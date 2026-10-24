@@ -1,0 +1,4 @@
+# AI 駆動開発の設定(ai-driven-dev スキル)
+merge: auto          # auto: CodeRabbit の指摘への対応が終わり、CI が緑なら自動でマージする(ai-auto-merge.yml) / review: 人がマージする
+reviewer: coderabbit # coderabbit / claude / both
+review_rounds: 2     # レビューの指摘に対応して再レビューを頼む回数の上限
