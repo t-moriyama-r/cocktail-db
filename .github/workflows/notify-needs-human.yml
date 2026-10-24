@@ -95,12 +95,17 @@ jobs:
             "needs-approval": {head: ":white_check_mark: *承認を待っています*", ask: "確かめてほしいこと", act: "PR を開いて確かめる"}
           }[$label] as $t
           # 頼むコメントには目印 <!-- ai-dev:<ラベル> --> が付き、ラベルより先に書かれる。
-          # 目印が無ければ、needs-decision は本文の「判断が要ること」、ほかは bot 以外のいちばん新しいコメントを添える
-          | ($comments | map(select(.body | contains("ai-dev:\($label)"))) | last) as $marked
+          # 目印が無ければ、needs-decision は本文の「判断が要ること」、ほかは人のいちばん新しいコメントを添える。
+          # public のリポジトリでは誰でもコメントできるので、Slack に引用するのは、書き込み権限のある人と
+          # GitHub App(Actions の中の Claude Code。リポジトリに入れた App しかコメントできない)のコメントだけにする
+          | ["OWNER", "MEMBER", "COLLABORATOR"] as $trusted
+          | ($comments | map(select(.author_association as $a | $trusted | index($a)))) as $people
+          | ($comments | map(select((.author_association as $a | $trusted | index($a)) or .user.type == "Bot"))
+             | map(select(.body | contains("ai-dev:\($label)"))) | last) as $marked
           | ($target.body | section | clean) as $section
           | (if $marked then {text: ($marked.body | clean), url: $marked.html_url}
              elif $label == "needs-decision" and $section != "" then {text: $section, url: $target.url}
-             else ($comments | map(select(.user.type != "Bot")) | last // {}) as $c
+             else ($people | map(select(.user.type != "Bot")) | last // {}) as $c
                | {text: ($c.body // "" | clean), url: ($c.html_url // $target.url)}
              end) as $ask
           | {
