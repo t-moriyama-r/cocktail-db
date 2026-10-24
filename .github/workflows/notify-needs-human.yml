@@ -1,6 +1,21 @@
-# PR・issue に needs-human が付いたら、Slack に知らせる
+# 人の判断・承認が要るものを、Slack に知らせる
+#
+# - needs-human(PR・issue): AI レビュアーの指摘などで、人に判断を頼んでいる
+# - needs-decision(issue): 着手する前に、人に決めてもらうことがある
+# - needs-approval(PR): 人の承認(マージ)を待っている
+#
 # 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
-name: needs-human を Slack に知らせる
+#
+# きっかけは 2 つあり、1 件につきどちらか一方だけが 1 通送る
+# - ラベルが付いたとき: 人(と、人のアカウントで動く手元のエージェント)が付けたものだけ。
+#   bot(GitHub Actions の中の Claude Code など)が付けたものは送らない。
+#   GITHUB_TOKEN で付けたラベルはワークフローを起こさないので、Actions の中からはこちらに頼れない
+# - workflow_dispatch: Actions の中から `gh workflow run` で呼ぶ(GITHUB_TOKEN でも起こせる)。
+#   number を空にすると、開いている needs-decision の issue を 1 通にまとめる(issue を一度にたくさん作ったとき)
+#
+# 本文が「作成後に書き込む」の仮のもの(目印 ai-dev:pending-body)の issue は、ラベルが付いても送らない。
+# issue-breakdown が一度に作る issue で、作り終えたらまとめて 1 通にするため
+name: 人の判断・承認を Slack に知らせる
 
 on:
   # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
@@ -8,6 +23,17 @@ on:
     types: [labeled]
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      number:
+        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る
+        required: false
+        default: ""
+      label:
+        description: 何を頼むか
+        type: choice
+        options: [needs-human, needs-decision, needs-approval]
+        default: needs-human
 
 permissions:
   contents: read
@@ -16,7 +42,13 @@ permissions:
 
 jobs:
   notify:
-    if: github.event.label.name == 'needs-human'
+    # 本文はイベントの時点のものを見る(作った直後に本文が書き込まれても、仮の本文だったことで判断する)
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.number != '')
+      || (github.event_name != 'workflow_dispatch'
+        && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name)
+        && github.event.sender.type != 'Bot'
+        && !contains(github.event.issue.body, 'ai-dev:pending-body'))
     runs-on: ubuntu-latest
     steps:
       - name: Slack に送る
@@ -24,24 +56,21 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
-          TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
-          URL: ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
-          KIND: ${{ github.event.pull_request && 'PR' || 'issue' }}
-          SENDER: ${{ github.event.sender.login }}
+          NUMBER: ${{ inputs.number || github.event.pull_request.number || github.event.issue.number }}
+          LABEL: ${{ inputs.label || github.event.label.name }}
+          SENDER: ${{ github.event_name != 'workflow_dispatch' && github.event.sender.login || '' }}
         run: |
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
             echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
             exit 0
           fi
 
-          # 判断を頼むコメントには目印 <!-- ai-dev:needs-human --> が付き、ラベルより先に書かれる。
-          # 目印の無いもの(人が手でラベルを付けたとき)は、bot 以外のいちばん新しいコメントを添える
-          comment=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
-            | jq 'add // [] | (map(select(.body | contains("ai-dev:needs-human"))) | last)
-                  // (map(select(.user.type != "Bot")) | last) // {}')
+          # issue の API は PR も返す(PR なら pull_request が付く)
+          target=$(gh api "repos/$REPO/issues/$NUMBER" \
+            | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}')
+          comments=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" | jq 'add // []')
           # PR なら、本文の Closes #N などで結び付いた issue
-          if [ "$KIND" = PR ]; then
+          if [ "$(jq -r .kind <<<"$target")" = PR ]; then
             issues=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
               query($owner: String!, $name: String!, $number: Int!) {
                 repository(owner: $owner, name: $name) {
@@ -56,37 +85,94 @@ jobs:
           # 通知の文面。Slack の mrkdwn で、& < > はエスケープが要る
           def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
           def link($url; $label): "<\($url)|\($label | esc)>";
+          def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("^\\s+|\\s+$"; "");
+          def quote: (if length > 600 then .[0:600] + "…" else . end) | esc | split("\n") | map("> " + .) | join("\n");
+          def section: (gsub("\r"; "") | capture("(^|\n)## 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n## |$)") | .s) // "";
 
-          ($comment.body // ""
-            | gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("^\\s+|\\s+$"; "")
-            | if length > 600 then .[0:600] + "…" else . end) as $excerpt
+          {
+            "needs-human":    {head: ":raising_hand: *人の判断が必要です*", ask: "判断してほしいこと", act: "コメントを開いて返信する"},
+            "needs-decision": {head: ":thinking_face: *着手する前に決めてほしいことがあります*", ask: "決めてほしいこと", act: "issue を開いてコメントで答える"},
+            "needs-approval": {head: ":white_check_mark: *承認を待っています*", ask: "確かめてほしいこと", act: "PR を開いて確かめる"}
+          }[$label] as $t
+          # 頼むコメントには目印 <!-- ai-dev:<ラベル> --> が付き、ラベルより先に書かれる。
+          # 目印が無ければ、needs-decision は本文の「判断が要ること」、ほかは bot 以外のいちばん新しいコメントを添える
+          | ($comments | map(select(.body | contains("ai-dev:\($label)"))) | last) as $marked
+          | ($target.body | section | clean) as $section
+          | (if $marked then {text: ($marked.body | clean), url: $marked.html_url}
+             elif $label == "needs-decision" and $section != "" then {text: $section, url: $target.url}
+             else ($comments | map(select(.user.type != "Bot")) | last // {}) as $c
+               | {text: ($c.body // "" | clean), url: ($c.html_url // $target.url)}
+             end) as $ask
           | {
               unfurl_links: false,
               text: ([
-                ":raising_hand: *人の判断が必要です*(\($repo))",
+                "\($t.head)(\($repo))",
                 "",
-                "*\($kind)*: \(link($url; "#\($number) \($title)"))",
-                (if $kind == "PR" then
+                "*\($target.kind)*: \(link($target.url; "#\($number) \($target.title)"))",
+                (if $target.kind == "PR" then
                   "*対応 issue*: " + (if ($issues | length) > 0
                     then ($issues | map(link(.url; "#\(.number) \(.title)")) | join("、"))
                     else "なし(PR の本文に Closes #番号 が無い)" end)
                  else empty end),
-                "*ラベルを付けた人*: \($sender)",
-                (if $excerpt != "" then
-                  "",
-                  "*判断してほしいこと*",
-                  ($excerpt | esc | split("\n") | map("> " + .) | join("\n")),
-                  "",
-                  link($comment.html_url; "コメントを開いて返信する")
+                (if $sender != "" then "*ラベルを付けた人*: \($sender)" else empty end),
+                (if $ask.text != "" then
+                  "", "*\($t.ask)*", ($ask.text | quote), "", link($ask.url; $t.act)
                  else
-                  "",
-                  "判断を頼むコメントが見つからなかった。\(link($url; "\($kind) を開く"))"
-                 end)
+                  "", "頼む中身が見つからなかった。\(link($target.url; "\($target.kind) を開く"))"
+                 end),
+                (if $label == "needs-approval" then "問題が無ければ、マージすると承認になる。直してほしいことは PR にコメントする" else empty end)
               ] | join("\n"))
             }
           JQ
 
           jq -n -f message.jq \
-            --arg repo "$REPO" --arg kind "$KIND" --arg number "$NUMBER" --arg title "$TITLE" \
-            --arg url "$URL" --arg sender "$SENDER" --argjson comment "$comment" --argjson issues "$issues" \
+            --arg repo "$REPO" --arg number "$NUMBER" --arg label "$LABEL" --arg sender "$SENDER" \
+            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues" \
+            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+
+  # 開いている needs-decision の issue を 1 通にまとめる
+  digest:
+    if: github.event_name == 'workflow_dispatch' && inputs.number == ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack に送る
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
+            exit 0
+          fi
+
+          list=$(gh issue list -R "$REPO" --label needs-decision --state open --limit 100 --json number,title,url,body)
+          if [ "$(jq length <<<"$list")" = 0 ]; then
+            echo "needs-decision の issue が無いので送らなかった"
+            exit 0
+          fi
+
+          cat > digest.jq <<'JQ'
+          def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+          def link($url; $label): "<\($url)|\($label | esc)>";
+          def section: (gsub("\r"; "") | capture("(^|\n)## 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n## |$)") | .s) // "";
+          # 「判断が要ること」の最初の 1 行で、何を決めるかを示す
+          def first_ask: section | gsub("<!--[\\s\\S]*?-->"; "")
+            | split("\n") | map(gsub("^[\\s>*-]+|\\s+$"; "")) | map(select(. != "")) | (first // "")
+            | if length > 120 then .[0:120] + "…" else . end;
+
+          {
+            unfurl_links: false,
+            text: ([
+              ":thinking_face: *着手する前に決めてほしいことが \($list | length) 件あります*(\($repo))",
+              "issue にコメントで答えると、続きが進む",
+              "",
+              ($list | sort_by(.number)[]
+                | "• \(link(.url; "#\(.number) \(.title)"))"
+                  + (.body // "" | first_ask | if . != "" then "\n      \(esc)" else "" end))
+            ] | join("\n"))
+          }
+          JQ
+
+          jq -n -f digest.jq --arg repo "$REPO" --argjson list "$list" \
             | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
