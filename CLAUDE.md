@@ -6,9 +6,17 @@
 
 誰でも読める。次のものは **commit しない。issue・PR・コミットメッセージ・レビューの返信にも書かない**。
 
-- サーバー名・ホスト名・ユーザー名・DB 名・絶対パス(ホームディレクトリのパスなど)
-- `.env`・鍵・トークン・パスワード、DB のダンプ、アップロードされた画像などの本番データ
+- SSH の接続先ホスト・サーバーのユーザー名・DB 名
+- `/home/...` で始まる絶対パス(ユーザー名が入るため)
+- `.env`・秘密鍵・トークン・パスワードなどの秘密の値、DB のダンプ、アップロードされた画像などの本番データ
 - 証跡(スクリーンショット・動画・ログ)に写ったこれらのもの。貼る前に画像を目視で確かめる
+
+次のものは書いてよい(`README.md` もこの範囲で書いている)。
+
+- サービスの公開 URL(`README.md` に公開先として出しているもの)
+- `~/` から始まるサーバー上の配置(`~/cocktail-db` など)
+- GitHub の Secret・Variable の名前(値は書かない)
+- cPanel に登録したデプロイ用の公開鍵の名前(秘密ではない)
 
 接続先などは GitHub の Secret・Variable に置き(`README.md` の「デプロイ」)、サンプルが要るときはプレースホルダ(`<host>`・`<user>` など)で書く。
 
@@ -17,11 +25,11 @@
 | ディレクトリ | 中身 | テスト・チェック |
 |---|---|---|
 | `backend/` | Laravel(PHP 8.4)。`/api/*` の API と、SPA を返すルート | `php artisan test`(下の「BE のテスト」) |
-| `frontend/` | React + Vite(TypeScript) | `npm run build`(`gen:api`・`tsc -b`・`vite build`)、`npm run lint`(oxlint)。テストランナー(Vitest)は #7 で入れる。入ったらここに追記 |
+| `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | (まだ無い)Playwright の E2E。#8 で作る。できたらコマンドをここに追記 | — |
 | `ops/` | (まだ無い)サーバーで動かす運用スクリプト(バックアップ・切り替えなど)。#14 などで作る | — |
-| `docs/` | (まだ無い)開発の決まりごとの資料。ラベルの意味は #11 で `docs/labels.md` に書く | — |
+| `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`) | — |
 
 ### BE のテスト
 
@@ -35,7 +43,17 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`release` 向け)と `develop` への push で動く
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`release` 向け)と `develop` への push で動く。同じワークフローの `frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す
+
+### FE のテスト
+
+```bash
+cd frontend
+npm run gen:api   # 型の元を最新にする(テスト・型チェックの前に)
+npx tsc -b        # 型チェック
+npm run lint      # oxlint
+npm test          # Vitest(vitest run)
+```
 
 ### テストの書き方
 
@@ -79,7 +97,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 8. エージェントは自分でマージしない。`.github/ai-dev.yml` が `merge: auto` のあいだは、指摘の対応が終わって CI が緑になった PR を `ai-auto-merge.yml` がマージする。`needs-human`・`needs-decision`・`needs-approval`・`ai-in-actions`・`no-auto-merge` のラベルが付いた PR、閉じる issue に `needs-review` が付いた PR はマージされない
 9. `release` へのマージはデプロイになるので、人が行う
 
-ラベルの意味の詳しい説明は `docs/labels.md`(#11 で作る)を見る。
+ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 
 ## 禁止事項
 
