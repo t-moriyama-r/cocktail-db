@@ -1,0 +1,92 @@
+# PR・issue に needs-human が付いたら、Slack に知らせる
+# 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
+name: needs-human を Slack に知らせる
+
+on:
+  # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
+  pull_request_target:
+    types: [labeled]
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify:
+    if: github.event.label.name == 'needs-human'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack に送る
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
+          URL: ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
+          KIND: ${{ github.event.pull_request && 'PR' || 'issue' }}
+          SENDER: ${{ github.event.sender.login }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
+            exit 0
+          fi
+
+          # 判断を頼むコメントには目印 <!-- ai-dev:needs-human --> が付き、ラベルより先に書かれる。
+          # 目印の無いもの(人が手でラベルを付けたとき)は、bot 以外のいちばん新しいコメントを添える
+          comment=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
+            | jq 'add // [] | (map(select(.body | contains("ai-dev:needs-human"))) | last)
+                  // (map(select(.user.type != "Bot")) | last) // {}')
+          # PR なら、本文の Closes #N などで結び付いた issue
+          if [ "$KIND" = PR ]; then
+            issues=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
+              query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $number) { closingIssuesReferences(first: 20) { nodes { number title url } } }
+                }
+              }' | jq '.data.repository.pullRequest.closingIssuesReferences.nodes')
+          else
+            issues='[]'
+          fi
+
+          cat > message.jq <<'JQ'
+          # 通知の文面。Slack の mrkdwn で、& < > はエスケープが要る
+          def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+          def link($url; $label): "<\($url)|\($label | esc)>";
+
+          ($comment.body // ""
+            | gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("^\\s+|\\s+$"; "")
+            | if length > 600 then .[0:600] + "…" else . end) as $excerpt
+          | {
+              unfurl_links: false,
+              text: ([
+                ":raising_hand: *人の判断が必要です*(\($repo))",
+                "",
+                "*\($kind)*: \(link($url; "#\($number) \($title)"))",
+                (if $kind == "PR" then
+                  "*対応 issue*: " + (if ($issues | length) > 0
+                    then ($issues | map(link(.url; "#\(.number) \(.title)")) | join("、"))
+                    else "なし(PR の本文に Closes #番号 が無い)" end)
+                 else empty end),
+                "*ラベルを付けた人*: \($sender)",
+                (if $excerpt != "" then
+                  "",
+                  "*判断してほしいこと*",
+                  ($excerpt | esc | split("\n") | map("> " + .) | join("\n")),
+                  "",
+                  link($comment.html_url; "コメントを開いて返信する")
+                 else
+                  "",
+                  "判断を頼むコメントが見つからなかった。\(link($url; "\($kind) を開く"))"
+                 end)
+              ] | join("\n"))
+            }
+          JQ
+
+          jq -n -f message.jq \
+            --arg repo "$REPO" --arg kind "$KIND" --arg number "$NUMBER" --arg title "$TITLE" \
+            --arg url "$URL" --arg sender "$SENDER" --argjson comment "$comment" --argjson issues "$issues" \
+            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
