@@ -18,7 +18,7 @@ jobs:
     env:
       APP_DIR: cocktail-db
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -39,7 +39,7 @@ jobs:
           php artisan scramble:export --path=../openapi/openapi.json
           git diff --exit-code -- ../openapi/openapi.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
