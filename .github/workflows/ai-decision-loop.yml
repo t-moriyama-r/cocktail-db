@@ -10,7 +10,7 @@
 # Claude Code は issue のコメント(外部の人も書ける)を読むので、そのジョブには issue を書き換える権限しか渡さない。
 # ワークフローを起動できる権限(actions: write。deploy.yml も起動できてしまう)は、通知を呼ぶジョブだけに渡す
 #
-# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN(`claude setup-token` で作る)。Claude の GitHub App をこのリポジトリに入れておく
+# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN(`claude setup-token` で作る)。2 つ目のアカウントで動かすときは CLAUDE_CODE_OAUTH_TOKEN_2 も作り、リポジトリ変数 CLAUDE_ACCOUNT を 2 にする。Claude の GitHub App をこのリポジトリに入れておく
 name: 人の判断を issue に反映する
 
 on:
@@ -57,7 +57,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         if: steps.live.outputs.open == 'true'
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ vars.CLAUDE_ACCOUNT == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: |
             --max-turns 40
             --allowedTools "Read,Write,Glob,Grep,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*)"
