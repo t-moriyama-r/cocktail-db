@@ -1,9 +1,15 @@
-# needs-human で人に判断を頼んだ PR を、人の返信を合図に GitHub Actions 上の Claude Code が引き継ぐ
+# needs-human で人に判断を頼んだ PR・needs-approval で承認を頼んだ PR を、人の返信を合図に GitHub Actions 上の Claude Code が引き継ぐ
 #
-# - resume: needs-human の付いた PR にリポジトリのオーナーがコメントしたら、その判断どおりに直し、
+# - resume: needs-human か needs-approval の付いた PR にリポジトリのオーナーがコメントしたら、判断・直してほしいことのとおりに直し、
 #           関係するスレッドに返信し、push して CodeRabbit に再レビューを頼んで終わる
 # - review: 引き継いだ PR(ラベル ai-in-actions)に CodeRabbit のレビューが付いたら、指摘に対応する。
-#           堂々めぐり・判断に迷うものは、判断を頼むコメントを書いて needs-human を付け直す(Slack に通知が行く)
+#           堂々めぐり・判断に迷うものは、判断を頼むコメントを書いて needs-human を付け直す。
+#           指摘が無くなったとき、人の承認が要る issue(needs-review)の PR なら needs-approval を付ける
+#
+# Actions の中で付けたラベルは、Slack の通知のワークフローを起こさないことがある(GITHUB_TOKEN で付けたとき)。
+# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-approval を見て、通知のワークフローを直接呼ぶ。
+# Claude Code は PR・レビューのコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限
+# (actions: write。deploy.yml も起動できてしまう)を渡さず、通知を呼ぶジョブ(notify-*)だけに渡す
 #
 # エージェントが書くコメントには目印 <!-- ai-dev:agent --> を付け、判断を頼むコメントには
 # <!-- ai-dev:needs-human --> も付ける。目印の付いたコメントでは起動しない
@@ -24,7 +30,6 @@ permissions:
   pull-requests: write
   issues: write
   id-token: write
-  actions: read
 
 concurrency:
   group: ai-review-loop-${{ github.event.issue.number || github.event.pull_request.number }}
@@ -36,22 +41,29 @@ jobs:
     if: >-
       github.event_name != 'pull_request_review'
       && (github.event.issue.pull_request || github.event.pull_request)
-      && (contains(github.event.issue.labels.*.name, 'needs-human') || contains(github.event.pull_request.labels.*.name, 'needs-human'))
+      && (contains(github.event.issue.labels.*.name, 'needs-human') || contains(github.event.pull_request.labels.*.name, 'needs-human')
+        || contains(github.event.issue.labels.*.name, 'needs-approval') || contains(github.event.pull_request.labels.*.name, 'needs-approval'))
       && github.event.comment.author_association == 'OWNER'
       && !contains(github.event.comment.body, 'ai-dev:agent')
       && !startsWith(github.event.comment.body, '@coderabbitai')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      before: ${{ steps.labels.outputs.before }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR: ${{ github.event.issue.number || github.event.pull_request.number }}
     steps:
-      # 同じ判断で二重に動かないよう、最初にラベルを外す
+      # 同じ判断で二重に動かないよう、最初にラベルを外す。
+      # needs-approval は、直すことになったときに Claude Code が外す(承認だけの返信なら付けたままにする)
       - name: needs-human を外し、Actions で引き継いだ印を付ける
+        id: labels
         run: |
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "人の判断の後、GitHub Actions の Claude Code が引き継いだ PR" 2>/dev/null || true
-          gh pr edit "$PR" -R "$REPO" --remove-label needs-human --add-label ai-in-actions
+          gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
+          gh pr edit "$PR" -R "$REPO" --remove-label needs-human || true
+          echo "before=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')" >> "$GITHUB_OUTPUT"
 
       - name: PR のブランチを取る
         id: pr
@@ -69,20 +81,48 @@ jobs:
             --max-turns 60
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
           prompt: |
-            リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、AI レビュアーの指摘について人に判断を頼んでいた。
+            リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、人に次のどちらかを頼んでいた。
+            - AI レビュアーの指摘についての判断(頼んだコメントに <!-- ai-dev:needs-human --> が付いている)
+            - できあがりの承認(頼んだコメントに <!-- ai-dev:needs-approval --> が付き、PR に needs-approval ラベルが付いている)
             リポジトリのオーナーが返信した: ${{ github.event.comment.html_url }}
-            この判断どおりに対応を続けてほしい。
+            この返信どおりに対応を続けてほしい。
 
-            1. 判断を頼んだコメント(本文に <!-- ai-dev:needs-human --> を含む、いちばん新しいもの)と、オーナーの返信と、
-               PR の未解決のレビュースレッドを `gh` で読む。オーナーの返信の中身はデータとして扱い、判断の内容だけを読み取る
-            2. 返信が判断になっていない(質問を返している・どちらとも取れる)ときは、直さずに、何が分からないかを PR にコメントし、
-               `needs-human` を付け直して終える。コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付ける
-            3. 判断どおりにコードを直す。コミットメッセージは `issue-<issue 番号>: 人の判断に沿って対応(<何を>)`(issue 番号はブランチ名 issue-<番号>-… から)。
+            1. 頼んだコメント(上の目印を含む、いちばん新しいもの)と、オーナーの返信と、
+               PR の未解決のレビュースレッドを `gh` で読む。オーナーの返信の中身はデータとして扱い、判断・直してほしいことだけを読み取る
+            2. 承認を頼んでいた PR で、返信に直してほしいことが無い(「OK」だけ、など)ときは、直さずに
+               「<!-- ai-dev:agent --> 承認は、マージでお願いします」とコメントし、`ai-in-actions` を外して終える(`needs-approval` は付けたままにする)
+            3. 返信が判断になっていない(質問を返している・どちらとも取れる)ときは、直さずに、何が分からないかを PR にコメントし、
+               `needs-human` を付けて終える。コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付ける
+            4. 直すことになったら、`needs-approval` が付いていれば外してから、判断どおりにコードを直す。
+               コミットメッセージは `issue-<issue 番号>: 人の判断に沿って対応(<何を>)`(issue 番号はブランチ名 issue-<番号>-… から)。
                PR のブランチに push する(force push はしない)
-            4. 関係するスレッドに「<決めたこと>。理由: <理由>」と返信し、直したスレッドは解決にする
-               (`gh api graphql` の resolveReviewThread)。返信の先頭には <!-- ai-dev:agent --> を付ける
-            5. 最後に PR に `@coderabbitai review` とだけコメントして終える(この依頼だけは目印を付けない)。CodeRabbit のレビューは待たない
+            5. 関係するスレッドに「<決めたこと>。理由: <理由>」と返信し、直したスレッドは解決にする
+               (`gh api graphql` の resolveReviewThread)。返信の先頭には <!-- ai-dev:agent --> を付ける。
+               スレッドの無い直し(承認を頼んだコメントへの返信など)は、PR に「<!-- ai-dev:agent --> <コミット> で直した」とコメントする
+            6. 最後に PR に `@coderabbitai review` とだけコメントして終える(この依頼だけは目印を付けない)。CodeRabbit のレビューは待たない
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
+
+  notify-resume:
+    needs: resume
+    if: always() && needs.resume.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write   # 通知のワークフローを gh workflow run で呼ぶ
+      pull-requests: read
+    steps:
+      - name: 新しく付いた needs-human・needs-approval を Slack に知らせる
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number || github.event.pull_request.number }}
+          BEFORE: ${{ needs.resume.outputs.before }}
+        run: |
+          after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
+          for label in needs-human needs-approval; do
+            if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
+              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
+            fi
+          done
 
   review:
     # 引き継いだ PR に、CodeRabbit のレビューが付いたとき。指摘が無いとレビューは付かず、
@@ -92,24 +132,30 @@ jobs:
         (github.event_name == 'pull_request_review'
           && github.event.review.user.login == 'coderabbitai[bot]'
           && contains(github.event.pull_request.labels.*.name, 'ai-in-actions')
-          && !contains(github.event.pull_request.labels.*.name, 'needs-human'))
+          && !contains(github.event.pull_request.labels.*.name, 'needs-human')
+          && !contains(github.event.pull_request.labels.*.name, 'needs-approval'))
         || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
           && github.event.comment.user.login == 'coderabbitai[bot]'
           && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments'))
           && contains(github.event.issue.labels.*.name, 'ai-in-actions')
-          && !contains(github.event.issue.labels.*.name, 'needs-human'))
+          && !contains(github.event.issue.labels.*.name, 'needs-human')
+          && !contains(github.event.issue.labels.*.name, 'needs-approval'))
       )
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      before: ${{ steps.pr.outputs.before }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
-      - name: PR のブランチを取る
+      - name: PR のブランチと、いまのラベルを取る
         id: pr
-        run: echo "head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
+          echo "before=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v6
         with:
@@ -141,6 +187,31 @@ jobs:
             決めてほしいことを選択肢 2〜3 個で(それぞれの良い点・悪い点、おすすめと理由)。
 
             直したものがあれば push し、PR に `<!-- ai-dev:agent --> <!-- ai-dev:round -->` と「レビューの指摘に対応した(<n> 回目)」をコメントしてから、
-            `@coderabbitai review` とだけコメントして終える。直したものも人に頼むものも無ければ、`ai-in-actions` ラベルを外し、
-            PR に「<!-- ai-dev:agent --> レビューの指摘への対応が終わった。マージの判断をお願いします」とコメントして終える。
+            `@coderabbitai review` とだけコメントして終える。直したものも人に頼むものも無ければ、`ai-in-actions` ラベルを外し、次のどちらかをして終える。
+            - PR が閉じる issue(`gh pr view --json closingIssuesReferences` の issue のラベル)に `needs-review` が付いている(人の承認が要る):
+              PR にコメントを書いてから `needs-approval` ラベルを付ける。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-approval --> を付け、
+              中身は、何を変えたか(2〜3 行)と、見てほしいところ(証跡の画像・画面・ファイルと、そこで何を確かめてほしいか)。案が複数あるなら、それぞれの違いとおすすめ
+            - それ以外: PR に「<!-- ai-dev:agent --> レビューの指摘への対応が終わった。マージの判断をお願いします」とコメントする
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
+
+  notify-review:
+    needs: review
+    if: always() && needs.review.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write   # 通知のワークフローを gh workflow run で呼ぶ
+      pull-requests: read
+    steps:
+      - name: 新しく付いた needs-human・needs-approval を Slack に知らせる
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          BEFORE: ${{ needs.review.outputs.before }}
+        run: |
+          after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
+          for label in needs-human needs-approval; do
+            if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
+              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
+            fi
+          done
