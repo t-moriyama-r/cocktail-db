@@ -1,0 +1,50 @@
+# PR・issue に needs-human が付いたら、Slack に知らせる
+# 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
+name: needs-human を Slack に知らせる
+
+on:
+  # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
+  pull_request_target:
+    types: [labeled]
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify:
+    if: github.event.label.name == 'needs-human'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack に送る
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
+          URL: ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
+          KIND: ${{ github.event.pull_request && 'PR' || 'issue' }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
+            exit 0
+          fi
+          # 判断を頼むコメントはラベルより先に書く決まりなので、bot 以外のいちばん新しいコメントを添える
+          last=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" | jq 'add // [] | map(select(.user.type != "Bot")) | last // {}')
+          comment_url=$(jq -r '.html_url // empty' <<<"$last")
+          excerpt=$(jq -r '.body // "" | gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | .[0:600]' <<<"$last")
+          text=":raising_hand: *人の判断が必要です* ($KIND #$NUMBER)
+          <$URL|$TITLE>"
+          if [ -n "$excerpt" ]; then
+            text="$text
+
+          > ${excerpt//$'\n'/$'\n'> }
+
+          <$comment_url|コメントを開く>"
+          fi
+          jq -n --arg text "$text" '{text: $text}' \
+            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
