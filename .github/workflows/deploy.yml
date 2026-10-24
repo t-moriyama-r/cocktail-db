@@ -2,7 +2,7 @@ name: deploy
 
 on:
   push:
-    branches: [main]
+    branches: [release]
   workflow_dispatch:
 
 permissions:
@@ -13,7 +13,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: test
+    # 手動実行でも release 以外のブランチからはデプロイしない
+    if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     env:
       APP_DIR: cocktail-db
@@ -24,20 +30,6 @@ jobs:
         with:
           php-version: '8.4'
           tools: composer:v2
-
-      - name: Install backend (with dev, for the OpenAPI check)
-        working-directory: backend
-        run: |
-          composer install --no-interaction --prefer-dist
-          cp .env.example .env
-          php artisan key:generate
-
-      # BE の変更で API の形が変わったのに openapi.json を更新し忘れていたら止める(FE の型がずれるため)
-      - name: Check OpenAPI is up to date
-        working-directory: backend
-        run: |
-          php artisan scramble:export --path=../openapi/openapi.json
-          git diff --exit-code -- ../openapi/openapi.json
 
       - uses: actions/setup-node@v7
         with:
@@ -51,10 +43,9 @@ jobs:
           npm ci
           npm run build
 
-      - name: Reinstall backend without dev dependencies
+      - name: Install backend without dev dependencies
         working-directory: backend
         run: |
-          rm .env
           composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
 
       - name: Set up SSH
