@@ -5,7 +5,7 @@
 # - 下書き・向き先が develop 以外(release へのマージはデプロイになるので、人がする)・作ったのがオーナー以外
 # - ラベル needs-human / needs-decision / needs-approval / ai-in-actions / no-auto-merge が付いている
 # - 閉じる issue に needs-review が付いている(人が中身を確かめるもの)
-# - CodeRabbit が最新のコミットをまだ見ていない・未解決の指摘が残っている
+# - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・未解決の指摘が残っている
 # - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている
 #
 # マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
@@ -90,14 +90,16 @@ jobs:
           done
 
           # CodeRabbit が最新のコミットを見たか。指摘があればそのコミットへのレビューが付き、
-          # 無ければ「Review finished」「No actionable comments」のコメントだけが付く
+          # 無ければ「Review finished」「No actionable comments」のコメントだけが付く。
+          # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける
           pushed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
           reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/reviews?per_page=100" \
-            | jq --arg head "$head" 'add // [] | any(.user.login == "coderabbitai[bot]" and .commit_id == $head)')
+            | jq --arg head "$head" 'add // [] | any(.commit_id == $head and (.user.login == "coderabbitai[bot]"
+                or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
           finished=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
             | jq --arg since "$pushed" 'add // [] | map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
                 | (last // {}).body // "" | test("Review finished|No actionable comments|LGTM")')
-          [ "$reviewed" = true ] || [ "$finished" = true ] || skip "CodeRabbit が最新のコミット ${head:0:7} をまだ見ていない"
+          [ "$reviewed" = true ] || [ "$finished" = true ] || skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
 
           unresolved=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
             query($owner: String!, $name: String!, $number: Int!) {
@@ -151,4 +153,4 @@ jobs:
           fi
 
           gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent -->
-          CodeRabbit の指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
+          AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
