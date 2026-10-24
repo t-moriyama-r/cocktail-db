@@ -1,0 +1,93 @@
+# 作業 issue のテンプレート(issue forms)
+#
+# AI エージェントが 1 件ずつ実装して PR にする粒度の issue を書く。欄の並びは
+# issue-breakdown スキルが作る作業 issue の本文(目的・参照・判断が要ること・やること・受け入れ条件・依存・対象外)に合わせる。
+# 欄ごとの見出しは GitHub が「### <label>」の形で本文に書き込む。label を変えると、
+# 本文を読むワークフロー(notify-needs-human.yml の「判断が要ること」)と合わなくなるので、変えるときはそちらも直す
+name: 作業
+description: 1 件の PR で終わる作業。目的・やること・受け入れ条件・依存を書く
+labels: [task]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        1 件の PR で終わる大きさにする(大きければ分けて、親の issue に `feature` を付ける)。
+        ラベルの意味は [docs/labels.md](https://github.com/t-moriyama-r/cocktail-db/blob/develop/docs/labels.md) にある。`area:*` は作った後で付ける。
+        公開リポジトリなので、サーバー名・ユーザー名・DB 名・絶対パス・秘密の値は書かない。
+
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 目的
+      description: なぜこの作業が要るか(1〜3 行)
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参照
+      description: 旧ソースのファイル・関数、設計書(`docs/…`)、関係する issue(`#N`)
+      placeholder: |
+        - 旧ソース: `app/Http/Controllers/SearchController.php` の `search()`
+        - 設計: `docs/schema.md`
+        - 関係する issue: #19
+    validations:
+      required: false
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: 判断が要ること
+      description: |
+        着手する前に人に決めてもらうことがあるときだけ書き、ラベル `needs-decision` を付ける(付けると Slack に知らせる)。
+        最初の 1 行は Slack のまとめの通知に出るので、何を決めるかを 1 行で書く。推奨があれば「推奨: …」と理由も書く
+      placeholder: |
+        YouTube の開始位置(旧 `y_hour`・`y_minute`・`y_second`)を秒 1 列にまとめるか
+        推奨: まとめる。理由: …
+    validations:
+      required: false
+
+  - type: textarea
+    id: todo
+    attributes:
+      label: やること
+      description: 作るファイル・コマンド・エンドポイントの名前まで具体的に
+      placeholder: |
+        1. `backend/app/Services/CategoryTree.php` に `moveSubtree()` を足す
+        2. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 受け入れ条件
+      description: コマンド・テストで確かめられる形で書く。「人が確かめた」は needs-decision の issue だけに使う
+      placeholder: |
+        - `GET /api/cocktails?limit=51` が 422 を返す(Feature テスト)
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依存
+      description: |
+        先に閉じている必要がある issue を、1 行に 1 件、`- Blocked by #N` の形で書く(無ければ空のまま)。
+        次に着手する issue を選ぶスクリプトが、この書式(`Blocked by #N`)を読む。「#N の後」などの書き方では読まれない
+      placeholder: |
+        - Blocked by #19
+        - Blocked by #40
+    validations:
+      required: false
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 対象外
+      description: やらないこと。隣の issue と重ならないように、どの issue でやるかも書く
+      placeholder: |
+        - 管理画面からの編集(#63 でやる)
+    validations:
+      required: false

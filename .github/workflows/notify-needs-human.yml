@@ -87,7 +87,10 @@ jobs:
           def link($url; $label): "<\($url)|\($label | esc)>";
           def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("^\\s+|\\s+$"; "");
           def quote: (if length > 600 then .[0:600] + "…" else . end) | esc | split("\n") | map("> " + .) | join("\n");
-          def section: (gsub("\r"; "") | capture("(^|\n)## 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n## |$)") | .s) // "";
+          # 見出しは、手で書いた本文なら ##、issue forms(.github/ISSUE_TEMPLATE)から作った本文なら ###。
+          # issue forms は空欄に _No response_ と書くので、それは無いものとして扱う
+          def section: ((gsub("\r"; "") | capture("(^|\n)#{2,3} 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n#{2,3} |$)") | .s) // "")
+            | if test("^\\s*_No response_\\s*$") then "" else . end;
 
           {
             "needs-human":    {head: ":raising_hand: *人の判断が必要です*", ask: "判断してほしいこと", act: "コメントを開いて返信する"},
@@ -160,7 +163,10 @@ jobs:
           cat > digest.jq <<'JQ'
           def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
           def link($url; $label): "<\($url)|\($label | esc)>";
-          def section: (gsub("\r"; "") | capture("(^|\n)## 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n## |$)") | .s) // "";
+          # 見出しは、手で書いた本文なら ##、issue forms(.github/ISSUE_TEMPLATE)から作った本文なら ###。
+          # issue forms は空欄に _No response_ と書くので、それは無いものとして扱う
+          def section: ((gsub("\r"; "") | capture("(^|\n)#{2,3} 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n#{2,3} |$)") | .s) // "")
+            | if test("^\\s*_No response_\\s*$") then "" else . end;
           # 「判断が要ること」の最初の 1 行で、何を決めるかを示す
           def first_ask: section | gsub("<!--[\\s\\S]*?-->"; "")
             | split("\n") | map(gsub("^[\\s>*-]+|\\s+$"; "")) | map(select(. != "")) | (first // "")
