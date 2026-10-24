@@ -17,7 +17,8 @@ name: AI レビュー(CodeRabbit の上限のときの代わり)
 
 on:
   issue_comment:
-    types: [created]
+    # CodeRabbit は「処理中」のコメントを作ってから、上限の文言に書き換える。作ったときの本文には文言が無いので、書き換えでも起動する
+    types: [created, edited]
   workflow_dispatch:
     inputs:
       number:
