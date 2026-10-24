@@ -55,9 +55,10 @@ jobs:
         id: pr
         run: |
           skip() { echo "見送り: $*"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; }
-          pr=$(gh pr view "$PR" -R "$REPO" --json state,author,headRefName,headRefOid,baseRefName,isCrossRepository)
+          pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,author,headRefName,headRefOid,baseRefName,isCrossRepository)
           head=$(jq -r .headRefOid <<<"$pr")
           [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "#$PR は開いていない"
+          [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "#$PR は下書き(ready にしたときの依頼を CodeRabbit に出す)"
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$PR はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$PR を作ったのがオーナーではない"
           # 同じコミットを、CodeRabbit か Claude がもう見ていれば、しない(上限のコメントは 1 回の依頼に 2 つ付くことがある)
@@ -108,6 +109,7 @@ jobs:
           name: claude-review
           path: .ai-review/review.json
           include-hidden-files: true
+          if-no-files-found: error
 
   post:
     needs: review

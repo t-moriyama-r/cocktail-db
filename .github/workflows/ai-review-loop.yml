@@ -173,7 +173,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # github-actions[bot]: ai-claude-review.yml が GITHUB_TOKEN で呼んだとき
-          allowed_bots: coderabbitai,coderabbitai[bot],github-actions[bot]
+          allowed_bots: coderabbitai,coderabbitai[bot],github-actions,github-actions[bot]
           claude_args: |
             --max-turns 80
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
