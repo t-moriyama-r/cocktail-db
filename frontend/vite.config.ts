@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+// vitest/config の defineConfig は、vite の設定に test を足した型を持つ
+import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -15,5 +16,9 @@ export default defineConfig({
   server: {
     // 本番と同じく /api を同一オリジンで呼べるように、開発時は Laravel に流す
     proxy: { '/api': 'http://127.0.0.1:8000' },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
   },
 })
