@@ -25,6 +25,9 @@ jobs:
       APP_DIR: cocktail-db
     steps:
       - uses: actions/checkout@v7
+        with:
+          # 依存ライブラリのインストールで動くコードに、リポジトリのトークンを渡さない
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@v2
         with:
