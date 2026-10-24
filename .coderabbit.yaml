@@ -1,0 +1,3 @@
+# CodeRabbit の設定。レビューを依頼された PR のブランチにあるこのファイルが使われる
+language: "ja-JP"
+tone_instructions: "レビューの指摘・要約・チャットの返信は、すべて日本語で書く。"

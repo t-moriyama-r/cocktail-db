@@ -1,0 +1,72 @@
+name: test
+
+on:
+  pull_request:
+    branches: [develop, release]
+  push:
+    branches: [develop]
+  # deploy.yml から呼び、テストが通ったときだけデプロイする
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 依存ライブラリのインストールで動くコードに、リポジトリのトークンを渡さない
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_mysql, mbstring, intl
+          tools: composer:v2
+          coverage: none
+
+      - name: Install backend
+        working-directory: backend
+        run: |
+          composer install --no-interaction --prefer-dist
+          cp .env.example .env
+          php artisan key:generate
+
+      # 旧 DB を読む移行テスト用の 2 つ目の DB
+      - name: Create legacy test database
+        run: |
+          mysql -h 127.0.0.1 -u root -proot -e "CREATE DATABASE IF NOT EXISTS legacy_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          mysql -h 127.0.0.1 -u root -proot -e "SHOW DATABASES LIKE 'legacy_test'" | grep -q legacy_test
+
+      - name: Run tests (including the db group)
+        working-directory: backend
+        run: php artisan test
+
+      # BE の変更で API の形が変わったのに openapi.json を更新し忘れていたら止める(FE の型がずれるため)
+      - name: Check OpenAPI is up to date
+        working-directory: backend
+        run: |
+          php artisan scramble:export --path=../openapi/openapi.json
+          git diff --exit-code -- ../openapi/openapi.json

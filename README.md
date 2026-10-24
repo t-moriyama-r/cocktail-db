@@ -50,13 +50,36 @@ cd backend && php artisan scramble:export --path=../openapi/openapi.json
 cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(build でも自動で走る)
 ```
 
-`openapi/openapi.json` の更新を忘れると、デプロイのワークフローが止まる。
+`openapi/openapi.json` の更新を忘れると、テストのワークフローが止まる。
+
+## テスト
+
+```bash
+cd backend
+php artisan test --exclude-group=db   # 手元(MariaDB が無いとき)。DB を使うテストを飛ばす
+php artisan test                      # MariaDB があるとき。DB_* を環境変数で渡す
+```
+
+- DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす(SQLite では代用しない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR と `develop` への push で動く
+- テスト名の先頭はテストケースの ID(`TC-<issue 番号>-<連番>`)。ケースの表は PR 本文にある
+
+## ブランチ
+
+| ブランチ | 役割 |
+|---|---|
+| `develop` | 開発のベース(既定のブランチ)。作業ブランチはここから切り、PR でここに戻す |
+| `release` | リリース用。`develop` から PR でマージすると、デプロイが動く |
+| `issue-<番号>-<短い名前>` | 作業ブランチ。issue から `gh issue develop <番号> --base develop --name issue-<番号>-<名前>` で作ると、issue に結び付く |
+
+- `develop`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
+- コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 
 ## デプロイ
 
-`main` に push すると GitHub Actions(`.github/workflows/deploy.yml`)が動く。
+`release` にマージすると GitHub Actions(`.github/workflows/deploy.yml`)が動く。先にテスト(`test.yml`)を流し、通ったときだけデプロイする。
 
-1. openapi.json が最新か確かめる
+1. テスト(openapi.json が最新かも含む)
 2. FE をビルド
 3. `composer install --no-dev`
 4. rsync で `~/cocktail-db/` に送る(`.env`・`storage/`・`.well-known/` は除く)
