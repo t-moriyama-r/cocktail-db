@@ -35,9 +35,11 @@ jobs:
             exit 0
           fi
 
-          # 判断を頼むコメントはラベルより先に書く決まりなので、bot 以外のいちばん新しいコメントを添える
+          # 判断を頼むコメントには目印 <!-- ai-dev:needs-human --> が付き、ラベルより先に書かれる。
+          # 目印の無いもの(人が手でラベルを付けたとき)は、bot 以外のいちばん新しいコメントを添える
           comment=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
-            | jq 'add // [] | map(select(.user.type != "Bot")) | last // {}')
+            | jq 'add // [] | (map(select(.body | contains("ai-dev:needs-human"))) | last)
+                  // (map(select(.user.type != "Bot")) | last) // {}')
           # PR なら、本文の Closes #N などで結び付いた issue
           if [ "$KIND" = PR ]; then
             issues=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
