@@ -165,10 +165,10 @@ jobs:
       OWNER: ${{ github.repository_owner }}
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
     steps:
-      # PR のブランチには、まだスクリプトが無いことがある(スクリプトを足す前に切ったブランチ)。既定のブランチのものを使う
+      # PR のブランチには、まだスクリプトが無いことがある(スクリプトを足す前に切ったブランチ)。
+      # 動いているワークフローと同じ版を使う(pull_request_review では PR のマージ後の形、issue_comment・workflow_dispatch では既定のブランチ)
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev
           sparse-checkout: .github/scripts
 
