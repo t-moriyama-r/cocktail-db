@@ -117,7 +117,8 @@ jobs:
           SINCE: ${{ github.event.comment.created_at }}
         run: |
           # GITHUB_TOKEN で外したラベルは unlabeled のイベントを起こさないので、片付いた通知に「済」を付けさせる
-          gh workflow run notify-needs-human.yml -R "$REPO" -f label=done
+          # 「済」は見た目の印なので、呼べなくても後ろの通知(本来の仕事)まで進む
+          gh workflow run notify-needs-human.yml -R "$REPO" -f label=done || echo "::warning::片付いた通知に「済」を付けるワークフローを呼べなかった"
           labels=$(gh issue view "$ISSUE" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
           [[ ",$labels," == *",needs-decision,"* ]] || exit 0
           asked=$(gh api --paginate "repos/$REPO/issues/$ISSUE/comments?since=$SINCE&per_page=100" \
