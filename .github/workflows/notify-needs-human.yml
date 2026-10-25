@@ -66,6 +66,8 @@ jobs:
       # 送るスクリプトだけを取る。pull_request_target でも取るのは既定のブランチのもので、PR のコードは動かない
       - uses: actions/checkout@v6
         with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
           sparse-checkout: .github/scripts
           persist-credentials: false
 
@@ -166,6 +168,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
           sparse-checkout: .github/scripts
           persist-credentials: false
 
@@ -275,6 +279,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
           sparse-checkout: .github/scripts
           persist-credentials: false
 
