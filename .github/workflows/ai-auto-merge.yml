@@ -6,7 +6,7 @@
 # 閉じる issue に needs-review が付いている(人が中身を確かめるもの)
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
-# - 下書き・向き先が develop 以外(release へのマージはデプロイになるので、人がする)・作ったのがオーナー以外
+# - 下書き・向き先が develop 以外(staging・release へのマージはデプロイになるので、人がする)・作ったのがオーナー以外
 # - ラベル needs-human / needs-decision / needs-approval / ai-in-actions が付いている(人の番か、Actions が対応している途中)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る

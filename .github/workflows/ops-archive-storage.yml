@@ -6,7 +6,7 @@ name: ops-archive-storage
 
 on:
   pull_request:
-    branches: [develop, release]
+    branches: [develop, staging, release]
   push:
     branches: [develop]
 
