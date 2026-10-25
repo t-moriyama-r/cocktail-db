@@ -218,7 +218,7 @@ jobs:
           cat > digest.jq <<'JQ'
           def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
           def link($url; $label): "<\($url)|\($label | esc)>";
-          def waited: if .days == null then "" elif .days == 0 then "(今日から)" else "(\(.days) 日前から)" end;
+          def waited: if .days == null then "" elif .days == 0 then "(1 日たっていない)" else "(\(.days) 日前から)" end;
 
           {
             "needs-human":    {head: ":raising_hand: *人の判断が必要*(needs-human)", act: "頼むコメントに返信する"},
