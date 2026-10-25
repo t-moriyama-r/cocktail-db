@@ -47,4 +47,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number || inputs.number }}
-        run: .github/scripts/ci-rerun.sh "$REPO" $NUMBER
+        # 空なら、スクリプトが開いている PR をすべて見る(${2:-} で受ける)ので、引用符で囲んで 1 つの引数として渡す
+        run: .github/scripts/ci-rerun.sh "$REPO" "$NUMBER"
