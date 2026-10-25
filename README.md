@@ -121,6 +121,8 @@ GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
 | Secret | `DEV_BASIC_AUTH` | 動作確認に使う Basic 認証の `<ユーザー名>:<パスワード>` |
 | Variable | `DEV_APP_URL` | `https://cocktail-dev.trc-vlackhistory.net` |
 
+Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは、デプロイの最初の check で止まる。
+
 ## 撤去
 
 1. GitHub の Secret・Variables を消す(リポジトリごと消すなら不要)
