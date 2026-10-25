@@ -34,6 +34,11 @@ jobs:
       DB_DATABASE: testing
       DB_USERNAME: root
       DB_PASSWORD: root
+      # 旧 DB の接続(legacy)。DB 名は phpunit.xml が legacy_test に固定する
+      LEGACY_DB_HOST: 127.0.0.1
+      LEGACY_DB_PORT: 3306
+      LEGACY_DB_USERNAME: root
+      LEGACY_DB_PASSWORD: root
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,7 +76,7 @@ jobs:
           php artisan scramble:export --path=../openapi/openapi.json
           git diff --exit-code -- ../openapi/openapi.json
 
-  # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れを止める
+  # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れと、型の誤りを止める
   backend-lint:
     runs-on: ubuntu-latest
     defaults:
@@ -98,6 +103,10 @@ jobs:
 
       - name: Code style (Pint)
         run: vendor/bin/pint --test
+
+      # 型の合わない呼び出しなどを、テストで通らない経路の分まで止める。設定と検査から外すものは phpstan.neon
+      - name: Static analysis (PHPStan)
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
   frontend:
     runs-on: ubuntu-latest

@@ -1,0 +1,26 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    # Pest のテストの中の $this を、pest()->extend() で指定した TestCase として読む。
+    # Pest 公式の pestphp/pest-plugin-phpstan は Pest 5 が要るため、Pest 4 で動くこちらを使う
+    - vendor/mrpunyapal/peststan/extension.neon
+
+parameters:
+    level: max
+    paths:
+        - app
+        - bootstrap/app.php
+        - config
+        - database
+        - routes
+        - tests
+
+    # 型の検査から外すもの。足すときは、なぜ外してよいかを必ず書く。
+    # 使われなくなった項目は、reportUnmatchedIgnoredErrors(既定で有効)で失敗として出る
+    ignoreErrors:
+        # Laravel の雛形の行。env() は値が "true"・"false" などのとき bool を返すため bool|string になるが、
+        # APP_URL は URL で bool になることはない。雛形と同じ形に保ち、Laravel の更新のときに比べやすくする
+        -
+            identifier: argument.type
+            message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
+            path: config/filesystems.php
+            count: 1
