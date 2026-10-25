@@ -71,14 +71,15 @@ facts() {
 apply() {
   local repo=$1 number=$2 target=$3 current label
   current=$(gh api "repos/$repo/issues/$number/labels" --jq ".[].name | select(startswith(\"$PREFIX\"))")
-  while IFS= read -r label; do
-    [ -n "$label" ] && [ "$label" != "$target" ] || continue
-    gh api -X DELETE "repos/$repo/issues/$number/labels/$(jq -rn --arg s "$label" '$s | @uri')" >/dev/null
-  done <<<"$current"
+  # 先に付けてから古いものを外す。途中で止まっても、ラベルが 1 つも無い PR を残さない(2 つ残っても次の回で直る)
   if [ -n "$target" ] && ! grep -qxF "$target" <<<"$current"; then
     ensure_label "$repo" "$target"
     gh api -X POST "repos/$repo/issues/$number/labels" -f "labels[]=$target" >/dev/null
   fi
+  while IFS= read -r label; do
+    [ -n "$label" ] && [ "$label" != "$target" ] || continue
+    gh api -X DELETE "repos/$repo/issues/$number/labels/$(jq -rn --arg s "$label" '$s | @uri')" >/dev/null
+  done <<<"$current"
   echo "#$number: ${target:-(状態のラベルなし)}"
 }
 

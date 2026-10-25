@@ -30,10 +30,11 @@ on:
 
 permissions: {}
 
-# 何度動かしても同じ結果になるので、同じ PR の古い回は取り消して新しい回だけを残す
+# 同じ PR の回を 1 列に並べる。取り消しはしない: concurrency はジョブの if より前に効くので、取り消すと、if で飛ばされる起動
+# (人のコメントなど)が、AI のワークフローから呼ばれた回を止めてしまう。何度動かしても同じ結果になるので、待たせても害は無い
 concurrency:
   group: pr-status-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.number || github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   label:
