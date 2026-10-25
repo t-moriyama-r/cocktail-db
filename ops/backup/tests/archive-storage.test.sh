@@ -44,6 +44,7 @@ main() {
 	tc_11_config_errors
 	tc_12_permissions
 	tc_13_db_connection_failure
+	tc_17_directory_changes_while_archiving
 	echo "passed: $PASSED, failed: $FAILED"
 	[[ $FAILED -eq 0 ]]
 }
@@ -168,8 +169,10 @@ tc_08_verify_detects_mismatch() {
 	expect_status "TC-15-08: --verify は一致していれば 0" 0
 
 	head -c 100 /dev/urandom >"$STORAGE/a.jpeg"
-	run_script --verify "$archive" "$STORAGE"
+	mkdir -p "$SANDBOX/tmp"
+	TMPDIR="$SANDBOX/tmp" run_script --verify "$archive" "$STORAGE"
 	expect_status "TC-15-08: 中身が変わったファイルがあれば 2" 2
+	expect "TC-15-08: 失敗しても展開した一時ファイルを残さない" test -z "$(ls -A "$SANDBOX/tmp")"
 
 	# 中身を元に戻してから、ファイルを 1 つ足す
 	tar -C "$STORAGE" -xzf "$archive" ./a.jpeg
@@ -249,6 +252,43 @@ tc_13_db_connection_failure() {
 	expect_status "TC-15-13: DB に繋がらなければ 1" 1
 	expect "TC-15-13: アーカイブを出さない" \
 		test -z "$(find "$BACKUP" -name '*.tar.gz' 2>/dev/null)"
+}
+
+# TC-15-17
+# 固めている最中のアップロードを、固める(tar -czf)たびに画像を 1 つ足す tar で再現する
+tc_17_directory_changes_while_archiving() {
+	new_sandbox
+	add_image "a.jpeg" 10
+	make_uploading_tar 1
+	PATH="$SANDBOX/bin:$PATH" run_script "$ENV_FILE"
+
+	expect_status "TC-15-17: 固めている間に 1 回変わっても、固め直して 0 で終わる" 0
+	expect_output "TC-15-17: 固め直したことを出す" "warning: 固めている間に画像のディレクトリが変わったので固め直す(1 回目)"
+	expect_output "TC-15-17: 固め直した後のファイルの数を出す" "files: 2 (展開して数とハッシュが元と一致した)"
+
+	new_sandbox
+	add_image "a.jpeg" 10
+	make_uploading_tar 99
+	PATH="$SANDBOX/bin:$PATH" run_script "$ENV_FILE"
+
+	expect_status "TC-15-17: 変わり続ければ 2" 2
+	expect "TC-15-17: 変わり続けたときは出力先に何も置かない" \
+		test -z "$(find "$BACKUP/storage" -maxdepth 1 -type f)" -a -z "$(find "$BACKUP/storage" -name '.work.*')"
+}
+
+# 引数の回数だけ、固める前に画像を 1 つ足す tar を $SANDBOX/bin に置く
+make_uploading_tar() {
+	local real_tar
+	real_tar=$(command -v tar)
+	mkdir -p "$SANDBOX/bin"
+	cat >"$SANDBOX/bin/tar" <<EOF
+#!/usr/bin/env bash
+if [[ " \$* " == *" -czf "* ]] && [[ \$(find "$STORAGE" -name 'uploaded-*' | wc -l) -lt $1 ]]; then
+	head -c 10 /dev/urandom >"$STORAGE/uploaded-\$(date +%s%N).jpeg"
+fi
+exec "$real_tar" "\$@"
+EOF
+	chmod +x "$SANDBOX/bin/tar"
 }
 
 # --- 道具 -------------------------------------------------------------------

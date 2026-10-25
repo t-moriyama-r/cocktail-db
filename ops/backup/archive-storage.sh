@@ -30,7 +30,8 @@
 # 終了コード:
 #   0  退避と検証ができた(欠けているファイルがあっても 0。件数は出力と check.tsv で見る)
 #   1  引数・設定・DB の接続などのエラー
-#   2  展開したアーカイブが元のディレクトリと一致しない
+#   2  検証に通らなかった(展開したアーカイブが元のディレクトリと一致しない、
+#      または固めている間に画像のディレクトリが変わり続けた)。出力先には何も置かない
 #
 # 欠けがあっても 0 にするのは、旧データには前から欠けがありうるため。欠けで失敗に
 # すると、定期実行したときにバックアップそのものが毎回失敗扱いになる。
@@ -44,7 +45,10 @@ set -euo pipefail
 archive_storage() {
 	if [[ "${1:-}" == "--verify" ]]; then
 		[[ $# -eq 3 ]] || usage
-		verify_archive "$2" "$3"
+		[[ -d "$3" ]] || die "画像のディレクトリが見つからない: $3"
+		make_work_dir "${TMPDIR:-/tmp}"
+		hash_manifest "$3" >"$WORK_DIR/source.sha256"
+		verify_archive "$2" "$WORK_DIR/source.sha256" >/dev/null
 		echo "verified: アーカイブと $3 の中身が一致した"
 		return 0
 	fi
@@ -66,8 +70,7 @@ archive_storage() {
 	mkdir -p "$out_dir"
 	chmod 700 "$out_dir"
 
-	WORK_DIR=$(mktemp -d "$out_dir/.work.XXXXXX")
-	trap 'rm -rf "$WORK_DIR"' EXIT
+	make_work_dir "$out_dir"
 
 	local stamp archive
 	stamp=$(date +%Y%m%d-%H%M%S)
@@ -79,9 +82,8 @@ archive_storage() {
 
 	# 検証に通ってから出力先に置く。通らなかったアーカイブに .sha256 を付けて残すと、
 	# 後で sha256sum -c が通り、正しい退避と取り違える。
-	tar -C "$storage_dir" -czf "$WORK_DIR/archive.tar.gz" .
 	local file_count
-	file_count=$(verify_archive "$WORK_DIR/archive.tar.gz" "$storage_dir" "$WORK_DIR/files.txt")
+	file_count=$(create_verified_archive "$storage_dir" "$WORK_DIR/archive.tar.gz" "$WORK_DIR/files.txt")
 	mv "$WORK_DIR/archive.tar.gz" "$archive"
 	(cd "$out_dir" && sha256sum "$stamp.tar.gz" >"$stamp.tar.gz.sha256")
 	echo "archive: $archive"
@@ -99,6 +101,12 @@ usage() {
 die() {
 	echo "error: $*" >&2
 	exit 1
+}
+
+# 一時ファイル(接続情報・展開した画像)は、途中で失敗しても残さない。
+make_work_dir() {
+	WORK_DIR=$(mktemp -d "$1/.work.XXXXXX")
+	trap 'rm -rf "$WORK_DIR"' EXIT
 }
 
 # Laravel の .env は `KEY=value` の行で、値を引用符で囲むことがある。シェルとして
@@ -161,28 +169,46 @@ query_image_columns() {
 		die "DB から画像列を読めなかった"
 }
 
-# 元のディレクトリと、アーカイブを展開したディレクトリの「相対パスごとの sha256」の一覧を
+# 旧アプリは動いたまま退避するので、固めている間に画像が足されたり消されたりしうる。
+# そのときのアーカイブは、固めた後のディレクトリとも前のディレクトリとも一致せず、
+# 検証が誤報になる(あるいは途中の変化を見逃す)。固める前後でディレクトリのハッシュの
+# 一覧が変わらなかった回だけを採り、変わった回は固め直す。
+# 標準出力にファイルの数を出し、3 つ目の引数のファイルにアーカイブの中のファイルの相対パスを書く。
+create_verified_archive() {
+	local storage_dir=$1 archive=$2 files_out=$3 attempt
+	for attempt in 1 2 3; do
+		hash_manifest "$storage_dir" >"$WORK_DIR/before.sha256"
+		tar -C "$storage_dir" -czf "$archive" .
+		hash_manifest "$storage_dir" >"$WORK_DIR/after.sha256"
+		if cmp -s "$WORK_DIR/before.sha256" "$WORK_DIR/after.sha256"; then
+			verify_archive "$archive" "$WORK_DIR/before.sha256" "$files_out"
+			return
+		fi
+		echo "warning: 固めている間に画像のディレクトリが変わったので固め直す($attempt 回目)" >&2
+	done
+	echo "error: 画像のディレクトリが変わり続け、変わらない状態で固められなかった" >&2
+	exit 2
+}
+
+# 期待するハッシュの一覧(hash_manifest の出力)と、アーカイブを展開したディレクトリの一覧を
 # 比べる。一覧が一致すれば、ファイルの数・名前・中身がすべて一致している。
 # 標準出力にファイルの数を出す。3 つ目の引数を渡すと、アーカイブの中のファイルの相対パスを書く。
 verify_archive() {
-	local archive=$1 storage_dir=$2 files_out=${3:-}
+	local archive=$1 expected=$2 files_out=${3:-}
 	[[ -f "$archive" ]] || die "アーカイブが見つからない: $archive"
-	[[ -d "$storage_dir" ]] || die "画像のディレクトリが見つからない: $storage_dir"
-	local tmp
-	tmp=$(mktemp -d "${WORK_DIR:-${TMPDIR:-/tmp}}/.verify.XXXXXX")
-	tar -C "$tmp" -xzf "$archive"
-	local status=0
-	if ! cmp -s <(hash_manifest "$storage_dir") <(hash_manifest "$tmp"); then
-		echo "error: 展開したアーカイブが元のディレクトリと一致しない: $archive" >&2
-		diff <(hash_manifest "$storage_dir") <(hash_manifest "$tmp") >&2 || true
-		status=2
-	fi
-	if [[ $status -eq 0 ]]; then
-		[[ -z "$files_out" ]] || (cd "$tmp" && find . -type f -printf '%P\n' | LC_ALL=C sort >"$files_out")
-		(cd "$tmp" && find . -type f -printf '.' | wc -c)
-	fi
+	local tmp="$WORK_DIR/extracted"
 	rm -rf "$tmp"
-	return $status
+	mkdir "$tmp"
+	tar -C "$tmp" -xzf "$archive"
+	hash_manifest "$tmp" >"$WORK_DIR/extracted.sha256"
+	if ! cmp -s "$expected" "$WORK_DIR/extracted.sha256"; then
+		echo "error: 展開したアーカイブが元のディレクトリと一致しない: $archive" >&2
+		diff "$expected" "$WORK_DIR/extracted.sha256" >&2 || true
+		exit 2
+	fi
+	[[ -z "$files_out" ]] || (cd "$tmp" && find . -type f -printf '%P\n' | LC_ALL=C sort >"$files_out")
+	wc -l <"$WORK_DIR/extracted.sha256"
+	rm -rf "$tmp"
 }
 
 hash_manifest() {
