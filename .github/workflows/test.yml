@@ -71,6 +71,34 @@ jobs:
           php artisan scramble:export --path=../openapi/openapi.json
           git diff --exit-code -- ../openapi/openapi.json
 
+  # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れを止める
+  backend-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 依存ライブラリのインストールで動くコードに、リポジトリのトークンを渡さない
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      # vendor を入れる前に、リポジトリにある PHP ファイルだけを見る(Blade は PHP として読めないので外す)
+      - name: Syntax check (php -l)
+        run: git ls-files -z '*.php' ':!:*.blade.php' | xargs -0 -n1 php -l -d display_errors=1
+
+      - name: Install backend
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Code style (Pint)
+        run: vendor/bin/pint --test
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
