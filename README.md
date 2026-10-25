@@ -2,7 +2,8 @@
 
 「宅飲みカクテルデータベース」(https://cocktail.trc-vlackhistory.net/)のリプレイス版。今は Hello World の段階。
 
-- 公開先(開発中): https://cocktail-next.trc-vlackhistory.net/
+- 公開先(開発中): https://cocktail-next.trc-vlackhistory.net/ (`release`)
+- dev 環境: https://cocktail-dev.trc-vlackhistory.net/ (`develop`。Basic 認証で閉じている。下の「dev 環境」)
 - BE: Laravel 13(PHP 8.4)。`/api/*` が API、それ以外のパスは React の SPA を返す
 - FE: React + Vite(TypeScript)。ビルド結果は `backend/public/spa` に出力し、Laravel の `resources/views/spa.blade.php` がマニフェストを読んで HTML を組み立てる
 - 型の共有: Laravel のコードから Scramble で `openapi/openapi.json` を出力し、FE は openapi-typescript で型を生成して openapi-fetch で呼ぶ
@@ -14,7 +15,8 @@
 backend/    Laravel(mixhost の ~/cocktail-db に置く)
 frontend/   React + Vite
 openapi/    Laravel から出力した OpenAPI(FE の型の元)
-.github/workflows/deploy.yml
+.github/workflows/deploy.yml       release → 本番
+.github/workflows/deploy-dev.yml   develop → dev 環境
 ```
 
 サーバー上の配置:
@@ -22,6 +24,9 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 ```
 ~/cocktail-db/                          アプリ本体(rsync で上書き。.env と storage/ は残す)
 ~/public_html/cocktail-db/public  ->  ~/cocktail-db/public   サブドメインのドキュメントルート(シンボリックリンク)
+~/cocktail-db-dev/                      dev 環境のアプリ本体(.env はデプロイのたびに作り直す。REVISION に出したコミット)
+~/public_html/cocktail-db-dev/.htaccess                      dev 環境の Basic 認証(cPanel の「ディレクトリのプライバシー」が書く)
+~/public_html/cocktail-db-dev/public  ->  ~/cocktail-db-dev/public   dev 環境のドキュメントルート(シンボリックリンク)
 ```
 
 アプリ本体を `public_html` の外に置き、公開するのは `public/` だけにしている(`.env` などが Web から見えないように)。
@@ -98,9 +103,28 @@ GitHub 側に要る設定:
 
 サーバーの `~/cocktail-db/.env` は初回に手で置いたもので、リポジトリには入れない。
 
+## dev 環境
+
+`develop` を、Basic 認証で閉じた dev 環境(https://cocktail-dev.trc-vlackhistory.net/)に出す(`.github/workflows/deploy-dev.yml`)。本番とは別のディレクトリ・DB(`<user>_cocktail_dev`)を使う。
+
+- **1 日 1 回**(日本時間 4:00)、`develop` の先頭を出す。前回出したコミット(サーバーの `~/cocktail-db-dev/REVISION`)から進んでいなければ、テストもデプロイもしない
+- **すぐ出したいとき**: Actions の「deploy-dev」→「Run workflow」(ブランチは `develop`)、または `gh workflow run deploy-dev.yml --ref develop`。同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)
+- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `migrate` → `optimize` → 動作確認)。動作確認では、資格情報なしで 401 になることも確かめる
+- `.env` はデプロイのたびに Secret から作り直す(手で直さない)。`APP_KEY` だけは初回にサーバーで作ったものを使い続ける
+- Basic 認証のユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
+
+GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
+
+| 種類 | 名前 | 中身 |
+|---|---|---|
+| Secret | `DEV_DB_PASSWORD` | dev の DB ユーザー(`<user>_cocktail_dev`)のパスワード。単一引用符は使えない |
+| Secret | `DEV_BASIC_AUTH` | 動作確認に使う Basic 認証の `<ユーザー名>:<パスワード>` |
+| Variable | `DEV_APP_URL` | `https://cocktail-dev.trc-vlackhistory.net` |
+
 ## 撤去
 
 1. GitHub の Secret・Variables を消す(リポジトリごと消すなら不要)
 2. cPanel の「SSH アクセス」で鍵 `cocktail_db_deploy` を削除
 3. cPanel の「ドメイン」で `cocktail-next.trc-vlackhistory.net` を削除
 4. SSH で `~/cocktail-db` と `~/public_html/cocktail-db` を削除
+5. dev 環境も消すなら: cPanel で `cocktail-dev.trc-vlackhistory.net`・DB `<user>_cocktail_dev` とそのユーザー・`public_html/cocktail-db-dev` のパスワード保護を削除し、SSH で `~/cocktail-db-dev` と `~/public_html/cocktail-db-dev` を削除。Secret の `DEV_*`・Variable の `DEV_APP_URL`・Environment の `dev` を消す
