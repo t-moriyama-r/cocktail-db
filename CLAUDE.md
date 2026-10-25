@@ -105,7 +105,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
 4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**画面が変わるなら、修正前後のスクリーンショット(か動画)を貼る**。画面が変わらないなら、撮らない理由を書く
-6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む
+6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。CI が通っても draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、決まりを満たしていれば ready にしてレビューを頼む(満たさなければ足りないものをコメントする)
 7. 指摘は直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)
 8. エージェントは自分でマージしない。`.github/ai-dev.yml` が `merge: auto` のあいだは、指摘の対応が終わって CI が緑になった PR を `ai-auto-merge.yml` がマージする。`needs-human`・`needs-decision`・`needs-approval`・`ai-in-actions`・`no-auto-merge` のラベルが付いた PR、閉じる issue に `needs-review` が付いた PR はマージされない
 9. `release` へのマージはデプロイになるので、人が行う
