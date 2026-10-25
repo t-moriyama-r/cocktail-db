@@ -56,6 +56,7 @@ test -f "$LEGACY_DUMP/legacy_data.sql" && test -f "$LEGACY_DUMP/legacy_schema.sq
 docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql" || load_failed
 awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
 sed -n '/^ALTER TABLE `users`/,/;$/p' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
+docker exec cocktail-legacy-db mariadb -uroot -proot legacy -e 'SELECT 1 FROM users LIMIT 1' >/dev/null || load_failed  # users が作られたかの確認
 
 # 3. 画面のビルド成果物は、commit 済みの版を取り出して使う
 mkdir -p "$WORK/public-head"
