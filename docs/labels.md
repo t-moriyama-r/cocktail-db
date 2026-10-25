@@ -48,7 +48,7 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
 | `no-auto-merge` | 自動でマージしたくない PR | 人が、いつでも | 自動でマージしない。ほかには何も起きない。外すと、自動マージの条件をもう一度確かめる |
-| `ai-in-actions` | 人の判断の後、GitHub Actions の Claude Code が対応を続けている PR | `ai-review-loop.yml` が、`needs-human` か `needs-approval` の PR にオーナーがコメントしたときに付ける。リポジトリにまだ無ければ、そのときに作る | 自動でマージしない。CodeRabbit のレビューが付くと、Actions の Claude Code が指摘に対応する。対応が終わると Claude Code が外す(閉じる issue に `needs-review` があれば、代わりに `needs-approval` を付ける) |
+| `ai-in-actions` | GitHub Actions の Claude Code がレビューの指摘に対応している PR | `ai-review-loop.yml` が、CodeRabbit のレビューに対応し始めたとき、`needs-human` か `needs-approval` の PR にオーナーがコメントしたときに付ける。リポジトリにまだ無ければ、そのときに作る | 自動でマージしない。対応が終わると Claude Code が外す(閉じる issue に `needs-review` があれば、代わりに `needs-approval` を付ける)。途中で止まったときもワークフローが外す。印だけ残ったものは、`ai-review-sweep.yml` が 3 時間たってから拾い直す |
 
 `needs-human`・`needs-decision`・`needs-approval` も、PR に付いていれば自動でマージしない(下の「人に頼む」)。
 
