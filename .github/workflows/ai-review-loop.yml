@@ -86,6 +86,9 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
+          # App のトークンは既定で contents・pull_requests・issues しか持たないため、ワークフローのファイルを直して push できるよう workflows も要求する
+          additional_permissions: |
+            workflows: write
           claude_args: |
             --max-turns 60
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
@@ -223,6 +226,9 @@ jobs:
         if: steps.pr.outputs.run
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
+          # App のトークンは既定で contents・pull_requests・issues しか持たないため、ワークフローのファイルを直して push できるよう workflows も要求する
+          additional_permissions: |
+            workflows: write
           # github-actions[bot]: ai-claude-review.yml が GITHUB_TOKEN で呼んだとき
           allowed_bots: coderabbitai,coderabbitai[bot],github-actions,github-actions[bot]
           claude_args: |
