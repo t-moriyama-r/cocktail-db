@@ -27,3 +27,6 @@ jobs:
 
       - name: Test pr-status.sh
         run: bash .github/scripts/tests/pr-status.test.sh
+
+      - name: Test head-reviewed.sh
+        run: bash .github/scripts/tests/head-reviewed.test.sh
