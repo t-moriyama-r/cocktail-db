@@ -1,0 +1,28 @@
+name: ai-dev-scripts
+
+# ai-dev のワークフローが使うスクリプト(.github/scripts/)のテスト。
+# 必須のチェックにしても止まらないよう、paths で絞らずにすべての PR で動かす
+# (絞ると、関係の無い PR でチェックが来ずに止まる)。
+
+on:
+  pull_request:
+    branches: [develop, staging, release]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: ShellCheck
+        run: shellcheck .github/scripts/workflow-change-summary.sh .github/scripts/tests/workflow-change-summary.test.sh
+
+      - name: Run workflow-change-summary tests
+        run: bash .github/scripts/tests/workflow-change-summary.test.sh

@@ -2,6 +2,8 @@
 #
 # Actions の Claude Code は App のトークンでワークフローを書き換えられるので、書き換わったものがマージされたことを
 # 人(オーナー)が必ず知れるようにする。
+# 変わったファイルの名前だけでは、見なくてよい変更かどうかが分からないので、どういう変更かのサマリー
+# (.github/scripts/workflow-change-summary.sh。要注意の変更があるかと、権限・secret・トリガーなどに触れる行)を付ける
 #
 # きっかけは 2 つあり、1 件につきどちらか一方だけが 1 通送る
 # - pull_request_target(closed): 人がマージしたとき
@@ -11,7 +13,8 @@
 name: ワークフローの変更のマージを Slack に知らせる
 
 on:
-  # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
+  # checkout するのは、動いているワークフローと同じ版(マージ先のブランチ)のスクリプトだけなので、
+  # pull_request_target でも PR(フォーク)のコードは動かない
   pull_request_target:
     types: [closed]
     paths:
@@ -31,6 +34,13 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged
     runs-on: ubuntu-latest
     steps:
+      # サマリーを作るスクリプト。PR のコードではなく、動いているワークフローと同じ版を使う
+      - uses: actions/checkout@v6
+        with:
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Slack に送る
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -38,29 +48,34 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ inputs.number || github.event.pull_request.number }}
         run: |
+          pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName)
+          # gh pr view の files は 100 件で切れるので、ファイルの差分は API からすべて取る
+          summary=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100" | jq 'add // []' \
+            | bash .ai-dev/.github/scripts/workflow-change-summary.sh)
+          if [ -z "$summary" ]; then
+            echo "#$NUMBER はワークフローを変えていないので送らなかった"
+            exit 0
+          fi
+          echo "$summary"
+
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
             echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
             exit 0
           fi
 
-          pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName,files)
-          files=$(jq '[.files[].path | select(startswith(".github/workflows/"))]' <<<"$pr")
-          if [ "$(jq length <<<"$files")" = 0 ]; then
-            echo "#$NUMBER はワークフローを変えていないので送らなかった"
-            exit 0
-          fi
-
-          jq -n --arg repo "$REPO" --argjson pr "$pr" --argjson files "$files" '
+          # サマリーの 1 行目は結論、2 行目からはファイルごとの中身(どちらも mrkdwn のエスケープ済み)
+          jq -n --arg repo "$REPO" --argjson pr "$pr" --arg summary "$summary" '
             def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
-            {
+            ($summary | split("\n")) as $lines
+            | {
               unfurl_links: false,
               text: ([
                 ":warning: *ワークフローを変えた PR がマージされた*(\($repo))",
                 "",
                 "*PR*: <\($pr.url)|\($pr.title | esc)>(\($pr.baseRefName) へ。マージした人: \($pr.mergedBy.login // "不明"))",
-                "*変わったワークフロー*:",
-                ($files[] | "• `\(. | esc)`"),
+                $lines[0],
                 "",
-                "意図しない変更(権限・secret・外部への送信など)が入っていないか、差分を確かめてください"
+                "*変わったワークフロー*(<\($pr.url)/files|差分>):",
+                $lines[1:][]
               ] | join("\n"))
             }' | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
