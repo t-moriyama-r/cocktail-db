@@ -69,6 +69,25 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 | `needs-decision` | 着手する前に決めることがある issue | 上の「着手の順番」 | Slack に知らせる(本文の「判断が要ること」を添える) |
 | `needs-approval` | マージできる状態になり、人の承認(マージ)を待っている PR | `ai-auto-merge.yml` が、人の手でマージする PR(上の「PR のマージ」)で、レビューの指摘への対応が終わり、CI が緑でコンフリクトが無くなったときに付ける。付ける前に、マージできる状態になったことを PR にコメントする(閉じる issue に `needs-review` があれば、Claude Code が書いた見てほしいところへのリンクを添える) | Slack に知らせる。自動でマージしない。人は証跡を見て、よければマージする(マージが承認)。オーナーが PR にコメントすると、`ai-review-loop.yml` の Claude Code が、直してほしいことがあればこのラベルを外して直し、再レビューを頼む。マージできる状態に戻れば、`ai-auto-merge.yml` がまた付ける。「OK」だけなら、マージで承認するよう返す |
 
+## PR の状態(表示用)
+
+開いている PR には、いま誰の番かを表す `状態:…` のラベルが 1 つだけ付く。`.github/scripts/pr-status.sh` が、下書きか・上のラベル・コンフリクト・必須のチェック・レビュー・返信待ちの指摘から毎回出し直して付け替える。上から見て最初に当てはまったものになる。
+
+| ラベル | いつ | 次に動くもの |
+|---|---|---|
+| `状態:作業中` | 下書き | PR を作ったエージェント(か `ai-draft-sweep.yml`)が ready にする |
+| `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
+| `状態:人のマージ待ち` | `needs-approval` が付いている | 人が確かめてマージする |
+| `状態:コンフリクト` | `develop` とコンフリクトしている | 自動では直らない。人かエージェントが `develop` を取り込んで直す |
+| `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
+| `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
+| `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない | CodeRabbit(上限なら `ai-claude-review.yml`) |
+| `状態:マージ待ち` | 上のどれでもない(レビューの対応が済み、CI も緑) | `ai-auto-merge.yml` |
+
+- 付け替えるのは `pr-status.yml`。PR の動き・レビュー・CodeRabbit のコメント・CI と AI のワークフローの終わりで動き、1 時間ごとに開いている PR をすべて出し直す。ジョブが途中で止まって古いラベルが残っても、そこで直る。手で付け替えても、事実どおりに戻る
+- 手元から今すぐ揃えるときは `gh workflow run pr-status.yml`(番号を付けなければ、開いている PR すべて)
+- 表示のためのラベルで、ワークフローの条件には使わない。止めたい・人に頼みたいときは、上の `no-auto-merge`・`needs-human` などを付ける
+
 ## GitHub の既定のラベル
 
 `bug`・`documentation`・`enhancement`・`duplicate`・`invalid`・`question`・`wontfix`・`good first issue`・`help wanted`・`accessibility` は、リポジトリを作ったときに GitHub が用意したもの。issue の種類を表すだけで、付けても自動では何も起きない(next-issue は `task` が無い issue を選ばないので、`bug` だけでは着手の候補にならない)。

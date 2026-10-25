@@ -1,0 +1,75 @@
+# PR に、いま誰の番かを表す状態のラベル(状態:レビュー待ち・状態:レビュー対応中 など)を 1 つだけ付ける。決め方は .github/scripts/pr-status.sh
+#
+# 状態が変わりうるとき(PR の動き・CodeRabbit のレビューとコメント・CI の終わり)に、その PR を事実から出し直して付け替える。
+# GITHUB_TOKEN で付けたラベルやマージはワークフローを起こさないので、AI のワークフロー(ai-review-loop.yml・ai-claude-review.yml・
+# ai-auto-merge.yml)は、状態を変えた後でこのワークフローを番号付きで呼ぶ。1 時間ごとに開いている PR をすべて出し直すので、
+# 途中で止まったジョブが古いラベルを残しても、そこで直る。
+# 1 回に PR 1 件あたり 10 回ほど API を呼ぶ。GITHUB_TOKEN の上限(1 時間に 1,000 回)をほかの AI のワークフローと分け合うので、
+# すべての PR を出し直すのは 1 時間ごとと手動のときだけにし、ほかのきっかけでは、その PR だけを出し直す。
+# PR のコードは checkout しない(pull_request_target で書き込みの権限を持つため)。スクリプトは既定のブランチのものを使う
+name: PR の状態のラベル
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    # CodeRabbit は依頼への返信を「Review triggered」で作ってから「Review finished」に書き換えるので、書き換えでも起動する
+    types: [created, edited]
+  workflow_run:
+    workflows: [test]   # CI のワークフロー名に合わせる
+    types: [completed]
+  schedule:
+    - cron: '45 * * * *'
+  workflow_dispatch:
+    inputs:
+      number:
+        description: PR の番号(空なら開いている PR すべて)
+        required: false
+
+permissions: {}
+
+# 同じ PR の回を 1 列に並べる。取り消しはしない: concurrency はジョブの if より前に効くので、取り消すと、if で飛ばされる起動
+# (人のコメントなど)が、AI のワークフローから呼ばれた回を止めてしまう。何度動かしても同じ結果になるので、待たせても害は無い
+concurrency:
+  group: pr-status-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.number || github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    # レビュー・コメントは CodeRabbit のものだけ(人のコメントでは状態は変わらない。状態を変える AI のワークフローは、終わりにこちらを呼ぶ)。
+    # CI は PR に結び付いた回だけ。このジョブが付け替えたラベルは GITHUB_TOKEN なので、ここへは戻ってこない。
+    # 人が状態のラベルを手で付け替えたときは動いて、事実どおりに戻す
+    if: >-
+      github.event_name == 'pull_request_target' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
+      || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]')
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+
+      - name: 状態を出し直して、ラベルを付け替える
+        run: |
+          if [ -n "$NUMBER" ]; then
+            numbers=$NUMBER
+          else
+            numbers=$(gh pr list -R "$REPO" --state open --limit 100 --json number --jq '.[].number')
+          fi
+          for n in $numbers; do
+            bash .github/scripts/pr-status.sh "$REPO" "$n" || echo "::warning::#$n の状態のラベルを付け替えられなかった"
+          done
