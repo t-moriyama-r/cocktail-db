@@ -39,6 +39,20 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           echo "${{ vars.MIXHOST_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
+      # Secret は、ターミナルから値を入れずに作ると空になる。空のまま出すと、途中の DB の接続や最後の動作確認で分かりにくく落ちるので、先に止める
+      - name: Check secrets
+        env:
+          DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
+          DEV_BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
+        run: |
+          missing=""
+          [ -n "$DEV_DB_PASSWORD" ] || missing="$missing DEV_DB_PASSWORD"
+          case "$DEV_BASIC_AUTH" in ?*:?*) ;; *) missing="$missing DEV_BASIC_AUTH(<ユーザー名>:<パスワード>)" ;; esac
+          if [ -n "$missing" ]; then
+            echo "::error::Secret が空か形が違う:$missing。リポジトリの Settings → Secrets and variables → Actions で入れ直す"
+            exit 1
+          fi
+
       # 前回出したコミットは、サーバーの ~/cocktail-db-dev/REVISION にある(デプロイの最後に書く)
       - name: Compare with the deployed revision
         id: revision
