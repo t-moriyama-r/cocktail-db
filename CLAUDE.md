@@ -94,8 +94,9 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 
 ## 旧ソースの参照
 
-- リプレイス元の旧アプリのソースは、秘密情報を取り除いて **private の別リポジトリ**に置く予定(#4)。このリポジトリには入れない
-- **まだ用意されていない**。用意されたら、リポジトリの場所と参照のしかたをここに追記する
+- リプレイス元の旧アプリのソースは、秘密情報を取り除いて **private のリポジトリ `t-moriyama-r/cocktail-legacy`** に置いてある(参照専用。このリポジトリには入れない)。clone して読む
+- 本番の BE は `laravel13/`、本番の画面のビルドは `production-public/`、画面の Vue のソースは `laravel6/resources/js/`。旧と同じ挙動を確かめるときに見るのは本番の版で、手元の古い版と違うところは cocktail-legacy の README の「本番との違い」にある
+- GitHub Actions のエージェントからは、まだ読めない(このリポジトリの `GITHUB_TOKEN` では別の private リポジトリを読めない)。旧実装を見る必要がある issue は、手元で進める
 - 旧ソースから写すときも、絶対パス・サーバー名・DB 名・外部サービスの設定名をこのリポジトリに持ち込まない
 - 旧システムを手元で動かす手順は `docs/legacy-local.md`
 
