@@ -17,7 +17,8 @@ name: AI レビュー(CodeRabbit の上限のときの代わり)
 
 on:
   issue_comment:
-    types: [created]
+    # CodeRabbit は「処理中」のコメントを作ってから、上限の文言に書き換える。作ったときの本文には文言が無いので、書き換えでも起動する
+    types: [created, edited]
   workflow_dispatch:
     inputs:
       number:
@@ -26,8 +27,15 @@ on:
 
 permissions: {}
 
+# 同じグループで待てる実行は 1 つだけで、後から来た実行が待っている実行を取り消す。CodeRabbit はコメントを何度も書き換えるので、
+# レビューしない実行まで PR ごとのグループに入れると、待っていた上限の実行が取り消される。PR ごとに順番待ちさせるのは、レビューしうる実行だけにする
 concurrency:
-  group: ai-claude-review-${{ github.event.issue.number || inputs.number }}
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch'
+      || (github.event.comment.user.login == 'coderabbitai[bot]'
+        && (contains(github.event.comment.body, 'Review limit reached') || contains(github.event.comment.body, 'Review rate limited'))))
+      && format('ai-claude-review-{0}', github.event.issue.number || inputs.number)
+      || format('ai-claude-review-run-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
