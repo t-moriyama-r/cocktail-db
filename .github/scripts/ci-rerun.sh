@@ -31,14 +31,15 @@ ci_rerun() {
     return
   fi
   for n in $(gh pr list -R "$repo" --state open --base "$default" --limit 100 --json number --jq '.[].number'); do
-    rerun_one "$repo" "$default" "$n"
+    # 1 件の失敗で、後ろの PR を見ないまま止まらない
+    rerun_one "$repo" "$default" "$n" || echo "#$n 失敗: 次の見回りでやり直す"
   done
 }
 
 rerun_one() {
   local repo=$1 default=$2 n=$3 pr sha branch
   skip() { echo "#$n 見送り: $*"; }
-  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable,updatedAt)
+  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable,updatedAt) || return 1  # || で呼ばれると set -e が効かないので、読めなかったら先へ進まない
   sha=$(jq -r .headRefOid <<<"$pr")
   branch=$(jq -r .headRefName <<<"$pr")
 
@@ -81,10 +82,12 @@ tell() {
     echo "#$n 見送り: このコミットではもう頼んだ"
     return
   fi
-  gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- $marker -->
-$message"
-  gh pr edit "$n" -R "$repo" --add-label needs-human
-  gh workflow run notify-needs-human.yml -R "$repo" -f number="$n" -f label=needs-human
+  # 目印入りのコメントは最後に書く。先に書くと、途中で失敗したときに「もう頼んだ」と見送られ、ラベルも通知も届かないまま止まる。
+  # 呼び出し側が || で囲むと set -e が効かなくなるので、&& でつないで、失敗したらコメントを書かずに戻す
+  gh pr edit "$n" -R "$repo" --add-label needs-human &&
+    gh workflow run notify-needs-human.yml -R "$repo" -f number="$n" -f label=needs-human &&
+    gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- $marker -->
+$message" || return 1
   echo "#$n で人に頼んだ: $message"
 }
 
