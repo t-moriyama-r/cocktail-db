@@ -113,7 +113,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
             --max-turns 30
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr ready:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view ${{ env.NUMBER }}:*),Bash(gh pr diff ${{ env.NUMBER }}:*),Bash(gh pr checks ${{ env.NUMBER }}:*),Bash(gh pr ready ${{ env.NUMBER }}),Bash(gh pr comment ${{ env.NUMBER }}:*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.NUMBER }} は draft のまま止まっている。CI はすべて緑。
             ready にしてレビューに回せる状態かを判断してほしい。コードは書かない・push しない。
