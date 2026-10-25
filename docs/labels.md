@@ -59,6 +59,7 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
 - `SLACK_WEBHOOK_URL` が無いときは、送らずに警告だけ出す
+- 付いたときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだこれらのラベルが付いて開いている PR・issue を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件の日は送らない。手動で送るときは、`notify-needs-human.yml` を `number` を空、`label` を `all` にして動かす
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
