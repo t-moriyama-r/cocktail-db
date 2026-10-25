@@ -66,6 +66,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす(SQLite では代用しない)
+- 移行のテストは、旧 DB の接続(`legacy`)で 2 つ目の DB `legacy_test` を使う。同じ MariaDB に `legacy_test` を作り、接続先を `LEGACY_DB_HOST` などで渡す(DB 名は `phpunit.xml` が `legacy_test` に固定する)。表と旧データは `tests/Support/LegacyFixture.php` が `database/legacy/schema.sql`(旧 DB の DDL)から作る
 - CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR と `develop` への push で動く
 - E2E(Playwright)は `e2e/` にある。`frontend` で `npm run build` してから、`e2e` で `npm test`(`php artisan serve` を自動で起こす)。CI では `e2e` ジョブで流れる
 - テスト名の先頭はテストケースの ID(`TC-<issue 番号>-<連番>`)。ケースの表は PR 本文にある
