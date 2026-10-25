@@ -1,5 +1,5 @@
 # AI 駆動開発の設定(ai-driven-dev スキル)
-merge: auto          # auto: CodeRabbit の指摘への対応が終わり、CI が緑なら自動でマージする(ai-auto-merge.yml) / review: 人がマージする
+merge: auto          # auto: CodeRabbit の指摘への対応が終わり、CI が緑なら自動でマージする(ai-auto-merge.yml) / review: 人がマージする(マージできる状態になったら needs-approval を付けて知らせる)
 reviewer: coderabbit # coderabbit / claude / both
                      # coderabbit でも、CodeRabbit が上限(Review limit reached / rate limited)を返した回だけは、
                      # 代わりに Claude がそのコミットをレビューする(ai-claude-review.yml)。次の依頼はまた CodeRabbit に出す

@@ -7,10 +7,11 @@
 #           ai-review-sweep.yml が返されていない指摘を見つけたときは、そのワークフローから呼ばれる(workflow_dispatch)。
 #           対応しているあいだは ai-in-actions を付けておく(自動マージはこのラベルの PR をマージしない)。
 #           堂々めぐり・判断に迷うものは、判断を頼むコメントを書いて needs-human を付ける。
-#           指摘が無くなったとき、人の承認が要る issue(needs-review)の PR なら needs-approval を付ける
+#           指摘が無くなったとき、人の承認が要る issue(needs-review)の PR なら、見てほしいところをコメントしておく。
+#           needs-approval は付けない。終わった後に ai-auto-merge.yml を呼び、マージできる状態になったらそちらが付けて人に知らせる
 #
 # Actions の中で付けたラベルは、Slack の通知のワークフローを起こさないことがある(GITHUB_TOKEN で付けたとき)。
-# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-approval を見て、通知のワークフローを直接呼ぶ。
+# そのため Claude Code が終わった後に、新しく付いた needs-human を見て、通知のワークフローを直接呼ぶ。
 # Claude Code は PR・レビューのコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限
 # (actions: write。deploy.yml も起動できてしまう)を渡さず、通知を呼ぶジョブ(notify-*)だけに渡す
 #
@@ -119,7 +120,8 @@ jobs:
       actions: write   # 通知のワークフローを gh workflow run で呼ぶ
       pull-requests: read
     steps:
-      - name: 新しく付いた needs-human・needs-approval を Slack に知らせる
+      # needs-approval はここでは新しく付かない(マージできる状態になったときに ai-auto-merge.yml が付ける)
+      - name: 新しく付いた needs-human を Slack に知らせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -127,11 +129,9 @@ jobs:
           BEFORE: ${{ needs.resume.outputs.before }}
         run: |
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-approval; do
-            if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
-              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
-            fi
-          done
+          if [[ ",$after," == *",needs-human,"* && ",$BEFORE," != *",needs-human,"* ]]; then
+            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
+          fi
 
   review:
     # PR に CodeRabbit のレビューが付いたとき。指摘が無いとレビューは付かず、
@@ -250,11 +250,11 @@ jobs:
 
             直したものがあれば push し、PR に `<!-- ai-dev:agent --> <!-- ai-dev:round -->` と「レビューの指摘に対応した(<n> 回目)」をコメントしてから、
             `@coderabbitai review` とだけコメントし、`ai-in-actions` ラベルを外して終える(次のレビューが付けば、また付けて対応する)。
-            直したものも人に頼むものも無ければ、`ai-in-actions` ラベルを外し、次のどちらかをして終える。
-            - PR が閉じる issue(`gh pr view --json closingIssuesReferences` の issue のラベル)に `needs-review` が付いている(人の承認が要る):
-              PR にコメントを書いてから `needs-approval` ラベルを付ける。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-approval --> を付け、
-              中身は、何を変えたか(2〜3 行)と、見てほしいところ(証跡の画像・画面・ファイルと、そこで何を確かめてほしいか)。案が複数あるなら、それぞれの違いとおすすめ
-            - それ以外: PR に「<!-- ai-dev:agent --> レビューの指摘への対応が終わった。マージの判断をお願いします」とコメントする
+            直したものも人に頼むものも無ければ、`ai-in-actions` ラベルを外して終える。
+            PR が閉じる issue(`gh pr view --json closingIssuesReferences` の issue のラベル)に `needs-review` が付いている(人が中身を確かめる)ときは、
+            外す前に、人に見てほしいところを PR にコメントしておく。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:approval-summary --> を付け、
+            中身は、何を変えたか(2〜3 行)と、見てほしいところ(証跡の画像・画面・ファイルと、そこで何を確かめてほしいか)。案が複数あるなら、それぞれの違いとおすすめ。
+            `needs-approval` ラベルは付けない。CI が緑でマージできる状態になったら、ai-auto-merge.yml が付けて人に知らせる(自動でマージする PR なら、そのままマージする)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
@@ -268,10 +268,13 @@ jobs:
     if: always() && needs.review.result != 'skipped' && needs.review.outputs.run == 'true'
     runs-on: ubuntu-latest
     permissions:
-      actions: write   # 通知のワークフローを gh workflow run で呼ぶ
+      actions: write   # 通知・判定のワークフローを gh workflow run で呼ぶ
       pull-requests: read
     steps:
-      - name: 新しく付いた needs-human・needs-approval を Slack に知らせる
+      # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
+      # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
+      # 直して再レビューを頼んだ回や、人に頼んだ回では、ai-auto-merge.yml の方で見送られる
+      - name: 新しく付いた needs-human を Slack に知らせ、マージできるかを確かめさせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -279,8 +282,7 @@ jobs:
           BEFORE: ${{ needs.review.outputs.before }}
         run: |
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-approval; do
-            if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
-              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
-            fi
-          done
+          if [[ ",$after," == *",needs-human,"* && ",$BEFORE," != *",needs-human,"* ]]; then
+            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
+          fi
+          gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
