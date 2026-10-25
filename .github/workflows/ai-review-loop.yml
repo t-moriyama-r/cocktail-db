@@ -15,7 +15,7 @@
 # エージェントが書くコメントには目印 <!-- ai-dev:agent --> を付け、判断を頼むコメントには
 # <!-- ai-dev:needs-human --> も付ける。目印の付いたコメントでは起動しない
 #
-# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN(`claude setup-token` で作る)。2 つ目のアカウントで動かすときは CLAUDE_CODE_OAUTH_TOKEN_2 も作り、リポジトリ変数 CLAUDE_ACCOUNT を 2 にする。Claude の GitHub App をこのリポジトリに入れておく
+# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(`claude setup-token` で作る)。使うアカウントはリポジトリ変数 CLAUDE_ACCOUNT で選び、アカウントごとに secret を 1 つ作る。Claude の GitHub App をこのリポジトリに入れておく
 name: AI レビュー対応
 
 on:
@@ -82,7 +82,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ vars.CLAUDE_ACCOUNT == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
             --max-turns 60
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
@@ -172,7 +172,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ vars.CLAUDE_ACCOUNT == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           # github-actions[bot]: ai-claude-review.yml が GITHUB_TOKEN で呼んだとき
           allowed_bots: coderabbitai,coderabbitai[bot],github-actions,github-actions[bot]
           claude_args: |

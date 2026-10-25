@@ -12,7 +12,7 @@
 # Claude Code は PR の差分を読むので、そのジョブには読み取りの権限だけを渡し、レビューを付ける・ワークフローを呼ぶのは別のジョブでする。
 # Claude のトークンを使うので、オーナーが作った PR だけを見る
 #
-# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN(ai-review-loop.yml と同じ。CLAUDE_ACCOUNT が 2 なら CLAUDE_CODE_OAUTH_TOKEN_2)
+# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)
 name: AI レビュー(CodeRabbit の上限のときの代わり)
 
 on:
@@ -90,7 +90,7 @@ jobs:
         id: claude
         if: steps.pr.outputs.go == 'true'
         with:
-          claude_code_oauth_token: ${{ vars.CLAUDE_ACCOUNT == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           github_token: ${{ github.token }}
           allowed_bots: coderabbitai,coderabbitai[bot]
           claude_args: |
