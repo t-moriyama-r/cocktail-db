@@ -53,7 +53,7 @@ jobs:
           now=$(date -u +%s)
           for n in $(gh pr list -R "$REPO" --state open --draft --base "$DEFAULT_BRANCH" --author "$OWNER" --limit 100 --json number --jq '.[].number'); do
             skip() { echo "#$n 見送り: $*"; }
-            pr=$(gh pr view "$n" -R "$REPO" --json headRefOid,labels,isCrossRepository,commits,statusCheckRollup)
+            pr=$(gh pr view "$n" -R "$REPO" --json headRefOid,labels,isCrossRepository,statusCheckRollup)
             head=$(jq -r .headRefOid <<<"$pr")
             if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
             label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")' <<<"$pr")
@@ -64,16 +64,17 @@ jobs:
             if [ "$(jq length <<<"$checks")" = 0 ]; then skip "チェックが無い"; continue; fi
             if jq -e 'index("pending")' <<<"$checks" >/dev/null; then skip "チェックが終わっていない"; continue; fi
             if jq -e 'index("failed")' <<<"$checks" >/dev/null; then skip "失敗したチェックがある"; continue; fi
-            committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+            # --json commits は先頭 100 件までなので、いまのコミットの日付を直接取る
+            committed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date)
             age=$(( (now - $(date -u -d "$committed" +%s)) / 3600 ))
             if [ "$age" -lt "$MIN_AGE_HOURS" ]; then skip "最後のコミットから ${age} 時間"; continue; fi
             # 目印は Actions の Claude が付ける。公開リポジトリなので、誰でも書ける人のコメントの目印は数えない(数えると、見回りから外せてしまう)
             judged=$(gh api --paginate "repos/$REPO/issues/$n/comments?per_page=100" --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"ai-dev:draft-sweep sha=$head\"))) | .id")
             if [ -n "$judged" ]; then skip "このコミットは判断済み"; continue; fi
             echo "#$n 候補"
-            picked+=("$n")
+            picked+=("$(jq -nc --argjson number "$n" --arg head "$head" '{number: $number, head: $head}')")
           done
-          echo "numbers=$(printf '%s\n' "${picked[@]}" | jq -Rnc '[inputs | select(length > 0) | tonumber]')" >> "$GITHUB_OUTPUT"
+          echo "numbers=$(printf '%s\n' "${picked[@]}" | jq -nc '[inputs]')" >> "$GITHUB_OUTPUT"
 
   judge:
     needs: pick
@@ -89,19 +90,26 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        number: ${{ fromJSON(needs.pick.outputs.numbers) }}
+        pr: ${{ fromJSON(needs.pick.outputs.numbers) }}
     env:
-      NUMBER: ${{ matrix.number }}
+      NUMBER: ${{ matrix.pr.number }}
+      PICKED_HEAD: ${{ matrix.pr.head }}
     steps:
-      # pick の後に人が ready にした・push したことがあるので、いまの状態を取り直す
-      - name: いまも draft か
+      # max-parallel: 1 なので、pick から数十分〜数時間たつことがある。その間に人が ready にした・push した・ラベルを付けたものは、
+      # pick で確かめた CI・経過時間・ラベルが今のものではないので見送る(次の日の見回りで、いまのコミットを確かめ直す)
+      - name: pick のときから変わっていないか
         id: live
         run: |
-          pr=$(gh pr view "$NUMBER" -R "$REPO" --json isDraft,state,headRefOid)
-          if [ "$(jq -r '.state + .isDraft' <<<"$pr")" = OPENtrue ]; then
-            echo "head=$(jq -r .headRefOid <<<"$pr")" >> "$GITHUB_OUTPUT"
-          else
+          pr=$(gh pr view "$NUMBER" -R "$REPO" --json isDraft,state,headRefOid,labels)
+          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")' <<<"$pr")
+          if [ "$(jq -r '.state + .isDraft' <<<"$pr")" != OPENtrue ]; then
             echo "#$NUMBER はもう draft ではない・閉じている"
+          elif [ "$(jq -r .headRefOid <<<"$pr")" != "$PICKED_HEAD" ]; then
+            echo "#$NUMBER は pick の後に push された"
+          elif [ -n "$label" ]; then
+            echo "#$NUMBER は pick の後にラベル $label が付いた"
+          else
+            echo "head=$PICKED_HEAD" >> "$GITHUB_OUTPUT"
           fi
 
       # CLAUDE.md・PR テンプレートを読めるようにする
