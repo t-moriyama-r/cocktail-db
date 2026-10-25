@@ -108,6 +108,20 @@ jobs:
       - name: Static analysis (PHPStan)
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
+  # 通知のワークフローが使う Slack のスクリプト。curl・gh を偽物にして流すので、Slack にも GitHub にも触らない
+  slack-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: ShellCheck
+        run: shellcheck --severity=warning .github/scripts/slack-*.sh .github/scripts/tests/slack.test.sh
+
+      - name: Test
+        run: bash .github/scripts/tests/slack.test.sh
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
