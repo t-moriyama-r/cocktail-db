@@ -16,8 +16,8 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 # 記号を一通り含める(オプションファイルのエスケープと、出力に漏れていないかの検索に使う)
-DUMP_PASS='Dp#9"q\z'"'"'$w x!'
-WRONG_PASS='Wr0ng#"\pa$$'
+DUMP_PASS="Dp#9\"q\z'\$w x!"
+WRONG_PASS="Wr0ng#\"\pa\$\$"
 
 FAILED=0
 PASSED=0
@@ -50,8 +50,11 @@ tc_missing_env_file() {
   local out
   out=$(bash "$SCRIPT" "$WORK/nothing.env" 2>&1)
   local status=$?
-  { [ "$status" -ne 0 ] && [[ $out == *".env が読めない"* ]]; }
-  result "TC-14-01: .env が無いと止まる" $?
+  if [ "$status" -ne 0 ] && [[ $out == *".env が読めない"* ]]; then
+    pass "TC-14-01: .env が無いと止まる"
+  else
+    fail "TC-14-01: .env が無いと止まる" ""
+  fi
 }
 
 tc_missing_required_key() {
@@ -60,9 +63,12 @@ tc_missing_required_key() {
   local out status
   out=$(bash "$SCRIPT" "$env" 2>&1)
   status=$?
-  { \
-    [ "$status" -ne 0 ] && [[ $out == *"BACKUP_DIR が無い"* ]] && no_secret "$out"; }
-  result "TC-14-02: 必須のキー(BACKUP_DIR)が無いと、キーの名前を出して止まる" $?
+  if \
+    [ "$status" -ne 0 ] && [[ $out == *"BACKUP_DIR が無い"* ]] && no_secret "$out"; then
+    pass "TC-14-02: 必須のキー(BACKUP_DIR)が無いと、キーの名前を出して止まる"
+  else
+    fail "TC-14-02: 必須のキー(BACKUP_DIR)が無いと、キーの名前を出して止まる" ""
+  fi
 }
 
 tc_relative_backup_dir() {
@@ -71,9 +77,12 @@ tc_relative_backup_dir() {
   local out status
   out=$(cd "$WORK" && bash "$SCRIPT" "$env" 2>&1)
   status=$?
-  { \
-    [ "$status" -ne 0 ] && [[ ! -e $WORK/backups ]] && no_secret "$out"; }
-  result "TC-14-03: BACKUP_DIR が相対パスだと止まり、何も作らない" $?
+  if \
+    [ "$status" -ne 0 ] && [[ ! -e $WORK/backups ]] && no_secret "$out"; then
+    pass "TC-14-03: BACKUP_DIR が相対パスだと止まり、何も作らない"
+  else
+    fail "TC-14-03: BACKUP_DIR が相対パスだと止まり、何も作らない" ""
+  fi
 }
 
 tc_public_html_direct() {
@@ -83,9 +92,12 @@ tc_public_html_direct() {
   local out status
   out=$(bash "$SCRIPT" "$env" 2>&1)
   status=$?
-  { \
-    [ "$status" -ne 0 ] && [[ $out == *"public_html"* ]] && [[ ! -e $WORK/home/public_html/backups ]] && no_secret "$out"; }
-  result "TC-14-04: BACKUP_DIR が public_html の下だと止まり、何も作らない" $?
+  if \
+    [ "$status" -ne 0 ] && [[ $out == *"public_html"* ]] && [[ ! -e $WORK/home/public_html/backups ]] && no_secret "$out"; then
+    pass "TC-14-04: BACKUP_DIR が public_html の下だと止まり、何も作らない"
+  else
+    fail "TC-14-04: BACKUP_DIR が public_html の下だと止まり、何も作らない" ""
+  fi
 }
 
 tc_public_html_symlink() {
@@ -99,9 +111,12 @@ tc_public_html_symlink() {
   local out status
   out=$(bash "$SCRIPT" "$env" 2>&1)
   status=$?
-  { \
-    [ "$status" -ne 0 ] && [[ $out == *"public_html"* ]] && [[ ! -e $WORK/home/public_html/backups ]] && no_secret "$out"; }
-  result "TC-14-05: BACKUP_DIR がリンク(~/www など)経由で public_html を指すと止まる" $?
+  if \
+    [ "$status" -ne 0 ] && [[ $out == *"public_html"* ]] && [[ ! -e $WORK/home/public_html/backups ]] && no_secret "$out"; then
+    pass "TC-14-05: BACKUP_DIR がリンク(~/www など)経由で public_html を指すと止まる"
+  else
+    fail "TC-14-05: BACKUP_DIR がリンク(~/www など)経由で public_html を指すと止まる" ""
+  fi
 }
 
 # ---- DB を使うケース ----
@@ -117,28 +132,40 @@ tc_dump_and_restore() {
 
   local gz=${out##*$'\n'}
   local stem=${gz%.sql.gz}
-  { \
-    [ "$status" -eq 0 ] && [[ $(basename "$gz") =~ ^dump_src-[0-9]{8}-[0-9]{6}\.sql\.gz$ ]] && [[ -f $gz ]]; }
-  result "TC-14-06: 終了コード 0 で <DB名>-<YYYYMMDD-HHMMSS>.sql.gz を作る" $?
+  if \
+    [ "$status" -eq 0 ] && [[ $(basename "$gz") =~ ^dump_src-[0-9]{8}-[0-9]{6}\.sql\.gz$ ]] && [[ -f $gz ]]; then
+    pass "TC-14-06: 終了コード 0 で <DB名>-<YYYYMMDD-HHMMSS>.sql.gz を作る"
+  else
+    fail "TC-14-06: 終了コード 0 で <DB名>-<YYYYMMDD-HHMMSS>.sql.gz を作る" ""
+  fi
   if [[ $status -ne 0 || ! -f $gz ]]; then
     printf '    出力: %s\n' "$(mask "$out")"
     return
   fi
 
-  { \
+  if \
     [ "$(stat -c %a "$backup/db")" = 700 ] && [ "$(stat -c %a "$gz")" = 600 ] \
-    && [ "$(stat -c %a "$stem.sha256")" = 600 ] && [ "$(stat -c %a "$stem.counts.tsv")" = 600 ]; }
-  result "TC-14-07: ディレクトリは 700、.sql.gz・.sha256・.counts.tsv は 600" $?
+    && [ "$(stat -c %a "$stem.sha256")" = 600 ] && [ "$(stat -c %a "$stem.counts.tsv")" = 600 ]; then
+    pass "TC-14-07: ディレクトリは 700、.sql.gz・.sha256・.counts.tsv は 600"
+  else
+    fail "TC-14-07: ディレクトリは 700、.sql.gz・.sha256・.counts.tsv は 600" ""
+  fi
 
-  { \
-    bash -c 'cd "$1" && sha256sum -c --quiet "$2"' _ "$backup/db" "$(basename "$stem.sha256")"; }
-  result "TC-14-08: .sha256 が db/ の中で sha256sum -c に通る" $?
+  if \
+    bash -c 'cd "$1" && sha256sum -c --quiet "$2"' _ "$backup/db" "$(basename "$stem.sha256")"; then
+    pass "TC-14-08: .sha256 が db/ の中で sha256sum -c に通る"
+  else
+    fail "TC-14-08: .sha256 が db/ の中で sha256sum -c に通る" ""
+  fi
 
   local expected_counts
   expected_counts=$(printf 'bin_rows\t2\nitems\t3\nlogs\t0\n')
-  { \
-    [ "$(cat "$stem.counts.tsv")" = "$expected_counts" ]; }
-  result "TC-14-09: .counts.tsv にテーブルごとの行数が出る(ビューは出さない)" $?
+  if \
+    [ "$(cat "$stem.counts.tsv")" = "$expected_counts" ]; then
+    pass "TC-14-09: .counts.tsv にテーブルごとの行数が出る(ビューは出さない)"
+  else
+    fail "TC-14-09: .counts.tsv にテーブルごとの行数が出る(ビューは出さない)" ""
+  fi
 
   admin -e "DROP DATABASE IF EXISTS dump_restore; CREATE DATABASE dump_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
   gunzip -c "$gz" >"$WORK/dump.sql"
@@ -148,19 +175,25 @@ tc_dump_and_restore() {
   restored_counts=$(for t in bin_rows items logs; do
     printf '%s\t%s\n' "$t" "$(admin -N -B dump_restore -e "SELECT COUNT(*) FROM \`$t\`")"
   done)
-  { \
+  if \
     [ "$restore_status" -eq 0 ] && [ "$restored_counts" = "$expected_counts" ] \
     && [ "$(table_digest dump_restore)" = "$(table_digest dump_src)" ] \
     && [ "$(admin -N -B -e "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='dump_restore'")" = 1 ] \
     && [ "$(admin -N -B -e "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA='dump_restore'")" = 1 ] \
     && [ "$(admin -N -B -e "SELECT COUNT(*) FROM dump_src.items")" = 3 ] \
-    && ! grep -Eq '^(CREATE DATABASE|USE )' "$WORK/dump.sql"; }
-  result "TC-14-10: gunzip | mysql で別の DB に入り、中身(絵文字・バイナリ・トリガー・ルーチン)が元と同じ" $?
+    && ! grep -Eq '^(CREATE DATABASE|USE )' "$WORK/dump.sql"; then
+    pass "TC-14-10: gunzip | mysql で別の DB に入り、中身(絵文字・バイナリ・トリガー・ルーチン)が元と同じ"
+  else
+    fail "TC-14-10: gunzip | mysql で別の DB に入り、中身(絵文字・バイナリ・トリガー・ルーチン)が元と同じ" ""
+  fi
 
-  { \
+  if \
     no_secret "$out" && ! grep -qF "$DUMP_PASS" "$WORK/dump.sql" \
-    && [ -z "$(ls -A "$tmp")" ] && [ -z "$(ls -A "$backup/db" | grep -v "^$(basename "$stem")\.")" ]; }
-  result "TC-14-11: 出力・ダンプの中にパスワードが出ず、一時ファイルが残らない" $?
+    && [ -z "$(ls -A "$tmp")" ] && only_outputs_of "$backup/db" "$(basename "$stem")"; then
+    pass "TC-14-11: 出力・ダンプの中にパスワードが出ず、一時ファイルが残らない"
+  else
+    fail "TC-14-11: 出力・ダンプの中にパスワードが出ず、一時ファイルが残らない" ""
+  fi
 }
 
 tc_wrong_password() {
@@ -170,10 +203,13 @@ tc_wrong_password() {
   local out status
   out=$(TMPDIR=$tmp bash "$SCRIPT" "$env" 2>&1)
   status=$?
-  { \
+  if \
     [ "$status" -ne 0 ] && [[ $out != *"$WRONG_PASS"* ]] && no_secret "$out" \
-    && [ -z "$(ls -A "$tmp")" ] && [ -z "$(ls -A "$backup/db" 2>/dev/null)" ]; }
-  result "TC-14-12: パスワードが違うと失敗し、作りかけのダンプも一時ファイルも残さず、出力にパスワードが出ない" $?
+    && [ -z "$(ls -A "$tmp")" ] && [ -z "$(ls -A "$backup/db" 2>/dev/null)" ]; then
+    pass "TC-14-12: パスワードが違うと失敗し、作りかけのダンプも一時ファイルも残さず、出力にパスワードが出ない"
+  else
+    fail "TC-14-12: パスワードが違うと失敗し、作りかけのダンプも一時ファイルも残さず、出力にパスワードが出ない" ""
+  fi
 }
 
 # ---- 補助 ----
@@ -237,6 +273,18 @@ write_env() {
   } >"$file"
 }
 
+# ディレクトリにあるのが <stem>.sql.gz・.sha256・.counts.tsv だけか(作りかけが残っていないか)
+only_outputs_of() {
+  local dir=$1 stem=$2 f
+  for f in "$dir"/* "$dir"/.[!.]*; do
+    [[ -e $f ]] || continue
+    case ${f##*/} in
+      "$stem.sql.gz" | "$stem.sha256" | "$stem.counts.tsv") ;;
+      *) return 1 ;;
+    esac
+  done
+}
+
 no_secret() {
   [[ $1 != *"$DUMP_PASS"* ]]
 }
@@ -246,14 +294,9 @@ mask() {
   printf '%s' "${s//"$WRONG_PASS"/***}"
 }
 
-result() {
-  local name=$1
-  if [[ $2 -eq 0 ]]; then
-    PASSED=$((PASSED + 1))
-    printf 'PASS %s\n' "$name"
-  else
-    fail "$name" ""
-  fi
+pass() {
+  PASSED=$((PASSED + 1))
+  printf 'PASS %s\n' "$1"
 }
 
 fail() {

@@ -102,7 +102,7 @@ cleanup() {
 # .env にキーが無いときは、名前だけを出して止める(値は出さない)
 require_env() {
   local file=$1 key=$2
-  if ! grep -Eq "^[[:space:]]*(export[[:space:]]+)?$key[[:space:]]*=" "$file"; then
+  if ! grep -Eq "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$file"; then
     die ".env に $key が無い"
   fi
   local value
@@ -113,10 +113,11 @@ require_env() {
 
 # Laravel の .env と同じく、同じキーが何度もあるときは最後のものを使う
 read_env() {
-  local file=$1 key=$2 line raw=
+  local file=$1 key=$2 line raw=''
+  local pattern="^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=(.*)$"
   while IFS= read -r line || [[ -n $line ]]; do
     line=${line%$'\r'}
-    if [[ $line =~ ^[[:space:]]*(export[[:space:]]+)?$key[[:space:]]*=(.*)$ ]]; then
+    if [[ $line =~ $pattern ]]; then
       raw=${BASH_REMATCH[2]}
     fi
   done <"$file"
@@ -128,7 +129,7 @@ unquote_env_value() {
   v=${v#"${v%%[![:space:]]*}"}
   if [[ $v == \"* ]]; then
     # "..." の中では \" と \\ を戻し、閉じの " で終わる
-    local out= i ch
+    local out='' i ch
     for ((i = 1; i < ${#v}; i++)); do
       ch=${v:i:1}
       if [[ $ch == \\ && $((i + 1)) -lt ${#v} ]]; then
@@ -156,7 +157,7 @@ unquote_env_value() {
 
 resolve_backup_dir() {
   local dir=$1
-  if [[ $dir == "~/"* ]]; then
+  if [[ $dir == \~/* ]]; then
     dir=$HOME/${dir#"~/"}
   fi
   [[ $dir == /* ]] || die "BACKUP_DIR は絶対パスで書く"
