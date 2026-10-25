@@ -24,6 +24,8 @@
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <!-- DB は本番と同じ MariaDB を使う。接続先は環境変数(CI では test.yml)で渡す。SQLite では代用しない -->
+        <!-- 旧 DB の接続(legacy)は、環境変数に何が入っていてもテスト用の DB に向ける。LegacyFixture が表を作り直すため -->
+        <env name="LEGACY_DB_DATABASE" value="legacy_test" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

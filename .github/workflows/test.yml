@@ -34,6 +34,11 @@ jobs:
       DB_DATABASE: testing
       DB_USERNAME: root
       DB_PASSWORD: root
+      # 旧 DB の接続(legacy)。DB 名は phpunit.xml が legacy_test に固定する
+      LEGACY_DB_HOST: 127.0.0.1
+      LEGACY_DB_PORT: 3306
+      LEGACY_DB_USERNAME: root
+      LEGACY_DB_PASSWORD: root
     steps:
       - uses: actions/checkout@v7
         with:
