@@ -30,3 +30,6 @@ jobs:
 
       - name: Test head-reviewed.sh
         run: bash .github/scripts/tests/head-reviewed.test.sh
+
+      - name: Test draft-candidates.sh
+        run: bash .github/scripts/tests/draft-candidates.test.sh
