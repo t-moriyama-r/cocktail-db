@@ -91,7 +91,10 @@ jq -r '
       items: (if .patch == null or .status == "removed" then []
         else [lines[] | . + {cat: category} | . + {warn: warn, key: (.c | sub("\\s+#.*$"; ""))}]
           # 同じ行を消して足しただけ(行末のコメントを直した・場所を動かした)なら、広がっていないので要注意にしない
-          | . as $all | map(.key as $k | .added as $a | .warn = (.warn and ([$all[] | select(.key == $k and .added != $a)] | length == 0)))
+          # 打ち消すのは、消した数と足した数が同じ分だけ(別のジョブに同じ行を足した分は要注意のまま残す)
+          | . as $all | to_entries | map(.key as $i | .value | .key as $k | .added as $a
+              | ([$all[0:$i][] | select(.key == $k and .added == $a)] | length) as $rank
+              | .warn = (.warn and ($rank >= ([$all[] | select(.key == $k and .added != $a)] | length))))
           # on: や permissions: だけの行は、中身の行が並ぶので、要注意のときだけ出す
           | map(select(.warn or (.key | IN("on:", "permissions:") | not)))
         end)

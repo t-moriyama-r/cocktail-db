@@ -26,6 +26,7 @@ main() {
 	tc_07_external_send
 	tc_08_credentials
 	tc_09_moved_line
+	tc_09_moved_line_unbalanced
 	tc_10_permissions_block_removed
 	tc_11_no_patch
 	tc_12_removed_and_renamed
@@ -153,6 +154,13 @@ tc_09_moved_line() {
 	expect_line "TC-220-09: 行末のコメントを直した・動かしただけなら要注意にしない" 1 ':white_check_mark: *'
 	expect_not "TC-220-09: 印が付かない" '⚠'
 	expect_has "TC-220-09: 行は中身として並ぶ" '    権限: - `actions: write   # 古いコメント`  + `actions: write   # 新しいコメント`'
+}
+
+tc_09_moved_line_unbalanced() {
+	run "$(files "$(file_entry modified .github/workflows/a.yml "$(
+		printf '%s\n' '-      contents: write' '+      contents: write' '+      contents: write'
+	)")")"
+	expect_line "TC-220-19: 足した数が多い分は要注意のまま残す" 1 ':rotating_light: *要注意の変更が 1 行ある*'
 }
 
 tc_10_permissions_block_removed() {
