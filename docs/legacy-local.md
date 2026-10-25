@@ -42,7 +42,12 @@ for i in $(seq 1 60); do
   if docker exec cocktail-legacy-db mariadb -uroot -proot legacy -e 'SELECT 1' >/dev/null 2>&1; then ready=1; break; fi
   sleep 1
 done
-if test -z "$ready"; then echo "MariaDB が起動しなかったため中止します。" >&2; exit 1; fi
+if test -z "$ready"; then
+  echo "MariaDB が起動しなかったため中止します。" >&2
+  docker rm -f cocktail-legacy-db >/dev/null 2>&1 || true
+  docker network rm cocktail-legacy >/dev/null 2>&1 || true
+  exit 1
+fi
 # legacy_data.sql はテーブル定義込み。users はデータ側に無いので、schema から定義だけ入れる
 docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql"
 awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy
