@@ -27,7 +27,7 @@
 | `backend/` | Laravel(PHP 8.4)。`/api/*` の API と、SPA を返すルート | `php artisan test`(下の「BE のテスト」) |
 | `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
-| `e2e/` | (まだ無い)Playwright の E2E。#8 で作る。できたらコマンドをここに追記 | — |
+| `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
 | `ops/` | (まだ無い)サーバーで動かす運用スクリプト(バックアップ・切り替えなど)。#14 などで作る | — |
 | `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`) | — |
 
@@ -54,6 +54,19 @@ npx tsc -b        # 型チェック
 npm run lint      # oxlint
 npm test          # Vitest(vitest run)
 ```
+
+### E2E
+
+```bash
+cd frontend && npm run build          # FE を backend/public/spa にビルドする(E2E はこれを相手にする)
+cd ../e2e
+npm ci && npx playwright install chromium   # 初回だけ
+npm test                              # php artisan serve を起こして Playwright を流す。起動済みならそれを使う
+```
+
+- CI は `test.yml` の `e2e` ジョブ。MariaDB を立て、`php artisan migrate --seed --seeder=E2eSeeder` でデータを入れてから流す。E2E が前提にするデータは `E2eSeeder` に足す
+- 失敗したときは、スクリーンショットと trace が `e2e-report` のアーティファクトに残る(`npx playwright show-trace <zip>` で開く)
+- 画面の挙動を変える issue の受け入れ条件は、ここにテストを足して確かめる
 
 ### テストの書き方
 
