@@ -49,9 +49,12 @@ if test -z "$ready"; then
   exit 1
 fi
 # legacy_data.sql はテーブル定義込み。users はデータ側に無いので、schema から定義だけ入れる
-docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql"
-awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy
-sed -n '/^ALTER TABLE `users`/,/;$/p' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy
+# 投入に失敗したら止める。データが欠けたまま動かすと、間違った「旧での結果」を採ってしまう
+load_failed() { echo "ダンプの投入に失敗したため中止します。片付けてからやり直してください。" >&2; exit 1; }
+test -f "$LEGACY_DUMP/legacy_data.sql" && test -f "$LEGACY_DUMP/legacy_schema.sql" || load_failed
+docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql" || load_failed
+awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
+sed -n '/^ALTER TABLE `users`/,/;$/p' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
 
 # 3. 画面のビルド成果物は、commit 済みの版を取り出して使う
 mkdir -p "$WORK/public-head"
