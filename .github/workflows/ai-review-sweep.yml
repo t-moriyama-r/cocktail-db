@@ -12,7 +12,7 @@
 #   - AI レビュアーの未解決のスレッドのうち、最後のコメントがエージェントの返信(<!-- ai-dev:agent -->)でないものがある → ai-review-loop.yml
 #   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
 #     → CodeRabbit の最後のコメントが上限(Review rate limited / Review limit reached)で、いまのコミットより後のものなら ai-claude-review.yml
-#   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージできるかはそちらが決める)。
+#   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
 #     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる
 #
 # ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい
@@ -79,15 +79,14 @@ jobs:
             finished=$(jq --arg since "$committed" 'map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
                 | any(.body // "" | test("Review finished|No actionable comments|LGTM"))' <<<"$comments")
             if [ "$reviewed" = true ] || [ "$finished" = true ]; then
-              # ai-in-actions が残ったままだと自動マージは見送るので、終わりの処理(ラベルを外す・承認を頼む)を ai-review-loop.yml にさせる
+              # ai-in-actions が残ったままだと ai-auto-merge.yml は見送るので、終わりの処理(ラベルを外す)を ai-review-loop.yml にさせる
               if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then
                 echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済みだが ai-in-actions が残っている。ai-review-loop.yml を呼ぶ"
                 gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
                 continue
               fi
-              # no-auto-merge は自動マージだけを止めるラベルなので、指摘への対応(上)はするが、ここでは呼ばない
-              if jq -e '.labels | any(.name == "no-auto-merge")' <<<"$pr" >/dev/null; then skip "レビュー済み。no-auto-merge なので自動マージは呼ばない"; continue; fi
-              # マージできるかは ai-auto-merge.yml が決める(merge: review のリポジトリでは何もしない)
+              # マージできる状態かは ai-auto-merge.yml が決める。人の手でマージする PR(no-auto-merge・needs-review・merge: review)なら、
+              # マージせずに needs-approval を付けて人に知らせる
               echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済み。ai-auto-merge.yml を呼ぶ"
               gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$n"
               continue
