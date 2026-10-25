@@ -21,6 +21,12 @@ LEGACY_SRC=<旧ソース>
 LEGACY_DUMP=<ダンプ>
 WORK=<作業用のディレクトリ>   # リポジトリの外
 
+# 設定のキャッシュがあると、下の DB_* の指定が効かない(「はまりどころ」)
+if test -e "$LEGACY_SRC/bootstrap/cache/config.php"; then
+  echo "設定のキャッシュがあるため中止します。キャッシュを除いた作業用のコピーを使ってください。" >&2
+  exit 1
+fi
+
 # 1. PHP 7.4 + pdo_mysql のイメージ(初回だけ)
 mkdir -p "$WORK"
 printf 'FROM php:7.4-cli\nRUN docker-php-ext-install pdo_mysql\nWORKDIR /app\n' > "$WORK/Dockerfile"
@@ -30,7 +36,14 @@ docker build -t cocktail-legacy-php "$WORK"
 docker network create cocktail-legacy
 docker run -d --rm --name cocktail-legacy-db --network cocktail-legacy \
   -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=legacy mariadb:10.11
-# 起動を待ってから流す。legacy_data.sql はテーブル定義込み。users はデータ側に無いので、schema から定義だけ入れる
+# 起動を待つ。待てなければ中止する
+ready=
+for i in $(seq 1 60); do
+  if docker exec cocktail-legacy-db mariadb -uroot -proot legacy -e 'SELECT 1' >/dev/null 2>&1; then ready=1; break; fi
+  sleep 1
+done
+if test -z "$ready"; then echo "MariaDB が起動しなかったため中止します。" >&2; exit 1; fi
+# legacy_data.sql はテーブル定義込み。users はデータ側に無いので、schema から定義だけ入れる
 docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql"
 awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy
 sed -n '/^ALTER TABLE `users`/,/;$/p' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy
@@ -79,4 +92,4 @@ await page.route(/google-analytics|googletagmanager|doubleclick/, (route) => rou
 
 ## 結果の残し方
 
-テストケースの表の「旧での結果」を埋めるときは、旧システムで同じ操作をした記録(画面のスクリーンショット、API の応答)を PR に貼る。貼る前に、ホスト名・ユーザー名・絶対パス・本番の個人情報が写っていないか目視で確かめる。
+テストケースの表の「旧での結果」を埋めるときは、旧システムで同じ操作をした記録(画面のスクリーンショット、API の応答)を PR に貼る。貼る前に、ホスト名・ユーザー名・DB 名・秘密の値・絶対パス・本番の個人情報が写っていないか目視で確かめる。
