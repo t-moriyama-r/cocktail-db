@@ -32,7 +32,8 @@ permissions: {}
 concurrency:
   group: >-
     ${{ (github.event_name == 'workflow_dispatch'
-      || contains(github.event.comment.body, 'Review limit reached') || contains(github.event.comment.body, 'Review rate limited'))
+      || (github.event.comment.user.login == 'coderabbitai[bot]'
+        && (contains(github.event.comment.body, 'Review limit reached') || contains(github.event.comment.body, 'Review rate limited'))))
       && format('ai-claude-review-{0}', github.event.issue.number || inputs.number)
       || format('ai-claude-review-run-{0}', github.run_id) }}
   cancel-in-progress: false
