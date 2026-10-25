@@ -38,7 +38,7 @@ ci_rerun() {
 rerun_one() {
   local repo=$1 default=$2 n=$3 pr sha branch
   skip() { echo "#$n 見送り: $*"; }
-  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable)
+  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable,updatedAt)
   sha=$(jq -r .headRefOid <<<"$pr")
   branch=$(jq -r .headRefName <<<"$pr")
 
@@ -50,17 +50,22 @@ rerun_one() {
     skip "$WORKFLOW はいまのコミットで動いた・動いている"
     return
   fi
-  local committed age
-  committed=$(gh api "repos/$repo/commits/$sha" --jq .commit.committer.date)
-  age=$((($(date -u +%s) - $(date -u -d "$committed" +%s)) / 60))
-  if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "コミットから $age 分しかたっていない"; return; fi
+  # コミットの日付は push の時刻ではない(古い日付のコミットを push できる)ので、push に近い PR の更新時刻で測る
+  local updated age
+  updated=$(jq -r .updatedAt <<<"$pr")
+  age=$((($(date -u +%s) - $(date -u -d "$updated" +%s)) / 60))
+  if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "PR の更新から $age 分しかたっていない"; return; fi
   if [ "$(jq -r .mergeable <<<"$pr")" = CONFLICTING ]; then
     skip "コンフリクトは ai-conflict-resolve.yml が直す"
     return
   fi
 
-  if gh workflow run "$WORKFLOW" -R "$repo" --ref "$branch"; then
+  local out
+  if out=$(gh workflow run "$WORKFLOW" -R "$repo" --ref "$branch" 2>&1); then
     echo "#$n で $WORKFLOW を流し直した($branch の ${sha:0:7})"
+  elif ! grep -q 'HTTP 422' <<<"$out"; then
+    # API の一時的なエラー・レート制限など。人に頼まず、次の見回りに任せる
+    skip "$WORKFLOW を動かせなかったが、workflow_dispatch が無いためではなさそう(次の見回りでやり直す): $out"
   else
     tell "$repo" "$n" "$sha" "いまのコミット(${sha:0:7})で CI が動いていないが、このブランチの $WORKFLOW を手で動かせなかった(workflow_dispatch が無い古いブランチなど)。$default を取り込んで push してほしい(push すれば CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する"
   fi
