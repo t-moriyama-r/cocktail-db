@@ -54,9 +54,9 @@ main() {
 	reset
 	pr 7 develop false MERGEABLE
 	runs 0
-	committed "$NEW"
+	updated "$NEW"
 	run 7
-	expect TC-228-06 'push の直後(10 分たっていない)は流さない' "$(dispatched)" ''
+	expect TC-228-06 'push の直後(PR の更新から 10 分たっていない)は流さない' "$(dispatched)" ''
 
 	reset
 	pr 7 develop false CONFLICTING
@@ -68,7 +68,7 @@ main() {
 	reset
 	pr 7 develop false MERGEABLE
 	runs 0
-	echo 1 >"$FAKE/dispatch-fails"
+	echo 422 >"$FAKE/dispatch-fails"
 	run 7
 	expect TC-228-08 'test.yml を動かせなかったら、そのことを頼み、Slack に知らせる' \
 		"$(commented | grep -c 'workflow_dispatch が無い')|$(notified | grep -c needs-human)" '1|1'
@@ -76,7 +76,7 @@ main() {
 	reset
 	pr 7 develop false MERGEABLE
 	runs 0
-	echo 1 >"$FAKE/dispatch-fails"
+	echo 422 >"$FAKE/dispatch-fails"
 	echo '<!-- ai-dev:agent --> <!-- ai-dev:ci-rerun sha=sha7 -->' >"$FAKE/comments"
 	run 7
 	expect TC-228-09 '同じコミットでもう頼んでいたら、もう頼まない' "$(commented)$(labeled)$(notified)" ''
@@ -93,10 +93,17 @@ main() {
 	reset
 	pr 7 develop false MERGEABLE
 	runs 0
-	echo 1 >"$FAKE/dispatch-fails"
+	echo 422 >"$FAKE/dispatch-fails"
 	{ echo '<!-- ai-dev:ci-rerun sha=sha7 -->'; head -c 300000 /dev/zero | tr '\0' 'x'; echo; } >"$FAKE/comments"
 	run 7
 	expect TC-228-11 'コメントが大きくても、同じコミットで頼み直さない' "$(commented)" ''
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs 0
+	echo 502 >"$FAKE/dispatch-fails"
+	run 7
+	expect TC-228-15 'workflow_dispatch が無いためでない失敗(一時的なエラー)では、人に頼まず次の見回りに任せる' 		"$(commented)$(labeled)$(notified)" ''
 
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
@@ -111,11 +118,12 @@ echo "gh $*" >>"$FAKE/calls"
 case "$*" in
 	"api repos/o/r --jq .default_branch") echo develop ;;
 	"pr list"*) tr ' ' '\n' <"$FAKE/list" ;;
-	"pr view"*) cat "$FAKE/pr-$3.json" ;;
+	"pr view"*) jq -c --arg u "$(cat "$FAKE/updated")" '. + {updatedAt: $u}' "$FAKE/pr-$3.json" ;;
 	"api repos/o/r/actions/workflows/"*) cat "$FAKE/runs" ;;
-	"api repos/o/r/commits/"*) cat "$FAKE/committed" ;;
 	"workflow run notify-needs-human.yml"*) shift 2; echo "$*" >>"$FAKE/notified" ;;
-	"workflow run"*) [ -f "$FAKE/dispatch-fails" ] && exit 1; shift 2; echo "$*" >>"$FAKE/dispatched" ;;
+	"workflow run"*)
+		if [ -f "$FAKE/dispatch-fails" ]; then echo "HTTP $(cat "$FAKE/dispatch-fails"): dispatch failed" >&2; exit 1; fi
+		shift 2; echo "$*" >>"$FAKE/dispatched" ;;
 	"pr edit"*) shift 2; echo "$*" >>"$FAKE/labeled" ;;
 	"api --paginate"*) cat "$FAKE/comments" ;;
 	"pr comment"*) printf '%s\n' "$*" >>"$FAKE/commented" ;;
@@ -130,7 +138,7 @@ reset() {
 	: >"$FAKE/comments"
 	: >"$FAKE/calls"
 	echo 7 >"$FAKE/list"
-	committed "$OLD"
+	updated "$OLD"
 }
 
 # PR の番号・向き先・フォークか・mergeable・状態
@@ -139,7 +147,8 @@ pr() {
 }
 
 runs() { echo "$1" >"$FAKE/runs"; }
-committed() { echo "$1" >"$FAKE/committed"; }
+# PR の更新時刻(push の時刻の代わり)
+updated() { echo "$1" >"$FAKE/updated"; }
 dispatched() { cat "$FAKE/dispatched" 2>/dev/null; }
 commented() { cat "$FAKE/commented" 2>/dev/null; }
 labeled() { cat "$FAKE/labeled" 2>/dev/null; }
