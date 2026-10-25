@@ -64,6 +64,13 @@ jobs:
       REPO: ${{ github.repository }}
       PR: ${{ github.event.issue.number || github.event.pull_request.number }}
     steps:
+      # 状態のラベルを付け替えるスクリプト。PR のコードではなく既定のブランチのものを使う
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+
       # 同じ判断で二重に動かないよう、最初にラベルを外す。
       # needs-approval は、直すことになったときに Claude Code が外す(承認だけの返信なら付けたままにする)
       - name: needs-human を外し、Actions で引き継いだ印を付ける
@@ -72,6 +79,8 @@ jobs:
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "人の判断の後、GitHub Actions の Claude Code が引き継いだ PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
           gh pr edit "$PR" -R "$REPO" --remove-label needs-human || true
+          # GITHUB_TOKEN で付け外ししたラベルでは pr-status.yml が起きないので、状態のラベルはここで付け替える
+          bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
           echo "before=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')" >> "$GITHUB_OUTPUT"
 
       - name: PR のブランチを取る
@@ -212,6 +221,8 @@ jobs:
         run: |
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "GitHub Actions の Claude Code がレビューの指摘に対応している PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
+          # GITHUB_TOKEN で付けたラベルでは pr-status.yml が起きないので、状態のラベルはここで付け替える
+          if [ -f .ai-dev/.github/scripts/pr-status.sh ]; then bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true; fi
 
       - uses: actions/checkout@v6
         if: steps.pr.outputs.run
