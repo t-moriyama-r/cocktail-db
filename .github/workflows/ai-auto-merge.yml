@@ -16,7 +16,8 @@ on:
   pull_request_review:
     types: [submitted]
   issue_comment:
-    types: [created]
+    # CodeRabbit は依頼への返信を「Review triggered」で作ってから「Review finished」に書き換えるので、書き換えでも起動する
+    types: [created, edited]
   workflow_run:
     workflows: [test]   # CI のワークフロー名に合わせる
     types: [completed]
@@ -90,7 +91,7 @@ jobs:
           done
 
           # CodeRabbit が最新のコミットを見たか。指摘があればそのコミットへのレビューが付き、
-          # 無ければ「Review finished」「No actionable comments」のコメントだけが付く。
+          # 無ければ「Review finished」「No actionable comments」のコメントだけが付く(どちらか片方のこともあり、後から別のコメントが続くこともある)。
           # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける。
           # CodeRabbit はスレッドへの返信のたびに本文が空のレビューを最新のコミットに付けるので、本文の無いレビューは数えない
           pushed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
@@ -99,7 +100,7 @@ jobs:
                 or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
           finished=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
             | jq --arg since "$pushed" 'add // [] | map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
-                | (last // {}).body // "" | test("Review finished|No actionable comments|LGTM")')
+                | any(.body // "" | test("Review finished|No actionable comments|LGTM"))')
           [ "$reviewed" = true ] || [ "$finished" = true ] || skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
 
           unresolved=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
