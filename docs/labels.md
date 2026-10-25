@@ -38,19 +38,21 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 | `needs-decision` | 着手する前に、人に決めてもらうことがある issue | issue を作るときに、本文の「判断が要ること」を書いて付ける(issue-breakdown・人)。判断になっていない返信のときは、Actions の Claude Code が付けたままにする | next-issue が選ばない。付けたときに Slack に知らせる(下の「人に頼む」)。リポジトリのオーナーが issue にコメントすると、`ai-decision-loop.yml` の Claude Code が本文に「決まったこと」を書き、このラベルを外す。外れると next-issue が選ぶようになる |
 | `later` | 今回の完了に入れない issue | issue を分けるとき・人が後回しにすると決めたとき | next-issue が選ばない。外すと候補に戻る |
 | `priority:high` | 依存の数に関係なく先にやる issue(規約の文書・自動化の仕組みなど) | issue を分けるとき・人 | next-issue が、ほかの並び(待っている issue の数・Epic の順・番号)より先に並べる |
-| `needs-review` | 出来上がりを人が見て承認してからマージする issue(設計書・データの扱いなど) | issue を分けるとき・人 | next-issue は選ぶ(`[要レビュー]` と表示する)。この issue を `Closes #N` で閉じる PR は自動でマージしない。エージェントは、レビューの指摘への対応が終わったら PR に `needs-approval` を付けて、人の承認(マージ)を待つ |
+| `needs-review` | 出来上がりを人が見て承認してからマージする issue(設計書・データの扱いなど) | issue を分けるとき・人 | next-issue は選ぶ(`[要レビュー]` と表示する)。この issue を `Closes #N` で閉じる PR は自動でマージしない。レビューの指摘への対応が終わり、CI が緑でマージできる状態になったら、`ai-auto-merge.yml` が PR に `needs-approval` を付けて、人の承認(マージ)を待つ |
 
 ## PR のマージ(ai-auto-merge.yml が読む)
 
-`.github/ai-dev.yml` が `merge: auto` のとき、CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑の PR を、`ai-auto-merge.yml` が自動でマージする。
-次のラベルのどれかが PR に付いていると、自動ではマージしない。閉じる issue に `needs-review` が付いているときも同じ。
+CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑で、コンフリクトの無い PR を、`ai-auto-merge.yml` がマージできる状態とみなし、自動でマージする。
+
+人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、同じ条件がそろったところで、マージせずに `needs-approval` を付けて Slack に知らせる(下の「人に頼む」)。直さない理由を返して未解決のまま残るスレッドもあるので、こちらは未解決ではなく返信待ちのスレッドが 0 件かで見る。自動のレビューと CI が終わる前には人を呼ばない。
+
+`ai-in-actions`・`needs-human`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
-| `no-auto-merge` | 自動でマージしたくない PR | 人が、いつでも | 自動でマージしない。ほかには何も起きない。外すと、自動マージの条件をもう一度確かめる |
-| `ai-in-actions` | 人の判断の後、GitHub Actions の Claude Code が対応を続けている PR | `ai-review-loop.yml` が、`needs-human` か `needs-approval` の PR にオーナーがコメントしたときに付ける。リポジトリにまだ無ければ、そのときに作る | 自動でマージしない。CodeRabbit のレビューが付くと、Actions の Claude Code が指摘に対応する。対応が終わると Claude Code が外す(閉じる issue に `needs-review` があれば、代わりに `needs-approval` を付ける) |
+| `no-auto-merge` | 自動でマージしたくない PR | 人が、いつでも | 自動でマージしない。マージできる状態になったら `needs-approval` を付けて知らせる。外すと、自動マージの条件をもう一度確かめる |
+| `ai-in-actions` | GitHub Actions の Claude Code がレビューの指摘に対応している PR | `ai-review-loop.yml` が、CodeRabbit のレビューに対応し始めたとき、`needs-human` か `needs-approval` の PR にオーナーがコメントしたときに付ける。リポジトリにまだ無ければ、そのときに作る | 自動でマージしない。対応が終わると Claude Code が外し、`ai-auto-merge.yml` にマージできる状態かを確かめさせる。途中で止まったときもワークフローが外す。印だけ残ったものは、`ai-review-sweep.yml` が 3 時間たってから拾い直す |
 
-`needs-human`・`needs-decision`・`needs-approval` も、PR に付いていれば自動でマージしない(下の「人に頼む」)。
 
 ## 人に頼む(Slack に知らせる)
 
@@ -59,12 +61,13 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
 - `SLACK_WEBHOOK_URL` が無いときは、送らずに警告だけ出す
+- 付いたときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだこれらのラベルが付いて開いている PR・issue を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件の日は送らない。手動で送るときは、`notify-needs-human.yml` を `number` を空、`label` を `all` にして動かす
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
 | `needs-human` | 人の判断が要る PR・issue | エージェント(手元・Actions)が、レビューの指摘で判断に迷うとき・指摘が堂々めぐりになったとき・再レビューの回数(`review_rounds`)を超えたときに付ける。人が付けてもよい | Slack に知らせる。自動でマージしない。PR なら、オーナーがコメントすると `ai-review-loop.yml` の Claude Code がこのラベルを外して `ai-in-actions` を付け、判断どおりに直して再レビューを頼む。issue に付けたときは通知だけで、引き継ぐワークフローは無い |
 | `needs-decision` | 着手する前に決めることがある issue | 上の「着手の順番」 | Slack に知らせる(本文の「判断が要ること」を添える) |
-| `needs-approval` | 人の承認(マージ)を待っている PR | エージェントが、閉じる issue に `needs-review` が付いた PR で、レビューの指摘への対応が終わったときに付ける | Slack に知らせる。自動でマージしない。人は証跡を見て、よければマージする(マージが承認)。オーナーが PR にコメントすると、`ai-review-loop.yml` の Claude Code が、直してほしいことがあればこのラベルを外して直し、再レビューの後でまた付ける。「OK」だけなら、マージで承認するよう返す |
+| `needs-approval` | マージできる状態になり、人の承認(マージ)を待っている PR | `ai-auto-merge.yml` が、人の手でマージする PR(上の「PR のマージ」)で、レビューの指摘への対応が終わり、CI が緑でコンフリクトが無くなったときに付ける。付ける前に、マージできる状態になったことを PR にコメントする(閉じる issue に `needs-review` があれば、Claude Code が書いた見てほしいところへのリンクを添える) | Slack に知らせる。自動でマージしない。人は証跡を見て、よければマージする(マージが承認)。オーナーが PR にコメントすると、`ai-review-loop.yml` の Claude Code が、直してほしいことがあればこのラベルを外して直し、再レビューを頼む。マージできる状態に戻れば、`ai-auto-merge.yml` がまた付ける。「OK」だけなら、マージで承認するよう返す |
 
 ## GitHub の既定のラベル
 

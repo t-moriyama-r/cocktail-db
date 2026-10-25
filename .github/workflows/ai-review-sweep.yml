@@ -1,0 +1,99 @@
+# レビューが止まったままの PR を 3 時間ごとに見て、止まったところから動かし直す
+#
+# ai-review-loop.yml・ai-claude-review.yml はレビューやコメントが付いたときに動くが、Claude Code が途中で止まった・上限に当たった・
+# レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
+# 候補はシェルで絞り、理由をジョブのログに出す。Claude Code はここでは動かさず、次のワークフローを workflow_dispatch で呼ぶ
+#
+# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-approval が
+# 付いていない(人の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
+# ai-in-actions が付いていれば 3 時間待つ(Actions が対応している途中。止まって印だけ残ったものは、そのあと拾う)
+#
+# 呼ぶもの(上から順に見て、最初に当てはまったもの):
+#   - AI レビュアーの未解決のスレッドのうち、最後のコメントがエージェントの返信(<!-- ai-dev:agent -->)でないものがある → ai-review-loop.yml
+#   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
+#     → CodeRabbit の最後のコメントが上限(Review rate limited / Review limit reached)で、いまのコミットより後のものなら ai-claude-review.yml
+#   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
+#     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる
+#
+# ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい
+name: 止まったレビューを見回る
+
+on:
+  schedule:
+    - cron: '30 */3 * * *'   # 3 時間ごと(ai-draft-sweep.yml の 0 分と重ならないよう 30 分)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-review-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      MIN_IDLE_MINUTES: 60
+      MIN_IDLE_MINUTES_IN_ACTIONS: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: 候補を絞って、止まったところのワークフローを呼ぶ
+        run: |
+          now=$(date -u +%s)
+          for n in $(gh pr list -R "$REPO" --state open --author "$OWNER" --limit 100 --json number --jq '.[].number'); do
+            skip() { echo "#$n 見送り: $*"; }
+            pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,labels,updatedAt,headRefOid,commits)
+            if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft"; continue; fi
+            if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
+            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
+            if [ -n "$label" ]; then skip "ラベル $label"; continue; fi
+            min=$MIN_IDLE_MINUTES
+            if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then min=$MIN_IDLE_MINUTES_IN_ACTIONS; fi
+            idle=$(( (now - $(date -u -d "$(jq -r .updatedAt <<<"$pr")" +%s)) / 60 ))
+            if [ "$idle" -lt "$min" ]; then skip "最後の動きから ${idle} 分(${min} 分たつまで待つ)"; continue; fi
+            unanswered=$(bash .github/scripts/unanswered-review-threads.sh "$REPO" "$n")
+            if [ "$unanswered" != 0 ]; then
+              echo "#$n 返信待ちのスレッドが $unanswered 件。ai-review-loop.yml を呼ぶ"
+              gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
+              continue
+            fi
+            head=$(jq -r .headRefOid <<<"$pr")
+            committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+            comments=$(gh api --paginate --slurp "repos/$REPO/issues/$n/comments?per_page=100" | jq 'add // []')
+            # 「いまのコミットを見た」は ai-auto-merge.yml と同じに数える。そのコミットへの本文のあるレビューか、
+            # そのコミットより後の「Review finished」「No actionable comments」のコメント(指摘が無いとレビューは付かない)
+            reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$n/reviews?per_page=100" \
+              | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
+                  or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
+            finished=$(jq --arg since "$committed" 'map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
+                | any(.body // "" | test("Review finished|No actionable comments|LGTM"))' <<<"$comments")
+            if [ "$reviewed" = true ] || [ "$finished" = true ]; then
+              # ai-in-actions が残ったままだと ai-auto-merge.yml は見送るので、終わりの処理(ラベルを外す)を ai-review-loop.yml にさせる
+              if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then
+                echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済みだが ai-in-actions が残っている。ai-review-loop.yml を呼ぶ"
+                gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
+                continue
+              fi
+              # マージできる状態かは ai-auto-merge.yml が決める。人の手でマージする PR(no-auto-merge・needs-review・merge: review)なら、
+              # マージせずに needs-approval を付けて人に知らせる
+              echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済み。ai-auto-merge.yml を呼ぶ"
+              gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$n"
+              continue
+            fi
+            limited=$(jq --arg since "$committed" 'map(select(.user.login == "coderabbitai[bot]")) | last // {}
+                | (.created_at // "") > $since and (.body // "" | test("Review rate limited|Review limit reached"))' <<<"$comments")
+            if [ "$limited" != true ]; then skip "返信待ちのスレッドが無く、CodeRabbit の上限で止まってもいない"; continue; fi
+            echo "#$n CodeRabbit が上限で、${head:0:7} を誰もレビューしていない。ai-claude-review.yml を呼ぶ"
+            gh workflow run ai-claude-review.yml -R "$REPO" -f number="$n"
+          done
