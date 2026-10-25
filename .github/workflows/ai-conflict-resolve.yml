@@ -55,7 +55,10 @@ jobs:
         id: pick
         env:
           NUMBER: ${{ inputs.number }}
-        run: echo "prs=$(bash .github/scripts/conflict-candidates.sh "$REPO" ${NUMBER:+"$NUMBER"})" >> "$GITHUB_OUTPUT"
+        # echo の中で呼ぶと、スクリプトが失敗してもステップが成功になる。先に変数へ入れて、失敗をステップの失敗にする
+        run: |
+          prs=$(bash .github/scripts/conflict-candidates.sh "$REPO" ${NUMBER:+"$NUMBER"})
+          echo "prs=$prs" >> "$GITHUB_OUTPUT"
 
   resolve:
     needs: pick
@@ -116,9 +119,10 @@ jobs:
             workflows: write
           # github-actions[bot]: ai-auto-merge.yml が GITHUB_TOKEN で呼んだとき
           allowed_bots: github-actions,github-actions[bot]
+          # PR のコメントは第三者も書ける。force push・別ブランチへの push・ブランチの削除をツールの許可で防ぐため、git は使うサブコマンドと push 先に絞る
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }}:*),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*),Bash(jq:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }}:*),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*),Bash(jq:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }}(ブランチ `${{ matrix.pr.branch }}`)が develop とコンフリクトしている。
             develop のコミット ${{ env.BASE }} を取り込んで、コンフリクトを解消してほしい。
