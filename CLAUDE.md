@@ -94,8 +94,9 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 
 ## 旧ソースの参照
 
-- リプレイス元の旧アプリのソースは、秘密情報を取り除いて **private の別リポジトリ**に置く予定(#4)。このリポジトリには入れない
-- **まだ用意されていない**。用意されたら、リポジトリの場所と参照のしかたをここに追記する
+- リプレイス元の旧アプリのソースは、秘密情報を取り除いて **private のリポジトリ `t-moriyama-r/cocktail-legacy`** に置いてある(参照専用。このリポジトリには入れない)。clone して読む
+- 本番の BE は `laravel13/`、本番の画面のビルドは `production-public/`、画面の Vue のソースは `laravel6/resources/js/`。旧と同じ挙動を確かめるときに見るのは本番の版で、手元の古い版と違うところは cocktail-legacy の README の「本番との違い」にある
+- GitHub Actions のエージェントからは、まだ読めない(このリポジトリの `GITHUB_TOKEN` では別の private リポジトリを読めない)。旧実装を見る必要がある issue は、手元で進める
 - 旧ソースから写すときも、絶対パス・サーバー名・DB 名・外部サービスの設定名をこのリポジトリに持ち込まない
 - 旧システムを手元で動かす手順は `docs/legacy-local.md`
 
@@ -109,7 +110,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**画面に出る挙動が変わるなら、修正前後のスクリーンショット・動画・比較画像(修正前後を並べた画像)の 3 つをすべて貼る**。どれか 1 つで済ませない。画面に出ない変更(API だけ・DB だけ・テストだけ・ドキュメントだけ)は、撮らない理由を書く
 6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。CI が通っても draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、決まりを満たしていれば ready にしてレビューを頼む(満たさなければ足りないものをコメントする)
-7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 3 時間ごとに見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
+7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 1 時間ごとに見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
 9. `develop` → `staging`(dev 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、人が行う。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)
 

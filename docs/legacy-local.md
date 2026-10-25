@@ -6,18 +6,18 @@
 
 ## 用意するもの
 
-- 旧ソースの clone(以下 `<旧ソース>`)。private リポジトリに置く作業は #4。それまでは、持っている人の手元の clone を使う
-- 本番の旧 DB のダンプ(以下 `<ダンプ>`。`legacy_schema.sql` と `legacy_data.sql`)。本番データなので、このリポジトリに commit しない
+- 旧ソースのリポジトリ `t-moriyama-r/cocktail-legacy`(private)の clone。動かすのはその中の `laravel6/`(以下 `<旧ソース>`)。何がどのディレクトリにあるかは、そのリポジトリの README
+- 本番の旧 DB のダンプ(以下 `<ダンプ>`。`legacy_schema.sql` と `legacy_data.sql`)。本番データなので、このリポジトリにも cocktail-legacy にも commit しない
 - Docker
 
-旧ソースの作業ツリーは書き換えない。下の手順では読み取り専用でマウントする。
+旧ソースは、`vendor/` を入れるとき以外は書き換えない。下の手順では読み取り専用でマウントする。
 
 ## 起動
 
 Git Bash で動かすときは、先に `export MSYS_NO_PATHCONV=1` をする(コンテナ内のパス `/tmp/views` を Windows のパスに書き換えられるのを防ぐ)。
 
 ```bash
-LEGACY_SRC=<旧ソース>
+LEGACY_SRC=<旧ソース>        # cocktail-legacy の clone の laravel6
 LEGACY_DUMP=<ダンプ>
 WORK=<作業用のディレクトリ>   # リポジトリの外
 
@@ -58,15 +58,20 @@ awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec
 sed -n '/^ALTER TABLE `users`/,/;$/p' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
 docker exec cocktail-legacy-db mariadb -uroot -proot legacy -e 'SELECT 1 FROM users LIMIT 1' >/dev/null || load_failed  # users が作られたかの確認
 
-# 3. 画面のビルド成果物は、commit 済みの版を取り出して使う
-mkdir -p "$WORK/public-head"
-git -C "$LEGACY_SRC" archive HEAD public | tar -x -C "$WORK/public-head"
+# 3. 依存を入れる(初回だけ)。composer.lock が古く package:discover が落ちるので --no-scripts で入れる
+#    (生成済みの bootstrap/cache/packages.php は cocktail-legacy に commit してある)
+#    Windows のフォルダをマウントすると展開が遅く(数分〜10 分ほど)、既定の 300 秒で打ち切られるので、時間の上限を外す
+if ! test -f "$LEGACY_SRC/vendor/autoload.php"; then
+  docker run --rm -v "$LEGACY_SRC:/app" -w /app -e COMPOSER_PROCESS_TIMEOUT=0 composer:2 \
+    install --ignore-platform-reqs --no-scripts --no-interaction \
+    || { echo "依存を入れられなかったため中止します。" >&2; exit 1; }
+fi
 
-# 4. アプリ
+# 4. アプリ。.env は無いので APP_KEY も渡す(手元で動かすだけなので、毎回作った値でよい)
 docker run -d --rm --name cocktail-legacy-app --network cocktail-legacy -p 127.0.0.1:8000:8000 \
-  -v "$LEGACY_SRC:/app:ro" -v "$LEGACY_SRC:/cocktail:ro" -v "$WORK/public-head/public:/app/public:ro" \
+  -v "$LEGACY_SRC:/app:ro" -v "$LEGACY_SRC:/cocktail:ro" \
   -e DB_CONNECTION=mysql -e DB_HOST=cocktail-legacy-db -e DB_PORT=3306 -e DB_DATABASE=legacy \
-  -e DB_USERNAME=root -e DB_PASSWORD=root \
+  -e DB_USERNAME=root -e DB_PASSWORD=root -e APP_KEY="base64:$(head -c 32 /dev/urandom | base64)" \
   -e APP_ENV=local -e APP_DEBUG=true -e APP_URL=http://127.0.0.1:8000 -e PHP_CLI_SERVER_WORKERS=6 \
   -e LOG_CHANNEL=stderr -e SESSION_DRIVER=cookie -e CACHE_DRIVER=array -e VIEW_COMPILED_PATH=/tmp/views \
   cocktail-legacy-php sh -c "mkdir -p /tmp/views && php -S 0.0.0.0:8000 -t public server.php"
@@ -83,7 +88,8 @@ docker rm -f cocktail-legacy-app cocktail-legacy-db; docker network rm cocktail-
 ## はまりどころ
 
 - **`http://127.0.0.1:8000` で開く**。旧画面のビルド成果物に、API の呼び先 `http://127.0.0.1:8000` が埋め込まれている。`localhost` や別のポートで開くと API が呼ばれず、画面の中身が空になる。新アプリの `php artisan serve`(既定で 8000)と同時に動かすときは、新アプリのポートを変える
-- **画面のビルド成果物は commit 済みの版を使う**。手元の作業ツリーの `public/js/app.js` が、依存が入っていない状態でビルドされた壊れた版のことがある(画面が真っ白になり、`Invalid left-hand side in assignment` が出る)。`node --check public/js/app.js` で確かめられる
+- **画面は `laravel6/public/` のビルドを使い、`production-public/` は使わない**。`production-public/`(本番の画面)には本番の API の URL が埋め込まれていて、手元で開くと本番の API を呼ぶ
+- 動くのは Laravel 6 の BE で、本番の BE(cocktail-legacy の `laravel13/`)とは認証まわりのルートなどが違う。カクテルの表示・検索の API は同じ(違いは cocktail-legacy の README の「本番との違い」)
 - **旧ソースの `public/index.php` は `../../cocktail` を読む**(本番の配置)。そのため旧ソースを `/app` と `/cocktail` の 2 か所にマウントしている
 - 接続先は環境変数で渡す。旧ソースの `.env` より環境変数が優先される(設定のキャッシュ `bootstrap/cache/config.php` が無いとき)。`.env` は書き換えない
 - POST の API は CSRF のトークンが要る。curl で直接呼ぶと 419 になるので、画面から操作する。セッションを `cookie` にしているのは、`array` だとトークンが保てず 419 になるため
