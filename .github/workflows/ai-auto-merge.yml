@@ -172,6 +172,7 @@ jobs:
           }- 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
             gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
+            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
             echo "#$NUMBER はマージできる状態。人の手でマージするので needs-approval を付けて知らせた($human)"
             exit 0
           fi
@@ -207,3 +208,5 @@ jobs:
 
           gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent -->
           AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
+          # GITHUB_TOKEN でマージしたので閉じた PR のイベントが起きない。状態のラベルを外させる
+          gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"

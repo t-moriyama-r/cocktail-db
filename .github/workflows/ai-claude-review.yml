@@ -173,3 +173,4 @@ jobs:
             gh workflow run ai-review-loop.yml -R "$REPO" -f number="$PR"
           fi
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
+          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"

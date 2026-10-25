@@ -1,0 +1,32 @@
+name: ai-dev-scripts
+
+# AI 駆動開発のワークフローが使うスクリプト(.github/scripts)の検査とテスト。
+# 必須のチェックにするので、paths で絞らずにすべての PR で動かす
+# (絞ると、関係の無い PR でチェックが来ずに止まる)。
+
+on:
+  pull_request:
+    branches: [develop, staging, release]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  ai-dev-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: ShellCheck
+        # GraphQL・jq の $ を単一引用符で渡すので、info(SC2016)は見ない
+        run: shellcheck --severity=warning .github/scripts/*.sh .github/scripts/tests/*.sh
+
+      - name: Test pr-status.sh
+        run: bash .github/scripts/tests/pr-status.test.sh
+
+      - name: Test head-reviewed.sh
+        run: bash .github/scripts/tests/head-reviewed.test.sh
