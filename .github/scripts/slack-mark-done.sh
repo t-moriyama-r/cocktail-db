@@ -92,7 +92,10 @@ settled_reason() {
 	fi
 	# issue の API は PR も返す
 	local target
-	target=$(gh api "repos/$REPO/issues/$number" --jq '{state, labels: [.labels[].name]}')
+	target=$(gh api "repos/$REPO/issues/$number" --jq '{state, labels: [.labels[].name]}') || {
+		echo "::warning::#$number の状態を読めなかった" >&2
+		return 0
+	}
 	if [ "$(jq -r .state <<<"$target")" = closed ]; then
 		echo "閉じた"
 	elif ! jq -e --arg label "$label" '.labels | index($label)' <<<"$target" >/dev/null; then
