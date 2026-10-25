@@ -68,10 +68,12 @@ jobs:
           [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "#$PR は下書き(ready にしたときの依頼を CodeRabbit に出す)"
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$PR はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$PR を作ったのがオーナーではない"
-          # 同じコミットを、CodeRabbit か Claude がもう見ていれば、しない(上限のコメントは 1 回の依頼に 2 つ付くことがある)
+          # 同じコミットを、CodeRabbit か Claude がもう見ていれば、しない(上限のコメントは 1 回の依頼に 2 つ付くことがある)。
+          # CodeRabbit はスレッドへの返信のたびに本文の無いレビューをいまのコミットに付けるので、それはレビューとして数えない
+          # (ai-auto-merge.yml と同じ数え方。数えると、上限で誰もレビューしていないコミットを見送ってしまう)
           seen=$(gh api --paginate --slurp "repos/$REPO/pulls/$PR/reviews?per_page=100" \
-            | jq --arg head "$head" 'add // [] | any(.commit_id == $head and (.user.login == "coderabbitai[bot]"
-                or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
+            | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
+                or (.user.login == "github-actions[bot]" and (.body // "" | contains("<!-- ai-dev:claude-review -->")))))')
           [ "$seen" = false ] || skip "${head:0:7} はレビュー済み"
           echo "go=true" >> "$GITHUB_OUTPUT"
           echo "head=$head" >> "$GITHUB_OUTPUT"
