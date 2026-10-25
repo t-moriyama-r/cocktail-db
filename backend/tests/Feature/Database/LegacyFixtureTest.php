@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -37,13 +38,27 @@ it('TC-27-07: legacy 接続の DB 名が _test で終わらなければ、接続
 it('TC-27-03: 旧 DB の 16 テーブルが作られる', function () {
     LegacyFixture::load();
 
-    $tables = collect(Schema::connection('legacy')->getTables())->pluck('name')->sort()->values()->all();
-
-    expect($tables)->toBe([
+    expect(legacyTableNames())->toBe([
         'affiliates', 'm_auto_input', 'm_brand', 'm_category', 'm_category_kinds', 'm_dictionary_category',
         'm_ice', 'm_method', 'm_middle', 'migrations', 'paraphrases', 'skip_db', 't_cocktails',
         't_dictionary', 't_recipies', 'users',
     ]);
+})->group('db');
+
+it('TC-200-01: 既定の DB に表があっても、legacy の表として数えない', function () {
+    Schema::dropIfExists('tc_200_default_only');
+    Schema::create('tc_200_default_only', function (Blueprint $table) {
+        $table->id();
+    });
+
+    try {
+        LegacyFixture::load();
+
+        expect(legacyTableNames())->toHaveCount(16)
+            ->not->toContain('tc_200_default_only');
+    } finally {
+        Schema::dropIfExists('tc_200_default_only');
+    }
 })->group('db');
 
 it('TC-27-04: 入れた旧データを legacy 接続で読める', function () {
@@ -115,3 +130,21 @@ it('TC-27-08: 既定の DB には旧 DB の表を作らない', function () {
 
     expect(Schema::hasTable('t_cocktails'))->toBeFalse();
 })->group('db');
+
+/**
+ * legacy 接続の DB にある表の名前を、名前順で返す。
+ *
+ * getTableListing() は DB 名を渡さないと、同じ MariaDB サーバーにあるほかの DB(既定の DB など)の表まで返すため、
+ * legacy 接続の DB 名で絞る。
+ *
+ * @return list<string>
+ */
+function legacyTableNames(): array
+{
+    $legacy = DB::connection('legacy');
+
+    $names = $legacy->getSchemaBuilder()->getTableListing($legacy->getDatabaseName(), schemaQualified: false);
+    sort($names);
+
+    return $names;
+}
