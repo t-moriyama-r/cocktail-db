@@ -67,7 +67,8 @@ jobs:
             committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
             age=$(( (now - $(date -u -d "$committed" +%s)) / 3600 ))
             if [ "$age" -lt "$MIN_AGE_HOURS" ]; then skip "最後のコミットから ${age} 時間"; continue; fi
-            judged=$(gh api --paginate "repos/$REPO/issues/$n/comments?per_page=100" --jq ".[] | select(.body | contains(\"ai-dev:draft-sweep sha=$head\")) | .id")
+            # 目印は Actions の Claude が付ける。公開リポジトリなので、誰でも書ける人のコメントの目印は数えない(数えると、見回りから外せてしまう)
+            judged=$(gh api --paginate "repos/$REPO/issues/$n/comments?per_page=100" --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"ai-dev:draft-sweep sha=$head\"))) | .id")
             if [ -n "$judged" ]; then skip "このコミットは判断済み"; continue; fi
             echo "#$n 候補"
             picked+=("$n")
@@ -113,7 +114,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
             --max-turns 30
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view ${{ env.NUMBER }}:*),Bash(gh pr diff ${{ env.NUMBER }}:*),Bash(gh pr checks ${{ env.NUMBER }}:*),Bash(gh pr ready ${{ env.NUMBER }}),Bash(gh pr comment ${{ env.NUMBER }}:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view ${{ env.NUMBER }}),Bash(gh pr view ${{ env.NUMBER }} --comments),Bash(gh pr diff ${{ env.NUMBER }}),Bash(gh pr checks ${{ env.NUMBER }}),Bash(gh pr ready ${{ env.NUMBER }}),Bash(gh pr comment ${{ env.NUMBER }} --body:*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.NUMBER }} は draft のまま止まっている。CI はすべて緑。
             ready にしてレビューに回せる状態かを判断してほしい。コードは書かない・push しない。
