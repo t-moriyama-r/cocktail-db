@@ -107,8 +107,8 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**画面が変わるなら、修正前後のスクリーンショット(か動画)を貼る**。画面が変わらないなら、撮らない理由を書く
 6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む
 7. 指摘は直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)
-8. エージェントは自分でマージしない。`.github/ai-dev.yml` が `merge: auto` のあいだは、指摘の対応が終わって CI が緑になった PR を `ai-auto-merge.yml` がマージする。`needs-human`・`needs-decision`・`needs-approval`・`ai-in-actions`・`no-auto-merge` のラベルが付いた PR、閉じる issue に `needs-review` が付いた PR はマージされない
-9. `release` へのマージはデプロイになるので、人が行う
+8. エージェントは自分でマージしない。`.github/ai-dev.yml` が `merge: auto` のあいだは、指摘の対応が終わって CI が緑になった `develop` 向けの PR を `ai-auto-merge.yml` がマージする。`needs-human`・`needs-decision`・`needs-approval`・`ai-in-actions`・`no-auto-merge` のラベルが付いた PR、閉じる issue に `needs-review` が付いた PR はマージされない
+9. `develop` → `staging`(dev 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、人が行う。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 
@@ -116,7 +116,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 
 - **このプロジェクトでは GitHub Copilot を使わない**。コード補完・Copilot のコードレビュー・「Fix with Copilot」「Explain error」・Copilot への issue のアサイン、すべて。レビュアーは CodeRabbit か Claude(`.github/ai-dev.yml` の `reviewer`)
 - 上の「このリポジトリは public」に挙げたものを commit しない・書かない
-- `develop`・`release` に直接 push・force push しない(保護で拒否される)
+- `develop`・`staging`・`release` に直接 push・force push しない(保護で拒否される)
 - 閉包テーブルを `CategoryTree` を通さずに書き換えない
 - DB を使うテストを SQLite で代用しない
 - エージェントは PR をマージしない

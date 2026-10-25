@@ -3,7 +3,7 @@
 「宅飲みカクテルデータベース」(https://cocktail.trc-vlackhistory.net/)のリプレイス版。今は Hello World の段階。
 
 - 公開先(開発中): https://cocktail-next.trc-vlackhistory.net/ (`release`)
-- dev 環境: https://cocktail-dev.trc-vlackhistory.net/ (`develop`。Basic 認証で閉じている。下の「dev 環境」)
+- dev 環境(ステージング): https://cocktail-dev.trc-vlackhistory.net/ (`staging`。Basic 認証で閉じている。下の「dev 環境」)
 - BE: Laravel 13(PHP 8.4)。`/api/*` が API、それ以外のパスは React の SPA を返す
 - FE: React + Vite(TypeScript)。ビルド結果は `backend/public/spa` に出力し、Laravel の `resources/views/spa.blade.php` がマニフェストを読んで HTML を組み立てる
 - 型の共有: Laravel のコードから Scramble で `openapi/openapi.json` を出力し、FE は openapi-typescript で型を生成して openapi-fetch で呼ぶ
@@ -16,7 +16,8 @@ backend/    Laravel(mixhost の ~/cocktail-db に置く)
 frontend/   React + Vite
 openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy.yml       release → 本番
-.github/workflows/deploy-dev.yml   develop → dev 環境
+.github/workflows/deploy-dev.yml   staging → dev 環境
+.github/workflows/branch-flow.yml  staging・release への PR の元のブランチを確かめる
 ```
 
 サーバー上の配置:
@@ -75,10 +76,14 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 | ブランチ | 役割 |
 |---|---|
 | `develop` | 開発のベース(既定のブランチ)。作業ブランチはここから切り、PR でここに戻す |
-| `release` | リリース用。`develop` から PR でマージすると、デプロイが動く |
+| `staging` | ステージング用。`develop` から PR でマージすると、dev 環境へのデプロイが動く |
+| `release` | リリース用。`staging` から PR でマージすると、本番へのデプロイが動く |
 | `issue-<番号>-<短い名前>` | 作業ブランチ。issue から `gh issue develop <番号> --base develop --name issue-<番号>-<名前>` で作ると、issue に結び付く |
 
-- `develop`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
+流れ: 作業ブランチ →(PR)→ `develop` →(PR)→ `staging`(dev 環境で確かめる)→(PR)→ `release`(本番)
+
+- `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
+- `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 
 ## デプロイ
@@ -106,10 +111,10 @@ GitHub 側に要る設定:
 
 ## dev 環境
 
-`develop` を、Basic 認証で閉じた dev 環境(https://cocktail-dev.trc-vlackhistory.net/)に出す(`.github/workflows/deploy-dev.yml`)。本番とは別のディレクトリ・DB(`<user>_cocktail_dev`)を使う。
+`staging` を、Basic 認証で閉じた dev 環境(ステージング。https://cocktail-dev.trc-vlackhistory.net/)に出す(`.github/workflows/deploy-dev.yml`)。本番とは別のディレクトリ・DB(`<user>_cocktail_dev`)を使う。
 
-- **1 日 1 回**(日本時間 4:00)、`develop` の先頭を出す。前回出したコミット(サーバーの `~/cocktail-db-dev/REVISION`)から進んでいなければ、テストもデプロイもしない
-- **すぐ出したいとき**: Actions の「deploy-dev」→「Run workflow」(ブランチは `develop`)、または `gh workflow run deploy-dev.yml --ref develop`。同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)
+- **`staging` にマージしたとき**に出す。`develop` から `staging` への PR を作り、その差分(前回ステージングに出したところからの変更)を見てマージする
+- **出し直したいとき**: Actions の「deploy-dev」→「Run workflow」(ブランチは `staging`)、または `gh workflow run deploy-dev.yml --ref staging`。前回出したコミット(サーバーの `~/cocktail-db-dev/REVISION`)と同じなら出さないので、同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)。`staging` 以外のブランチからは出さない
 - 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `migrate` → `optimize` → 動作確認)。動作確認では、資格情報なしで 401 になることも確かめる
 - `.env` はデプロイのたびに Secret から作り直す(手で直さない)。`APP_KEY` だけは初回にサーバーで作ったものを使い続ける
 - Basic 認証のユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
