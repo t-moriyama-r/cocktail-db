@@ -29,11 +29,18 @@ slack_mark_done() {
 		return 0
 	fi
 
-	local channel
-	channel=$(slack_form conversations.open --data-urlencode "users=$SLACK_NOTIFY_USER" | jq -r .channel.id)
-
-	local asks
-	asks=$(read_asks "$channel")
+	# 「済」は見た目の印なので、Slack 側の失敗(権限の不足など)でジョブを失敗にしない。
+	# pull_request_target で動くので、失敗すると PR のチェックが赤くなり、自動マージが止まる
+	local opened channel asks
+	if ! opened=$(slack_form conversations.open --data-urlencode "users=$SLACK_NOTIFY_USER"); then
+		echo "::warning::Slack の DM を開けなかったので、「済」を付けなかった"
+		return 0
+	fi
+	channel=$(jq -r .channel.id <<<"$opened")
+	if ! asks=$(read_asks "$channel"); then
+		echo "::warning::Slack の DM の履歴を読めなかったので、「済」を付けなかった"
+		return 0
+	fi
 
 	local pending
 	pending=$(jq -c '.[] | select(.done | not)' <<<"$asks")
@@ -47,8 +54,7 @@ slack_mark_done() {
 		number=$(jq -r .number <<<"$ask")
 		label=$(jq -r .label <<<"$ask")
 		why=$(settled_reason "$ask" "$number" "$label")
-		if [ -n "$why" ]; then
-			mark_done "$channel" "$ask"
+		if [ -n "$why" ] && mark_done "$channel" "$ask"; then
 			echo "#$number の $label の通知に「済」を付けた($why)"
 		fi
 	done <<<"$pending"
@@ -61,7 +67,7 @@ read_asks() {
 	oldest=$(($(date -u +%s) - LOOKBACK_DAYS * 86400))
 	while :; do
 		page=$(slack_form conversations.history --data-urlencode "channel=$channel" --data-urlencode "oldest=$oldest" \
-			--data-urlencode "limit=200" --data-urlencode "include_all_metadata=true" --data-urlencode "cursor=$cursor")
+			--data-urlencode "limit=200" --data-urlencode "include_all_metadata=true" --data-urlencode "cursor=$cursor") || return 1
 		messages=$(jq -c --argjson page "$page" '. + ($page.messages // [])' <<<"$messages")
 		cursor=$(jq -r '.response_metadata.next_cursor // ""' <<<"$page")
 		[ -n "$cursor" ] || break
@@ -100,7 +106,7 @@ mark_done() {
 		'{channel: $channel, timestamp: $ask.ts, name: "white_check_mark"}' | slack_json reactions.add)
 	# 前の回でリアクションまで付けて、本文の書き換えで止まったときは already_reacted になる
 	if [ "$(jq -r .ok <<<"$res")" != true ] && [ "$(jq -r .error <<<"$res")" != already_reacted ]; then
-		echo "::error::リアクションを付けられなかった: $(jq -r .error <<<"$res")"
+		echo "::warning::リアクションを付けられなかった: $(jq -r .error <<<"$res")"
 		return 1
 	fi
 
@@ -110,7 +116,7 @@ mark_done() {
 		metadata: {event_type: "ai_dev_done", event_payload: {repo: $repo, number: $ask.number, label: $ask.label}}
 	}' | slack_json chat.update)
 	if [ "$(jq -r .ok <<<"$res")" != true ]; then
-		echo "::error::本文を書き換えられなかった: $(jq -r .error <<<"$res")"
+		echo "::warning::本文を書き換えられなかった: $(jq -r .error <<<"$res")"
 		return 1
 	fi
 }
@@ -122,7 +128,7 @@ slack_form() {
 	local res
 	res=$(curl -sS -X POST "https://slack.com/api/$method" -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$@")
 	if [ "$(jq -r .ok <<<"$res")" != true ]; then
-		echo "::error::Slack の $method が失敗した: $(jq -r .error <<<"$res")" >&2
+		echo "::warning::Slack の $method が失敗した: $(jq -r .error <<<"$res")" >&2
 		return 1
 	fi
 	printf '%s\n' "$res"

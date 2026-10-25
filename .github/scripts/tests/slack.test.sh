@@ -94,6 +94,28 @@ main() {
 	run_mark none >/dev/null
 	expect TC-221-13 'bot が無ければ、何もせず成功で終わる' "$?:$(calls | wc -l | tr -d ' ')" '0:0'
 
+	reset
+	history "$(ask 100 7 needs-human)"
+	issue 7 open '[]'
+	echo '{"ok":false,"error":"missing_scope"}' >"$FAKE/res/conversations.open.json"
+	out=$(run_mark)
+	expect TC-221-16 'DM を開けない(権限の不足)ときは、警告だけ出して成功で終わり、何も書かない' \
+		"$?:$(calls | grep -c -e reactions.add -e chat.update):$(grep -c '::warning::' <<<"$out")" '0:0:1'
+
+	reset
+	issue 7 open '[]'
+	echo '{"ok":false,"error":"missing_scope"}' >"$FAKE/res/conversations.history.json"
+	out=$(run_mark)
+	expect TC-221-17 '履歴を読めないときも、警告だけ出して成功で終わる' "$?:$(grep -c '::warning::' <<<"$out")" '0:1'
+
+	reset
+	history "$(ask 100 7 needs-human),$(ask 200 8 needs-human)"
+	issue 7 open '[]'
+	issue 8 open '[]'
+	echo '{"ok":false,"error":"message_not_found"}' >"$FAKE/res/chat.update.json"
+	run_mark >/dev/null
+	expect TC-221-18 '1 件書き換えられなくても、ほかの通知へ進み、成功で終わる' "$?:$(sent chat.update .ts | paste -sd,)" '0:100,200'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -180,7 +202,8 @@ calls() {
 # 呼んだ API に送った中身から、jq で取り出す
 sent() {
 	[ -f "$FAKE/body.$1" ] || return 0
-	jq -r "$2" "$FAKE/body.$1"
+	# Windows の jq は CRLF で出す
+	jq -r "$2" "$FAKE/body.$1" | tr -d '\r'
 }
 
 expect() {
