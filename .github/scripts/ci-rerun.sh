@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# CI(test.yml)がいまのコミットで一度も動いていない PR に、CI を流し直させる
+#
+# 使い方:
+#   ci-rerun.sh <owner/repo>              既定のブランチ向けの開いている PR すべてを見る
+#   ci-rerun.sh <owner/repo> <PR の番号>  その PR だけを見る
+#
+# 開いている PR の上に積んだ PR は、土台がマージされてブランチが消えると、GitHub が base を既定のブランチに付け替える。
+# 付け替えはプッシュではないので test.yml が動かず、必須のチェックがそろわないまま止まる。ほかにも GITHUB_TOKEN で push した
+# コミットは test.yml を起こさない。そのため、何が起きたかではなく「いまのコミットで test.yml が動いたか」で決める。
+# 何度呼んでも、動いていない PR に 1 回流させるだけ。
+# 流し直しは、test.yml を PR のブランチで workflow_dispatch する(GITHUB_TOKEN で push しても CI は起きないので、既定のブランチを
+# 取り込んで push する形にはしない)。そのため、試すのは PR のブランチの先頭で、既定のブランチとのマージではない
+# (必須のチェックは「最新に追いついていること」を求めていないので、これでマージできる)。
+# 流せないもの(コンフリクトしている・ブランチの test.yml に workflow_dispatch が無い)は、PR にコメントして人に知らせる。
+# コメントはコミットごとに 1 回だけ
+set -euo pipefail
+
+WORKFLOW=${CI_WORKFLOW:-test.yml}
+# push の直後は、pull_request の回が作られる前のことがある。その間に重ねて流さない
+MIN_AGE_MINUTES=${MIN_AGE_MINUTES:-10}
+
+ci_rerun() {
+  local repo=$1 number=${2:-} default n
+  default=$(gh api "repos/$repo" --jq .default_branch)
+  if [ -n "$number" ]; then
+    rerun_one "$repo" "$default" "$number"
+    return
+  fi
+  for n in $(gh pr list -R "$repo" --state open --base "$default" --limit 100 --json number --jq '.[].number'); do
+    rerun_one "$repo" "$default" "$n"
+  done
+}
+
+rerun_one() {
+  local repo=$1 default=$2 n=$3 pr sha branch
+  skip() { echo "#$n 見送り: $*"; }
+  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable)
+  sha=$(jq -r .headRefOid <<<"$pr")
+  branch=$(jq -r .headRefName <<<"$pr")
+
+  if [ "$(jq -r .state <<<"$pr")" != OPEN ]; then skip "閉じている"; return; fi
+  # フォークのブランチでは、こちらから test.yml を動かせない(動かすのも危ない)
+  if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; return; fi
+  if [ "$(jq -r .baseRefName <<<"$pr")" != "$default" ]; then skip "向き先が $default ではない(積んでいる途中)"; return; fi
+  if [ "$(gh api "repos/$repo/actions/workflows/$WORKFLOW/runs?head_sha=$sha&per_page=1" --jq .total_count)" != 0 ]; then
+    skip "$WORKFLOW はいまのコミットで動いた・動いている"
+    return
+  fi
+  local committed age
+  committed=$(gh api "repos/$repo/commits/$sha" --jq .commit.committer.date)
+  age=$((($(date -u +%s) - $(date -u -d "$committed" +%s)) / 60))
+  if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "コミットから $age 分しかたっていない"; return; fi
+  if [ "$(jq -r .mergeable <<<"$pr")" = CONFLICTING ]; then
+    tell "$repo" "$n" "$sha" "$default とコンフリクトしているので、CI を流し直さなかった。$default を取り込んで push してほしい(push すれば CI が動く)"
+    return
+  fi
+
+  if gh workflow run "$WORKFLOW" -R "$repo" --ref "$branch"; then
+    echo "#$n で $WORKFLOW を流し直した($branch の ${sha:0:7})"
+  else
+    tell "$repo" "$n" "$sha" "いまのコミット(${sha:0:7})で CI が動いていないが、このブランチの $WORKFLOW を手で動かせなかった(workflow_dispatch が無い古いブランチなど)。$default を取り込んで push してほしい(push すれば CI が動く)"
+  fi
+}
+
+# 同じコミットで同じことを何度も書かない(見回りは 1 時間ごとに動く)
+tell() {
+  local repo=$1 n=$2 sha=$3 message=$4 marker
+  marker="ai-dev:ci-rerun sha=$sha"
+  if gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq '.[].body' | grep -qF "$marker"; then
+    echo "#$n 見送り: このコミットではもう知らせた"
+    return
+  fi
+  gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- $marker -->
+$message"
+  echo "#$n に知らせた: $message"
+}
+
+ci_rerun "$@"

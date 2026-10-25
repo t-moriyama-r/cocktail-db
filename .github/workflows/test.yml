@@ -7,6 +7,8 @@ on:
     branches: [develop]
   # deploy.yml・deploy-dev.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
+  # PR のブランチで流し直す(ci-rerun.yml)。base の付け替えや GITHUB_TOKEN の push では pull_request の回が起きないため
+  workflow_dispatch:
 
 permissions:
   contents: read
