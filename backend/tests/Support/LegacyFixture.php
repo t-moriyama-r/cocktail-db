@@ -53,11 +53,20 @@ final class LegacyFixture
      */
     private static function schemaStatements(): array
     {
-        $sql = file_get_contents(database_path('legacy/schema.sql'));
+        $path = database_path('legacy/schema.sql');
+        $sql = file_get_contents($path);
+        if ($sql === false) {
+            throw new RuntimeException("旧 DB の DDL を読めない: {$path}");
+        }
+
         $sql = preg_replace('/^--.*$/m', '', $sql);
+        $statements = $sql === null ? false : preg_split('/;\s*$/m', $sql);
+        if ($statements === false) {
+            throw new RuntimeException("旧 DB の DDL を文に分けられない: {$path}");
+        }
 
         return array_values(array_filter(
-            array_map('trim', preg_split('/;\s*$/m', $sql)),
+            array_map('trim', $statements),
             fn (string $statement) => $statement !== '',
         ));
     }
