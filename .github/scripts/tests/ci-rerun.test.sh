@@ -62,22 +62,24 @@ main() {
 	pr 7 develop false CONFLICTING
 	runs 0
 	run 7
-	expect TC-228-07 'コンフリクトしていたら流さずに、コミットの目印付きでコメントする' \
-		"$(dispatched)|$(commented | grep -c 'ai-dev:ci-rerun sha=sha7')" '|1'
+	expect TC-228-07 'コンフリクトしていたら流さずに、頼むコメント(目印 needs-human とコミット)を書き、needs-human を付けて Slack に知らせる' \
+		"$(dispatched)|$(commented | grep -c 'ai-dev:needs-human --> <!-- ai-dev:ci-rerun sha=sha7')|$(labeled)|$(notified)" \
+		'|1|7 -R o/r --add-label needs-human|notify-needs-human.yml -R o/r -f number=7 -f label=needs-human'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs 0
 	echo 1 >"$FAKE/dispatch-fails"
 	run 7
-	expect TC-228-08 'test.yml を動かせなかったら、そのことをコメントする' "$(commented | grep -c 'workflow_dispatch が無い')" 1
+	expect TC-228-08 'test.yml を動かせなかったら、そのことを頼み、Slack に知らせる' \
+		"$(commented | grep -c 'workflow_dispatch が無い')|$(notified | grep -c needs-human)" '1|1'
 
 	reset
 	pr 7 develop false CONFLICTING
 	runs 0
 	echo '<!-- ai-dev:agent --> <!-- ai-dev:ci-rerun sha=sha7 -->' >"$FAKE/comments"
 	run 7
-	expect TC-228-09 '同じコミットでもう知らせていたら、もう書かない' "$(commented)" ''
+	expect TC-228-09 '同じコミットでもう頼んでいたら、もう頼まない' "$(commented)$(labeled)$(notified)" ''
 
 	reset
 	pr 7 develop false MERGEABLE
@@ -85,7 +87,15 @@ main() {
 	runs 0
 	echo "7 8" >"$FAKE/list"
 	run
-	expect TC-228-10 '番号なしなら、既定のブランチ向けの開いている PR をすべて見る' "$(grep -c 'workflow run' "$FAKE/calls")" 2
+	expect TC-228-10 '番号なしなら、既定のブランチ向けの開いている PR をすべて見る' "$(dispatched | wc -l | tr -d ' ')" 2
+
+	# grep -q に直接つなぐと、目印を見つけた時点で gh が SIGPIPE で止まり、pipefail で見落とす
+	reset
+	pr 7 develop false CONFLICTING
+	runs 0
+	{ echo '<!-- ai-dev:ci-rerun sha=sha7 -->'; head -c 300000 /dev/zero | tr '\0' 'x'; echo; } >"$FAKE/comments"
+	run 7
+	expect TC-228-11 'コメントが大きくても、同じコミットで頼み直さない' "$(commented)" ''
 
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
@@ -103,7 +113,9 @@ case "$*" in
 	"pr view"*) cat "$FAKE/pr-$3.json" ;;
 	"api repos/o/r/actions/workflows/"*) cat "$FAKE/runs" ;;
 	"api repos/o/r/commits/"*) cat "$FAKE/committed" ;;
+	"workflow run notify-needs-human.yml"*) shift 2; echo "$*" >>"$FAKE/notified" ;;
 	"workflow run"*) [ -f "$FAKE/dispatch-fails" ] && exit 1; shift 2; echo "$*" >>"$FAKE/dispatched" ;;
+	"pr edit"*) shift 2; echo "$*" >>"$FAKE/labeled" ;;
 	"api --paginate"*) cat "$FAKE/comments" ;;
 	"pr comment"*) printf '%s\n' "$*" >>"$FAKE/commented" ;;
 	*) echo "unexpected: gh $*" >&2; exit 2 ;;
@@ -113,7 +125,7 @@ SH
 }
 
 reset() {
-	rm -f "$FAKE"/pr-*.json "$FAKE"/calls "$FAKE"/dispatched "$FAKE"/commented "$FAKE"/dispatch-fails
+	rm -f "$FAKE"/pr-*.json "$FAKE"/calls "$FAKE"/dispatched "$FAKE"/commented "$FAKE"/dispatch-fails "$FAKE"/labeled "$FAKE"/notified
 	: >"$FAKE/comments"
 	: >"$FAKE/calls"
 	echo 7 >"$FAKE/list"
@@ -129,6 +141,8 @@ runs() { echo "$1" >"$FAKE/runs"; }
 committed() { echo "$1" >"$FAKE/committed"; }
 dispatched() { cat "$FAKE/dispatched" 2>/dev/null; }
 commented() { cat "$FAKE/commented" 2>/dev/null; }
+labeled() { cat "$FAKE/labeled" 2>/dev/null; }
+notified() { cat "$FAKE/notified" 2>/dev/null; }
 
 run() {
 	PATH="$FAKE/bin:$PATH" bash "$SCRIPT" o/r "$@" >"$FAKE/out" 2>&1

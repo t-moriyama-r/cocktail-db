@@ -12,8 +12,9 @@
 # 流し直しは、test.yml を PR のブランチで workflow_dispatch する(GITHUB_TOKEN で push しても CI は起きないので、既定のブランチを
 # 取り込んで push する形にはしない)。そのため、試すのは PR のブランチの先頭で、既定のブランチとのマージではない
 # (必須のチェックは「最新に追いついていること」を求めていないので、これでマージできる)。
-# 流せないもの(コンフリクトしている・ブランチの test.yml に workflow_dispatch が無い)は、PR にコメントして人に知らせる。
-# コメントはコミットごとに 1 回だけ
+# 流せないもの(コンフリクトしている・ブランチの test.yml に workflow_dispatch が無い)は、人に頼む。人が動くのは Slack に
+# 知らせが来たときだけなので、頼むコメント(目印 ai-dev:needs-human)を書いて needs-human を付け、notify-needs-human.yml を呼ぶ。
+# オーナーが返信すると ai-review-loop.yml の Claude Code が引き継ぐ。頼むのはコミットごとに 1 回だけ
 set -euo pipefail
 
 WORKFLOW=${CI_WORKFLOW:-test.yml}
@@ -52,28 +53,32 @@ rerun_one() {
   age=$((($(date -u +%s) - $(date -u -d "$committed" +%s)) / 60))
   if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "コミットから $age 分しかたっていない"; return; fi
   if [ "$(jq -r .mergeable <<<"$pr")" = CONFLICTING ]; then
-    tell "$repo" "$n" "$sha" "$default とコンフリクトしているので、CI を流し直さなかった。$default を取り込んで push してほしい(push すれば CI が動く)"
+    tell "$repo" "$n" "$sha" "$default とコンフリクトしているので、CI を流し直さなかった。$default を取り込んで push してほしい(push すれば CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する"
     return
   fi
 
   if gh workflow run "$WORKFLOW" -R "$repo" --ref "$branch"; then
     echo "#$n で $WORKFLOW を流し直した($branch の ${sha:0:7})"
   else
-    tell "$repo" "$n" "$sha" "いまのコミット(${sha:0:7})で CI が動いていないが、このブランチの $WORKFLOW を手で動かせなかった(workflow_dispatch が無い古いブランチなど)。$default を取り込んで push してほしい(push すれば CI が動く)"
+    tell "$repo" "$n" "$sha" "いまのコミット(${sha:0:7})で CI が動いていないが、このブランチの $WORKFLOW を手で動かせなかった(workflow_dispatch が無い古いブランチなど)。$default を取り込んで push してほしい(push すれば CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する"
   fi
 }
 
-# 同じコミットで同じことを何度も書かない(見回りは 1 時間ごとに動く)
+# 同じコミットで同じことを何度も頼まない(見回りは 1 時間ごとに動く)
 tell() {
-  local repo=$1 n=$2 sha=$3 message=$4 marker
+  local repo=$1 n=$2 sha=$3 message=$4 marker bodies
   marker="ai-dev:ci-rerun sha=$sha"
-  if gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq '.[].body' | grep -qF "$marker"; then
-    echo "#$n 見送り: このコミットではもう知らせた"
+  # grep -q に直接つなぐと、見つけた時点で gh が SIGPIPE で止まり、pipefail で「見つからない」扱いになって頼み直してしまう
+  bodies=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq '.[].body')
+  if grep -qF "$marker" <<<"$bodies"; then
+    echo "#$n 見送り: このコミットではもう頼んだ"
     return
   fi
-  gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- $marker -->
+  gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- $marker -->
 $message"
-  echo "#$n に知らせた: $message"
+  gh pr edit "$n" -R "$repo" --add-label needs-human
+  gh workflow run notify-needs-human.yml -R "$repo" -f number="$n" -f label=needs-human
+  echo "#$n で人に頼んだ: $message"
 }
 
 ci_rerun "$@"

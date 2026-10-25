@@ -32,8 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write   # 流せないときに PR にコメントする
-      actions: write         # test.yml を workflow_dispatch する
+      pull-requests: write   # 流せないときに、頼むコメントを書いて needs-human を付ける
+      actions: write         # test.yml と notify-needs-human.yml を workflow_dispatch する
     steps:
       - uses: actions/checkout@v6
         with:
