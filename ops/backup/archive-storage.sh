@@ -48,7 +48,7 @@ archive_storage() {
 		[[ -d "$3" ]] || die "画像のディレクトリが見つからない: $3"
 		make_work_dir "${TMPDIR:-/tmp}"
 		hash_manifest "$3" >"$WORK_DIR/source.sha256"
-		verify_archive "$2" "$WORK_DIR/source.sha256" >/dev/null
+		verify_archive "$2" "$WORK_DIR/source.sha256"
 		echo "verified: アーカイブと $3 の中身が一致した"
 		return 0
 	fi
@@ -82,12 +82,12 @@ archive_storage() {
 
 	# 検証に通ってから出力先に置く。通らなかったアーカイブに .sha256 を付けて残すと、
 	# 後で sha256sum -c が通り、正しい退避と取り違える。
-	local file_count
-	file_count=$(create_verified_archive "$storage_dir" "$WORK_DIR/archive.tar.gz" "$WORK_DIR/files.txt")
+	# コマンド置換($(...))の中では set -e が効かず tar などの失敗を見逃すので、直接呼ぶ
+	create_verified_archive "$storage_dir" "$WORK_DIR/archive.tar.gz" "$WORK_DIR/files.txt"
 	mv "$WORK_DIR/archive.tar.gz" "$archive"
 	(cd "$out_dir" && sha256sum "$stamp.tar.gz" >"$stamp.tar.gz.sha256")
 	echo "archive: $archive"
-	echo "files: $file_count (展開して数とハッシュが元と一致した)"
+	echo "files: $(wc -l <"$WORK_DIR/extracted.sha256") (展開して数とハッシュが元と一致した)"
 
 	reconcile "$WORK_DIR/db.tsv" "$WORK_DIR/files.txt" >"$out_dir/$stamp.check.tsv"
 	report "$out_dir/$stamp.check.tsv"
@@ -172,15 +172,19 @@ query_image_columns() {
 # 旧アプリは動いたまま退避するので、固めている間に画像が足されたり消されたりしうる。
 # そのときのアーカイブは、固めた後のディレクトリとも前のディレクトリとも一致せず、
 # 検証が誤報になる(あるいは途中の変化を見逃す)。固める前後でディレクトリのハッシュの
-# 一覧が変わらなかった回だけを採り、変わった回は固め直す。
-# 標準出力にファイルの数を出し、3 つ目の引数のファイルにアーカイブの中のファイルの相対パスを書く。
+# 一覧が変わらなかった回だけを採り、変わった回は固め直す。GNU tar は読んでいる間に
+# ファイルが変わると終了コード 1 を返すので、それも変わった回として扱う。それより大きい
+# 終了コード(読めないファイルがある、など)は、固め直しても直らないのでエラーにする。
+# 3 つ目の引数のファイルに、アーカイブの中のファイルの相対パスを書く。
 create_verified_archive() {
-	local storage_dir=$1 archive=$2 files_out=$3 attempt
+	local storage_dir=$1 archive=$2 files_out=$3 attempt tar_status
 	for attempt in 1 2 3; do
 		hash_manifest "$storage_dir" >"$WORK_DIR/before.sha256"
-		tar -C "$storage_dir" -czf "$archive" .
+		tar_status=0
+		tar -C "$storage_dir" -czf "$archive" . || tar_status=$?
+		[[ $tar_status -le 1 ]] || die "tar が失敗した(終了コード $tar_status)"
 		hash_manifest "$storage_dir" >"$WORK_DIR/after.sha256"
-		if cmp -s "$WORK_DIR/before.sha256" "$WORK_DIR/after.sha256"; then
+		if [[ $tar_status -eq 0 ]] && cmp -s "$WORK_DIR/before.sha256" "$WORK_DIR/after.sha256"; then
 			verify_archive "$archive" "$WORK_DIR/before.sha256" "$files_out"
 			return
 		fi
@@ -192,7 +196,8 @@ create_verified_archive() {
 
 # 期待するハッシュの一覧(hash_manifest の出力)と、アーカイブを展開したディレクトリの一覧を
 # 比べる。一覧が一致すれば、ファイルの数・名前・中身がすべて一致している。
-# 標準出力にファイルの数を出す。3 つ目の引数を渡すと、アーカイブの中のファイルの相対パスを書く。
+# 3 つ目の引数を渡すと、アーカイブの中のファイルの相対パスを書く。展開したものの一覧は
+# $WORK_DIR/extracted.sha256 に残す。
 verify_archive() {
 	local archive=$1 expected=$2 files_out=${3:-}
 	[[ -f "$archive" ]] || die "アーカイブが見つからない: $archive"
@@ -207,12 +212,13 @@ verify_archive() {
 		exit 2
 	fi
 	[[ -z "$files_out" ]] || (cd "$tmp" && find . -type f -printf '%P\n' | LC_ALL=C sort >"$files_out")
-	wc -l <"$WORK_DIR/extracted.sha256"
 	rm -rf "$tmp"
 }
 
+# 読めないファイルがあると一覧から抜け、抜けたまま「一致した」ことになるので、エラーにする。
 hash_manifest() {
-	(cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+	(cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) ||
+		die "ハッシュを取れないファイルがある(権限を確かめる): $1"
 }
 
 # 画像列の値は、直下のファイル名(`abc.jpeg`)と、外部の URL(`https://…`)がある。

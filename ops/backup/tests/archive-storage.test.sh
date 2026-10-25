@@ -45,6 +45,7 @@ main() {
 	tc_12_permissions
 	tc_13_db_connection_failure
 	tc_17_directory_changes_while_archiving
+	tc_18_tar_failure
 	echo "passed: $PASSED, failed: $FAILED"
 	[[ $FAILED -eq 0 ]]
 }
@@ -274,6 +275,54 @@ tc_17_directory_changes_while_archiving() {
 	expect_status "TC-15-17: 変わり続ければ 2" 2
 	expect "TC-15-17: 変わり続けたときは出力先に何も置かない" \
 		test -z "$(find "$BACKUP/storage" -maxdepth 1 -type f)" -a -z "$(find "$BACKUP/storage" -name '.work.*')"
+}
+
+# TC-15-18
+tc_18_tar_failure() {
+	new_sandbox
+	add_image "a.jpeg" 10
+	make_failing_tar 1
+	PATH="$SANDBOX/bin:$PATH" run_script "$ENV_FILE"
+	expect_status "TC-15-18: tar が 1(読んでいる間に変わった)を返した回は固め直して 0" 0
+	expect_output "TC-15-18: 固め直したことを出す" "warning: 固めている間に画像のディレクトリが変わったので固め直す(1 回目)"
+
+	new_sandbox
+	add_image "a.jpeg" 10
+	make_failing_tar 2
+	PATH="$SANDBOX/bin:$PATH" run_script "$ENV_FILE"
+	expect_status "TC-15-18: tar が 2 以上を返したら 1" 1
+	expect "TC-15-18: tar が失敗したときは出力先に何も置かない" \
+		test -z "$(find "$BACKUP/storage" -maxdepth 1 -type f)"
+
+	if [[ $EUID -eq 0 ]]; then
+		echo "skip TC-15-18: 読めないファイル(root では読めてしまうので、root 以外で流す CI で確かめる)"
+		return
+	fi
+	new_sandbox
+	add_image "a.jpeg" 10
+	add_image "secret.jpeg" 10
+	chmod 000 "$STORAGE/secret.jpeg"
+	run_script "$ENV_FILE"
+	chmod 600 "$STORAGE/secret.jpeg"
+	expect_status "TC-15-18: 読めないファイルがあれば 1" 1
+	expect "TC-15-18: 読めないファイルがあるときは出力先に何も置かない" \
+		test -z "$(find "$BACKUP/storage" -maxdepth 1 -type f)"
+}
+
+# 初めの 1 回だけ、本物の tar で固めた後に引数の終了コードを返す tar を $SANDBOX/bin に置く
+make_failing_tar() {
+	local real_tar
+	real_tar=$(command -v tar)
+	mkdir -p "$SANDBOX/bin"
+	cat >"$SANDBOX/bin/tar" <<EOF
+#!/usr/bin/env bash
+"$real_tar" "\$@" || exit
+if [[ " \$* " == *" -czf "* && ! -e "$SANDBOX/bin/failed" ]]; then
+	touch "$SANDBOX/bin/failed"
+	exit $1
+fi
+EOF
+	chmod +x "$SANDBOX/bin/tar"
 }
 
 # 引数の回数だけ、固める前に画像を 1 つ足す tar を $SANDBOX/bin に置く
