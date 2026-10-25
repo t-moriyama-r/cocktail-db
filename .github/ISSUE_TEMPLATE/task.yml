@@ -4,7 +4,8 @@
 # issue-breakdown スキルが作る作業 issue の本文(目的・参照・判断が要ること・やること・受け入れ条件・依存・対象外)に合わせる。
 # 欄ごとの見出しは GitHub が「### <label>」の形で本文に書き込む。label を変えると、
 # 本文を読むワークフロー(notify-needs-human.yml の「判断が要ること」)と合わなくなるので、変えるときはそちらも直す
-name: 作業
+# name は 3 文字以上でないと、GitHub がテンプレートを読み込まず、作成画面に出ない
+name: 作業 issue
 description: 1 件の PR で終わる作業。目的・やること・受け入れ条件・依存を書く
 labels: [task]
 body:
