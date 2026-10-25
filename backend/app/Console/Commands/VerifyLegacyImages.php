@@ -6,7 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use League\Flysystem\PathTraversalDetected;
+use League\Flysystem\FilesystemException;
 
 /**
  * 旧 DB(接続 legacy)の画像の列が指すファイルが、新アプリの public ディスク
@@ -80,13 +80,13 @@ final class VerifyLegacyImages extends Command
     }
 
     /**
-     * `../` を含む値はディスクの外を指すので、確かめずに無いものとして扱う。
+     * `../` や制御文字を含む値は Flysystem が例外にするので、確かめずに無いものとして扱う。
      */
     private function exists(Filesystem $disk, string $path): bool
     {
         try {
             return $disk->exists($path);
-        } catch (PathTraversalDetected) {
+        } catch (FilesystemException) {
             return false;
         }
     }

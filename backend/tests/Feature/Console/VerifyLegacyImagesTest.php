@@ -130,7 +130,22 @@ it('TC-34-15: ディスクの外を指す値(../)は、確かめずに欠けと�
         ->assertExitCode(1);
 })->group('db');
 
-it('TC-34-16: 旧データに画像が 1 件も無ければ 0 で終わる', function () {
+it('TC-34-17: 制御文字を含む値があっても落ちず、欠けとして数えて集計を出す', function () {
+    $cocktail = firstLegacyId('t_cocktails');
+    $dictionary = firstLegacyId('t_dictionary');
+    Storage::disk('public')->put('ok.jpeg', 'x');
+    setLegacyImages([
+        't_cocktails' => [$cocktail => "bad\tname.jpeg"],
+        't_dictionary' => [$dictionary => 'ok.jpeg'],
+    ]);
+
+    verifyLegacyImages($this)
+        ->expectsOutput('found: 1')
+        ->expectsOutput('missing: 1')
+        ->assertExitCode(1);
+})->group('db');
+
+it('TC-34-16:旧データに画像が 1 件も無ければ 0 で終わる', function () {
     setLegacyImages([]);
 
     verifyLegacyImages($this)
