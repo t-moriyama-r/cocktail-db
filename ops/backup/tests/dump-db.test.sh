@@ -31,9 +31,10 @@ run_tests() {
   tc_public_html_symlink
 
   if db_available; then
-    setup_fixture
-    tc_dump_and_restore
-    tc_wrong_password
+    if setup_fixture; then
+      tc_dump_and_restore
+      tc_wrong_password
+    fi
   elif [[ ${DUMP_TEST_REQUIRE_DB:-} == 1 ]]; then
     fail "DB のケース" "DUMP_TEST_REQUIRE_DB=1 なのに DUMP_TEST_DB_HOST が無い"
   else
@@ -219,7 +220,7 @@ db_available() {
 }
 
 admin() {
-  MYSQL_PWD=${DUMP_TEST_DB_ROOT_PASSWORD:-} "$(client)" -h "$DUMP_TEST_DB_HOST" -P "${DUMP_TEST_DB_PORT:-3306}" -u root "$@"
+  MYSQL_PWD=${DUMP_TEST_DB_ROOT_PASSWORD:-} "$(client)" --default-character-set=utf8mb4     -h "$DUMP_TEST_DB_HOST" -P "${DUMP_TEST_DB_PORT:-3306}" -u root "$@"
 }
 
 client() {
@@ -230,7 +231,7 @@ client() {
 setup_fixture() {
   local sql_pass=${DUMP_PASS//\\/\\\\}
   sql_pass=${sql_pass//\'/\\\'}
-  admin <<SQL || { fail "fixture" "テスト用の DB を作れない"; return; }
+  admin <<SQL || { fail "fixture" "テスト用の DB を作れない"; return 1; }
 DROP DATABASE IF EXISTS dump_src;
 DROP DATABASE IF EXISTS dump_restore;
 DROP USER IF EXISTS 'dump_test'@'%';
