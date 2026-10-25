@@ -11,11 +11,13 @@ set -euo pipefail
 repo=$1
 number=$2
 
-gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$number" -f query='
-  query($owner: String!, $name: String!, $number: Int!) {
+# --paginate はページごとに数を出すので、最後に足す
+gh api graphql --paginate -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$number" -f query='
+  query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
     repository(owner: $owner, name: $name) {
       pullRequest(number: $number) {
-        reviewThreads(first: 100) {
+        reviewThreads(first: 100, after: $endCursor) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             isResolved
             first: comments(first: 1) { nodes { author { login } body } }
@@ -30,4 +32,4 @@ gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$number" -
         | $c.author.login == "coderabbitai"
           or ($c.author.login == "github-actions" and ($c.body | contains("ai-dev:claude-review"))))
     | select(.last.nodes[0].body | (contains("ai-dev:agent") and (contains("ai-dev:claude-review") | not)) | not)
-  ] | length'
+  ] | length' | jq -s add

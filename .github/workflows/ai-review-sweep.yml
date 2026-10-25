@@ -4,8 +4,8 @@
 # レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
 # 候補はシェルで絞り、理由をジョブのログに出す。Claude Code はここでは動かさず、次のワークフローを workflow_dispatch で呼ぶ
 #
-# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-approval / no-auto-merge が
-# 付いていない(人の番か、止めてある)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
+# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-approval が
+# 付いていない(人の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
 # ai-in-actions が付いていれば 3 時間待つ(Actions が対応している途中。止まって印だけ残ったものは、そのあと拾う)
 #
 # 呼ぶもの(上から順に見て、最初に当てはまったもの):
@@ -56,7 +56,7 @@ jobs:
             pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,labels,updatedAt,headRefOid,commits)
             if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft"; continue; fi
             if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
-            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval","no-auto-merge"))] | join(",")' <<<"$pr")
+            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
             if [ -n "$label" ]; then skip "ラベル $label"; continue; fi
             min=$MIN_IDLE_MINUTES
             if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then min=$MIN_IDLE_MINUTES_IN_ACTIONS; fi
@@ -85,6 +85,8 @@ jobs:
                 gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
                 continue
               fi
+              # no-auto-merge は自動マージだけを止めるラベルなので、指摘への対応(上)はするが、ここでは呼ばない
+              if jq -e '.labels | any(.name == "no-auto-merge")' <<<"$pr" >/dev/null; then skip "レビュー済み。no-auto-merge なので自動マージは呼ばない"; continue; fi
               # マージできるかは ai-auto-merge.yml が決める(merge: review のリポジトリでは何もしない)
               echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済み。ai-auto-merge.yml を呼ぶ"
               gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$n"
