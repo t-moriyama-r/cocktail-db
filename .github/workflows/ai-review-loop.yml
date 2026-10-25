@@ -136,12 +136,15 @@ jobs:
   review:
     # PR に CodeRabbit のレビューが付いたとき。指摘が無いとレビューは付かず、
     # 「Review finished.」「No actionable comments」のコメントだけが付くので、それも拾う。
-    # 指摘があっても、レビューの後に「Review finished.」が付くので、同じレビューで 2 回起きることがある(2 回目は guard で止める)
+    # 指摘があっても、レビューの後に「Review finished.」が付くので、同じレビューで 2 回起きることがある(2 回目は guard で止める)。
+    # CodeRabbit がスレッドで返信したときに付く本文の無いレビューでは起きない(エージェントとの返信の応酬を、その場で続けない。
+    # 返信に答えが要るものは ai-review-sweep.yml が後で拾う)
     if: >-
       github.event_name == 'workflow_dispatch'
       || (
         (github.event_name == 'pull_request_review'
           && github.event.review.user.login == 'coderabbitai[bot]'
+          && github.event.review.body != ''
           && !contains(github.event.pull_request.labels.*.name, 'needs-human')
           && !contains(github.event.pull_request.labels.*.name, 'needs-approval'))
         || (github.event_name == 'issue_comment'
@@ -181,13 +184,21 @@ jobs:
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "オーナーの PR でない"
           label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
           [ -z "$label" ] || skip "ラベル $label"
-          # 返信待ちのスレッドが無く、いまのコミットの後にエージェントがもうコメントしていれば、このレビューへの対応は済んでいる
+          # 返信待ちのスレッドが無く、AI レビュアーの最後の動きの後にエージェントがもうコメントしていれば、このレビューへの対応は済んでいる。
+          # CodeRabbit はスレッドへの返信のたびに本文の無いレビューを付けるので、それはレビューとして数えない(ai-auto-merge.yml と同じ)。
+          # コミットの時刻と比べると、直して再レビューを頼んだ回のコメント(ai-dev:round)がコミットより新しいため、
+          # 指摘の無い再レビューで見送ってしまい、ai-in-actions が外れないまま止まる
           unanswered=$(bash .ai-dev/.github/scripts/unanswered-review-threads.sh "$REPO" "$PR")
           if [ "$unanswered" = 0 ]; then
-            committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
-            done_at=$(gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
-              --jq "[.[] | select((.body | contains(\"ai-dev:agent\")) and .created_at > \"$committed\")] | length" | jq -s add)
-            [ "$done_at" = 0 ] || skip "返信待ちのスレッドが無く、いまのコミットへの対応は済んでいる"
+            comments=$(gh api --paginate --slurp "repos/$REPO/issues/$PR/comments?per_page=100" | jq 'add // []')
+            reviews=$(gh api --paginate --slurp "repos/$REPO/pulls/$PR/reviews?per_page=100" | jq 'add // []')
+            reviewed_at=$(jq -rn --argjson c "$comments" --argjson r "$reviews" '
+              [ ($r[] | select((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
+                  or (.user.login == "github-actions[bot]" and (.body | contains("ai-dev:claude-review")))) | .submitted_at),
+                ($c[] | select(.user.login == "coderabbitai[bot]" and (.body // "" | test("Review finished|No actionable comments|LGTM"))) | .updated_at)
+              ] | max // ""')
+            agent_at=$(jq -r '[.[] | select(.body | contains("ai-dev:agent")) | .created_at] | max // ""' <<<"$comments")
+            [[ -z "$agent_at" || "$agent_at" < "$reviewed_at" ]] || skip "返信待ちのスレッドが無く、最後のレビュー($reviewed_at)の後にエージェントがコメントしている($agent_at)"
           fi
           echo "#$PR 対応する(返信待ちのスレッド: $unanswered 件)"
           echo "head=$(jq -r .headRefName <<<"$pr")" >> "$GITHUB_OUTPUT"
