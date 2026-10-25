@@ -141,6 +141,8 @@ jobs:
           if [[ ",$after," == *",needs-human,"* && ",$BEFORE," != *",needs-human,"* ]]; then
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
           fi
+          # GITHUB_TOKEN で付け外ししたラベルでは起きないので、状態のラベルを付け替えさせる
+          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
 
   review:
     # PR に CodeRabbit のレビューが付いたとき。指摘が無いとレビューは付かず、
@@ -297,3 +299,4 @@ jobs:
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
           fi
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
+          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"

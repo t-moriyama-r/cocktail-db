@@ -6,7 +6,7 @@ name: ai-dev-scripts
 
 on:
   pull_request:
-    branches: [develop, release]
+    branches: [develop, staging, release]
   push:
     branches: [develop]
 
