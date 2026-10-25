@@ -50,7 +50,8 @@ if test -z "$ready"; then
 fi
 # legacy_data.sql はテーブル定義込み。users はデータ側に無いので、schema から定義だけ入れる
 # 投入に失敗したら止める。データが欠けたまま動かすと、間違った「旧での結果」を採ってしまう
-load_failed() { echo "ダンプの投入に失敗したため中止します。片付けてからやり直してください。" >&2; exit 1; }
+# DB は調べられるよう消さずに残す。やり直す前に、下の「片付け」で消す
+load_failed() { echo "ダンプの投入に失敗したため中止します。調べ終えたら下の「片付け」で消してから、最初からやり直してください。" >&2; exit 1; }
 test -f "$LEGACY_DUMP/legacy_data.sql" && test -f "$LEGACY_DUMP/legacy_schema.sql" || load_failed
 docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql" || load_failed
 awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
@@ -72,10 +73,10 @@ docker run -d --rm --name cocktail-legacy-app --network cocktail-legacy -p 127.0
 
 http://127.0.0.1:8000 を開く。
 
-片付け:
+片付け(途中で止まったときも、これで消してからやり直す):
 
 ```bash
-docker stop cocktail-legacy-app cocktail-legacy-db && docker network rm cocktail-legacy
+docker rm -f cocktail-legacy-app cocktail-legacy-db; docker network rm cocktail-legacy
 ```
 
 ## はまりどころ
