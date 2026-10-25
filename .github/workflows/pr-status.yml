@@ -1,0 +1,66 @@
+# PR に、いま誰の番かを表す状態のラベル(状態:レビュー待ち・状態:レビュー対応中 など)を 1 つだけ付ける。決め方は .github/scripts/pr-status.sh
+#
+# 状態が変わりうるとき(PR の動き・レビュー・CodeRabbit のコメント・CI と AI のワークフローの終わり)に、事実から出し直して付け替える。
+# GITHUB_TOKEN で付けたラベルやマージはワークフローを起こさないので、AI のワークフローの終わり(workflow_run)と、1 時間ごとの見回りでも
+# 開いている PR をすべて出し直す。途中で止まったジョブが古いラベルを残しても、そこで直る。
+# PR のコードは checkout しない(pull_request_target で書き込みの権限を持つため)。スクリプトは既定のブランチのものを使う
+name: PR の状態のラベル
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created, edited]
+  workflow_run:
+    # 名前は各ワークフローの name: に合わせる
+    workflows: [test, AI レビュー対応, AI レビュー(CodeRabbit の上限のときの代わり), マージできるかの判定と自動マージ]
+    types: [completed]
+  schedule:
+    - cron: '45 * * * *'
+  workflow_dispatch:
+    inputs:
+      number:
+        description: PR の番号(空なら開いている PR すべて)
+        required: false
+
+permissions: {}
+
+# 何度動かしても同じ結果になるので、同じ PR の古い回は取り消して新しい回だけを残す
+concurrency:
+  group: pr-status-${{ github.event.pull_request.number || github.event.issue.number || inputs.number || 'all' }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    # issue_comment は PR へのコメントだけ。このジョブが付け替えたラベルは GITHUB_TOKEN なので、ここへは戻ってこない。
+    # 人が状態のラベルを手で付け替えたときは動いて、事実どおりに戻す
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+
+      - name: 状態を出し直して、ラベルを付け替える
+        run: |
+          if [ -n "$NUMBER" ]; then
+            numbers=$NUMBER
+          else
+            numbers=$(gh pr list -R "$REPO" --state open --limit 100 --json number --jq '.[].number')
+          fi
+          for n in $numbers; do
+            bash .github/scripts/pr-status.sh "$REPO" "$n" || echo "::warning::#$n の状態のラベルを付け替えられなかった"
+          done
