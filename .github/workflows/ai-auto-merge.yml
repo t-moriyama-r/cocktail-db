@@ -77,7 +77,9 @@ jobs:
 
           # 人の手でマージする理由。空なら自動でマージする
           human=""
-          setting=$(gh api "repos/$REPO/contents/.github/ai-dev.yml?ref=$DEFAULT_BRANCH" --jq .content 2>/dev/null | base64 -d 2>/dev/null || true)
+          # 取得に失敗したときに「merge: auto ではない」と取り違えて人を呼ばないよう、見送る
+          content=$(gh api "repos/$REPO/contents/.github/ai-dev.yml?ref=$DEFAULT_BRANCH" --jq .content) || skip "ai-dev.yml を読めない"
+          setting=$(base64 -d <<<"$content") || skip "ai-dev.yml を読めない"
           grep -Eq '^merge:[[:space:]]*auto([[:space:]]|#|$)' <<<"$setting" || human=".github/ai-dev.yml が merge: auto ではない"
 
           # workflow_run では PR の番号が来ないことがあるので、コミットから探す
