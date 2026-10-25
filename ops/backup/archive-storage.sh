@@ -77,13 +77,14 @@ archive_storage() {
 	write_defaults_file "$env_file" "$WORK_DIR/my.cnf"
 	query_image_columns "$WORK_DIR/my.cnf" "$(env_value DB_DATABASE "$env_file")" >"$WORK_DIR/db.tsv"
 
+	# 検証に通ってから出力先に置く。通らなかったアーカイブに .sha256 を付けて残すと、
+	# 後で sha256sum -c が通り、正しい退避と取り違える。
 	tar -C "$storage_dir" -czf "$WORK_DIR/archive.tar.gz" .
+	local file_count
+	file_count=$(verify_archive "$WORK_DIR/archive.tar.gz" "$storage_dir" "$WORK_DIR/files.txt")
 	mv "$WORK_DIR/archive.tar.gz" "$archive"
 	(cd "$out_dir" && sha256sum "$stamp.tar.gz" >"$stamp.tar.gz.sha256")
 	echo "archive: $archive"
-
-	local file_count
-	file_count=$(verify_archive "$archive" "$storage_dir" "$WORK_DIR/files.txt")
 	echo "files: $file_count (展開して数とハッシュが元と一致した)"
 
 	reconcile "$WORK_DIR/db.tsv" "$WORK_DIR/files.txt" >"$out_dir/$stamp.check.tsv"
@@ -193,8 +194,9 @@ hash_manifest() {
 # .gitignore などのドットファイルは、Laravel が置くもので画像ではないので unreferenced に出さない。
 reconcile() {
 	local db_tsv=$1 files=$2
-	LC_ALL=C awk -F '\t' -v OFS='\t' '
-		NR == FNR { present[$0] = 1; next }
+	# 1 つ目のファイルを FILENAME で見分ける(NR == FNR だと、ファイルが 0 件のときに DB の行を取り違える)
+	LC_ALL=C awk -F '\t' -v OFS='\t' -v files="$files" '
+		FILENAME == files { present[$0] = 1; next }
 		{
 			name = $3
 			if (name ~ /^https?:\/\//) { print "external", $1, $2, name; next }

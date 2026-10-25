@@ -147,6 +147,12 @@ tc_07_empty_directory() {
 
 	expect_status "TC-15-07: 空のディレクトリでも正常に終わる" 0
 	expect_output "TC-15-07: ファイルの数は 0" "files: 0 (展開して数とハッシュが元と一致した)"
+
+	new_sandbox
+	db_rows "INSERT INTO t_cocktails (id, image) VALUES (1, 'a.jpeg'), (2, 'b.jpeg')"
+	run_script "$ENV_FILE"
+	expect_output "TC-15-07: 空のディレクトリでも DB が指すファイルは欠けに数える" "missing: 2"
+	expect_output "TC-15-07: DB の値を unreferenced に出さない" "unreferenced: 0"
 }
 
 # TC-15-08
