@@ -11,7 +11,7 @@
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
-# - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている
+# - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)
 #
 # マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
@@ -153,6 +153,10 @@ jobs:
             [ "$mergeable" != UNKNOWN ] && break
             sleep 5
           done
+          if [ "$mergeable" = CONFLICTING ]; then
+            # 取り込んで直すのは ai-conflict-resolve.yml(1 時間ごとにも見回る)。見つけたときに早く拾わせる
+            gh workflow run ai-conflict-resolve.yml -R "$REPO" -f number="$NUMBER" || echo "::warning::ai-conflict-resolve.yml を呼べなかった"
+          fi
           [ "$mergeable" = MERGEABLE ] || skip "#$NUMBER はマージできない状態($mergeable)"
 
           if [ -n "$human" ]; then
