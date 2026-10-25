@@ -7,13 +7,14 @@
 # DB を使うケースは、管理者で入れる MariaDB を次の環境変数で渡したときだけ流す(渡さなければ SKIP)。
 #   DUMP_TEST_DB_HOST・DUMP_TEST_DB_PORT・DUMP_TEST_DB_ROOT_PASSWORD
 # DUMP_TEST_REQUIRE_DB=1 のときは、DB のケースを飛ばさずに失敗にする(CI はこれ)。
-# テスト用に dump_src・dump_restore の DB と dump_test のユーザーを作り直す。本番の DB には向けない。
+# テスト用に dump_src・dump_restore の DB と dump_test のユーザーを作り直し、終わったら消す。本番の DB には向けない。
 
 set -uo pipefail
 
 SCRIPT=$(cd "$(dirname "$0")/.." && pwd)/dump-db.sh
 WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
+FIXTURE_CREATED=0
+trap cleanup EXIT
 
 # 記号を一通り含める(オプションファイルのエスケープと、出力に漏れていないかの検索に使う)
 DUMP_PASS="Dp#9\"q\z'\$w x!"
@@ -29,6 +30,7 @@ run_tests() {
   tc_relative_backup_dir
   tc_public_html_direct
   tc_public_html_symlink
+  tc_public_html_db_symlink
 
   if db_available; then
     if setup_fixture; then
@@ -117,6 +119,24 @@ tc_public_html_symlink() {
     pass "TC-14-05: BACKUP_DIR がリンク(~/www など)経由で public_html を指すと止まる"
   else
     fail "TC-14-05: BACKUP_DIR がリンク(~/www など)経由で public_html を指すと止まる" ""
+  fi
+}
+
+tc_public_html_db_symlink() {
+  local env=$WORK/db-link.env
+  mkdir -p "$WORK/home/public_html" "$WORK/home/backups"
+  if ! ln -s "$WORK/home/public_html" "$WORK/home/backups/db" 2>/dev/null || [[ ! -L $WORK/home/backups/db ]]; then
+    skip "TC-14-13: BACKUP_DIR/db のリンク経由の public_html" "この環境ではシンボリックリンクを作れない"
+    return
+  fi
+  write_env "$env" "$WORK/home/backups" "$DUMP_PASS"
+  local out status
+  out=$(bash "$SCRIPT" "$env" 2>&1)
+  status=$?
+  if [ "$status" -ne 0 ] && [[ $out == *"public_html"* ]] && [[ -z $(ls -A "$WORK/home/public_html") ]] && no_secret "$out"; then
+    pass "TC-14-13: BACKUP_DIR/db がリンクで public_html を指すと止まり、何も書かない"
+  else
+    fail "TC-14-13: BACKUP_DIR/db がリンクで public_html を指すと止まり、何も書かない" ""
   fi
 }
 
@@ -229,6 +249,7 @@ client() {
 
 # ダンプするユーザーは、サーバーと同じく自分の DB にだけ権限を持ち、ルーチン・トリガーの定義者でもある
 setup_fixture() {
+  FIXTURE_CREATED=1
   local sql_pass=${DUMP_PASS//\\/\\\\}
   sql_pass=${sql_pass//\'/\\\'}
   admin <<SQL || { fail "fixture" "テスト用の DB を作れない"; return 1; }
@@ -249,6 +270,20 @@ CREATE DEFINER='dump_test'@'%' TRIGGER items_after_insert AFTER INSERT ON items
   FOR EACH ROW INSERT INTO logs (item_id) VALUES (NEW.id);
 CREATE DEFINER='dump_test'@'%' PROCEDURE item_count() SELECT COUNT(*) FROM items;
 SQL
+}
+
+# 既知のパスワードのユーザーを共有の MariaDB に残さないよう、作ったものを消す
+cleanup() {
+  local status=$?
+  if [[ $FIXTURE_CREATED -eq 1 ]]; then
+    admin >/dev/null 2>&1 <<'SQL' || true
+DROP DATABASE IF EXISTS dump_src;
+DROP DATABASE IF EXISTS dump_restore;
+DROP USER IF EXISTS 'dump_test'@'%';
+SQL
+  fi
+  rm -rf "$WORK"
+  exit "$status"
 }
 
 # 行の中身を比べる(バイナリは HEX にして比べる)

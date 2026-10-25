@@ -44,7 +44,8 @@ dump_db() {
   db_socket=$(read_env "$env_file" DB_SOCKET)
 
   local out_dir
-  out_dir=$(resolve_backup_dir "$backup_dir")/db
+  # db がリンクで public_html を指すこともあるので、db まで含めて解決する
+  out_dir=$(resolve_backup_dir "$backup_dir/db")
 
   local dump_cmd client_cmd
   dump_cmd=$(find_command mariadb-dump mysqldump)
@@ -66,28 +67,37 @@ dump_db() {
     die "同じ名前のダンプがもうある: $stem.sql.gz"
   fi
 
-  PARTIAL_FILE=$(mktemp "$out_dir/.dump-db.XXXXXXXX.partial")
+  # 途中で落ちたときに不完全なファイルが正規の名前で残らないよう、3 つとも作りかけの名前で書き上げてから名前を付ける
+  local gz_part sha_part counts_part
+  gz_part=$(mktemp "$out_dir/.dump-db.XXXXXXXX.partial")
+  PARTIAL_FILES+=("$gz_part")
+  sha_part=$(mktemp "$out_dir/.dump-db.XXXXXXXX.partial")
+  PARTIAL_FILES+=("$sha_part")
+  counts_part=$(mktemp "$out_dir/.dump-db.XXXXXXXX.partial")
+  PARTIAL_FILES+=("$counts_part")
+
   "$dump_cmd" --defaults-extra-file="$OPTION_FILE" \
     --single-transaction --routines --triggers --hex-blob \
     --default-character-set=utf8mb4 --no-tablespaces \
-    "$db_name" | gzip -c >"$PARTIAL_FILE"
+    "$db_name" | gzip -c >"$gz_part"
 
-  # 途中で落ちたダンプが正規の名前で残らないよう、出来上がってから名前を付ける
-  chmod 600 "$PARTIAL_FILE"
-  mv "$PARTIAL_FILE" "$stem.sql.gz"
-  PARTIAL_FILE=
+  local hash
+  hash=$(sha256sum <"$gz_part")
+  printf '%s  %s\n' "${hash%% *}" "$(basename "$stem.sql.gz")" >"$sha_part"
 
-  (cd "$out_dir" && sha256sum "$(basename "$stem.sql.gz")") >"$stem.sha256"
-  chmod 600 "$stem.sha256"
+  count_rows "$client_cmd" "$db_name" >"$counts_part"
 
-  count_rows "$client_cmd" "$db_name" >"$stem.counts.tsv"
-  chmod 600 "$stem.counts.tsv"
+  chmod 600 "$gz_part" "$sha_part" "$counts_part"
+  mv "$counts_part" "$stem.counts.tsv"
+  mv "$sha_part" "$stem.sha256"
+  mv "$gz_part" "$stem.sql.gz"
+  PARTIAL_FILES=()
 
   printf '%s\n' "$stem.sql.gz"
 }
 
 OPTION_FILE=
-PARTIAL_FILE=
+PARTIAL_FILES=()
 
 die() {
   printf 'dump-db: %s\n' "$*" >&2
@@ -96,7 +106,7 @@ die() {
 
 cleanup() {
   if [[ -n $OPTION_FILE ]]; then rm -f "$OPTION_FILE"; fi
-  if [[ -n $PARTIAL_FILE ]]; then rm -f "$PARTIAL_FILE"; fi
+  if [[ ${#PARTIAL_FILES[@]} -gt 0 ]]; then rm -f "${PARTIAL_FILES[@]}"; fi
 }
 
 # .env にキーが無いときは、名前だけを出して止める(値は出さない)
