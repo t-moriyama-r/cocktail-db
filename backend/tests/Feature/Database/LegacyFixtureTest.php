@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Support\LegacyFixture;
@@ -7,10 +8,11 @@ use Tests\Support\LegacyFixture;
 // 旧 DB の接続(legacy)と、テスト用の旧データ。DB を使うものは db グループに入れる(手元に MariaDB が無いときは飛ばす)
 
 it('TC-27-01: legacy 接続は LEGACY_DB_* から読み、MariaDB のテスト用の DB を向く', function () {
-    $config = config('database.connections.legacy');
+    $config = config()->array('database.connections.legacy');
 
+    // 設定が環境変数から読まれていることを確かめるので、env() ではなく環境変数そのものと比べる
     expect($config['driver'])->toBe('mariadb')
-        ->and($config['database'])->toBe(env('LEGACY_DB_DATABASE'))
+        ->and($config['database'])->toBe(Env::get('LEGACY_DB_DATABASE'))
         ->and($config['database'])->toBe('legacy_test');
 });
 
@@ -48,7 +50,7 @@ it('TC-27-04: 入れた旧データを legacy 接続で読める', function () {
     LegacyFixture::load();
 
     $legacy = DB::connection('legacy');
-    $cocktail = $legacy->table('t_cocktails')->where('id', 1)->first();
+    $cocktail = $legacy->table('t_cocktails')->where('id', 1)->sole();
     $recipes = $legacy->table('t_recipies')
         ->join('m_category', 'm_category.id', '=', 't_recipies.category')
         ->where('t_recipies.cocktail_id', 1)
@@ -64,7 +66,7 @@ it('TC-27-04: 入れた旧データを legacy 接続で読める', function () {
 it('TC-27-05: 旧データの異常の例が入っている(:dataset)', function (string $sql, int $expected) {
     LegacyFixture::load();
 
-    expect((int) DB::connection('legacy')->scalar($sql))->toBe($expected);
+    expect(DB::connection('legacy')->scalar($sql))->toBe($expected);
 })->with([
     'カクテルが消えた後に残ったレシピの行' => [
         'SELECT COUNT(*) FROM t_recipies r LEFT JOIN t_cocktails c ON c.id = r.cocktail_id WHERE c.id IS NULL',
