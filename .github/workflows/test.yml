@@ -2,10 +2,10 @@ name: test
 
 on:
   pull_request:
-    branches: [develop, release]
+    branches: [develop, staging, release]
   push:
     branches: [develop]
-  # deploy.yml から呼び、テストが通ったときだけデプロイする
+  # deploy.yml・deploy-dev.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
 
 permissions:

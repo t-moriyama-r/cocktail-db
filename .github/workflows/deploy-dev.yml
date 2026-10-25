@@ -1,11 +1,11 @@
 name: deploy-dev
 
-# develop を、Basic 認証で閉じた dev 環境(cocktail-dev)に出す。本番(deploy.yml。release への push で動く)とは別のディレクトリ・DB を使う
-# - 1 日 1 回、develop の先頭を出す。前回出したコミットから develop が進んでいなければ、テストもデプロイもしない
-# - Actions の画面(または gh workflow run deploy-dev.yml)から、いつでも手で出せる。同じコミットを出し直すときは force を付ける
+# staging を、Basic 認証で閉じた dev 環境(cocktail-dev)に出す。本番(deploy.yml。release への push で動く)とは別のディレクトリ・DB を使う
+# - staging に push(develop からの PR をマージ)したときに出す
+# - Actions の画面(または gh workflow run deploy-dev.yml --ref staging)から、いつでも手で出せる。同じコミットを出し直すときは force を付ける
 on:
-  schedule:
-    - cron: '0 19 * * *'   # 毎日 4:00(日本時間)
+  push:
+    branches: [staging]
   workflow_dispatch:
     inputs:
       force:
@@ -59,8 +59,8 @@ jobs:
         env:
           FORCE: ${{ inputs.force }}
         run: |
-          if [ "$GITHUB_REF" != "refs/heads/develop" ]; then
-            echo "::error::dev には develop だけを出す($GITHUB_REF からは出さない)"
+          if [ "$GITHUB_REF" != "refs/heads/staging" ]; then
+            echo "::error::dev には staging だけを出す($GITHUB_REF からは出さない)"
             exit 1
           fi
           deployed=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" \
@@ -206,7 +206,7 @@ jobs:
           curl -fsS -u "$BASIC_AUTH" "$APP_URL/up" > /dev/null
           curl -fsS -u "$BASIC_AUTH" "$APP_URL/api/hello"
 
-      # 出したコミットを記録する。次の定期実行は、これと develop の先頭を比べて、進んでいなければ出さない
+      # 出したコミットを記録する。次に出すときは、これと staging の先頭を比べて、同じなら(force を付けない限り)出さない
       - name: Record deployed revision
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" \

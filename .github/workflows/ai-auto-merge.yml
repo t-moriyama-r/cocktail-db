@@ -2,7 +2,7 @@
 #
 # 既定のブランチの .github/ai-dev.yml に `merge: auto` があるときだけ動く(無い・review なら何もしない)。
 # 次のどれかに当てはまる PR はマージしない。理由はジョブのログに出す
-# - 下書き・向き先が develop 以外(release へのマージはデプロイになるので、人がする)・作ったのがオーナー以外
+# - 下書き・向き先が develop 以外(staging・release へのマージはデプロイになるので、人がする)・作ったのがオーナー以外
 # - ラベル needs-human / needs-decision / needs-approval / ai-in-actions / no-auto-merge が付いている
 # - 閉じる issue に needs-review が付いている(人が中身を確かめるもの)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・未解決の指摘が残っている
