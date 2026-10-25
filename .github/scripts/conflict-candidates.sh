@@ -53,12 +53,12 @@ candidate() {
   [ -z "$label" ] || skip "ラベル $label"
   head=$(jq -r .headRefOid <<<"$pr")
   # --json commits は先頭 100 件までなので、いまのコミットの日付を直接取る
-  committed=$(gh api "repos/$repo/commits/$head" --jq .commit.committer.date)
+  committed=$(gh api "repos/$repo/commits/$head" --jq .commit.committer.date) || skip "コミットの日付を取れない"
   idle=$(( (now - $(date -u -d "$committed" +%s)) / 60 ))
   [ "$idle" -ge "$MIN_IDLE_MINUTES" ] || skip "最後のコミットから ${idle} 分(${MIN_IDLE_MINUTES} 分たつまで待つ)"
   # 目印は Actions が付ける。公開リポジトリなので、誰でも書ける人のコメントの目印は数えない(数えると、解消を止められてしまう)。
   # 大きな出力を grep -q に直接つなぐと、gh が SIGPIPE で止まり pipefail で見落とすので、いったん受けてから探す
-  comments=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq '.[] | select(.user.type == "Bot") | .body')
+  comments=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq '.[] | select(.user.type == "Bot") | .body') || skip "コメントを取れない"
   if grep -qF "ai-dev:conflict-resolve sha=$head base=$base_sha" <<<"$comments"; then
     skip "${head:0:7} と ${base_sha:0:7} の組はもう試した"
   fi
