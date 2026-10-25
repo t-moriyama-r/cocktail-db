@@ -12,7 +12,9 @@
 # 流し直しは、test.yml を PR のブランチで workflow_dispatch する(GITHUB_TOKEN で push しても CI は起きないので、既定のブランチを
 # 取り込んで push する形にはしない)。そのため、試すのは PR のブランチの先頭で、既定のブランチとのマージではない
 # (必須のチェックは「最新に追いついていること」を求めていないので、これでマージできる)。
-# 流せないもの(コンフリクトしている・ブランチの test.yml に workflow_dispatch が無い)は、人に頼む。人が動くのは Slack に
+# コンフリクトしているものは、ai-conflict-resolve.yml が develop を取り込んで直す(その push で CI が動く)。ここで needs-human を
+# 付けると、needs-human の付いた PR を見送る ai-conflict-resolve.yml が動かなくなるので、何もせずに見送る。
+# 流せないもの(ブランチの test.yml に workflow_dispatch が無い)は、人に頼む。人が動くのは Slack に
 # 知らせが来たときだけなので、頼むコメント(目印 ai-dev:needs-human)を書いて needs-human を付け、notify-needs-human.yml を呼ぶ。
 # オーナーが返信すると ai-review-loop.yml の Claude Code が引き継ぐ。頼むのはコミットごとに 1 回だけ
 set -euo pipefail
@@ -53,7 +55,7 @@ rerun_one() {
   age=$((($(date -u +%s) - $(date -u -d "$committed" +%s)) / 60))
   if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "コミットから $age 分しかたっていない"; return; fi
   if [ "$(jq -r .mergeable <<<"$pr")" = CONFLICTING ]; then
-    tell "$repo" "$n" "$sha" "$default とコンフリクトしているので、CI を流し直さなかった。$default を取り込んで push してほしい(push すれば CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する"
+    skip "コンフリクトは ai-conflict-resolve.yml が直す"
     return
   fi
 

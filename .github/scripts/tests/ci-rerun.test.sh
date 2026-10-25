@@ -62,9 +62,8 @@ main() {
 	pr 7 develop false CONFLICTING
 	runs 0
 	run 7
-	expect TC-228-07 'コンフリクトしていたら流さずに、頼むコメント(目印 needs-human とコミット)を書き、needs-human を付けて Slack に知らせる' \
-		"$(dispatched)|$(commented | grep -c 'ai-dev:needs-human --> <!-- ai-dev:ci-rerun sha=sha7')|$(labeled)|$(notified)" \
-		'|1|7 -R o/r --add-label needs-human|notify-needs-human.yml -R o/r -f number=7 -f label=needs-human'
+	expect TC-228-07 'コンフリクトしていたら流さず、人にも頼まない(ai-conflict-resolve.yml が直す)' \
+		"$(dispatched)$(commented)$(labeled)$(notified)" ''
 
 	reset
 	pr 7 develop false MERGEABLE
@@ -75,8 +74,9 @@ main() {
 		"$(commented | grep -c 'workflow_dispatch が無い')|$(notified | grep -c needs-human)" '1|1'
 
 	reset
-	pr 7 develop false CONFLICTING
+	pr 7 develop false MERGEABLE
 	runs 0
+	echo 1 >"$FAKE/dispatch-fails"
 	echo '<!-- ai-dev:agent --> <!-- ai-dev:ci-rerun sha=sha7 -->' >"$FAKE/comments"
 	run 7
 	expect TC-228-09 '同じコミットでもう頼んでいたら、もう頼まない' "$(commented)$(labeled)$(notified)" ''
@@ -91,8 +91,9 @@ main() {
 
 	# grep -q に直接つなぐと、目印を見つけた時点で gh が SIGPIPE で止まり、pipefail で見落とす
 	reset
-	pr 7 develop false CONFLICTING
+	pr 7 develop false MERGEABLE
 	runs 0
+	echo 1 >"$FAKE/dispatch-fails"
 	{ echo '<!-- ai-dev:ci-rerun sha=sha7 -->'; head -c 300000 /dev/zero | tr '\0' 'x'; echo; } >"$FAKE/comments"
 	run 7
 	expect TC-228-11 'コメントが大きくても、同じコミットで頼み直さない' "$(commented)" ''
