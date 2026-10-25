@@ -6,8 +6,7 @@
 #
 # レビューは、Claude Code が書いた JSON を、後のジョブが GITHUB_TOKEN で PR のレビューとして付ける(github-actions[bot] の
 # レビューになる。本文と行ごとの指摘に目印 <!-- ai-dev:claude-review --> を付ける)。GITHUB_TOKEN で付けたレビューでは
-# ほかのワークフローが起きないので、付けた後に、自動マージ(ai-auto-merge.yml)と、Actions が引き継いだ PR(ai-in-actions)の
-# 指摘への対応(ai-review-loop.yml)を直接呼ぶ
+# ほかのワークフローが起きないので、付けた後に、自動マージ(ai-auto-merge.yml)と、指摘への対応(ai-review-loop.yml)を直接呼ぶ
 #
 # Claude Code は PR の差分を読むので、そのジョブには読み取りの権限だけを渡し、レビューを付ける・ワークフローを呼ぶのは別のジョブでする。
 # Claude のトークンを使うので、オーナーが作った PR だけを見る
@@ -164,11 +163,11 @@ jobs:
           done
           echo "レビューを付けた(指摘 $n 件。行に付けられないものは 1 件ずつ)"
 
-      - name: 自動マージと、引き継いだ PR の指摘への対応を呼ぶ
+      - name: 自動マージと、指摘への対応を呼ぶ
         run: |
           # ai-review-loop.yml が CodeRabbit のレビューで動くときと同じく、人の判断・承認を待っている PR では呼ばない
           labels=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          if [[ ",$labels," == *",ai-in-actions,"* && ",$labels," != *",needs-human,"* && ",$labels," != *",needs-approval,"* ]]; then
+          if [[ ",$labels," != *",needs-human,"* && ",$labels," != *",needs-approval,"* ]]; then
             gh workflow run ai-review-loop.yml -R "$REPO" -f number="$PR"
           fi
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
