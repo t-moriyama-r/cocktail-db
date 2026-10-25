@@ -34,6 +34,7 @@ main() {
 	tc_15_comment_lines
 	tc_16_many_lines
 	tc_17_no_relevant_change
+	tc_05_list_trigger_and_secret_forms
 	echo "passed: $PASSED, failed: $FAILED"
 	[[ $FAILED -eq 0 ]]
 }
@@ -102,6 +103,15 @@ tc_05_risky_trigger() {
 	)")")"
 	expect_has "TC-220-05: secret 付きで動くトリガーにだけ印が付く" \
 		'    トリガー: ⚠ + `pull_request_target:`  + `pull_request:`  ⚠ + `on: [push, workflow_run]`  + `- cron: "0 0 * * *"`'
+}
+
+tc_05_list_trigger_and_secret_forms() {
+	run "$(files "$(file_entry modified .github/workflows/a.yml "$(
+		printf '%s\n' '+    - pull_request_target' '+    secrets: inherit' '+          ALL: ${{ toJSON(secrets) }}'
+	)")")"
+	expect_has "TC-220-18: リスト形式の危険なトリガーに印が付く" '    トリガー: ⚠ + `- pull_request_target`'
+	expect_has "TC-220-18: secrets: inherit と toJSON(secrets) に印が付く" \
+		'    secret: ⚠ + `secrets: inherit`  ⚠ + `ALL: ${{ toJSON(secrets) }}`'
 }
 
 tc_06_third_party_action() {

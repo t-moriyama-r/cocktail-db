@@ -34,8 +34,8 @@ jq -r '
     # issues・deployments などはトリガーと権限の両方の名前なので、値(read / write / none)の付く権限を先に見る
     | if ($c | test("^permissions:")) or ($c | test("^(\(scopes)):\\s*(read|write|none)\\b")) then "permissions"
       elif ($c | test("^on:")) or ($c | test("^cron:"))
-        or ($c | test("^(\(events | join("|")))\\s*:")) then "trigger"
-      elif ($c | test("secrets[.\\[]")) then "secrets"
+        or ($c | test("^(\(events | join("|")))\\s*(:|$)")) then "trigger"
+      elif ($c | test("secrets[.\\[]|secrets:\\s*inherit|\\(\\s*secrets\\s*[,)]")) then "secrets"
       elif ($c | test("^uses:")) then "uses"
       elif ($c | test("\\b(curl|wget)\\b")) or ([$c | scan("https?://[^\\s\"'"'"')]+") | select(github_host | not)] | length > 0) then "send"
       elif ($c | test("persist-credentials")) then "credentials"
@@ -49,7 +49,7 @@ jq -r '
         (.added and ($c | test("\\bwrite(-all)?\\b")))
         # permissions のブロックを消すと、リポジトリの既定の権限(書き込みのこともある)に広がる
         or ((.added | not) and ($c | test("^permissions:")))
-      elif .cat == "trigger" then .added and ([risky_events[] as $e | $c | test("^\($e)\\s*:|[\\[ ,]\($e)[\\], ]|^on:\\s*\($e)\\s*$")] | any)
+      elif .cat == "trigger" then .added and ([risky_events[] as $e | $c | test("^\($e)\\s*(:|$)|[\\[ ,]\($e)[\\], ]|^on:\\s*\($e)\\s*$")] | any)
       elif .cat == "uses" then .added and ($c | test("^uses:\\s*[\"'"'"']?(actions|anthropics|github)/") | not) and ($c | test("^uses:\\s*[\"'"'"']?\\./") | not)
       elif .cat == "credentials" then (.added and ($c | test("true"))) or ((.added | not) and ($c | test("false")))
       else .added end;
