@@ -82,6 +82,7 @@ jobs:
       PR: ${{ matrix.pr.number }}
       PICKED_HEAD: ${{ matrix.pr.head }}
       BASE: ${{ matrix.pr.base }}
+      BRANCH: ${{ matrix.pr.branch }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -122,7 +123,7 @@ jobs:
           # PR のコメントは第三者も書ける。force push・別ブランチへの push・ブランチの削除をツールの許可で防ぐため、git は使うサブコマンドと push 先に絞る
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }}:*),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*),Bash(jq:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*),Bash(jq:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }}(ブランチ `${{ matrix.pr.branch }}`)が develop とコンフリクトしている。
             develop のコミット ${{ env.BASE }} を取り込んで、コンフリクトを解消してほしい。
@@ -156,16 +157,23 @@ jobs:
             短く答えられる形(「おすすめで」「B で」など)を示す。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
-      # after は PR ごとに、この回で取り込みを試したかを知る必要がある(matrix のジョブの outputs は PR ごとに分けられない)
+      # after は PR ごとに、この回で取り込みを試したかを知る必要がある(matrix のジョブの outputs は PR ごとに分けられない)。
+      # Claude Code の push が拒否された後に人が push しても、head は進む。この回の Claude Code が push した head だけを解消したものとして渡す
       - name: 試したことを after に渡す
         if: always() && steps.live.outputs.go
-        run: mkdir -p .ai-conflict && echo "$PR" > .ai-conflict/tried
+        run: |
+          mkdir -p .ai-conflict && echo "$PR" > .ai-conflict/tried
+          local_head=$(git rev-parse HEAD)
+          remote_head=$(git ls-remote origin "refs/heads/$BRANCH" | awk 'NR == 1 { print $1 }')
+          if [ "$local_head" != "$PICKED_HEAD" ] && [ "$local_head" = "$remote_head" ]; then
+            echo "$local_head" > .ai-conflict/resolved-head
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.live.outputs.go
         with:
           name: conflict-resolve-tried-${{ env.PR }}
-          path: .ai-conflict/tried
+          path: .ai-conflict
           include-hidden-files: true
           retention-days: 1
 
@@ -213,10 +221,11 @@ jobs:
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,headRefOid,labels)
           head=$(jq -r .headRefOid <<<"$pr")
+          resolved_head=$(cat .ai-conflict/resolved-head 2>/dev/null || true)
           mark="ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE"
           comments=$(gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" --jq '.[] | select(.user.type == "Bot") | .body')
 
-          if [ "$(jq -r .state <<<"$pr")" = OPEN ] && [ "$head" != "$PICKED_HEAD" ]; then
+          if [ "$(jq -r .state <<<"$pr")" = OPEN ] && [ -n "$resolved_head" ] && [ "$head" = "$resolved_head" ]; then
             echo "#$PR は ${head:0:7} に進んだ"
             # ボットの push で test.yml が起きないことがある(#227)。少し待っても回が無ければ、PR のブランチで流す
             for _ in $(seq 1 $((CI_WAIT_SECONDS / 15))); do
@@ -236,6 +245,9 @@ jobs:
             if [ "$(jq -r .isDraft <<<"$pr")" = false ] && [ -z "$held" ]; then
               gh workflow run ai-claude-review.yml -R "$REPO" -f number="$PR" -f reason=conflict-resolve
             fi
+          elif [ "$head" != "$PICKED_HEAD" ]; then
+            # この回の Claude Code ではない push(人の push など)で進んだ。その push で CI が動き、コンフリクトが残れば次の回が新しい head で試す
+            echo "#$PR はこの回の解消ではない push で ${head:0:7} に進んだので、何もしない"
           elif ! grep -qF "$mark" <<<"$comments"; then
             # Claude Code が途中で止まった。同じ組で何度も試さないよう、目印を残す(develop が進めば試し直す)
             gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- $mark -->
