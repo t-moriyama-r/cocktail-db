@@ -2,6 +2,8 @@
 #
 # Actions の Claude Code は App のトークンでワークフローを書き換えられるので、書き換わったものがマージされたことを
 # 人(オーナー)が必ず知れるようにする。
+# 変わったファイルの名前だけでは、見なくてよい変更かどうかが分からないので、どういう変更かのサマリー
+# (.github/scripts/workflow-change-summary.sh。要注意の変更があるかと、権限・secret・トリガーなどに触れる行)を付ける
 #
 # きっかけは 2 つあり、1 件につきどちらか一方だけが 1 通送る
 # - pull_request_target(closed): 人がマージしたとき
@@ -11,7 +13,8 @@
 name: ワークフローの変更のマージを Slack に知らせる
 
 on:
-  # checkout するのは既定のブランチの .github/scripts だけなので、pull_request_target でもフォークのコードは動かない
+  # checkout するのは、動いているワークフローと同じ版(既定のブランチ)のスクリプトだけなので、
+  # pull_request_target でも PR(フォーク)のコードは動かない
   pull_request_target:
     types: [closed]
     paths:
@@ -31,8 +34,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged
     runs-on: ubuntu-latest
     steps:
+      # サマリーを作るスクリプトと送信用のスクリプト。PR のコードではなく、動いているワークフローと同じ版を使う
       - uses: actions/checkout@v6
         with:
+          path: .ai-dev
           # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
           ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
           sparse-checkout: .github/scripts
@@ -47,24 +52,36 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ inputs.number || github.event.pull_request.number }}
         run: |
-          pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName,files)
-          files=$(jq '[.files[].path | select(startswith(".github/workflows/"))]' <<<"$pr")
-          if [ "$(jq length <<<"$files")" = 0 ]; then
+          pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName)
+          # gh pr view の files は 100 件で切れるので、ファイルの差分は API からすべて取る。
+          # API の一時的な失敗などでサマリーが作れなくても、書き換わったワークフローを人が見るきっかけは残したいので、
+          # 結論の行だけにして PR のリンクは送る。
+          # パイプでつなぐと(pipefail が無いので)gh api の失敗が見えず、空のサマリーで「変えていない」扱いになるので、先に取る
+          if ! files=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100"); then
+            echo "::warning::#$NUMBER の変わったファイルを読めなかった"
+            summary=':warning: 変わったファイルを読めず、サマリーを作れなかった。差分を見てください'
+          elif ! summary=$(set -o pipefail; jq 'add // []' <<<"$files" | bash .ai-dev/.github/scripts/workflow-change-summary.sh); then
+            echo "::warning::#$NUMBER のサマリーを作れなかった"
+            summary=':warning: サマリーを作れなかった。差分を見てください'
+          elif [ -z "$summary" ]; then
             echo "#$NUMBER はワークフローを変えていないので送らなかった"
             exit 0
           fi
+          echo "$summary"
 
-          jq -n --arg repo "$REPO" --argjson pr "$pr" --argjson files "$files" '
+          # サマリーの 1 行目は結論、2 行目からはファイルごとの中身(どちらも mrkdwn のエスケープ済み)
+          jq -n --arg repo "$REPO" --argjson pr "$pr" --arg summary "$summary" '
             def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
-            {
+            ($summary | split("\n")) as $lines
+            | {
               unfurl_links: false,
               text: ([
                 ":warning: *ワークフローを変えた PR がマージされた*(\($repo))",
                 "",
                 "*PR*: <\($pr.url)|\($pr.title | esc)>(\($pr.baseRefName) へ。マージした人: \($pr.mergedBy.login // "不明"))",
-                "*変わったワークフロー*:",
-                ($files[] | "• `\(. | esc)`"),
+                $lines[0],
                 "",
-                "意図しない変更(権限・secret・外部への送信など)が入っていないか、差分を確かめてください"
+                "*変わったワークフロー*(<\($pr.url)/files|差分>):",
+                $lines[1:][]
               ] | join("\n"))
-            }' | .github/scripts/slack-post.sh
+            }' | .ai-dev/.github/scripts/slack-post.sh
