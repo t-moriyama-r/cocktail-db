@@ -18,7 +18,7 @@ name: コンフリクトを解消する
 
 on:
   schedule:
-    - cron: '10 * * * *'   # 1 時間ごと(pr-status.yml の 45 分・ai-review-sweep.yml の 30 分と重ならないよう 10 分)
+    - cron: '10 * * * *'   # 1 時間ごと(ci-rerun.yml の 20 分・ai-review-sweep.yml の 30 分と重ならないよう 10 分)
   push:
     branches: [develop]
   workflow_dispatch:
