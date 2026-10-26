@@ -11,6 +11,6 @@ class HelloController extends Controller
      */
     public function __invoke(): array
     {
-        return ['message' => 'Hello World from Laravel'];
+        return ['message' => 'Hello World from Laravel!'];
     }
 }
