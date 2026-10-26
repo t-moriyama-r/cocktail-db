@@ -165,6 +165,8 @@ jobs:
           mkdir -p .ai-conflict && echo "$PR" > .ai-conflict/tried
           local_head=$(git rev-parse HEAD)
           remote_head=$(git ls-remote origin "refs/heads/$BRANCH" | awk 'NR == 1 { print $1 }')
+          # ls-remote が失敗しても pipefail が無いので空になるだけ。解消済みと渡せず after が見送るので、気づけるよう警告を出す
+          if [ -z "$remote_head" ]; then echo "::warning::#$PR のブランチ $BRANCH の head を読めなかった(解消していても after は見送る)"; fi
           if [ "$local_head" != "$PICKED_HEAD" ] && [ "$local_head" = "$remote_head" ]; then
             echo "$local_head" > .ai-conflict/resolved-head
           fi
