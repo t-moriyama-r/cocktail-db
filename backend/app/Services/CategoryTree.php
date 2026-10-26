@@ -48,7 +48,7 @@ class CategoryTree
                         ->selectRaw('ancestor_id, ?, depth + 1', [$node->id]),
                 );
                 if ($copied === 0) {
-                    throw new InvalidArgumentException("親のノード(id: {$parent->getKey()})がカテゴリ木に入っていない");
+                    throw new InvalidArgumentException('親のノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
                 }
             }
 
@@ -76,7 +76,9 @@ class CategoryTree
      */
     public function subtreeIds(Category $node): array
     {
-        return [$node->getKey(), ...$node->descendants()->pluck($node->qualifyColumn('id'))->all()];
+        $descendantIds = $node->descendants()->get()->map(fn (Category $descendant): int => $descendant->id);
+
+        return [$node->id, ...$descendantIds->values()->all()];
     }
 
     /**
@@ -86,7 +88,10 @@ class CategoryTree
      */
     public function roots(): Collection
     {
-        return $this->inSiblingOrder(Category::query()->whereDoesntHave('ancestors'))->get();
+        $roots = Category::query()->whereDoesntHave('ancestors');
+        $this->orderAsSiblings($roots);
+
+        return $roots->get();
     }
 
     /**
@@ -96,22 +101,22 @@ class CategoryTree
      */
     public function children(Category $node): Collection
     {
-        return $this->inSiblingOrder($node->children())->get();
+        $children = $node->children();
+        $this->orderAsSiblings($children);
+
+        return $children->get();
     }
 
     /**
-     * 兄弟の並び順(sort_order、同じなら ID)。sort_order が同じ兄弟もありうるので、ID で順を決めきる。
+     * 兄弟の並び順(sort_order、同じなら ID)を $query に付ける。sort_order が同じ兄弟もありうるので、ID で順を決めきる。
      *
-     * @template TQuery of EloquentBuilder<Category>|BelongsToMany<Category, Category, CategoryClosure>
-     *
-     * @param  TQuery  $query
-     * @return TQuery
+     * @param  EloquentBuilder<Category>|BelongsToMany<Category, Category, CategoryClosure>  $query
      */
-    private function inSiblingOrder(EloquentBuilder|BelongsToMany $query): EloquentBuilder|BelongsToMany
+    private function orderAsSiblings(EloquentBuilder|BelongsToMany $query): void
     {
         $category = new Category;
 
-        return $query
+        $query
             ->orderBy($category->qualifyColumn('sort_order'))
             ->orderBy($category->qualifyColumn('id'));
     }
