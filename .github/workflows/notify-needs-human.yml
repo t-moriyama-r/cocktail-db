@@ -4,7 +4,12 @@
 # - needs-decision(issue): 着手する前に、人に決めてもらうことがある
 # - needs-approval(PR): 人の承認(マージ)を待っている
 #
-# 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
+# 送り先は、Slack App の bot(secret SLACK_BOT_TOKEN)と、変数 SLACK_NOTIFY_USER の人の DM。
+# bot が無いリポジトリでは secret SLACK_WEBHOOK_URL(Incoming Webhook)。どちらも無ければ何もせず警告だけ出す(.github/scripts/slack-post.sh)
+#
+# bot で送ったときは、頼んだラベルが外れるか PR・issue が閉じたら、その通知に ✅ を付けて本文の先頭に「【済】」を足す(mark-done ジョブ)。
+# ラベルを外すのは Actions の中(GITHUB_TOKEN)のことが多く、そのときはイベントが起きないので、ラベルが外れた・閉じたときのイベントに加えて、
+# ラベルを外すワークフローの終わり(label を done にして呼ぶ)と毎朝の見回りでも動かす。何度動いても、片付いたものに 1 回付けるだけ
 #
 # 頼んだときの通知は、きっかけが 2 つあり、1 件につきどちらか一方だけが 1 通送る
 # - ラベルが付いたとき: 人(と、人のアカウントで動く手元のエージェント)が付けたものだけ。
@@ -24,21 +29,21 @@ name: 人の判断・承認を Slack に知らせる
 on:
   schedule:
     - cron: '0 0 * * *'   # 毎日 9:00(日本時間)
-  # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
+  # checkout するのは既定のブランチの .github/scripts だけなので、pull_request_target でもフォークのコードは動かない
   pull_request_target:
-    types: [labeled]
+    types: [labeled, unlabeled, closed]
   issues:
-    types: [labeled]
+    types: [labeled, unlabeled, closed]
   workflow_dispatch:
     inputs:
       number:
-        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る(label が all なら 3 つのラベルすべて)
+        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る(label が all なら 3 つのラベルすべて。done なら番号は見ない)
         required: false
         default: ""
       label:
-        description: 何を頼むか(all は number が空のときだけ)
+        description: 何を頼むか(all は number が空のときだけ)。done は、片付いた通知に「済」を付ける
         type: choice
-        options: [needs-human, needs-decision, needs-approval, all]
+        options: [needs-human, needs-decision, needs-approval, all, done]
         default: needs-human
 
 permissions:
@@ -50,15 +55,26 @@ jobs:
   notify:
     # 本文はイベントの時点のものを見る(作った直後に本文が書き込まれても、仮の本文だったことで判断する)
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.number != '' && inputs.label != 'all')
+      (github.event_name == 'workflow_dispatch' && inputs.number != '' && inputs.label != 'all' && inputs.label != 'done')
       || (github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
+        && github.event.action == 'labeled'
         && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name)
         && github.event.sender.type != 'Bot'
         && !contains(github.event.issue.body, 'ai-dev:pending-body'))
     runs-on: ubuntu-latest
     steps:
+      # 送るスクリプトだけを取る。pull_request_target でも取るのは既定のブランチのもので、PR のコードは動かない
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Slack に送る
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -66,11 +82,6 @@ jobs:
           LABEL: ${{ inputs.label || github.event.label.name }}
           SENDER: ${{ github.event_name != 'workflow_dispatch' && github.event.sender.login || '' }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
-            exit 0
-          fi
-
           # issue の API は PR も返す(PR なら pull_request が付く)
           target=$(gh api "repos/$REPO/issues/$NUMBER" \
             | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}')
@@ -119,6 +130,8 @@ jobs:
              end) as $ask
           | {
               unfurl_links: false,
+              # 片付いたときに「済」を付ける通知を、後から見つけるための印(slack-mark-done.sh が読む)
+              metadata: {event_type: "ai_dev_ask", event_payload: {repo: $repo, number: $number, label: $label}},
               text: ([
                 "\($t.head)(\($repo))",
                 "",
@@ -142,7 +155,7 @@ jobs:
           jq -n -f message.jq \
             --arg repo "$REPO" --arg number "$NUMBER" --arg label "$LABEL" --arg sender "$SENDER" \
             --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues" \
-            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            | .github/scripts/slack-post.sh
 
   # 人の番になっているものを 1 通にまとめる。ラベルが付いたときの通知は 1 回きりなので、返事をしないまま
   # 残ったものを毎朝知らせ直す。issue-breakdown が issue を作り終えたときの呼び出し(label を渡さない)は、
@@ -150,21 +163,25 @@ jobs:
   digest:
     if: >-
       github.event_name == 'schedule'
-      || (github.event_name == 'workflow_dispatch' && inputs.number == '')
+      || (github.event_name == 'workflow_dispatch' && inputs.number == '' && inputs.label != 'done')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Slack に送る
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           LABELS: ${{ (github.event_name == 'schedule' || inputs.label == 'all') && 'needs-human needs-decision needs-approval' || 'needs-decision' }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
-            exit 0
-          fi
-
           cat > item.jq <<'JQ'
           def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("^\\s+|\\s+$"; "");
           def first_line: split("\n") | map(gsub("^[\\s>*#-]+|\\s+$"; "")) | map(select(. != "")) | (first // "")
@@ -243,4 +260,34 @@ jobs:
           JQ
 
           jq -n -f digest.jq --arg repo "$REPO" --arg labels "$LABELS" --slurpfile items items.jsonl \
-            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            | .github/scripts/slack-post.sh
+
+  # 頼んだ通知のうち、片付いたもの(ラベルが外れた・閉じた・頼み直した)に「済」を付ける。
+  # 閉じた・外れたは、bot がしたことでも人に見せたいので、送り手が bot でも動く
+  mark-done:
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.label == 'done')
+      || github.event.action == 'closed'
+      || (github.event.action == 'unlabeled'
+        && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name))
+    runs-on: ubuntu-latest
+    # 何度動いても同じ結果になるので、続けて起きたら待っている 1 回にまとめる
+    concurrency:
+      group: slack-mark-done
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: 片付いた通知に「済」を付ける
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: .github/scripts/slack-mark-done.sh

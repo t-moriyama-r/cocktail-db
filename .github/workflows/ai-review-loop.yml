@@ -149,6 +149,9 @@ jobs:
           PR: ${{ github.event.issue.number || github.event.pull_request.number }}
           BEFORE: ${{ needs.resume.outputs.before }}
         run: |
+          # GITHUB_TOKEN で外したラベルは unlabeled のイベントを起こさないので、片付いた通知に「済」を付けさせる
+          # 「済」は見た目の印なので、呼べなくても後ろの通知(本来の仕事)まで進む
+          gh workflow run notify-needs-human.yml -R "$REPO" -f label=done || echo "::warning::片付いた通知に「済」を付けるワークフローを呼べなかった"
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
           if [[ ",$after," == *",needs-human,"* && ",$BEFORE," != *",needs-human,"* ]]; then
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
