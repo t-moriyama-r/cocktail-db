@@ -31,6 +31,24 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 
 `area:*` は issue を絞り込むための分類で、付けても自動では何も起きない。1 つの issue に複数付けてよい。
 
+### タイトルの接頭辞
+
+issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(一覧で BE・FE・CI のどれの話かをタイトルだけで分かるようにするため)。接頭辞は `area:*` から決める。
+
+| `area:*` | 接頭辞 |
+|---|---|
+| `area:backend`・`area:db` | `【BE】` |
+| `area:frontend` | `【FE】` |
+| `area:infra` | `【CI】` |
+| `area:migration` | `【移行】` |
+| `area:ops` | `【運用】` |
+
+- `area:admin` は管理画面と管理 API なので、BE・FE の側に当てる(`area:backend` なら `【BE】`、`area:frontend` なら `【FE】`)
+- 複数の領域にまたがるときは、上の表の順(BE → FE → CI → 移行 → 運用)に並べて続ける(例: `【BE】【FE】`)
+- PR は、閉じる issue と同じ接頭辞にして、その後ろに `issue-<番号>: ` を続ける(例: `【CI】issue-262: …`)
+- Epic(`[Epic] …`)は領域をまたぐので付けない。機能(`feature`)・作業(`task`)には付ける
+- 領域が決まらないときは、作る前に issue で相談する
+
 ## 着手の順番(next-issue が読む)
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
