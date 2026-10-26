@@ -275,8 +275,11 @@ jobs:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           # github-actions[bot]: ai-claude-review.yml が GITHUB_TOKEN で呼んだとき
           allowed_bots: coderabbitai,coderabbitai[bot],github-actions,github-actions[bot]
+          # 指摘への対応は回数が多く、大半は小さな直しなので、利用枠の減りの少ないモデルで動かす(リポジトリ変数 CLAUDE_LIGHT_MODEL で変えられる)。
+          # 迷うもの・堂々めぐりは needs-human で人に回す
           claude_args: |
             --max-turns 80
+            --model ${{ vars.CLAUDE_LIGHT_MODEL || 'claude-sonnet-5-5' }}
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、AI レビュアーのレビューが終わった: ${{ github.event.review.html_url || github.event.comment.html_url || '(代わりの Claude がレビューした、または見回りで返されていない指摘が見つかった)' }}
