@@ -1,0 +1,73 @@
+# エージェントが着手した issue を、Slack に 1 通にまとめて知らせる
+#
+# 手元の issue-batch・夜間の定期実行などは、PR ができるまで何が動いているのか Slack から見えないので、
+# 着手したところで呼んでもらう。`gh workflow run notify-started.yml -f issues=<番号>,<番号> -f note=<任意>`
+#
+# 送り先は notify-needs-human.yml と同じ(.github/scripts/slack-post.sh。bot か Webhook。どちらも無ければ何もせず警告だけ出す)
+name: 着手した issue を Slack に知らせる
+
+on:
+  workflow_dispatch:
+    inputs:
+      issues:
+        description: 着手した issue の番号(カンマ区切り)
+        required: true
+      note:
+        description: 添える一言(見送ったもの・理由など。任意)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Slack に送る
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUES: ${{ inputs.issues }}
+          NOTE: ${{ inputs.note }}
+        run: |
+          # 入力は手で打つものなので、番号でないもの・PR・無い番号は飛ばし、飛ばしたことを本文に書く
+          : > found.jsonl
+          skipped=""
+          for n in $(tr ',' ' ' <<<"$ISSUES"); do
+            n=${n#\#}
+            if ! [[ "$n" =~ ^[0-9]+$ ]]; then skipped="$skipped $n"; continue; fi
+            # issue の API は PR も返す(PR なら pull_request が付く)
+            if issue=$(gh api "repos/$REPO/issues/$n" --jq 'select(.pull_request | not) | {number, title, url: .html_url}' 2>/dev/null) \
+              && [ -n "$issue" ]; then
+              printf '%s\n' "$issue" >> found.jsonl
+            else
+              skipped="$skipped #$n"
+            fi
+          done
+
+          if [ ! -s found.jsonl ]; then
+            echo "::warning::着手した issue が 1 件も見つからなかったので送らなかった(入力: $ISSUES)"
+            exit 0
+          fi
+
+          jq -s --arg repo "$REPO" --arg note "$NOTE" --arg skipped "${skipped# }" '
+            def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+            {
+              unfurl_links: false,
+              text: ([
+                ":rocket: *issue に着手した*(\($repo)。\(length) 件)",
+                (.[] | "• <\(.url)|#\(.number) \(.title | esc)>"),
+                (if $note != "" then "", ($note | esc) else empty end),
+                (if $skipped != "" then "", "issue として見つからず飛ばした: \($skipped | esc)" else empty end)
+              ] | join("\n"))
+            }' found.jsonl | .github/scripts/slack-post.sh
