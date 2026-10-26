@@ -105,6 +105,15 @@ main() {
 	run 7
 	expect TC-228-15 'workflow_dispatch が無いためでない失敗(一時的なエラー)では、人に頼まず次の見回りに任せる' 		"$(commented)$(labeled)$(notified)" ''
 
+	# 前の回でラベルと通知までで止まり、コメントだけ書けなかったとき
+	reset
+	pr 7 develop false MERGEABLE OPEN needs-human
+	runs 0
+	echo 422 >"$FAKE/dispatch-fails"
+	run 7
+	expect TC-228-16 'needs-human がもう付いていたら、Slack に知らせ直さず、頼むコメントだけ書く' \
+		"$(commented | grep -c 'ai-dev:ci-rerun sha=sha7')|$(labeled)$(notified)" '1|'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -141,9 +150,11 @@ reset() {
 	updated "$OLD"
 }
 
-# PR の番号・向き先・フォークか・mergeable・状態
+# PR の番号・向き先・フォークか・mergeable・状態・付いているラベル
 pr() {
-	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefName\":\"issue-$1\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"mergeable\":\"$4\"}" >"$FAKE/pr-$1.json"
+	local labels=
+	if [ -n "${6:-}" ]; then labels="{\"name\":\"$6\"}"; fi
+	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefName\":\"issue-$1\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"mergeable\":\"$4\",\"labels\":[$labels]}" >"$FAKE/pr-$1.json"
 }
 
 runs() { echo "$1" >"$FAKE/runs"; }

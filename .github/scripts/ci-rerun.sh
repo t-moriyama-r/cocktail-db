@@ -39,7 +39,7 @@ ci_rerun() {
 rerun_one() {
   local repo=$1 default=$2 n=$3 pr sha branch
   skip() { echo "#$n 見送り: $*"; }
-  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable,updatedAt) || return 1  # || で呼ばれると set -e が効かないので、読めなかったら先へ進まない
+  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable,updatedAt,labels) || return 1  # || で呼ばれると set -e が効かないので、読めなかったら先へ進まない
   sha=$(jq -r .headRefOid <<<"$pr")
   branch=$(jq -r .headRefName <<<"$pr")
 
@@ -68,13 +68,13 @@ rerun_one() {
     # API の一時的なエラー・レート制限など。人に頼まず、次の見回りに任せる
     skip "$WORKFLOW を動かせなかったが、workflow_dispatch が無いためではなさそう(次の見回りでやり直す): $out"
   else
-    tell "$repo" "$n" "$sha" "いまのコミット(${sha:0:7})で CI が動いていないが、このブランチの $WORKFLOW を手で動かせなかった(workflow_dispatch が無い古いブランチなど)。$default を取り込んで push してほしい(push すれば CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する"
+    tell "$repo" "$n" "$sha" "$(jq -r 'any(.labels[]?; .name == "needs-human")' <<<"$pr")" "いまのコミット(${sha:0:7})で CI が動いていないが、このブランチの $WORKFLOW を手で動かせなかった(workflow_dispatch が無い古いブランチなど)。$default を取り込んで push してほしい(push すれば CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する"
   fi
 }
 
 # 同じコミットで同じことを何度も頼まない(見回りは 1 時間ごとに動く)
 tell() {
-  local repo=$1 n=$2 sha=$3 message=$4 marker bodies
+  local repo=$1 n=$2 sha=$3 asked=$4 message=$5 marker bodies
   marker="ai-dev:ci-rerun sha=$sha"
   # grep -q に直接つなぐと、見つけた時点で gh が SIGPIPE で止まり、pipefail で「見つからない」扱いになって頼み直してしまう
   bodies=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq '.[].body')
@@ -83,9 +83,11 @@ tell() {
     return
   fi
   # 目印入りのコメントは最後に書く。先に書くと、途中で失敗したときに「もう頼んだ」と見送られ、ラベルも通知も届かないまま止まる。
-  # 呼び出し側が || で囲むと set -e が効かなくなるので、&& でつないで、失敗したらコメントを書かずに戻す
-  gh pr edit "$n" -R "$repo" --add-label needs-human &&
-    gh workflow run notify-needs-human.yml -R "$repo" -f number="$n" -f label=needs-human &&
+  # 呼び出し側が || で囲むと set -e が効かなくなるので、&& でつないで、失敗したらコメントを書かずに戻す。
+  # needs-human がもう付いているのは、前の回でコメントだけ書けなかったとき。Slack に知らせ直さず、コメントだけ書き直す
+  { [ "$asked" = true ] ||
+    { gh pr edit "$n" -R "$repo" --add-label needs-human &&
+      gh workflow run notify-needs-human.yml -R "$repo" -f number="$n" -f label=needs-human; }; } &&
     gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- $marker -->
 $message" || return 1
   echo "#$n で人に頼んだ: $message"
