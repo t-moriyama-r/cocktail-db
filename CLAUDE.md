@@ -82,9 +82,10 @@ npm test                              # php artisan serve を起こして Playwr
 
 - 旧と挙動を変えると決めたら、決めた issue の本文か、`docs/decisions/` の文書に「旧との差分」の節を置く(見出しは `旧との差分`。決定を別の issue から引くときは `旧との差分(意図: #<決めた issue>)`)。差分ごとに、旧で何が起きていて、新で何に変えるかを 1 行で書く
 - 条件検索の差分は、`docs/search-expected-diffs.md` の、決めた issue ごとの節を「旧との差分」の節として扱う(`legacy:compare-search` が機械的に確かめる)
-- `差分あり(意図: …)` には、その節を持つ issue か文書を書く(例: `差分あり(意図: #247)`・`差分あり(意図: docs/decisions/recipe-count.md)`)。節の無い issue・PR を指してはいけない
+- `差分あり(意図: …)` には、その節を持つ issue か文書(`docs/decisions/` の文書か `docs/search-expected-diffs.md`)を書く(例: `差分あり(意図: #247)`・`差分あり(意図: docs/decisions/recipe-count.md)`)。節の無い issue・PR を指してはいけない
+- PR 本文の表の下に「旧との差分の根拠」の節を置き、`差分あり` の行ごとに、指した節の 1 行をそのまま引く(例: `TC-247-03 → #247: 旧は… → 新は…`)。レビュアーは issue の本文を読めないことがある(CodeRabbit で確かめた。#273)ので、PR 本文だけで根拠を確かめられるようにする
 - 実装中に、どの節にも無い差分を見つけたら、旧に合わせるか、issue で相談する(意図の書けない差分と同じ扱い)
-- レビュー(CodeRabbit の `.coderabbit.yaml`・代わりの Claude の `ai-claude-review.yml`)も、表に「旧での結果」の列があるか、`差分あり` の根拠に節があるか、表に無い差分がコードに入っていないかを確かめる
+- レビュー(CodeRabbit の `.coderabbit.yaml`・代わりの Claude の `ai-claude-review.yml`)も、表に「旧での結果」の列があるか、`差分あり` に根拠と引用があるか、表に無い差分がコードに入っていないかを確かめる
 
 ## API を変えたら
 
