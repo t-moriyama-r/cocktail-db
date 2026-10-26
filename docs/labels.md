@@ -65,7 +65,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 ### Slack の設定
 
-送るのは `.github/scripts/slack-post.sh`。`notify-workflow-merged.yml`(ワークフローを変えた PR のマージ)も同じ送り先に送る。
+送るのは `.github/scripts/slack-post.sh`。`notify-workflow-merged.yml`(ワークフローを変えた PR のマージ)と `notify-started.yml`(エージェントが着手した issue。`gh workflow run notify-started.yml -f issues=<番号>,<番号> -f note=<任意>` で呼ぶ)も同じ送り先に送る。
 
 - **bot で送る(おすすめ)**: Slack App の bot token を secret `SLACK_BOT_TOKEN` に、送り先の人のメンバー ID(`U` で始まるもの。Slack のプロフィールの「︙」→「メンバー ID をコピー」)をリポジトリ変数 `SLACK_NOTIFY_USER` に入れる。通知は、その人と bot の DM(Slack の左側の「App」の下)に届く。App の bot に要る権限(OAuth & Permissions の Bot Token Scopes)は、`chat:write`(送る)・`reactions:write`(✅ を付ける)・`im:write`(DM を開く)・`im:history`(頼んだ通知を探す)。権限を足したら、App をワークスペースに入れ直す
 - **Webhook で送る**: bot が無ければ、secret `SLACK_WEBHOOK_URL`(Incoming Webhook)に送る。「済」は付かない
