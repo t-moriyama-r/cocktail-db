@@ -56,7 +56,7 @@ WHERE c.id IS NULL;
 ```sql
 -- 移すカクテルの中: 13 組・26 行・量も同じ 4 組
 SELECT COUNT(*) AS groups_, SUM(n) AS rows_, SUM(same_amount) AS same_amount_groups FROM (
-  SELECT r.cocktail_id, COUNT(*) AS n, COUNT(DISTINCT r.amount) = 1 AS same_amount
+  SELECT r.cocktail_id, COUNT(*) AS n, COUNT(DISTINCT IFNULL(r.amount, '<null>')) = 1 AS same_amount
   FROM t_recipies r JOIN t_cocktails c ON c.id = r.cocktail_id
   GROUP BY r.cocktail_id, r.category, r.middle_category, r.brand
   HAVING COUNT(*) > 1
