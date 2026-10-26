@@ -7,6 +7,8 @@ on:
     branches: [develop]
   # deploy.yml・deploy-dev.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
+  # ai-conflict-resolve.yml が、ボットの push で CI が起きなかった PR に流し直す
+  workflow_dispatch:
 
 permissions:
   contents: read
