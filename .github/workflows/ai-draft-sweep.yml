@@ -161,9 +161,10 @@ jobs:
             `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --remove-label ai-in-actions` と、`gh issue view`・`gh run view`)。この形のまま使う。
             返信・コメントの先頭には <!-- ai-dev:agent --> を付ける。決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
-      # 印が残ると、ほかの見回り・自動マージが対応中とみなして動かない
-      - name: 途中で止まったら、対応中の印を外す
-        if: (failure() || cancelled()) && steps.live.outputs.run
+      # 印が残ると、ほかの見回り・自動マージが対応中とみなして動かない。Claude Code が外さずに成功扱いで終わること
+      # (--max-turns に達したなど)もあるので、成功・失敗に関わらず最後に外す
+      - name: 終わったら、対応中の印を外す
+        if: always() && steps.live.outputs.run
         run: gh pr edit "$PR" -R "$REPO" --remove-label ai-in-actions || true
 
   # Claude Code が GITHUB_TOKEN で付けたラベルは、Slack の通知のワークフローを起こさないので、ここから直接呼ぶ。
@@ -181,12 +182,17 @@ jobs:
         pr: ${{ fromJSON(needs.pick.outputs.prs) }}
     env:
       PR: ${{ matrix.pr.number }}
+      PICKED_HEAD: ${{ matrix.pr.head }}
     steps:
-      # 候補は needs-human の付いていない PR だけなので、いま付いていれば、引き継いだ Claude Code が付けたもの
+      # 候補は needs-human の付いていない PR だけなので、引き継いだ PR にいま付いていれば、引き継いだ Claude Code が付けたもの。
+      # recover で見送った PR(pick の後に人が needs-human を付けたなど)は、付けた側が知らせているので知らせない。
+      # matrix のジョブの output は 1 つしか残らないので、引き継いだかは recover が付ける目印のコメントで見分ける
       - name: 新しく付いた needs-human を Slack に知らせ、状態のラベルを付け替えさせる
         run: |
-          labels=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          if [[ ",$labels," == *",needs-human,"* ]]; then
+          pr=$(gh pr view "$PR" -R "$REPO" --json labels,comments)
+          recovered=$(jq --arg mark "<!-- ai-dev:draft-sweep sha=$PICKED_HEAD -->" 'any(.comments[]; .body | contains($mark))' <<<"$pr")
+          labels=$(jq -r '[.labels[].name] | join(",")' <<<"$pr")
+          if [ "$recovered" = true ] && [[ ",$labels," == *",needs-human,"* ]]; then
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
           fi
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
