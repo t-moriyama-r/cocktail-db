@@ -6,14 +6,15 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\SchemaShape;
 
-// カテゴリ木の表(#21)の形を docs/schema.md と突き合わせる。閉包表(category_closures)は CategoryTree(#24)だけが
-// 書き換えるので、ここでは行を入れず、表の定義(列・索引・外部キー)を読んで確かめる。
+// カテゴリ木の表(#21)の形を docs/schema.md と突き合わせる。閉包表(category_closures)の行は CategoryTree(#24)を
+// 通して作るものなので、ここでは行を入れず、表の定義(列・索引・外部キー)を読んで確かめる。
 
 uses(RefreshDatabase::class)->group('db');
 
 it('TC-21-03: categories の列の型・null 可・既定値が設計どおり', function () {
-    expect(columnsOf('categories'))->toBe([
+    expect(SchemaShape::columns('categories'))->toBe([
         'id' => ['bigint(20) unsigned', false, null],
         'name' => ['varchar(255)', false, null],
         'name_search' => ['varchar(255)', false, null],
@@ -37,7 +38,7 @@ it('TC-21-03: categories の列の型・null 可・既定値が設計どおり',
 });
 
 it('TC-21-04: categories の索引は旧と同じ 5 列と主キーだけで、外部キーはまだ無い', function () {
-    expect(indexesOf('categories'))->toEqualCanonicalizing([
+    expect(SchemaShape::indexes('categories'))->toEqualCanonicalizing([
         'primary' => ['id'],
         'categories_name_search_index' => ['name_search'],
         'categories_name_eng_index' => ['name_eng'],
@@ -50,32 +51,32 @@ it('TC-21-04: categories の索引は旧と同じ 5 列と主キーだけで、�
 });
 
 it('TC-21-05: category_closures の列・主キー・索引が設計どおり', function () {
-    expect(columnsOf('category_closures'))->toBe([
+    expect(SchemaShape::columns('category_closures'))->toBe([
         'ancestor_id' => ['bigint(20) unsigned', false, null],
         'descendant_id' => ['bigint(20) unsigned', false, null],
         'depth' => ['smallint(5) unsigned', false, null],
     ])
-        ->and(indexesOf('category_closures'))->toEqualCanonicalizing([
+        ->and(SchemaShape::indexes('category_closures'))->toEqualCanonicalizing([
             'primary' => ['ancestor_id', 'descendant_id'],
             'category_closures_descendant_id_depth_index' => ['descendant_id', 'depth'],
         ]);
 });
 
 it('TC-21-06: category_closures の 2 つの外部キーが categories を指し、削除は CASCADE', function () {
-    expect(foreignKeysOf('category_closures'))->toEqualCanonicalizing([
+    expect(SchemaShape::foreignKeys('category_closures'))->toEqualCanonicalizing([
         ['ancestor_id', 'categories', 'id', 'cascade'],
         ['descendant_id', 'categories', 'id', 'cascade'],
     ]);
 });
 
 it('TC-21-07: legacy_id_maps の列・主キー・索引が設計どおりで、外部キーは無い', function () {
-    expect(columnsOf('legacy_id_maps'))->toBe([
+    expect(SchemaShape::columns('legacy_id_maps'))->toBe([
         'legacy_table' => ['varchar(64)', false, null],
         'legacy_id' => ['int(10) unsigned', false, null],
         'new_table' => ['varchar(64)', false, null],
         'new_id' => ['bigint(20) unsigned', false, null],
     ])
-        ->and(indexesOf('legacy_id_maps'))->toEqualCanonicalizing([
+        ->and(SchemaShape::indexes('legacy_id_maps'))->toEqualCanonicalizing([
             'primary' => ['legacy_table', 'legacy_id'],
             'legacy_id_maps_new_table_new_id_index' => ['new_table', 'new_id'],
         ])
@@ -143,44 +144,3 @@ it('TC-21-12: LegacyIdMap は、同じ (旧の表, 旧 ID) を 2 行入れられ
     expect(fn () => LegacyIdMap::factory()->create(['legacy_table' => 'm_category', 'legacy_id' => 3]))
         ->toThrow(QueryException::class);
 });
-
-/**
- * 列の名前ごとに [型, null 可, 既定値] を、表の列の順に返す。
- *
- * @return array<string, array{string, bool, mixed}>
- */
-function columnsOf(string $table): array
-{
-    return collect(Schema::getColumns($table))
-        ->mapWithKeys(fn (array $column) => [$column['name'] => [$column['type'], $column['nullable'], $column['default']]])
-        ->all();
-}
-
-/**
- * 索引の名前ごとに、索引の列を返す。
- *
- * @return array<string, list<string>>
- */
-function indexesOf(string $table): array
-{
-    return collect(Schema::getIndexes($table))
-        ->mapWithKeys(fn (array $index) => [$index['name'] => $index['columns']])
-        ->all();
-}
-
-/**
- * 外部キーごとに [列, 指す表, 指す列, 削除のとき] を返す。
- *
- * @return array<int, array{string, string, string, string|null}>
- */
-function foreignKeysOf(string $table): array
-{
-    return collect(Schema::getForeignKeys($table))
-        ->map(fn (array $key) => [
-            implode(',', $key['columns']),
-            $key['foreign_table'],
-            implode(',', $key['foreign_columns']),
-            $key['on_delete'],
-        ])
-        ->all();
-}

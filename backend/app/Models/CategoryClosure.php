@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 /**
  * カテゴリ木の閉包表(category_closures)の 1 行。祖先から子孫までの段数(depth)を持ち、自分自身は depth 0。
  *
- * Category の親・子・祖先・子孫のリレーションが中間の表として使う。
- * 行の書き換えは、木の整合(すべての祖先との行がそろっていること)を保つ CategoryTree(#24)が行う。
+ * 1 つのノードの追加・移動で、すべての祖先との行をそろえて書き換えないと木が食い違うため、
+ * 行の書き換えは CategoryTree(#24)に限っている。
  */
 class CategoryClosure extends Pivot
 {

@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
  * カテゴリ木のノード(旧の種別・カテゴリ・ミドル)。
  *
  * 親子は列に持たず、閉包表(category_closures)だけで持つ。閉包表の行には自分自身(depth 0)も入るため、
- * 祖先・子孫のリレーションは depth 0 の行を除いて引く。閉包表の書き換えは CategoryTree(#24)が行う。
+ * 祖先・子孫のリレーションは depth 0 の行を除いて引く。
  */
 #[Fillable([
     'name', 'name_search', 'name_eng', 'description', 'role',
@@ -34,7 +34,7 @@ class Category extends Model
     public function parent(): HasOneThrough
     {
         return $this->hasOneThrough(Category::class, CategoryClosure::class, 'descendant_id', 'id', 'id', 'ancestor_id')
-            ->where('category_closures.depth', 1);
+            ->where((new CategoryClosure)->qualifyColumn('depth'), 1);
     }
 
     /**
@@ -89,8 +89,7 @@ class Category extends Model
      */
     private function closureRelation(string $selfKey, string $otherKey): BelongsToMany
     {
-        return $this->belongsToMany(Category::class, 'category_closures', $selfKey, $otherKey)
-            ->using(CategoryClosure::class)
+        return $this->belongsToMany(Category::class, CategoryClosure::class, $selfKey, $otherKey)
             ->withPivot('depth');
     }
 }

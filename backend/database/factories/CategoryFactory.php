@@ -6,8 +6,8 @@ use App\Models\Category;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * categories の行だけを作る。閉包表(category_closures)の行は作らないので、親子を持たない単体のノードになる。
- * 閉包表を書き換えてよいのは CategoryTree(#24)だけのため、木を組むときはそちらを通す。
+ * categories の行だけを作る。閉包表(category_closures)の行は書き換える場所が CategoryTree(#24)に
+ * 限られているので作らず、親子を持たない単体のノードになる。
  *
  * @extends Factory<Category>
  */

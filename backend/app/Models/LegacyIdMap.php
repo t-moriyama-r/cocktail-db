@@ -12,7 +12,8 @@ use Illuminate\Database\Eloquent\Model;
  * 旧 DB の ID と新しい DB の ID の対応(legacy_id_maps)の 1 行。
  *
  * 主キーは (legacy_table, legacy_id) の複合キー。Eloquent は複合の主キーを扱えないため、
- * 保存・削除のときに 2 列で行を特定するようにしている。
+ * 保存・削除のときに 2 列で行を特定するようにしている。$primaryKey は片方の列だけなので、
+ * find() は旧の表を区別せずに引く。
  */
 #[Fillable(['legacy_table', 'legacy_id', 'new_table', 'new_id'])]
 class LegacyIdMap extends Model
@@ -20,6 +21,9 @@ class LegacyIdMap extends Model
     /** @use HasFactory<LegacyIdMapFactory> */
     use HasFactory;
 
+    private const KEY_COLUMNS = ['legacy_table', 'legacy_id'];
+
+    // 複合の主キー(KEY_COLUMNS)のうち、Eloquent に 1 列として渡せる方
     protected $primaryKey = 'legacy_id';
 
     public $incrementing = false;
@@ -46,8 +50,10 @@ class LegacyIdMap extends Model
      */
     protected function setKeysForSaveQuery($query)
     {
-        return $query
-            ->where('legacy_table', $this->getOriginal('legacy_table', $this->getAttribute('legacy_table')))
-            ->where('legacy_id', $this->getOriginal('legacy_id', $this->getAttribute('legacy_id')));
+        foreach (self::KEY_COLUMNS as $column) {
+            $query->where($column, $this->getOriginal($column, $this->getAttribute($column)));
+        }
+
+        return $query;
     }
 }

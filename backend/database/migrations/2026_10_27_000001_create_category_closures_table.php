@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * カテゴリ木の閉包表(docs/schema.md の「category_closures」)。
- * 行を書き換えるのは CategoryTree(#24)だけ。
  */
 return new class extends Migration
 {
