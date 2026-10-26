@@ -117,6 +117,13 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 
+## 文書と既存コードが食い違うとき
+
+CLAUDE.md・`README.md`・`docs/` の記述と、既存コードの実際の書き方が食い違っているときは、**既存コードの書き方に従う**。文書は古くなっていることがある。
+
+- 見つけた食い違いは、作業の最後の返答(PR の本文ではなく、エージェントがユーザーに返す最後の返答)に**すべて**挙げる。どの文書のどの記述と、どのコードの書き方が食い違うか、どちらに従ったかを書く。直すかどうかはユーザーが決める
+- 文書を直すのは、issue の範囲に入っているときだけ。ついでに直さない(1 PR = 1 issue)
+
 ## 禁止事項
 
 - **このプロジェクトでは GitHub Copilot を使わない**。コード補完・Copilot のコードレビュー・「Fix with Copilot」「Explain error」・Copilot への issue のアサイン、すべて。レビュアーは CodeRabbit か Claude(`.github/ai-dev.yml` の `reviewer`)
