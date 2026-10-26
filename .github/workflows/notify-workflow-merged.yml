@@ -49,10 +49,14 @@ jobs:
           NUMBER: ${{ inputs.number || github.event.pull_request.number }}
         run: |
           pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName)
-          # gh pr view の files は 100 件で切れるので、ファイルの差分は API からすべて取る
-          summary=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100" | jq 'add // []' \
-            | bash .ai-dev/.github/scripts/workflow-change-summary.sh)
-          if [ -z "$summary" ]; then
+          # gh pr view の files は 100 件で切れるので、ファイルの差分は API からすべて取る。
+          # API の一時的な失敗などでサマリーが作れなくても、書き換わったワークフローを人が見るきっかけは残したいので、
+          # 結論の行だけにして PR のリンクは送る
+          if ! summary=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100" | jq 'add // []' \
+            | bash .ai-dev/.github/scripts/workflow-change-summary.sh); then
+            echo "::warning::#$NUMBER のサマリーを作れなかった"
+            summary=':warning: サマリーを作れなかった。差分を見てください'
+          elif [ -z "$summary" ]; then
             echo "#$NUMBER はワークフローを変えていないので送らなかった"
             exit 0
           fi
