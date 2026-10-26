@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * カクテルの材料の 1 行。
  *
  * 主キーは (cocktail_id, position) の複合キー。同じカクテルに同じノード・銘柄の行が 2 つあってもよいため、
- * 行はカクテルの中での並び順で特定する。$primaryKey は片方の列だけなので、find() はカクテルを区別せずに引く。
+ * 行はカクテルの中での並び順で特定する。
  */
 #[Fillable(['cocktail_id', 'position', 'category_id', 'brand_id', 'amount', 'is_optional'])]
 class CocktailIngredient extends Model
@@ -25,8 +25,6 @@ class CocktailIngredient extends Model
 
     // 複合の主キー(compositeKeyColumns)のうち、Eloquent に 1 列として渡せる方
     protected $primaryKey = 'position';
-
-    public $incrementing = false;
 
     public $timestamps = false;
 

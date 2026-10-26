@@ -154,14 +154,20 @@ it('TC-22-11: 材料は position の順に返る(入れた順が違っても、�
         ->toBe([[1, 2, 3], [1, 2, 3]]);
 });
 
-it('TC-22-12: 材料は、カクテルが違えば同じ position を持て、更新は (カクテル, position) の 1 行だけに効く', function () {
+it('TC-22-12: 材料は、カクテルが違えば同じ position を持て、更新・読み直し・削除は (カクテル, position) の 1 行だけに効く', function () {
     $first = CocktailIngredient::factory()->create(['position' => 1, 'amount' => '30ml']);
     $second = CocktailIngredient::factory()->create(['position' => 1, 'amount' => '30ml']);
 
     $second->update(['amount' => '45ml']);
 
     expect(CocktailIngredient::query()->orderBy('cocktail_id')->pluck('amount', 'cocktail_id')->all())
-        ->toBe([$first->cocktail_id => '30ml', $second->cocktail_id => '45ml']);
+        ->toBe([$first->cocktail_id => '30ml', $second->cocktail_id => '45ml'])
+        ->and($second->fresh()?->amount)->toBe('45ml')
+        ->and($first->fresh()?->amount)->toBe('30ml');
+
+    $first->delete();
+
+    expect(CocktailIngredient::query()->pluck('cocktail_id')->all())->toBe([$second->cocktail_id]);
 });
 
 it('TC-22-13: 同じカクテルに同じ position の材料を 2 行入れられない', function () {
@@ -176,9 +182,7 @@ it('TC-22-14: 同じカクテルに、同じノード・銘柄で量の違う材
     $cocktail = Cocktail::factory()->create();
     $brand = Brand::factory()->create();
     foreach ([1 => '30ml', 2 => '15ml'] as $position => $amount) {
-        CocktailIngredient::factory()->for($cocktail)->create([
-            'position' => $position, 'category_id' => $brand->category_id, 'brand_id' => $brand->id, 'amount' => $amount,
-        ]);
+        CocktailIngredient::factory()->for($cocktail)->forBrand($brand)->create(['position' => $position, 'amount' => $amount]);
     }
 
     expect($cocktail->ingredients->pluck('amount')->all())->toBe(['30ml', '15ml']);
@@ -200,7 +204,7 @@ it('TC-22-16: 材料・ノードの有名な銘柄に使われている銘柄と
     expect(fn () => $target->delete())->toThrow(QueryException::class)
         ->and($target->fresh())->not->toBeNull();
 })->with([
-    '材料の銘柄' => fn () => tap(Brand::factory()->create(), fn (Brand $brand) => CocktailIngredient::factory()->for($brand)->create(['position' => 1])),
+    '材料の銘柄' => fn () => tap(Brand::factory()->create(), fn (Brand $brand) => CocktailIngredient::factory()->forBrand($brand)->create(['position' => 1])),
     '有名な銘柄' => fn () => tap(Brand::factory()->create(), fn (Brand $brand) => Category::findOrFail($brand->category_id)->update(['famous_brand_id' => $brand->id])),
     '銘柄の所属ノード' => fn () => tap(Category::factory()->create(), fn (Category $category) => Brand::factory()->for($category)->create()),
     '材料のノード' => fn () => tap(Category::factory()->create(), fn (Category $category) => CocktailIngredient::factory()->for($category)->create(['position' => 1])),
@@ -244,7 +248,7 @@ it('TC-22-20: ノード・銘柄・カクテル・材料のリレーションが
     $brand = Brand::factory()->for($category)->create();
     $category->update(['famous_brand_id' => $brand->id]);
     $cocktail = Cocktail::factory()->for($base, 'baseCategory')->create();
-    $ingredient = CocktailIngredient::factory()->for($cocktail)->for($category)->for($brand)->create(['position' => 1]);
+    $ingredient = CocktailIngredient::factory()->for($cocktail)->forBrand($brand)->create(['position' => 1]);
 
     expect($category->brands->modelKeys())->toBe([$brand->id])
         ->and($category->famousBrand?->is($brand))->toBeTrue()

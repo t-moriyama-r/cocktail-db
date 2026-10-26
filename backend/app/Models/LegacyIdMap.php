@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Model;
  * 旧 DB の ID と新しい DB の ID の対応(legacy_id_maps)の 1 行。
  *
  * 主キーは (legacy_table, legacy_id) の複合キー。legacy_id だけでは、旧の別の表の同じ ID の行と区別できない。
- * $primaryKey は片方の列だけなので、find() は旧の表を区別せずに引く。
  */
 #[Fillable(['legacy_table', 'legacy_id', 'new_table', 'new_id'])]
 class LegacyIdMap extends Model
@@ -24,8 +23,6 @@ class LegacyIdMap extends Model
 
     // 複合の主キー(compositeKeyColumns)のうち、Eloquent に 1 列として渡せる方
     protected $primaryKey = 'legacy_id';
-
-    public $incrementing = false;
 
     public $timestamps = false;
 

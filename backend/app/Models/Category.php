@@ -80,7 +80,7 @@ class Category extends Model
     }
 
     /**
-     * 有名な銘柄(度数の計算に使う)。決めていないノードでは null。
+     * このノードの有名な銘柄。決めていないノードでは null。
      *
      * @return BelongsTo<Brand, $this>
      */
@@ -98,6 +98,7 @@ class Category extends Model
             'is_major' => 'boolean',
             'is_like' => 'boolean',
             'is_powder' => 'boolean',
+            'famous_brand_id' => 'integer',
             'youtube_created_at' => 'datetime',
             'youtube_start_seconds' => 'integer',
             'sort_order' => 'integer',
