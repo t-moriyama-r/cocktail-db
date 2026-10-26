@@ -55,8 +55,12 @@ jobs:
           pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName)
           # gh pr view の files は 100 件で切れるので、ファイルの差分は API からすべて取る。
           # API の一時的な失敗などでサマリーが作れなくても、書き換わったワークフローを人が見るきっかけは残したいので、
-          # 結論の行だけにして PR のリンクは送る
-          if ! summary=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100" | jq 'add // []'             | bash .ai-dev/.github/scripts/workflow-change-summary.sh); then
+          # 結論の行だけにして PR のリンクは送る。
+          # パイプでつなぐと(pipefail が無いので)gh api の失敗が見えず、空のサマリーで「変えていない」扱いになるので、先に取る
+          if ! files=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100"); then
+            echo "::warning::#$NUMBER の変わったファイルを読めなかった"
+            summary=':warning: 変わったファイルを読めず、サマリーを作れなかった。差分を見てください'
+          elif ! summary=$(set -o pipefail; jq 'add // []' <<<"$files" | bash .ai-dev/.github/scripts/workflow-change-summary.sh); then
             echo "::warning::#$NUMBER のサマリーを作れなかった"
             summary=':warning: サマリーを作れなかった。差分を見てください'
           elif [ -z "$summary" ]; then
