@@ -37,7 +37,7 @@ it('TC-21-03: categories の列の型・null 可・既定値が設計どおり',
     ]);
 });
 
-it('TC-21-04: categories の索引は旧と同じ 5 列と主キーだけで、外部キーはまだ無い', function () {
+it('TC-21-04: categories の索引は旧と同じ 5 列と主キー、#22 で足した famous_brand_id だけ', function () {
     expect(SchemaShape::indexes('categories'))->toEqualCanonicalizing([
         'primary' => ['id'],
         'categories_name_search_index' => ['name_search'],
@@ -45,9 +45,9 @@ it('TC-21-04: categories の索引は旧と同じ 5 列と主キーだけで、�
         'categories_is_major_index' => ['is_major'],
         'categories_is_like_index' => ['is_like'],
         'categories_youtube_created_at_index' => ['youtube_created_at'],
-    ])
-        // famous_brand_id の外部キーは brands を作る #22 で足す
-        ->and(Schema::getForeignKeys('categories'))->toBe([]);
+        // famous_brand_id の索引と外部キーは brands を作る #22 で足した(TC-22-06)
+        'categories_famous_brand_id_index' => ['famous_brand_id'],
+    ]);
 });
 
 it('TC-21-05: category_closures の列・主キー・索引が設計どおり', function () {

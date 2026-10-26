@@ -6,7 +6,9 @@ use Database\Factories\CategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 /**
@@ -65,6 +67,26 @@ class Category extends Model
     public function descendants(): BelongsToMany
     {
         return $this->closureRelation('ancestor_id', 'descendant_id')->wherePivot('depth', '>', 0);
+    }
+
+    /**
+     * このノードに直接ぶら下がる銘柄(子孫のノードの銘柄は含まない)。
+     *
+     * @return HasMany<Brand, $this>
+     */
+    public function brands(): HasMany
+    {
+        return $this->hasMany(Brand::class);
+    }
+
+    /**
+     * 有名な銘柄(度数の計算に使う)。決めていないノードでは null。
+     *
+     * @return BelongsTo<Brand, $this>
+     */
+    public function famousBrand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class, 'famous_brand_id');
     }
 
     /**
