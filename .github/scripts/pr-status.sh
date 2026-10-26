@@ -30,7 +30,7 @@ main() {
   apply "$repo" "$number" "$target"
 }
 
-# 上から見て最初に当てはまったものにする。誰の番かが変わるところで分け、自動では動かないもの(コンフリクト・CI の失敗)は
+# 上から見て最初に当てはまったものにする。誰の番かが変わるところで分け、レビューの流れが止まるもの(コンフリクト・CI の失敗)は
 # 人が気づけるよう別にする。mergeable が UNKNOWN(push の直後に GitHub が計算している間)はコンフリクトとみなさない
 decide() {
   jq -r --arg p "$PREFIX" '
@@ -91,7 +91,7 @@ ensure_label() {
     レビュー対応中) color=0e8a16 description="レビューの指摘に、Actions の Claude Code が対応する番" ;;
     人の判断待ち) color=d93f0b description="人の判断を待っている(needs-human・needs-decision)" ;;
     人のマージ待ち) color=fbca04 description="人の確認とマージを待っている(needs-approval)" ;;
-    コンフリクト) color=b60205 description="develop とコンフリクトしている。自動では直らない" ;;
+    コンフリクト) color=b60205 description="develop とコンフリクトしている。Actions の Claude Code が取り込んで直す" ;;
     CI失敗) color=b60205 description="必須のチェックが失敗している" ;;
     マージ待ち) color=5319e7 description="レビューの対応が済み、自動マージを待っている" ;;
     *) color=ededed description="" ;;
