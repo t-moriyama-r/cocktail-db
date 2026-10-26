@@ -171,10 +171,15 @@ WHERE EXISTS (SELECT 1 FROM m_middle m WHERE m.parent = k.id)
 - **扱い**: そのまま移す
 
 ```sql
--- 22 件(属するカテゴリ・ミドルの名前と同じものに限っても 22 件)
+-- 22 件
 SELECT COUNT(*) FROM m_brand b
 WHERE EXISTS (SELECT 1 FROM m_category k WHERE k.name = b.name)
    OR EXISTS (SELECT 1 FROM m_middle m WHERE m.name = b.name);
+
+-- 属するカテゴリ・ミドル自身の名前と同じものに限っても 22 件
+SELECT COUNT(*) FROM m_brand b
+WHERE EXISTS (SELECT 1 FROM m_category k WHERE k.id = b.category AND k.name = b.name)
+   OR EXISTS (SELECT 1 FROM m_middle m WHERE m.id = b.middle_category AND m.name = b.name);
 ```
 
 ## 9. アフィリエイトのキーの 0
@@ -210,8 +215,8 @@ SET SESSION group_concat_max_len = 100000;
 SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
   SELECT s, COUNT(*) AS n FROM (
     SELECT c.id, c.name,
-      GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), r.amount, r.is_optional)
-                   ORDER BY r.category, r.middle_category, r.brand, r.amount SEPARATOR ',') AS s
+      GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
+                   ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
     FROM t_cocktails c JOIN t_recipies r ON r.cocktail_id = c.id
     GROUP BY c.id
   ) sig
@@ -274,8 +279,8 @@ SET SESSION group_concat_max_len = 100000;
 SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
   SELECT s, name, COUNT(*) AS n FROM (
     SELECT c.id, c.name,
-      GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), r.amount, r.is_optional)
-                   ORDER BY r.category, r.middle_category, r.brand, r.amount SEPARATOR ',') AS s
+      GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
+                   ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
     FROM t_cocktails c JOIN t_recipies r ON r.cocktail_id = c.id
     GROUP BY c.id
   ) sig
