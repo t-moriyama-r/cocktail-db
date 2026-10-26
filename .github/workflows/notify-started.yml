@@ -46,9 +46,15 @@ jobs:
           for n in $(tr ',' ' ' <<<"$ISSUES"); do
             n=${n#\#}
             if ! [[ "$n" =~ ^[0-9]+$ ]]; then skipped="$skipped $n"; continue; fi
+            # 無い番号(404)は飛ばす。それ以外の失敗(権限・レート制限・通信)で飛ばすと、抜けた通知に気づけないので止める
+            if ! raw=$(gh api "repos/$REPO/issues/$n" 2>err.txt); then
+              if grep -q 'HTTP 404' err.txt; then skipped="$skipped #$n"; continue; fi
+              echo "::error::issue #$n の取得に失敗した: $(cat err.txt)"
+              exit 1
+            fi
             # issue の API は PR も返す(PR なら pull_request が付く)
-            if issue=$(gh api "repos/$REPO/issues/$n" --jq 'select(.pull_request | not) | {number, title, url: .html_url}' 2>/dev/null) \
-              && [ -n "$issue" ]; then
+            issue=$(jq -c 'select(.pull_request | not) | {number, title, url: .html_url}' <<<"$raw")
+            if [ -n "$issue" ]; then
               printf '%s\n' "$issue" >> found.jsonl
             else
               skipped="$skipped #$n"
