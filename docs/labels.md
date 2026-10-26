@@ -12,10 +12,10 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
 | `epic` | 根と Epic(`[Epic] …`) | issue を分けるとき(issue-breakdown スキル・人) | next-issue が、開いている `epic` から sub-issue を深さ優先でたどった順番を、同じ優先度の issue の並び順に使う(先に書いた Epic ほど前に並ぶ) |
-| `feature` | 機能。作業が 3 件以上まとまるもの | issue を分けるとき | ほかの issue が `Blocked by` で `feature` の issue を待っているとき、その子(sub-issue)がすべて閉じていれば、親が開いていても済んだものとして扱う |
+| `feature` | 機能。作業が 3 件以上まとまるもの | issue を分けるとき | ほかの issue が `Blocked by` で `feature` の issue を待っているとき、その子(sub-issue)がすべて済んでいれば、親が開いていても済んだものとして扱う。子が `feature` なら、その子も同じ判定で見る(子の `feature` は誰も閉じないため) |
 | `task` | 作業。1 件の PR で終わるもの | issue を分けるとき。issue のテンプレート(`.github/ISSUE_TEMPLATE/task.yml`)から作ると自動で付く | next-issue が着手する issue の候補にするのは、開いていて `task` が付いた issue だけ |
 
-依存は、本文に `Blocked by #N` と書く(1 行に 1 件)。next-issue はこの書式だけを読み、`#N` が閉じる(`feature` なら子がすべて閉じる)まで、その issue を選ばない。
+依存は、本文に `Blocked by #N` と書く(1 行に 1 件)。next-issue はこの書式だけを読み、`#N` が閉じる(`feature` なら子がすべて済む)まで、その issue を選ばない。
 
 ## 領域
 
@@ -110,7 +110,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 | `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない | CodeRabbit(上限なら `ai-claude-review.yml`) |
 | `状態:マージ待ち` | 上のどれでもない(レビューの対応が済み、CI も緑) | `ai-auto-merge.yml` |
 
-- 付け替えるのは `pr-status.yml`。PR の動き・レビュー・CodeRabbit のコメント・CI と AI のワークフローの終わりで動き、1 時間ごとに開いている PR をすべて出し直す。ジョブが途中で止まって古いラベルが残っても、そこで直る。手で付け替えても、事実どおりに戻る
+- 付け替えるのは `pr-status.yml`。PR の動き・レビュー・CodeRabbit のコメント・CI と AI のワークフローの終わりで動く。開いている PR のすべての出し直しは、`ai-review-sweep.yml` が 2 時間ごとに行う。ジョブが途中で止まって古いラベルが残っても、そこで直る。手で付け替えても、事実どおりに戻る
 - 手元から今すぐ揃えるときは `gh workflow run pr-status.yml`(番号を付けなければ、開いている PR すべて)
 - 表示のためのラベルで、ワークフローの条件には使わない。止めたい・人に頼みたいときは、上の `no-auto-merge`・`needs-human` などを付ける
 

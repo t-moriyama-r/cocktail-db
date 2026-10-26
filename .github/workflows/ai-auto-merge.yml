@@ -50,13 +50,19 @@ concurrency:
 
 jobs:
   auto-merge:
-    # PR の上で起きたことだけ。issue_comment は CodeRabbit のコメント(指摘なしで終わったときはレビューが付かない)だけ
+    # PR の上で起きたことだけ。issue_comment は CodeRabbit のレビューの終わりを表すコメント(指摘なしで終わったときはレビューが付かない)だけ。
+    # CodeRabbit はサマリーのコメントを何度も書き換えるので、ほかのコメントでは動かさない(private では動いたジョブが 1 分ずつ課金される)。
+    # ラベルを外したときは、マージを止めるラベルが外れたときだけ。CI は既定のブランチへの push の回(PR ではない)を除く
     if: >-
       github.event_name == 'workflow_dispatch'
-      || github.event_name == 'pull_request_target'
+      || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
+        || contains(fromJSON('["needs-human","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
       || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
-      || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]')
-      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
+        && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
+          || contains(github.event.comment.body, 'LGTM')))
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.head_branch != github.event.repository.default_branch)
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
