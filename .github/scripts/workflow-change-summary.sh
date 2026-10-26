@@ -91,10 +91,13 @@ jq -r '
       items: (if .patch == null or .status == "removed" then []
         else [lines[] | . + {cat: category} | . + {warn: warn, key: (.c | sub("\\s+#.*$"; ""))}]
           # 同じ行を消して足しただけ(行末のコメントを直した・場所を動かした)なら、広がっていないので要注意にしない
-          # 打ち消すのは、消した数と足した数が同じ分だけ(別のジョブに同じ行を足した分は要注意のまま残す)
+          # 打ち消すのは、消した数と足した数が同じ分だけ(別のジョブに同じ行を足した分は要注意のまま残す)。
+          # ただし権限と secret は、ジョブの中からワークフロー直下へ動かすだけで全ジョブに広がる。行の中身だけでは
+          # 場所が分からないので打ち消さず、動かしたらしいことを添えて要注意のまま出す
           | . as $all | to_entries | map(.key as $i | .value | .key as $k | .added as $a
               | ([$all[0:$i][] | select(.key == $k and .added == $a)] | length) as $rank
-              | .warn = (.warn and ($rank >= ([$all[] | select(.key == $k and .added != $a)] | length))))
+              | ($rank < ([$all[] | select(.key == $k and .added != $a)] | length)) as $paired
+              | if .cat | IN("permissions", "secrets") then .moved = $paired else .warn = (.warn and ($paired | not)) end)
           # on: や permissions: だけの行は、中身の行が並ぶので、要注意のときだけ出す
           | map(select(.warn or (.key | IN("on:", "permissions:") | not)))
         end)
@@ -120,7 +123,8 @@ jq -r '
          | order[] as $cat
          | [$items[] | select(.cat == $cat)] as $hits
          | select($hits | length > 0)
-         | ($hits[0:5] | map((if .warn then "⚠ " else "" end) + (if $new then "" elif .added then "+ " else "- " end) + (.c | code)))
+         | ($hits[0:5] | map((if .warn then "⚠ " else "" end) + (if $new then "" elif .added then "+ " else "- " end) + (.c | code)
+             + (if .warn and .moved then "(同じ中身の行を消している。動かした先で範囲が広がっていないか)" else "" end)))
            as $shown
          | "    \($cat | cat_label): \($shown | join("  "))\(if ($hits | length) > 5 then "  ほか \(($hits | length) - 5) 行" else "" end)"
        end))

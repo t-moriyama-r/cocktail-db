@@ -27,6 +27,7 @@ main() {
 	tc_08_credentials
 	tc_09_moved_line
 	tc_09_moved_line_unbalanced
+	tc_20_moved_permission_and_secret
 	tc_10_permissions_block_removed
 	tc_11_no_patch
 	tc_12_removed_and_renamed
@@ -148,19 +149,32 @@ tc_08_credentials() {
 
 tc_09_moved_line() {
 	run "$(files "$(file_entry modified .github/workflows/a.yml "$(
-		printf '%s\n' '-  actions: write   # 古いコメント' '+  actions: write   # 新しいコメント' \
-			'-      TOKEN: ${{ secrets.A }}' '+      TOKEN: ${{ secrets.A }}'
+		printf '%s\n' '-      - uses: someone/action@v1   # 古いコメント' '+      - uses: someone/action@v1   # 新しいコメント' \
+			'-        run: curl https://example.com' '+        run: curl https://example.com'
 	)")")"
 	expect_line "TC-220-09: 行末のコメントを直した・動かしただけなら要注意にしない" 1 ':white_check_mark: *'
 	expect_not "TC-220-09: 印が付かない" '⚠'
-	expect_has "TC-220-09: 行は中身として並ぶ" '    権限: - `actions: write   # 古いコメント`  + `actions: write   # 新しいコメント`'
+	expect_has "TC-220-09: 行は中身として並ぶ" '    アクション: - `- uses: someone/action@v1   # 古いコメント`  + `- uses: someone/action@v1   # 新しいコメント`'
 }
 
 tc_09_moved_line_unbalanced() {
 	run "$(files "$(file_entry modified .github/workflows/a.yml "$(
-		printf '%s\n' '-      contents: write' '+      contents: write' '+      contents: write'
+		printf '%s\n' '-      - uses: someone/action@v1' '+      - uses: someone/action@v1' '+      - uses: someone/action@v1'
 	)")")"
 	expect_line "TC-220-19: 足した数が多い分は要注意のまま残す" 1 ':rotating_light: *要注意の変更が 1 行ある*'
+}
+
+# ジョブの中の権限をワークフロー直下へ動かすと全ジョブに広がるが、行の中身は同じなので打ち消すと見落とす
+tc_20_moved_permission_and_secret() {
+	run "$(files "$(file_entry modified .github/workflows/a.yml "$(
+		printf '%s\n' '+permissions:' '+  contents: write' '-    permissions:' '-      contents: write' \
+			'-      TOKEN: ${{ secrets.A }}' '+      TOKEN: ${{ secrets.A }}'
+	)")")"
+	expect_line "TC-220-20: 権限と secret は、同じ行を消して足しても要注意のまま出す" 1 ':rotating_light: *要注意の変更が 3 行ある*'
+	expect_has "TC-220-20: 動かしたらしいことを添える" \
+		'⚠ + `contents: write`(同じ中身の行を消している。動かした先で範囲が広がっていないか)'
+	expect_has "TC-220-20: secret の行にも添える" \
+		'⚠ + `TOKEN: ${{ secrets.A }}`(同じ中身の行を消している。動かした先で範囲が広がっていないか)'
 }
 
 tc_10_permissions_block_removed() {
