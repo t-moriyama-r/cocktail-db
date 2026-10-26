@@ -61,8 +61,10 @@ jobs:
         if: steps.live.outputs.open == 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
+          # 人の判断を issue の本文に写すだけの軽いタスクなので、利用枠の減りの少ないモデルで動かす(リポジトリ変数 CLAUDE_LIGHT_MODEL で変えられる)
           claude_args: |
             --max-turns 40
+            --model ${{ vars.CLAUDE_LIGHT_MODEL || 'claude-sonnet-5-5' }}
             --allowedTools "Read,Write,Glob,Grep,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の issue #${{ env.ISSUE }} は、着手する前に人に決めてもらうことがある(ラベル needs-decision)。
