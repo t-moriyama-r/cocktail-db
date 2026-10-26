@@ -1,4 +1,8 @@
-# レビューが止まったままの PR を 1 時間ごとに見て、止まったところから動かし直す
+# レビューが止まったままの PR を 2 時間ごとに見て、止まったところから動かし直す。あわせて、開いている PR の状態のラベルをすべて出し直す
+#
+# private のリポジトリでは、定期実行は PR が無くても 1 回 1 分ずつ課金される。1 時間ごとの定期実行を 2 本(この見回りと
+# pr-status.yml の出し直し)持つと月 1,400 分ほどになるので、1 本のジョブにまとめて 2 時間ごとにしている。
+# 人が作業しているあいだは、pr-patrol スキルで同じ見回りを早めに起こせる
 #
 # ai-review-loop.yml・ai-claude-review.yml はレビューやコメントが付いたときに動くが、Claude Code が途中で止まった・上限に当たった・
 # レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
@@ -23,7 +27,7 @@ name: 止まったレビューを見回る
 
 on:
   schedule:
-    - cron: '30 * * * *'   # 1 時間ごと(ほかの定期実行の 0・20・45 分と重ならないよう 30 分)
+    - cron: '30 */2 * * *'   # 2 時間ごと(ほかの定期実行の 0・20 分と重ならないよう 30 分)
   workflow_dispatch:
 
 permissions:
@@ -38,7 +42,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write   # 状態のラベル(pr-status.sh)
+      issues: write
+      checks: read
+      statuses: read
       actions: write
     env:
       GH_TOKEN: ${{ github.token }}
@@ -98,4 +105,12 @@ jobs:
             fi
             echo "#$n ${head:0:7} を誰もレビューしていない"
             bash .github/scripts/request-review.sh "$REPO" "$n" || echo "::warning::#$n のレビューの依頼に失敗した"
+          done
+
+      # 状態のラベルは表示のためのものなので、上の見回りが失敗しても出し直す。決め方は pr-status.sh(pr-status.yml と同じ)
+      - name: 開いている PR の状態のラベルを出し直す
+        if: always()
+        run: |
+          for n in $(gh pr list -R "$REPO" --state open --limit 100 --json number --jq '.[].number'); do
+            bash .github/scripts/pr-status.sh "$REPO" "$n" || echo "::warning::#$n の状態のラベルを付け替えられなかった"
           done
