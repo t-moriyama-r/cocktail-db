@@ -58,12 +58,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           echo "${{ vars.MIXHOST_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-      # .env と storage(ログ・セッション)はサーバー側のものを残す
+      # .env と storage(ログ・セッション・アップロードした画像)はサーバー側のものを残す。
+      # public/storage は storage:link が作るリンクで、手元のビルドには無いので、--delete で消させない
       - name: Upload with rsync
         run: |
           rsync -az --delete \
             --exclude '.env' \
             --exclude 'storage/' \
+            --exclude 'public/storage' \
             --exclude 'public/.well-known/' \
             --exclude 'tests/' \
             -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
@@ -75,6 +77,9 @@ jobs:
             set -e
             cd ~/${APP_DIR}
             mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
+            # 画像を /storage/<ファイル名> で配信するためのリンク(public/storage → storage/app/public)。
+            # 既にあれば作らずに 0 で終わる
+            php artisan storage:link
             php artisan optimize
           "
 

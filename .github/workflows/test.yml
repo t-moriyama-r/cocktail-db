@@ -5,7 +5,7 @@ on:
     branches: [develop, staging, release]
   push:
     branches: [develop]
-  # deploy.yml・deploy-dev.yml から呼び、テストが通ったときだけデプロイする
+  # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
   # PR のブランチで流し直す(ci-rerun.yml)。base の付け替えや GITHUB_TOKEN の push では pull_request の回が起きないため
   workflow_dispatch:
@@ -109,6 +109,20 @@ jobs:
       # 型の合わない呼び出しなどを、テストで通らない経路の分まで止める。設定と検査から外すものは phpstan.neon
       - name: Static analysis (PHPStan)
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  # 通知のワークフローが使う Slack のスクリプト。curl・gh を偽物にして流すので、Slack にも GitHub にも触らない
+  slack-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: ShellCheck
+        run: shellcheck --severity=warning .github/scripts/slack-*.sh .github/scripts/tests/slack.test.sh
+
+      - name: Test
+        run: bash .github/scripts/tests/slack.test.sh
 
   frontend:
     runs-on: ubuntu-latest

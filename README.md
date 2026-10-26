@@ -3,7 +3,8 @@
 「宅飲みカクテルデータベース」(https://cocktail.trc-vlackhistory.net/)のリプレイス版。今は Hello World の段階。
 
 - 公開先(開発中): https://cocktail-next.trc-vlackhistory.net/ (`release`)
-- dev 環境(ステージング): https://cocktail-dev.trc-vlackhistory.net/ (`staging`。Basic 認証で閉じている。下の「dev 環境」)
+- dev 環境: https://cocktail-dev.trc-vlackhistory.net/ (`develop`。Basic 認証で閉じている。下の「dev 環境・stg 環境」)
+- stg 環境(ステージング): https://cocktail-stg.trc-vlackhistory.net/ (`staging`。同上)
 - BE: Laravel 13(PHP 8.4)。`/api/*` が API、それ以外のパスは React の SPA を返す
 - FE: React + Vite(TypeScript)。ビルド結果は `backend/public/spa` に出力し、Laravel の `resources/views/spa.blade.php` がマニフェストを読んで HTML を組み立てる
 - 型の共有: Laravel のコードから Scramble で `openapi/openapi.json` を出力し、FE は openapi-typescript で型を生成して openapi-fetch で呼ぶ
@@ -16,7 +17,9 @@ backend/    Laravel(mixhost の ~/cocktail-db に置く)
 frontend/   React + Vite
 openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy.yml       release → 本番
-.github/workflows/deploy-dev.yml   staging → dev 環境
+.github/workflows/deploy-dev.yml   develop → dev 環境
+.github/workflows/deploy-stg.yml   staging → stg 環境
+.github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
 .github/workflows/branch-flow.yml  staging・release への PR の元のブランチを確かめる
 ```
 
@@ -28,6 +31,7 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 ~/cocktail-db-dev/                      dev 環境のアプリ本体(.env はデプロイのたびに作り直す。REVISION に出したコミット)
 ~/public_html/cocktail-db-dev/.htaccess                      dev 環境の Basic 認証(cPanel の「ディレクトリのプライバシー」が書く)
 ~/public_html/cocktail-db-dev/public  ->  ~/cocktail-db-dev/public   dev 環境のドキュメントルート(シンボリックリンク)
+~/cocktail-db-stg/ ・ ~/public_html/cocktail-db-stg/           stg 環境(dev と同じ形)
 ```
 
 アプリ本体を `public_html` の外に置き、公開するのは `public/` だけにしている(`.env` などが Web から見えないように)。
@@ -76,12 +80,12 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 
 | ブランチ | 役割 |
 |---|---|
-| `develop` | 開発のベース(既定のブランチ)。作業ブランチはここから切り、PR でここに戻す |
-| `staging` | ステージング用。`develop` から PR でマージすると、dev 環境へのデプロイが動く |
+| `develop` | 開発のベース(既定のブランチ)。作業ブランチはここから切り、PR でここに戻す。push されるたびに dev 環境に出る |
+| `staging` | ステージング用。`develop` から PR でマージすると、stg 環境へのデプロイが動く |
 | `release` | リリース用。`staging` から PR でマージすると、本番へのデプロイが動く |
 | `issue-<番号>-<短い名前>` | 作業ブランチ。issue から `gh issue develop <番号> --base develop --name issue-<番号>-<名前>` で作ると、issue に結び付く |
 
-流れ: 作業ブランチ →(PR)→ `develop` →(PR)→ `staging`(dev 環境で確かめる)→(PR)→ `release`(本番)
+流れ: 作業ブランチ →(PR)→ `develop` →(PR)→ `staging`(stg 環境で確かめる)→(PR)→ `release`(本番)
 
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
@@ -110,23 +114,31 @@ GitHub 側に要る設定:
 
 サーバーの `~/cocktail-db/.env` は初回に手で置いたもので、リポジトリには入れない。
 
-## dev 環境
+## dev 環境・stg 環境
 
-`staging` を、Basic 認証で閉じた dev 環境(ステージング。https://cocktail-dev.trc-vlackhistory.net/)に出す(`.github/workflows/deploy-dev.yml`)。本番とは別のディレクトリ・DB(`<user>_cocktail_dev`)を使う。
+Basic 認証で閉じた確認用の環境が 2 つある。中身は `.github/workflows/deploy-env.yml` で、環境ごとに別のディレクトリ・DB を使う(`develop` の migration が `staging` の DB を先に進めないように)。
 
-- **`staging` にマージしたとき**に出す。`develop` から `staging` への PR を作り、その差分(前回ステージングに出したところからの変更)を見てマージする
-- **出し直したいとき**: Actions の「deploy-dev」→「Run workflow」(ブランチは `staging`)、または `gh workflow run deploy-dev.yml --ref staging`。前回出したコミット(サーバーの `~/cocktail-db-dev/REVISION`)と同じなら出さないので、同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)。`staging` 以外のブランチからは出さない
+| 環境 | URL | 出すブランチ | ワークフロー | アプリ本体 | DB |
+|---|---|---|---|---|---|
+| dev | https://cocktail-dev.trc-vlackhistory.net/ | `develop` | `deploy-dev.yml` | `~/cocktail-db-dev` | `<user>_cocktail_dev` |
+| stg(ステージング) | https://cocktail-stg.trc-vlackhistory.net/ | `staging` | `deploy-stg.yml` | `~/cocktail-db-stg` | `<user>_cocktail_stg` |
+
+- **dev**: `develop` に push される(PR がマージされる)たびに出す。`ai-auto-merge.yml` のマージは `GITHUB_TOKEN` なので push のワークフローが起きず、マージの後に `ai-auto-merge.yml` が `deploy-dev.yml` を直接呼ぶ。マージされた変更を、ステージングに出す前に画面で確かめる
+- **stg**: `staging` にマージしたときに出す。`develop` から `staging` への PR を作り、その差分(前回ステージングに出したところからの変更)を見てマージする
+- **出し直したいとき**: Actions の「deploy-dev」「deploy-stg」→「Run workflow」(ブランチはそれぞれ `develop`・`staging`)、または `gh workflow run deploy-dev.yml --ref develop`・`gh workflow run deploy-stg.yml --ref staging`。前回出したコミット(サーバーの `~/<アプリ本体>/REVISION`)と同じなら出さないので、同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)。決まったブランチ以外からは出さない
 - 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `migrate` → `optimize` → 動作確認)。動作確認では、資格情報なしで 401 になることも確かめる
 - `.env` はデプロイのたびに Secret から作り直す(手で直さない)。`APP_KEY` だけは初回にサーバーで作ったものを使い続ける
-- Basic 認証のユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
+- Basic 認証の資格情報は dev と stg で同じ。ユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`・`public_html/cocktail-db-stg`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
 
 GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
 
 | 種類 | 名前 | 中身 |
 |---|---|---|
 | Secret | `DEV_DB_PASSWORD` | dev の DB ユーザー(`<user>_cocktail_dev`)のパスワード。単一引用符は使えない |
-| Secret | `DEV_BASIC_AUTH` | 動作確認に使う Basic 認証の `<ユーザー名>:<パスワード>` |
+| Secret | `STG_DB_PASSWORD` | stg の DB ユーザー(`<user>_cocktail_stg`)のパスワード。単一引用符は使えない |
+| Secret | `DEV_BASIC_AUTH` | 動作確認に使う Basic 認証の `<ユーザー名>:<パスワード>`(dev・stg 共通) |
 | Variable | `DEV_APP_URL` | `https://cocktail-dev.trc-vlackhistory.net` |
+| Variable | `STG_APP_URL` | `https://cocktail-stg.trc-vlackhistory.net` |
 
 Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは、デプロイの最初の check で止まる。
 
@@ -136,4 +148,4 @@ Secret は GitHub の画面(Settings → Secrets and variables → Actions)か�
 2. cPanel の「SSH アクセス」で鍵 `cocktail_db_deploy` を削除
 3. cPanel の「ドメイン」で `cocktail-next.trc-vlackhistory.net` を削除
 4. SSH で `~/cocktail-db` と `~/public_html/cocktail-db` を削除
-5. dev 環境も消すなら: cPanel で `cocktail-dev.trc-vlackhistory.net`・DB `<user>_cocktail_dev` とそのユーザー・`public_html/cocktail-db-dev` のパスワード保護を削除し、SSH で `~/cocktail-db-dev` と `~/public_html/cocktail-db-dev` を削除。Secret の `DEV_*`・Variable の `DEV_APP_URL`・Environment の `dev` を消す
+5. dev 環境も消すなら: cPanel で `cocktail-dev.trc-vlackhistory.net`・DB `<user>_cocktail_dev` とそのユーザー・`public_html/cocktail-db-dev` のパスワード保護を削除し、SSH で `~/cocktail-db-dev` と `~/public_html/cocktail-db-dev` を削除。Secret の `DEV_*`・Variable の `DEV_APP_URL`・Environment の `dev` を消す。stg 環境も同じ形(`cocktail-stg`・`<user>_cocktail_stg`・`cocktail-db-stg`・`STG_*`・Environment の `stg`)

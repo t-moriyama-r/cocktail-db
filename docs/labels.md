@@ -31,6 +31,24 @@ issue は「根 → Epic → 機能 → 作業」の木にして、GitHub の su
 
 `area:*` は issue を絞り込むための分類で、付けても自動では何も起きない。1 つの issue に複数付けてよい。
 
+### タイトルの接頭辞
+
+issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(一覧で BE・FE・CI のどれの話かをタイトルだけで分かるようにするため)。接頭辞は `area:*` から決める。
+
+| `area:*` | 接頭辞 |
+|---|---|
+| `area:backend`・`area:db` | `【BE】` |
+| `area:frontend` | `【FE】` |
+| `area:infra` | `【CI】` |
+| `area:migration` | `【移行】` |
+| `area:ops` | `【運用】` |
+
+- `area:admin` は管理画面と管理 API なので、BE・FE の側に当てる(`area:backend` なら `【BE】`、`area:frontend` なら `【FE】`)
+- 複数の領域にまたがるときは、上の表の順(BE → FE → CI → 移行 → 運用)に並べて続ける(例: `【BE】【FE】`)
+- PR は、閉じる issue と同じ接頭辞にして、その後ろに `issue-<番号>: ` を続ける(例: `【CI】issue-262: …`)
+- Epic(`[Epic] …`)は領域をまたぐので付けない。機能(`feature`)・作業(`task`)には付ける
+- 領域が決まらないときは、作る前に issue で相談する
+
 ## 着手の順番(next-issue が読む)
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
@@ -56,12 +74,20 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 ## 人に頼む(Slack に知らせる)
 
-次のラベルが付くと、`notify-needs-human.yml` が Slack(secret の `SLACK_WEBHOOK_URL`)に知らせる。通知には、PR・issue と、PR が閉じる issue へのリンク、頼むコメント(目印 `<!-- ai-dev:<ラベル> -->` の付いたいちばん新しいもの)の抜粋が入る。そのため、ラベルより先に頼むコメントを書く。
+次のラベルが付くと、`notify-needs-human.yml` が Slack に知らせる(送り方は下の「Slack の設定」)。通知には、PR・issue と、PR が閉じる issue へのリンク、頼むコメント(目印 `<!-- ai-dev:<ラベル> -->` の付いたいちばん新しいもの)の抜粋が入る。そのため、ラベルより先に頼むコメントを書く。頼む中身(目印の付いたコメント、`needs-decision` なら本文の「判断が要ること」、ほかは人のいちばん新しいコメント)が見つからないときは、開いても答えることが無いので送らない(毎朝のまとめには載る)。
 
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
-- `SLACK_WEBHOOK_URL` が無いときは、送らずに警告だけ出す
 - 付いたときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだこれらのラベルが付いて開いている PR・issue を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件の日は送らない。手動で送るときは、`notify-needs-human.yml` を `number` を空、`label` を `all` にして動かす
+- 頼んだラベルが外れるか、PR・issue が閉じるか、同じラベルで頼み直したら、その通知に ✅ のリアクションが付き、本文の先頭に「【済】」が付く(bot で送ったときだけ)。ラベルが外れた・閉じたときのイベント、ラベルを外すワークフロー(`ai-review-loop.yml`・`ai-decision-loop.yml`)の終わり、毎朝の見回りで、`notify-needs-human.yml` の `mark-done` ジョブが付ける。手動で付けさせるときは、`label` を `done` にして動かす
+
+### Slack の設定
+
+送るのは `.github/scripts/slack-post.sh`。`notify-workflow-merged.yml`(ワークフローを変えた PR のマージ)と `notify-started.yml`(エージェントが着手した issue。`gh workflow run notify-started.yml -f issues=<番号>,<番号> -f note=<任意>` で呼ぶ)も同じ送り先に送る。
+
+- **bot で送る(おすすめ)**: Slack App の bot token を secret `SLACK_BOT_TOKEN` に、送り先の人のメンバー ID(`U` で始まるもの。Slack のプロフィールの「︙」→「メンバー ID をコピー」)をリポジトリ変数 `SLACK_NOTIFY_USER` に入れる。通知は、その人と bot の DM(Slack の左側の「App」の下)に届く。App の bot に要る権限(OAuth & Permissions の Bot Token Scopes)は、`chat:write`(送る)・`reactions:write`(✅ を付ける)・`im:write`(DM を開く)・`im:history`(頼んだ通知を探す)。権限を足したら、App をワークスペースに入れ直す
+- **Webhook で送る**: bot が無ければ、secret `SLACK_WEBHOOK_URL`(Incoming Webhook)に送る。「済」は付かない
+- どちらも無いときは、送らずに警告だけ出す
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
@@ -75,7 +101,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 | ラベル | いつ | 次に動くもの |
 |---|---|---|
-| `状態:作業中` | 下書き | PR を作ったエージェント(か `ai-draft-sweep.yml`)が ready にする |
+| `状態:作業中` | 下書き | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
 | `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
 | `状態:人のマージ待ち` | `needs-approval` が付いている | 人が確かめてマージする |
 | `状態:コンフリクト` | `develop` とコンフリクトしている | 自動では直らない。人かエージェントが `develop` を取り込んで直す |

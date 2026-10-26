@@ -7,11 +7,11 @@
 # - pull_request_target(closed): 人がマージしたとき
 # - workflow_dispatch: ai-auto-merge.yml が GITHUB_TOKEN でマージしたとき(GITHUB_TOKEN のマージはイベントを起こさないので、直接呼ばれる)
 #
-# 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
+# 送り先は notify-needs-human.yml と同じ(.github/scripts/slack-post.sh。bot か Webhook。どちらも無ければ何もせず警告だけ出す)
 name: ワークフローの変更のマージを Slack に知らせる
 
 on:
-  # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
+  # checkout するのは既定のブランチの .github/scripts だけなので、pull_request_target でもフォークのコードは動かない
   pull_request_target:
     types: [closed]
     paths:
@@ -31,18 +31,22 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Slack に送る
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ inputs.number || github.event.pull_request.number }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
-            exit 0
-          fi
-
           pr=$(gh pr view "$NUMBER" -R "$REPO" --json title,url,mergedBy,baseRefName,files)
           files=$(jq '[.files[].path | select(startswith(".github/workflows/"))]' <<<"$pr")
           if [ "$(jq length <<<"$files")" = 0 ]; then
@@ -63,4 +67,4 @@ jobs:
                 "",
                 "意図しない変更(権限・secret・外部への送信など)が入っていないか、差分を確かめてください"
               ] | join("\n"))
-            }' | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            }' | .github/scripts/slack-post.sh
