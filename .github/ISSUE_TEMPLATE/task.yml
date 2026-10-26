@@ -7,6 +7,7 @@
 # name は 3 文字以上でないと、GitHub がテンプレートを読み込まず、作成画面に出ない
 name: 作業 issue
 description: 1 件の PR で終わる作業。目的・やること・受け入れ条件・依存を書く
+title: "【】"
 labels: [task]
 body:
   - type: markdown
@@ -14,6 +15,7 @@ body:
       value: |
         1 件の PR で終わる大きさにする(大きければ分けて、親の issue に `feature` を付ける)。
         ラベルの意味は [docs/labels.md](https://github.com/t-moriyama-r/cocktail-db/blob/develop/docs/labels.md) にある。`area:*` は作った後で付ける。
+        タイトルの `【】` には対象(`BE`・`FE`・`CI`・`移行`・`運用`)を入れる(対応は上のリンクの「タイトルの接頭辞」)。
         公開リポジトリなので、サーバー名・ユーザー名・DB 名・絶対パス・秘密の値は書かない。
 
   - type: textarea

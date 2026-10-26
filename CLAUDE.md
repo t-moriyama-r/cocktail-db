@@ -105,6 +105,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 ブランチとコミットの決まりは `README.md` の「ブランチ」のとおり。要点と、PR の流れ:
 
 1. 1 PR = 1 issue。ついでの修正を混ぜない(見つけたら別の issue にする)
+   - issue・PR のタイトルの先頭に、対象を示す接頭辞(`【BE】`・`【FE】`・`【CI】`・`【移行】`・`【運用】`)を付ける。`area:*` ラベルとの対応は `docs/labels.md` の「タイトルの接頭辞」。PR のタイトルは `【CI】issue-<番号>: <何をしたか>` の形にする
 2. ブランチは issue から `develop` を元に作る: `gh issue develop <番号> --base develop --name issue-<番号>-<短い英名> --checkout`
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
 4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする
