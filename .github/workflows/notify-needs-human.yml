@@ -128,6 +128,8 @@ jobs:
              else ($people | map(select(.user.type != "Bot")) | last // {}) as $c
                | {text: ($c.body // "" | clean), url: ($c.html_url // $target.url)}
              end) as $ask
+          # 頼む中身が無い通知は、開いても答えることが無いので送らない(何も出さない)
+          | select($ask.text != "")
           | {
               unfurl_links: false,
               # 片付いたときに「済」を付ける通知を、後から見つけるための印(slack-mark-done.sh が読む)
@@ -142,20 +144,20 @@ jobs:
                     else "なし(PR の本文に Closes #番号 が無い)" end)
                  else empty end),
                 (if $sender != "" then "*ラベルを付けた人*: \($sender)" else empty end),
-                (if $ask.text != "" then
-                  "", "*\($t.ask)*", ($ask.text | quote), "", link($ask.url; $t.act)
-                 else
-                  "", "頼む中身が見つからなかった。\(link($target.url; "\($target.kind) を開く"))"
-                 end),
+                "", "*\($t.ask)*", ($ask.text | quote), "", link($ask.url; $t.act),
                 (if $label == "needs-approval" then "問題が無ければ、マージすると承認になる。直してほしいことは PR にコメントする" else empty end)
               ] | join("\n"))
             }
           JQ
 
-          jq -n -f message.jq \
+          message=$(jq -n -f message.jq \
             --arg repo "$REPO" --arg number "$NUMBER" --arg label "$LABEL" --arg sender "$SENDER" \
-            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues" \
-            | .github/scripts/slack-post.sh
+            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues")
+          if [ -z "$message" ]; then
+            echo "#$NUMBER に $LABEL で頼む中身(目印 ai-dev:$LABEL のコメントなど)が見つからなかったので、Slack に送らなかった"
+            exit 0
+          fi
+          .github/scripts/slack-post.sh <<<"$message"
 
   # 人の番になっているものを 1 通にまとめる。ラベルが付いたときの通知は 1 回きりなので、返事をしないまま
   # 残ったものを毎朝知らせ直す。issue-breakdown が issue を作り終えたときの呼び出し(label を渡さない)は、
