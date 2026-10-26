@@ -123,7 +123,7 @@ jobs:
           # PR のコメントは第三者も書ける。force push・別ブランチへの push・ブランチの削除をツールの許可で防ぐため、git は使うサブコマンドと push 先に絞る
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*),Bash(jq:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }}(ブランチ `${{ matrix.pr.branch }}`)が develop とコンフリクトしている。
             develop のコミット ${{ env.BASE }} を取り込んで、コンフリクトを解消してほしい。
@@ -141,7 +141,7 @@ jobs:
                  Claude Code に渡す権限やツールのところ
                ワークフローのファイルでも、上に当たらない衝突は解消してよい(develop にもうある変更を取り込むことで、ワークフローを新しく変えることではない)
             4. 解消したら確かめる: `git diff --check`、衝突の印(<<<<<<< ・======= ・>>>>>>> )が残っていないこと(`git grep -nE '^(<<<<<<<|>>>>>>>) '`)、
-               触ったファイルの構文(シェルは `bash -n`、PHP は `php -l`、JSON は `jq . <ファイル>`)
+               触ったファイルの構文(シェルは `bash -n`、PHP は `php -l`。JSON は Read で読んで確かめる)
             5. `issue-<issue 番号>: develop を取り込み、コンフリクトを解消(<ファイル>)` でコミットし、本文に `Refs #<issue 番号>` を書く
                (issue 番号はブランチ名 issue-<番号>-… から)。`git push origin HEAD:${{ matrix.pr.branch }}` で push する。
                force push はしない。push が拒否されたら(その間に誰かが push した)、何もせずに終える
