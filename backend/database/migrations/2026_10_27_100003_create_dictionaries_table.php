@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * 用語辞典(docs/schema.md の「dictionaries」。旧 t_dictionary)。グラスも分類「グラス」の項目としてここに入る。
- * カクテルの glass_dictionary_id が旧 ID のまま指すので、ID は旧 ID のまま入れる。
+ * ID は旧 t_dictionary と同じ値を持つ(docs/schema.md の ID の方針)。
  */
 return new class extends Migration
 {

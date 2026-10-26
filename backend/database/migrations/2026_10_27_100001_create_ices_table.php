@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * 氷(docs/schema.md の「ices」。旧 m_ice と同じ列)。
- * カクテルの ice_id が旧 ID のまま指すので、ID は旧 ID のまま入れる。
+ * ID は旧 m_ice と同じ値を持つ(docs/schema.md の ID の方針)。
  */
 return new class extends Migration
 {

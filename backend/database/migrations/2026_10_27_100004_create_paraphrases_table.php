@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * 言い換え辞書(docs/schema.md の「paraphrases」。旧 paraphrases の列に id を足したもの)。
- * converted・middle はノードの ID ではなく名前のまま持つ。自動取り込み(#68)が名前で引くため。
+ * converted・middle は、ノードの ID ではなく名前のまま持つ(理由は docs/schema.md の「paraphrases」)。
  */
 return new class extends Migration
 {
