@@ -76,13 +76,7 @@ class CategoryTree
      */
     public function subtreeIds(Category $node): array
     {
-        return CategoryClosure::query()
-            ->where('ancestor_id', $node->getKey())
-            ->orderBy('depth')
-            ->orderBy('descendant_id')
-            ->pluck('descendant_id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+        return [$node->getKey(), ...$node->descendants()->pluck($node->qualifyColumn('id'))->all()];
     }
 
     /**
@@ -92,12 +86,7 @@ class CategoryTree
      */
     public function roots(): Collection
     {
-        $roots = Category::query()->whereNotExists(fn ($query) => $query
-            ->from('category_closures')
-            ->whereColumn('category_closures.descendant_id', 'categories.id')
-            ->where('category_closures.depth', '>', 0));
-
-        return $this->inSiblingOrder($roots)->get();
+        return $this->inSiblingOrder(Category::query()->whereDoesntHave('ancestors'))->get();
     }
 
     /**
@@ -120,8 +109,10 @@ class CategoryTree
      */
     private function inSiblingOrder(EloquentBuilder|BelongsToMany $query): EloquentBuilder|BelongsToMany
     {
+        $category = new Category;
+
         return $query
-            ->orderBy('categories.sort_order')
-            ->orderBy('categories.id');
+            ->orderBy($category->qualifyColumn('sort_order'))
+            ->orderBy($category->qualifyColumn('id'));
     }
 }

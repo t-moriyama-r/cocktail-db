@@ -27,21 +27,20 @@ function categoryTreeChain(int $depth): array
 }
 
 /**
- * 閉包表のすべての行を [祖先の ID, 子孫の ID, depth] で、並びを決めて返す。
+ * 閉包表のすべての行を [祖先の ID, 子孫の ID, depth] で返す。
  *
  * @return list<array{int, int, int}>
  */
 function categoryTreeClosureRows(): array
 {
     return DB::table('category_closures')
-        ->orderBy('ancestor_id')->orderBy('descendant_id')
         ->get()
         ->map(fn (object $row) => [(int) $row->ancestor_id, (int) $row->descendant_id, (int) $row->depth])
         ->all();
 }
 
 /**
- * 鎖の閉包表として正しい行(i 番目から j 番目へ、depth j - i)を、categoryTreeClosureRows と同じ並びで返す。
+ * 鎖の閉包表として正しい行(i 番目から j 番目へ、depth j - i)を返す。
  *
  * @param  list<Category>  $chain
  * @return list<array{int, int, int}>
@@ -56,7 +55,6 @@ function categoryTreeExpectedChainRows(array $chain): array
             }
         }
     }
-    usort($rows, fn (array $a, array $b) => [$a[0], $a[1]] <=> [$b[0], $b[1]]);
 
     return $rows;
 }
@@ -73,7 +71,7 @@ it('TC-89-01〜05: 鎖を作ると、閉包表の行数が各ノードの深さ 
     $chain = categoryTreeChain($depth);
 
     expect(DB::table('category_closures')->count())->toBe($expectedRows)
-        ->and(categoryTreeClosureRows())->toBe(categoryTreeExpectedChainRows($chain));
+        ->and(categoryTreeClosureRows())->toEqualCanonicalizing(categoryTreeExpectedChainRows($chain));
 })->with('chain depths');
 
 it('TC-89-06: 枝分かれした木と別の根を作ると、閉包表は各ノードの祖先からの行だけになり、別の木の行は増えない', function () {
@@ -93,10 +91,9 @@ it('TC-89-06: 枝分かれした木と別の根を作ると、閉包表は各ノ
         [$a1->id, $a1->id, 0],
         [$otherChild->id, $otherChild->id, 0],
     ];
-    usort($expected, fn (array $x, array $y) => [$x[0], $x[1]] <=> [$y[0], $y[1]]);
 
     // 深さ 0・1・1・0・2・1 の 6 ノードで、行数は 1 + 2 + 2 + 1 + 3 + 2 = 11
-    expect(categoryTreeClosureRows())->toBe($expected);
+    expect(categoryTreeClosureRows())->toEqualCanonicalizing($expected);
 });
 
 it('TC-89-07: addNode は渡した属性で保存したノードを返す', function () {
@@ -112,13 +109,15 @@ it('TC-89-07: addNode は渡した属性で保存したノードを返す', func
 it('TC-89-08: 木に入っていない親(閉包表に自分の行が無い)の下には足せず、ノードも閉包表の行も残らない', function () {
     $root = app(CategoryTree::class)->addNode(null, Category::factory()->raw());
     $outside = Category::factory()->create();
-    $before = [Category::count(), categoryTreeClosureRows()];
+    $categoriesBefore = Category::count();
+    $rowsBefore = categoryTreeClosureRows();
 
     expect(fn () => app(CategoryTree::class)->addNode($outside, Category::factory()->raw()))
         ->toThrow(InvalidArgumentException::class);
 
-    expect([Category::count(), categoryTreeClosureRows()])->toBe($before)
-        ->and($before[1])->toBe([[$root->id, $root->id, 0]]);
+    expect(Category::count())->toBe($categoriesBefore)
+        ->and(categoryTreeClosureRows())->toEqualCanonicalizing($rowsBefore)
+        ->and($rowsBefore)->toBe([[$root->id, $root->id, 0]]);
 });
 
 it('TC-89-09: 保存していない親の下には足せず、ノードも閉包表の行も残らない', function () {
