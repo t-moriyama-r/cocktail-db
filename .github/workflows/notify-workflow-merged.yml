@@ -9,11 +9,11 @@
 # - pull_request_target(closed): 人がマージしたとき
 # - workflow_dispatch: ai-auto-merge.yml が GITHUB_TOKEN でマージしたとき(GITHUB_TOKEN のマージはイベントを起こさないので、直接呼ばれる)
 #
-# 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
+# 送り先は notify-needs-human.yml と同じ(.github/scripts/slack-post.sh。bot か Webhook。どちらも無ければ何もせず警告だけ出す)
 name: ワークフローの変更のマージを Slack に知らせる
 
 on:
-  # checkout するのは、動いているワークフローと同じ版(マージ先のブランチ)のスクリプトだけなので、
+  # checkout するのは、動いているワークフローと同じ版(既定のブランチ)のスクリプトだけなので、
   # pull_request_target でも PR(フォーク)のコードは動かない
   pull_request_target:
     types: [closed]
@@ -34,15 +34,19 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged
     runs-on: ubuntu-latest
     steps:
-      # サマリーを作るスクリプト。PR のコードではなく、動いているワークフローと同じ版を使う
+      # サマリーを作るスクリプトと送信用のスクリプト。PR のコードではなく、動いているワークフローと同じ版を使う
       - uses: actions/checkout@v6
         with:
           path: .ai-dev
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
           sparse-checkout: .github/scripts
           persist-credentials: false
 
       - name: Slack に送る
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -52,8 +56,7 @@ jobs:
           # gh pr view の files は 100 件で切れるので、ファイルの差分は API からすべて取る。
           # API の一時的な失敗などでサマリーが作れなくても、書き換わったワークフローを人が見るきっかけは残したいので、
           # 結論の行だけにして PR のリンクは送る
-          if ! summary=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100" | jq 'add // []' \
-            | bash .ai-dev/.github/scripts/workflow-change-summary.sh); then
+          if ! summary=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/files?per_page=100" | jq 'add // []'             | bash .ai-dev/.github/scripts/workflow-change-summary.sh); then
             echo "::warning::#$NUMBER のサマリーを作れなかった"
             summary=':warning: サマリーを作れなかった。差分を見てください'
           elif [ -z "$summary" ]; then
@@ -61,11 +64,6 @@ jobs:
             exit 0
           fi
           echo "$summary"
-
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
-            exit 0
-          fi
 
           # サマリーの 1 行目は結論、2 行目からはファイルごとの中身(どちらも mrkdwn のエスケープ済み)
           jq -n --arg repo "$REPO" --argjson pr "$pr" --arg summary "$summary" '
@@ -82,4 +80,4 @@ jobs:
                 "*変わったワークフロー*(<\($pr.url)/files|差分>):",
                 $lines[1:][]
               ] | join("\n"))
-            }' | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            }' | .ai-dev/.github/scripts/slack-post.sh
