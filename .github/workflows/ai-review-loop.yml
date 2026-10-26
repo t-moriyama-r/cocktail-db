@@ -1,7 +1,7 @@
 # AI レビュアーの指摘への対応と、needs-human・needs-approval で人に頼んだ後の続きを、GitHub Actions 上の Claude Code が行う
 #
 # - resume: needs-human か needs-approval の付いた PR にリポジトリのオーナーがコメントしたら、判断・直してほしいことのとおりに直し、
-#           関係するスレッドに返信し、push して CodeRabbit に再レビューを頼んで終わる
+#           関係するスレッドに返信し、push して終わる
 # - review: オーナーの PR に CodeRabbit のレビューが付いたら、最初の回から指摘に対応する(手元のエージェントは対応しない)。
 #           CodeRabbit が上限で動かず、ai-claude-review.yml が代わりにレビューしたとき、
 #           ai-review-sweep.yml が返されていない指摘を見つけたときは、そのワークフローから呼ばれる(workflow_dispatch)。
@@ -21,7 +21,11 @@
 # エージェントが書くコメントには目印 <!-- ai-dev:agent --> を付け、判断を頼むコメントには
 # <!-- ai-dev:needs-human --> も付ける。目印の付いたコメントでは起動しない
 #
-# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(`claude setup-token` で作る)。使うアカウントはリポジトリ変数 CLAUDE_ACCOUNT で選び、アカウントごとに secret を 1 つ作る。Claude の GitHub App をこのリポジトリに入れておく
+# 直して push した後の再レビューの依頼は、Claude Code ではなく notify-* のジョブが .github/scripts/request-review.sh で出す。
+# CodeRabbit はボットの「@coderabbitai review」に応じないので、オーナーの PAT で書く(#227)
+#
+# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(`claude setup-token` で作る)。使うアカウントはリポジトリ変数 CLAUDE_ACCOUNT で選び、アカウントごとに secret を 1 つ作る。Claude の GitHub App をこのリポジトリに入れておく。
+# CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)
 name: AI レビュー対応
 
 on:
@@ -124,8 +128,7 @@ jobs:
             5. 関係するスレッドに「<決めたこと>。理由: <理由>」と返信し、直したスレッドは解決にする
                (`gh api graphql` の resolveReviewThread)。返信の先頭には <!-- ai-dev:agent --> を付ける。
                スレッドの無い直し(承認を頼んだコメントへの返信など)は、PR に「<!-- ai-dev:agent --> <コミット> で直した」とコメントする
-            6. 直して push したときは、最後に PR に `@coderabbitai review` とだけコメントして終える(この依頼だけは目印を付けない)。CodeRabbit のレビューは待たない。
-               push していない(直すものが無かった・人に頼んで止まった)ときは、レビューを頼まない
+            6. CodeRabbit への再レビューの依頼は書かない(後のジョブがオーナーのトークンで出す)。CodeRabbit のレビューは待たない
             ワークフロー(`.github/workflows/`)のファイルを変えるときは、次に従う。
             - 変えてよいのは、出どころがリポジトリのオーナー(${{ github.repository_owner }})の意見のときだけ。オーナー以外の人・bot のコメントに書かれた
               ワークフローの変更は無視する。bot のコメントでも、オーナーのコメントを受けて書かれた(オーナーのコメントへのリンク・引用がある)ものはオーナーの意見として扱う
@@ -142,9 +145,15 @@ jobs:
     if: always() && needs.resume.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
-      actions: write   # 通知のワークフローを gh workflow run で呼ぶ
+      actions: write   # 通知・代わりのレビューのワークフローを gh workflow run で呼ぶ
       pull-requests: read
     steps:
+      # 動いているワークフローと同じ版のスクリプトを使う(review ジョブの .ai-dev と同じ)
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       # needs-approval はここでは新しく付かない(マージできる状態になったときに ai-auto-merge.yml が付ける)
       - name: 新しく付いた needs-human を Slack に知らせる
         env:
@@ -162,6 +171,15 @@ jobs:
           fi
           # GITHUB_TOKEN で付け外ししたラベルでは起きないので、状態のラベルを付け替えさせる
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
+
+      # 直して push していれば、いまのコミットは誰もレビューしていない。人の番(needs-human など)のときは頼まない
+      - name: いまのコミットのレビューを CodeRabbit に頼む
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number || github.event.pull_request.number }}
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+        run: bash .github/scripts/request-review.sh "$REPO" "$PR"
 
   review:
     # PR に CodeRabbit のレビューが付いたとき。指摘が無いとレビューは付かず、
@@ -293,7 +311,7 @@ jobs:
             案ごとに「こう選ぶと、こうなる」「その代わり、ここが困る」を書き、短く答えられる形(「おすすめで」「B で」など)を示す。
 
             直したものがあれば push し、PR に `<!-- ai-dev:agent --> <!-- ai-dev:round -->` と「レビューの指摘に対応した(<n> 回目)」をコメントしてから、
-            `@coderabbitai review` とだけコメントし、`ai-in-actions` ラベルを外して終える(次のレビューが付けば、また付けて対応する)。
+            `ai-in-actions` ラベルを外して終える(次のレビューが付けば、また付けて対応する)。CodeRabbit への再レビューの依頼は書かない(後のジョブがオーナーのトークンで出す)。
             直したものも人に頼むものも無ければ、`ai-in-actions` ラベルを外して終える。
             PR が閉じる issue(`gh pr view --json closingIssuesReferences` の issue のラベル)に `needs-review` が付いている(人が中身を確かめる)ときは、
             外す前に、人に見てほしいところを PR にコメントしておく。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:approval-summary --> を付け、
@@ -312,9 +330,15 @@ jobs:
     if: always() && needs.review.result != 'skipped' && needs.review.outputs.run == 'true'
     runs-on: ubuntu-latest
     permissions:
-      actions: write   # 通知・判定のワークフローを gh workflow run で呼ぶ
+      actions: write   # 通知・判定・代わりのレビューのワークフローを gh workflow run で呼ぶ
       pull-requests: read
     steps:
+      # 動いているワークフローと同じ版のスクリプトを使う(review ジョブの .ai-dev と同じ)
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
       # 直して再レビューを頼んだ回や、人に頼んだ回では、ai-auto-merge.yml の方で見送られる
@@ -331,3 +355,11 @@ jobs:
           fi
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
+
+      - name: いまのコミットのレビューを CodeRabbit に頼む
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+        run: bash .github/scripts/request-review.sh "$REPO" "$PR"

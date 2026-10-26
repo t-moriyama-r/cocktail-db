@@ -33,3 +33,9 @@ jobs:
 
       - name: Test draft-candidates.sh
         run: bash .github/scripts/tests/draft-candidates.test.sh
+
+      - name: Test review-request-state.sh
+        run: bash .github/scripts/tests/review-request-state.test.sh
+
+      - name: Test request-review.sh
+        run: bash .github/scripts/tests/request-review.test.sh

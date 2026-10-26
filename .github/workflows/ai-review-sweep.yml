@@ -11,11 +11,14 @@
 # 呼ぶもの(上から順に見て、最初に当てはまったもの):
 #   - AI レビュアーの未解決のスレッドのうち、最後のコメントがエージェントの返信(<!-- ai-dev:agent -->)でないものがある → ai-review-loop.yml
 #   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
-#     → CodeRabbit の最後のコメントが上限(Review rate limited / Review limit reached)で、いまのコミットより後のものなら ai-claude-review.yml
+#     → .github/scripts/request-review.sh。オーナーの依頼がまだ無ければオーナーの PAT で CodeRabbit に頼み、
+#       依頼に上限が返った・30 分たっても返事もレビューも無い・依頼を書けなかったときだけ ai-claude-review.yml を呼ぶ。
+#       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)
 #   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
 #     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる
 #
-# ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい
+# ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい。
+# 必要な secret: CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)
 name: 止まったレビューを見回る
 
 on:
@@ -49,6 +52,8 @@ jobs:
           sparse-checkout: .github/scripts
 
       - name: 候補を絞って、止まったところのワークフローを呼ぶ
+        env:
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           now=$(date -u +%s)
           for n in $(gh pr list -R "$REPO" --state open --author "$OWNER" --limit 100 --json number --jq '.[].number'); do
@@ -91,9 +96,6 @@ jobs:
               gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$n"
               continue
             fi
-            limited=$(jq --arg since "$committed" 'map(select(.user.login == "coderabbitai[bot]")) | last // {}
-                | (.created_at // "") > $since and (.body // "" | test("Review rate limited|Review limit reached"))' <<<"$comments")
-            if [ "$limited" != true ]; then skip "返信待ちのスレッドが無く、CodeRabbit の上限で止まってもいない"; continue; fi
-            echo "#$n CodeRabbit が上限で、${head:0:7} を誰もレビューしていない。ai-claude-review.yml を呼ぶ"
-            gh workflow run ai-claude-review.yml -R "$REPO" -f number="$n"
+            echo "#$n ${head:0:7} を誰もレビューしていない"
+            bash .github/scripts/request-review.sh "$REPO" "$n" || echo "::warning::#$n のレビューの依頼に失敗した"
           done
