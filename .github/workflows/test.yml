@@ -5,7 +5,7 @@ on:
     branches: [develop, staging, release]
   push:
     branches: [develop]
-  # deploy.yml・deploy-dev.yml から呼び、テストが通ったときだけデプロイする
+  # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
 
 permissions:
