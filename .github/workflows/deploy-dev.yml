@@ -1,11 +1,11 @@
 name: deploy-dev
 
-# staging を、Basic 認証で閉じた dev 環境(cocktail-dev)に出す。本番(deploy.yml。release への push で動く)とは別のディレクトリ・DB を使う
-# - staging に push(develop からの PR をマージ)したときに出す
-# - Actions の画面(または gh workflow run deploy-dev.yml --ref staging)から、いつでも手で出せる。同じコミットを出し直すときは force を付ける
+# develop を、Basic 認証で閉じた dev 環境(cocktail-dev)に出す。中身は deploy-env.yml
+# - develop に push(作業ブランチの PR をマージ)したときに出す
+# - Actions の画面(または gh workflow run deploy-dev.yml --ref develop)から、いつでも手で出せる。同じコミットを出し直すときは force を付ける
 on:
   push:
-    branches: [staging]
+    branches: [develop]
   workflow_dispatch:
     inputs:
       force:
@@ -20,194 +20,20 @@ concurrency:
   group: deploy-dev
   cancel-in-progress: false
 
-env:
-  APP_DIR: cocktail-db-dev
-  # サブドメインのドキュメントルート。cPanel が作った実ディレクトリを、~/cocktail-db-dev/public へのリンクに置き換える。
-  # Basic 認証は 1 つ上の public_html/cocktail-db-dev の .htaccess にあり、デプロイでは触らない
-  DOC_ROOT: public_html/cocktail-db-dev/public
-
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      deploy: ${{ steps.revision.outputs.deploy }}
-    steps:
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.MIXHOST_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          echo "${{ vars.MIXHOST_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-
-      # Secret は、ターミナルから値を入れずに作ると空になる。空のまま出すと、途中の DB の接続や最後の動作確認で分かりにくく落ちるので、先に止める
-      - name: Check secrets
-        env:
-          DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
-          DEV_BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
-        run: |
-          missing=""
-          [ -n "$DEV_DB_PASSWORD" ] || missing="$missing DEV_DB_PASSWORD"
-          case "$DEV_BASIC_AUTH" in ?*:?*) ;; *) missing="$missing DEV_BASIC_AUTH(<ユーザー名>:<パスワード>)" ;; esac
-          if [ -n "$missing" ]; then
-            echo "::error::Secret が空か形が違う:$missing。リポジトリの Settings → Secrets and variables → Actions で入れ直す"
-            exit 1
-          fi
-
-      # 前回出したコミットは、サーバーの ~/cocktail-db-dev/REVISION にある(デプロイの最後に書く)
-      - name: Compare with the deployed revision
-        id: revision
-        env:
-          FORCE: ${{ inputs.force }}
-        run: |
-          if [ "$GITHUB_REF" != "refs/heads/staging" ]; then
-            echo "::error::dev には staging だけを出す($GITHUB_REF からは出さない)"
-            exit 1
-          fi
-          deployed=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" \
-            "cat ~/${APP_DIR}/REVISION 2>/dev/null || true")
-          if [ "$deployed" = "$GITHUB_SHA" ] && [ "$FORCE" != "true" ]; then
-            echo "前回と同じコミット(${GITHUB_SHA:0:7})なので出さない"
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "出す: ${deployed:0:7} -> ${GITHUB_SHA:0:7}"
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          fi
-
-  test:
-    needs: check
-    if: needs.check.outputs.deploy == 'true'
-    uses: ./.github/workflows/test.yml
-
   deploy:
-    needs: [check, test]
-    if: needs.check.outputs.deploy == 'true'
-    runs-on: ubuntu-latest
-    environment:
-      name: dev
-      url: ${{ vars.DEV_APP_URL }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # 依存ライブラリのインストールで動くコードに、リポジトリのトークンを渡さない
-          persist-credentials: false
-
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          tools: composer:v2
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build frontend into backend/public/spa
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-
-      - name: Install backend without dev dependencies
-        working-directory: backend
-        run: |
-          composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
-
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.MIXHOST_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          echo "${{ vars.MIXHOST_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-
-      # .env・storage(ログ・セッション)・REVISION はサーバー側のものを残す
-      - name: Upload with rsync
-        run: |
-          rsync -az --delete \
-            --exclude '.env' \
-            --exclude 'storage/' \
-            --exclude 'REVISION' \
-            --exclude 'public/.well-known/' \
-            --exclude 'tests/' \
-            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
-            backend/ "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}:~/${APP_DIR}/"
-
-      # .env はデプロイのたびに作り直す。DB のパスワードは Secret から、コマンドの引数に載せずに標準入力で送る。
-      # APP_KEY は初回だけサーバーで作り、以後はサーバーの .env にあるものを使い続ける(変えるとセッションなどが読めなくなる)。
-      # DB 名とユーザー名は cPanel のユーザー名が頭に付く(<user>_cocktail_dev)
-      - name: Write .env
-        env:
-          DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
-          SSH_USER: ${{ secrets.MIXHOST_SSH_USER }}
-          APP_URL: ${{ vars.DEV_APP_URL }}
-        run: |
-          printf '%s' "$DB_PASSWORD" | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${SSH_USER}@${{ secrets.MIXHOST_SSH_HOST }}" "
-            set -e
-            cd ~/${APP_DIR}
-            umask 077
-            db_password=\$(cat)
-            # .env では単一引用符の中は展開されない。単一引用符そのものを含むパスワードは書けないので止める
-            case \"\$db_password\" in *\\'*) echo 'DEV_DB_PASSWORD に単一引用符が入っている' >&2; exit 1;; esac
-            app_key=\$(grep -E '^APP_KEY=base64:' .env 2>/dev/null | head -n 1 | cut -d= -f2- || true)
-            cat > .env.new <<ENV
-          APP_NAME=cocktail-db
-          APP_ENV=dev
-          APP_KEY=\${app_key}
-          APP_DEBUG=true
-          APP_URL=${APP_URL}
-          APP_LOCALE=ja
-          APP_FALLBACK_LOCALE=en
-          LOG_CHANNEL=daily
-          LOG_LEVEL=debug
-          DB_CONNECTION=mariadb
-          DB_HOST=localhost
-          DB_PORT=3306
-          DB_DATABASE=${SSH_USER}_cocktail_dev
-          DB_USERNAME=${SSH_USER}_cocktail_dev
-          DB_PASSWORD='\${db_password}'
-          SESSION_DRIVER=file
-          CACHE_STORE=file
-          QUEUE_CONNECTION=sync
-          MAIL_MAILER=log
-          ENV
-            mv .env.new .env
-            if [ -z \"\$app_key\" ]; then php artisan key:generate --force; fi
-          "
-
-      - name: Prepare storage, migrate and cache config
-        run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" "
-            set -e
-            cd ~/${APP_DIR}
-            mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
-            php artisan migrate --force
-            php artisan optimize
-          "
-
-      # cPanel がサブドメインを作ったときの実ディレクトリを、アプリの public へのリンクに置き換える(初回だけ)。
-      # 中身があったときのために、消さずに退避する
-      - name: Link document root
-        run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" "
-            set -e
-            cd ~
-            if [ -e ${DOC_ROOT} ] && [ ! -L ${DOC_ROOT} ]; then mv ${DOC_ROOT} ${DOC_ROOT}.bak-\$(date +%Y%m%d%H%M%S); fi
-            ln -sfn ~/${APP_DIR}/public ${DOC_ROOT}
-          "
-
-      - name: Smoke test
-        env:
-          BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
-          APP_URL: ${{ vars.DEV_APP_URL }}
-        run: |
-          # Basic 認証が効いていること(資格情報なしでは 401)
-          status=$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL/")
-          [ "$status" = 401 ] || { echo "::error::資格情報なしで $status が返った(401 のはず)"; exit 1; }
-          curl -fsS -u "$BASIC_AUTH" "$APP_URL/up" > /dev/null
-          curl -fsS -u "$BASIC_AUTH" "$APP_URL/api/hello"
-
-      # 出したコミットを記録する。次に出すときは、これと staging の先頭を比べて、同じなら(force を付けない限り)出さない
-      - name: Record deployed revision
-        run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" \
-            "echo '${GITHUB_SHA}' > ~/${APP_DIR}/REVISION"
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      branch: develop
+      environment: dev
+      app_dir: cocktail-db-dev
+      doc_root: public_html/cocktail-db-dev/public
+      db_suffix: cocktail_dev
+      app_url: ${{ vars.DEV_APP_URL }}
+      force: ${{ inputs.force || false }}
+    secrets:
+      DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
+      BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
+      MIXHOST_SSH_KEY: ${{ secrets.MIXHOST_SSH_KEY }}
+      MIXHOST_SSH_HOST: ${{ secrets.MIXHOST_SSH_HOST }}
+      MIXHOST_SSH_USER: ${{ secrets.MIXHOST_SSH_USER }}
