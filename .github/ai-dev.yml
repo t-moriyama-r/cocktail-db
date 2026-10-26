@@ -3,4 +3,6 @@ merge: auto          # auto: CodeRabbit の指摘への対応が終わり、CI �
 reviewer: coderabbit # coderabbit / claude / both
                      # coderabbit でも、CodeRabbit が上限(Review limit reached / rate limited)を返した回だけは、
                      # 代わりに Claude がそのコミットをレビューする(ai-claude-review.yml)。次の依頼はまた CodeRabbit に出す
+                     # Actions からの依頼は、オーナーの PAT(secret CODERABBIT_REQUEST_TOKEN)で書く。ボットの依頼には CodeRabbit が応じないため(#227)。
+                     # 依頼に 30 分返事が無い・依頼を書けないときも、Claude が代わりにレビューする(.github/scripts/request-review.sh)
 review_rounds: 2     # レビューの指摘に対応して再レビューを頼む回数の上限
