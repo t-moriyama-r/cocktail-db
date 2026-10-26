@@ -41,8 +41,8 @@ class LegacyIdMap extends Model
      * 更新・削除の対象を、legacy_id だけでなく legacy_table とあわせて特定する。
      * legacy_id だけでは、旧の別の表の同じ ID の行まで書き換えてしまうため。
      *
-     * @param  Builder<LegacyIdMap>  $query
-     * @return Builder<LegacyIdMap>
+     * @param  Builder<static>  $query
+     * @return Builder<static>
      */
     protected function setKeysForSaveQuery($query)
     {

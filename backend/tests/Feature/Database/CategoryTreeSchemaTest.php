@@ -147,7 +147,7 @@ it('TC-21-12: LegacyIdMap は、同じ (旧の表, 旧 ID) を 2 行入れられ
 /**
  * 列の名前ごとに [型, null 可, 既定値] を、表の列の順に返す。
  *
- * @return array<string, array{string, bool, string|null}>
+ * @return array<string, array{string, bool, mixed}>
  */
 function columnsOf(string $table): array
 {
@@ -171,7 +171,7 @@ function indexesOf(string $table): array
 /**
  * 外部キーごとに [列, 指す表, 指す列, 削除のとき] を返す。
  *
- * @return list<array{string, string, string, string}>
+ * @return array<int, array{string, string, string, string|null}>
  */
 function foreignKeysOf(string $table): array
 {
@@ -180,7 +180,7 @@ function foreignKeysOf(string $table): array
             implode(',', $key['columns']),
             $key['foreign_table'],
             implode(',', $key['foreign_columns']),
-            strtolower($key['on_delete']),
+            $key['on_delete'],
         ])
         ->all();
 }
