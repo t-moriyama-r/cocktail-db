@@ -74,7 +74,18 @@ npm test                              # php artisan serve を起こして Playwr
 - テスト名の先頭にケース ID を付ける(`TC-<issue 番号>-<連番 2 桁>`。例: Pest なら `it('TC-6-01: …')`)
 - 自動テストで確かめられないもの(CI の挙動・画面の見た目など)は、種別を「CI」「手動」にして証跡で確かめる。確かめていないものは「未確認」と書く
 - **旧システムの挙動を期待値の基準にする**。旧ソースを読んで推測した値ではなく、旧システムで同じ操作をして実際に出た結果を期待値にする。旧システムは手元で動かす(`docs/legacy-local.md`)
-- 表に「旧での結果」列を足し、`同じ`(出た値も書く)/ `差分あり(意図: …)`(決めた issue・PR)/ `旧に無い` / `未確認(理由)` のどれかを書く。意図の書けない差分は回帰として扱い、旧に合わせるか issue で相談する。旧の不具合を勝手に直さない
+- 表に「旧での結果」列を足し、`同じ`(出た値も書く)/ `差分あり(意図: …)`(根拠。下の「旧との差分」)/ `旧に無い` / `未確認(理由)` のどれかを書く。意図の書けない差分は回帰として扱い、旧に合わせるか issue で相談する。旧の不具合を勝手に直さない
+
+#### 旧との差分
+
+旧と挙動を変えると決めたものは、決めたところに「旧との差分」の節を置き、テストの表からそこを指す。意図した仕様変更と回帰を、読む人によらず見分けられるようにするため。
+
+- 旧と挙動を変えると決めたら、決めた issue の本文か、`docs/decisions/` の文書に「旧との差分」の節を置く(見出しは `旧との差分`。決定を別の issue から引くときは `旧との差分(意図: #<決めた issue>)`)。差分ごとに、旧で何が起きていて、新で何に変えるかを 1 行で書く
+- 条件検索の差分は、`docs/search-expected-diffs.md` の、決めた issue ごとの節を「旧との差分」の節として扱う(`legacy:compare-search` が機械的に確かめる)
+- `差分あり(意図: …)` には、その節を持つ issue か文書(`docs/decisions/` の文書か `docs/search-expected-diffs.md`)を書く(例: `差分あり(意図: #247)`・`差分あり(意図: docs/decisions/recipe-count.md)`)。節の無い issue・PR を指してはいけない
+- PR 本文の表の下に「旧との差分の根拠」の節を置き、`差分あり` の行ごとに、指した節の 1 行をそのまま引く(例: `TC-247-03 → #247: 旧は… → 新は…`)。レビュアーは issue の本文を読めないことがある(CodeRabbit で確かめた。#273)ので、PR 本文だけで根拠を確かめられるようにする
+- 実装中に、どの節にも無い差分を見つけたら、旧に合わせるか、issue で相談する(意図の書けない差分と同じ扱い)
+- レビュー(CodeRabbit の `.coderabbit.yaml`・代わりの Claude の `ai-claude-review.yml`)も、表に「旧での結果」の列があるか、`差分あり` に根拠と引用があるか、表に無い差分がコードに入っていないかを確かめる
 
 ## API を変えたら
 
@@ -108,10 +119,10 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
    - issue・PR のタイトルの先頭に、対象を示す接頭辞(`【BE】`・`【FE】`・`【CI】`・`【移行】`・`【運用】`)を付ける。`area:*` ラベルとの対応は `docs/labels.md` の「タイトルの接頭辞」。PR のタイトルは `【CI】issue-<番号>: <何をしたか>` の形にする
 2. ブランチは issue から `develop` を元に作る: `gh issue develop <番号> --base develop --name issue-<番号>-<短い英名> --checkout`
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
-4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする
+4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする。同じファイルを変える PR がまだ開いていて、その上に積むときだけ、ブランチと PR の向き先を土台の PR のブランチにする(土台がマージされると GitHub が向き先を `develop` に付け替え、`ci-rerun.yml` が 1 時間以内に CI を流し直す)
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**画面に出る挙動が変わるなら、修正前後のスクリーンショット・動画・比較画像(修正前後を並べた画像)の 3 つをすべて貼る**。どれか 1 つで済ませない。画面に出ない変更(API だけ・DB だけ・テストだけ・ドキュメントだけ)は、撮らない理由を書く
 6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や画面の証跡が要るものは `needs-human` を付ける)
-7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 1 時間ごとに見つけて対応させる
+7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごとに見つけて対応させる
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
 9. `develop`(dev 環境に出る)→ `staging`(stg 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、人が行う。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)
 

@@ -42,3 +42,6 @@ jobs:
 
       - name: Test workflow-change-summary.sh
         run: bash .github/scripts/tests/workflow-change-summary.test.sh
+
+      - name: Test ci-rerun.sh
+        run: bash .github/scripts/tests/ci-rerun.test.sh
