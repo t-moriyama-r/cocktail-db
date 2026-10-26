@@ -96,7 +96,11 @@ API の呼び出し先は、どの地域でも `https://creatorsapi.amazon`。�
 - `POST https://creatorsapi.amazon/catalog/v1/getItems`
 - `itemIds`(必須): ASIN の配列。**1 回に 10 件まで**。`itemIdType` は `ASIN` だけ(既定も `ASIN`)
 - `partnerTag`(必須)、`marketplace`、`resources`(返してほしいもの。既定は `itemInfo.title` だけ)、`languagesOfPreference`(1 つだけ)、`currencyOfPreference`、`condition`(`Any`・`New`)
-- 取れない ASIN は、`200` のまま応答の `errors` に入る(例: `ItemNotAccessible`「The ItemId … is not accessible through the Creators API.」)。そのため応答の並びは頼みの並びと一致しないことがある。各商品は `asin` の値で突き合わせる
+- 取れない ASIN の扱いは、取れた件数で変わる(出典: `processing-of-errors`)
+  - 一部だけ取れない: `200` で、取れた商品と、取れない ASIN の `errors` を返す(例: `ItemNotAccessible`「The ItemId … is not accessible through the Creators API.」)。そのため応答の並びは頼みの並びと一致しないことがある。各商品は `asin` の値で突き合わせる
+  - すべて取れない: `404` `ResourceNotFoundException`(部分応答は無い。例のメッセージは `No items found for the requested item IDs.`)
+  - すべて取れる: `200` で `errors` は無い
+- 収集(#73)は、全件取れない `404` を致命的なエラーと区別して扱う(10 件まとめて頼んだ ASIN が全部売り切れ・取扱外でも、収集を止めない)
 - 指定できる主な `resources`: `itemInfo.title`・`itemInfo.byLineInfo` など `itemInfo.*`、`images.primary.small|medium|large`・`images.variants.*`、`browseNodeInfo.*`、`offersV2.listings.*`(下の 7)、`parentASIN`
 
 ```json
@@ -111,6 +115,8 @@ API の呼び出し先は、どの地域でも `https://creatorsapi.amazon`。�
 
 出典:
 - GetItems: https://affiliate.amazon.co.jp/creatorsapi/docs/en-us/api-reference/operations/get-items
+- エラーの扱い(部分応答・全件失敗): https://affiliate.amazon.co.jp/creatorsapi/docs/en-us/troubleshooting/processing-of-errors
+- エラーコードとメッセージ(404 の例): https://affiliate.amazon.co.jp/creatorsapi/docs/en-us/troubleshooting/error-codes-and-messages
 
 ## 6. SearchItems(キーワードで探す)
 
@@ -263,5 +269,8 @@ Node.js・Python・PHP・Java の SDK がある。トークンの取得と使い
 - このサイトのアソシエイトのアカウントが、Creators API を使える条件(直近 30 日に 10 件)を満たしているか、実際の上限がいくつか
 - 9.5 の利用要件 (p) の「8」が何の数字か(優先は未確認で、9.5 では 8 章の TPS を超えない運用にしている)
 - 日本のマーケットプレイスで実際に呼んだときの応答(`displayAmount` の書式など)。資料の例はすべて米国のもの
+- GetItems の応答のキーが、資料の中で `itemResults` と `itemsResult` の 2 通りに書かれている。どちらが正しいか
+- GetItems の `errors` のコードが、資料の中で `ItemNotAccessible`・`InvalidParameterValue`・`ItemNotFound` と揺れている
+- エラーの扱い(5 の部分応答・全件失敗)は英語版だけで確かめた。日本語版と、日本のマーケットプレイスでの実機の応答は未確認。`error-codes-and-messages` の GetItems の節自体は、全件失敗のときの HTTP ステータスを書いていない
 - お酒がどの `searchIndex` に入るか
 - SDK の版と、PHP の SDK を Composer のパッケージとして入れられるか
