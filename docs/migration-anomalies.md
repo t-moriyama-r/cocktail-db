@@ -208,12 +208,13 @@ FROM affiliates;
 材料の組(カテゴリ・ミドル・銘柄・量・任意)がまったく同じで、名前の違うカクテルが 45 組(95 カクテル)ある。
 
 - **扱い**: 別々のまま移す。別名と同じレシピの表示は #82・#83 で作る
+- **13 との順序**: 13(名前も材料も同じものをまとめる)を先に行い、まとめた後の状態で 10 を数える。たとえば同じ材料の組で名前が A・A・B の 3 件なら、A・A が 1 件にまとまり、A と B の 2 件が 10 の「別々のまま移す」対象になる。下の SQL は同じ名前を 1 件と数える。組の数(45)はまとめても変わらず、カクテルの数は 13 でまとまる分だけ 95 より減る(まとめた後の数は、手元のダンプで流して確かめる)
 
 ```sql
--- 45 組・95 カクテル
+-- 45 組。cocktails は 13 でまとめた後の数(同じ名前を 1 件と数える。まとめる前は 95)
 SET SESSION group_concat_max_len = 100000;
 SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
-  SELECT s, COUNT(*) AS n FROM (
+  SELECT s, COUNT(DISTINCT name) AS n FROM (
     SELECT c.id, c.name,
       GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
                    ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
