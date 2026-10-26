@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# PR に続けて push したら、前の回は取り消す(private ではジョブが動いた分だけ課金されるため)。
+# deploy-*.yml から workflow_call で呼んだ回は、github.workflow が呼んだ側の名前になるので、PR の回とは別の列になる
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -108,19 +114,73 @@ jobs:
       - name: Static analysis (PHPStan)
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
-  # 通知のワークフローが使う Slack のスクリプト。curl・gh を偽物にして流すので、Slack にも GitHub にも触らない
-  slack-scripts:
+  # DB を使わないシェルスクリプトの検査とテスト。どれも数秒で終わるので 1 つのジョブで順に流す
+  # (private ではジョブごとに 1 分に切り上げて課金されるため)。必須のチェックにはしていない
+  scripts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: ShellCheck
-        run: shellcheck --severity=warning .github/scripts/slack-*.sh .github/scripts/tests/slack.test.sh
+      # AI 駆動開発・通知のワークフローが使うスクリプト(.github/scripts)。curl・gh を偽物にして流すので、Slack にも GitHub にも触らない。
+      # GraphQL・jq の $ を単一引用符で渡すので、info(SC2016)は見ない
+      - name: ShellCheck (.github/scripts)
+        run: shellcheck --severity=warning .github/scripts/*.sh .github/scripts/tests/*.sh
 
-      - name: Test
-        run: bash .github/scripts/tests/slack.test.sh
+      - name: Test .github/scripts
+        run: |
+          for t in .github/scripts/tests/*.test.sh; do
+            echo "::group::$t"
+            bash "$t"
+            echo "::endgroup::"
+          done
+
+      # 画像のコピースクリプト(ops/migrate/copy-storage.sh)
+      - name: ShellCheck (copy-storage)
+        run: shellcheck ops/migrate/copy-storage.sh ops/migrate/tests/copy-storage.test.sh
+
+      - name: Test copy-storage.sh
+        run: ops/migrate/tests/copy-storage.test.sh
+
+  # MariaDB を使う運用スクリプト(ops/backup)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
+  ops-db:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: ShellCheck
+        run: shellcheck ops/backup/archive-storage.sh ops/backup/tests/archive-storage.test.sh ops/backup/dump-db.sh ops/backup/tests/dump-db.test.sh
+
+      # 画像の退避スクリプト(ops/backup/archive-storage.sh)
+      - name: Test archive-storage.sh
+        env:
+          TEST_DB_HOST: 127.0.0.1
+          TEST_DB_PORT: 3306
+          TEST_DB_USER: root
+          TEST_DB_PASSWORD: root
+        run: ops/backup/tests/archive-storage.test.sh
+
+      # ops/backup/dump-db.sh を MariaDB に向けて流し、ダンプを別の DB に入れられること・出力にパスワードが出ないことを確かめる。
+      # ランナーに入っている mysqldump は MySQL 8 のもので、MariaDB に向けると落ちることがある。
+      # サーバーと同じ MariaDB のクライアント(mariadb-dump)で流すため、mariadb の image の中で動かす
+      - name: Test dump-db.sh
+        run: |
+          docker run --rm --network host             -v "$GITHUB_WORKSPACE:/w:ro" -w /w             -e DUMP_TEST_DB_HOST=127.0.0.1             -e DUMP_TEST_DB_PORT=3306             -e DUMP_TEST_DB_ROOT_PASSWORD=root             -e DUMP_TEST_REQUIRE_DB=1             mariadb:10.11 bash ops/backup/tests/dump-db.test.sh
 
   frontend:
     runs-on: ubuntu-latest
