@@ -39,3 +39,6 @@ jobs:
 
       - name: Test request-review.sh
         run: bash .github/scripts/tests/request-review.test.sh
+
+      - name: Test ci-rerun.sh
+        run: bash .github/scripts/tests/ci-rerun.test.sh
