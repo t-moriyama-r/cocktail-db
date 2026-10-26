@@ -42,3 +42,6 @@ jobs:
 
       - name: Test conflict-candidates.sh
         run: bash .github/scripts/tests/conflict-candidates.test.sh
+
+      - name: Test ci-rerun.sh
+        run: bash .github/scripts/tests/ci-rerun.test.sh
