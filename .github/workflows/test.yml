@@ -180,7 +180,13 @@ jobs:
       # サーバーと同じ MariaDB のクライアント(mariadb-dump)で流すため、mariadb の image の中で動かす
       - name: Test dump-db.sh
         run: |
-          docker run --rm --network host             -v "$GITHUB_WORKSPACE:/w:ro" -w /w             -e DUMP_TEST_DB_HOST=127.0.0.1             -e DUMP_TEST_DB_PORT=3306             -e DUMP_TEST_DB_ROOT_PASSWORD=root             -e DUMP_TEST_REQUIRE_DB=1             mariadb:10.11 bash ops/backup/tests/dump-db.test.sh
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -w /w \
+            -e DUMP_TEST_DB_HOST=127.0.0.1 \
+            -e DUMP_TEST_DB_PORT=3306 \
+            -e DUMP_TEST_DB_ROOT_PASSWORD=root \
+            -e DUMP_TEST_REQUIRE_DB=1 \
+            mariadb:10.11 bash ops/backup/tests/dump-db.test.sh
 
   frontend:
     runs-on: ubuntu-latest
