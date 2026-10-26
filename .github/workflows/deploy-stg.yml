@@ -1,0 +1,40 @@
+name: deploy-stg
+
+# staging を、Basic 認証で閉じた stg 環境(cocktail-stg)に出す。中身は deploy-env.yml
+# - staging に push(develop からの PR をマージ)したときに出す
+# - Actions の画面(または gh workflow run deploy-stg.yml --ref staging)から、いつでも手で出せる。同じコミットを出し直すときは force を付ける
+# Basic 認証の資格情報は dev と同じもの(DEV_BASIC_AUTH)を使う
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 前回と同じコミットでも出し直す(.env を変えた後など)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-stg
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      branch: staging
+      environment: stg
+      app_dir: cocktail-db-stg
+      doc_root: public_html/cocktail-db-stg/public
+      db_suffix: cocktail_stg
+      app_url: ${{ vars.STG_APP_URL }}
+      force: ${{ inputs.force || false }}
+    secrets:
+      DB_PASSWORD: ${{ secrets.STG_DB_PASSWORD }}
+      BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
+      MIXHOST_SSH_KEY: ${{ secrets.MIXHOST_SSH_KEY }}
+      MIXHOST_SSH_HOST: ${{ secrets.MIXHOST_SSH_HOST }}
+      MIXHOST_SSH_USER: ${{ secrets.MIXHOST_SSH_USER }}

@@ -105,16 +105,26 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 ブランチとコミットの決まりは `README.md` の「ブランチ」のとおり。要点と、PR の流れ:
 
 1. 1 PR = 1 issue。ついでの修正を混ぜない(見つけたら別の issue にする)
+   - issue・PR のタイトルの先頭に、対象を示す接頭辞(`【BE】`・`【FE】`・`【CI】`・`【移行】`・`【運用】`)を付ける。`area:*` ラベルとの対応は `docs/labels.md` の「タイトルの接頭辞」。PR のタイトルは `【CI】issue-<番号>: <何をしたか>` の形にする
 2. ブランチは issue から `develop` を元に作る: `gh issue develop <番号> --base develop --name issue-<番号>-<短い英名> --checkout`
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
 4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**画面に出る挙動が変わるなら、修正前後のスクリーンショット・動画・比較画像(修正前後を並べた画像)の 3 つをすべて貼る**。どれか 1 つで済ませない。画面に出ない変更(API だけ・DB だけ・テストだけ・ドキュメントだけ)は、撮らない理由を書く
-6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。CI が通っても draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、決まりを満たしていれば ready にしてレビューを頼む(満たさなければ足りないものをコメントする)
+6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や画面の証跡が要るものは `needs-human` を付ける)
 7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 1 時間ごとに見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
-9. `develop` → `staging`(dev 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、人が行う。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)
+9. `develop`(dev 環境に出る)→ `staging`(stg 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、人が行う。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
+
+## 文書と既存コードが食い違うとき
+
+CLAUDE.md・`README.md`・`docs/` の記述と、既存コードの実際の書き方が食い違っているときは、**既存コードの書き方に従う**。文書は古くなっていることがある。
+
+ただし、これはコードの書き方・命名・構成などの作法の食い違いに限る。作法とは、命名・ディレクトリ構成・コードスタイル・書式のこと。この文書で「〜しない」「〜する」と明示した決まり(「禁止事項」「このリポジトリは public」「カテゴリ木」のほか、API の型を手で書かない・テスト名にケース ID を付ける・DB テストを SQLite で代用しない・旧システムの実測を期待値にする、など)には当てはめない(既存コードが違反していても従わず、食い違いとして挙げる)。
+
+- 見つけた食い違いは、作業の最後の返答(PR の本文ではなく、エージェントがユーザーに返す最後の返答)に**すべて**挙げる。どの文書のどの記述と、どのコードの書き方が食い違うか、どちらに従ったかを書く。直すかどうかはユーザーが決める
+- 文書を直すのは、issue の範囲に入っているときだけ。ついでに直さない(1 PR = 1 issue)
 
 ## 禁止事項
 

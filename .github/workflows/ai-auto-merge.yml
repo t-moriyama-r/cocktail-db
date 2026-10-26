@@ -16,7 +16,7 @@
 # マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
-# 同じ理由で、ワークフローを変えた PR をマージしたら notify-workflow-merged.yml を直接呼ぶ
+# 同じ理由で、ワークフローを変えた PR をマージしたら notify-workflow-merged.yml を、develop にマージしたら deploy-dev.yml を直接呼ぶ
 name: マージできるかの判定と自動マージ
 
 on:
@@ -187,6 +187,11 @@ jobs:
           # ワークフローを変えた PR なら、オーナーに知らせる(GITHUB_TOKEN のマージは notify-workflow-merged.yml を起こさないので直接呼ぶ)
           if [ "$(gh pr view "$NUMBER" -R "$REPO" --json files --jq 'any(.files[].path; startswith(".github/workflows/"))')" = true ]; then
             gh workflow run notify-workflow-merged.yml -R "$REPO" -f number="$NUMBER" || echo "::warning::ワークフローの変更の通知を呼べなかった"
+          fi
+
+          # develop に入れたら dev 環境に出す(GITHUB_TOKEN のマージは deploy-dev.yml の push を起こさないので直接呼ぶ)
+          if [ "$(gh pr view "$NUMBER" -R "$REPO" --json baseRefName --jq .baseRefName)" = develop ]; then
+            gh workflow run deploy-dev.yml -R "$REPO" --ref develop || echo "::warning::dev 環境へのデプロイを呼べなかった"
           fi
 
           # GITHUB_TOKEN でマージすると、Closes #N の issue は閉じず、ブランチの自動削除も効かないので、ここでする。

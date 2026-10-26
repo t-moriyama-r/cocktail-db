@@ -1,7 +1,7 @@
 name: branch-flow
 
 # デプロイするブランチへの PR が、決まった元のブランチから来ているかを確かめる。
-# staging(dev 環境)へは develop から、release(本番)へは staging から出す。ステージングで確かめていないものを本番に出さないため。
+# staging(stg 環境)へは develop から、release(本番)へは staging から出す。ステージングで確かめていないものを本番に出さないため。
 # staging・release の保護で、このジョブ(branch-flow)を必須のチェックにしている
 on:
   pull_request:
