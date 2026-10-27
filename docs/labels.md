@@ -64,6 +64,8 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、同じ条件がそろったところで、マージせずに `needs-approval` を付けて Slack に知らせる(下の「人に頼む」)。直さない理由を返して未解決のまま残るスレッドもあるので、こちらは未解決ではなく返信待ちのスレッドが 0 件かで見る。自動のレビューと CI が終わる前には人を呼ばない。
 
+向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。AI レビューは流すが、指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを AI がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
+
 `ai-in-actions`・`needs-human`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
@@ -103,10 +105,10 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 |---|---|---|
 | `状態:作業中` | 下書き | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
 | `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
-| `状態:人のマージ待ち` | `needs-approval` が付いている | 人が確かめてマージする |
+| `状態:人のマージ待ち` | `needs-approval` が付いている。向き先が `staging`・`release` の PR は、いまのコミットを AI がレビューし終えていれば(指摘が残っていても) | 人が確かめてマージする |
 | `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(draft も。1 時間ごと)。直せない衝突は `needs-human` で人に頼む |
 | `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
-| `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
+| `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある(向き先が `staging`・`release` の PR は除く) | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
 | `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない | CodeRabbit(上限なら `ai-claude-review.yml`) |
 | `状態:マージ待ち` | 上のどれでもない(レビューの対応が済み、CI も緑) | `ai-auto-merge.yml` |
 
