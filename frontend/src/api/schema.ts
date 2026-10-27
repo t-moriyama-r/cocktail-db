@@ -101,6 +101,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/paraphrases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 言い換え辞書の一覧を、ID の順(足した順)で 1 ページずつ返す。
+         * @description q は、変換前・変換後・ミドルの名前のどこかに含む語(部分一致)。
+         */
+        get: operations["paraphrases.index"];
+        put?: never;
+        /** 言い換え辞書に 1 語を足す。 */
+        post: operations["paraphrases.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/paraphrases/{paraphrase}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 言い換え辞書の 1 語を返す。 */
+        get: operations["paraphrases.show"];
+        /** 言い換え辞書の 1 語を書き換える。 */
+        put: operations["paraphrases.update"];
+        post?: never;
+        /** 言い換え辞書の 1 語を消す。 */
+        delete: operations["paraphrases.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search-form": {
         parameters: {
             query?: never;
@@ -118,6 +158,42 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/skip-words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** スキップ語をすべて、ID の順で返す(旧で 5 件。ページに分けない)。 */
+        get: operations["skip-words.index"];
+        put?: never;
+        /** スキップ語を 1 語足す。 */
+        post: operations["skip-words.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/skip-words/{skipWord}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** スキップ語を 1 語書き換える。 */
+        put: operations["skip-words.update"];
+        post?: never;
+        /** スキップ語を 1 語消す。 */
+        delete: operations["skip-words.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -220,6 +296,56 @@ export interface components {
             name: string;
             name_eng: string;
         };
+        /** ParaphraseResource */
+        ParaphraseResource: {
+            id: number;
+            /** @description 変換前の名前 */
+            name: string;
+            /** @description 変換後の名前(ノードか銘柄) */
+            converted: string;
+            middle: string | null;
+            /** @description null: 指定なし / hot: 強制ホット */
+            command: string | null;
+            note: string | null;
+            resolved: {
+                path: {
+                    id: number;
+                    name: string;
+                    name_eng: string;
+                }[];
+                brand: {
+                    id: number;
+                    name: string;
+                    name_eng: string;
+                } | null;
+            } | null;
+        };
+        /**
+         * SaveParaphraseRequest
+         * @description 言い換え辞書の 1 語の追加・更新(POST /api/admin/paraphrases・PUT /api/admin/paraphrases/{id}。#316)。
+         */
+        SaveParaphraseRequest: {
+            /** @description 変換前の名前(取り込んだ材料の名前)。ほかの語と重ならない */
+            name: string;
+            /** @description 変換後の名前。ノードか銘柄の名前で、解決できないと 422 */
+            converted: string;
+            /** @description converted のノードの配下のノードの名前 */
+            middle?: string | null;
+            /**
+             * @description null: 指定なし / hot: 強制ホット(旧の画面の選択肢)
+             * @enum {string|null}
+             */
+            command?: "hot" | null;
+            note?: string | null;
+        };
+        /**
+         * SaveSkipWordRequest
+         * @description スキップ語の 1 語の追加・更新(POST /api/admin/skip-words・PUT /api/admin/skip-words/{id}。#316)。
+         */
+        SaveSkipWordRequest: {
+            /** @description 列の長さ(docs/schema.md の「skip_words」。旧 skip_db と同じ 256)まで。ほかの語と重ならない */
+            name: string;
+        };
         /** SearchFormMethodResource */
         SearchFormMethodResource: {
             id: number;
@@ -234,6 +360,11 @@ export interface components {
             root_role: components["schemas"]["CategoryRole"] | null;
             children: components["schemas"]["SearchFormNodeResource"][];
         };
+        /** SkipWordResource */
+        SkipWordResource: {
+            id: number;
+            name: string;
+        };
     };
     responses: {
         /** @description Not found */
@@ -245,6 +376,22 @@ export interface components {
                 "application/json": {
                     /** @description Error overview. */
                     message: string;
+                };
+            };
+        };
+        /** @description Validation error */
+        ValidationException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Errors overview. */
+                    message: string;
+                    /** @description A detailed description of each field that failed validation. */
+                    errors: {
+                        [key: string]: string[];
+                    };
                 };
             };
         };
@@ -373,6 +520,163 @@ export interface operations {
             };
         };
     };
+    "paraphrases.index": {
+        parameters: {
+            query?: {
+                q?: string | null;
+                page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "paraphrases.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveParaphraseRequest"];
+            };
+        };
+        responses: {
+            /** @description `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "paraphrases.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paraphrase ID */
+                paraphrase: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "paraphrases.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paraphrase ID */
+                paraphrase: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveParaphraseRequest"];
+            };
+        };
+        responses: {
+            /** @description `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "paraphrases.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paraphrase ID */
+                paraphrase: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
     searchForm: {
         parameters: {
             query?: never;
@@ -393,6 +697,108 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    "skip-words.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `SkipWordResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SkipWordResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "skip-words.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSkipWordRequest"];
+            };
+        };
+        responses: {
+            /** @description `SkipWordResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SkipWordResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "skip-words.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The skip word ID */
+                skipWord: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSkipWordRequest"];
+            };
+        };
+        responses: {
+            /** @description `SkipWordResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SkipWordResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "skip-words.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The skip word ID */
+                skipWord: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
 }
