@@ -6,7 +6,9 @@ use Database\Factories\CategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 /**
@@ -68,6 +70,26 @@ class Category extends Model
     }
 
     /**
+     * このノードに直接ぶら下がる銘柄(子孫のノードの銘柄は含まない)。
+     *
+     * @return HasMany<Brand, $this>
+     */
+    public function brands(): HasMany
+    {
+        return $this->hasMany(Brand::class);
+    }
+
+    /**
+     * このノードの有名な銘柄。決めていないノードでは null。
+     *
+     * @return BelongsTo<Brand, $this>
+     */
+    public function famousBrand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class, 'famous_brand_id');
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -76,6 +98,7 @@ class Category extends Model
             'is_major' => 'boolean',
             'is_like' => 'boolean',
             'is_powder' => 'boolean',
+            'famous_brand_id' => 'integer',
             'youtube_created_at' => 'datetime',
             'youtube_start_seconds' => 'integer',
             'sort_order' => 'integer',
