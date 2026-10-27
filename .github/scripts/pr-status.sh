@@ -80,13 +80,16 @@ facts() {
     pr=$(gh pr view "$number" -R "$repo" --json "$fields")
   done
   # CI はブランチ保護で必須にしたチェックだけを見る。AI のワークフローのジョブ(取り消し・見送りが多い)を CI の失敗と取り違えない。
-  # gh pr checks は、終わっていないチェックがあると 8 で、必須のチェックが 1 つも付いていないと 1 で終わる
+  # gh pr checks は、終わっていないチェックがあると 8 で、失敗したチェックがあると 1 で終わる(どちらも JSON は標準出力に出る)。
+  # 必須のチェックが 1 つも付いていないときも 1 で、標準出力は空になる
   local checks rc=0 err failed pending unanswered unresolved reviewed
   err=$(mktemp)
   checks=$(gh pr checks "$number" -R "$repo" --required --json bucket 2>"$err") || rc=$?
-  if [ "$rc" = 1 ] && grep -q "no required checks reported" "$err"; then
+  if jq -e 'type == "array"' <<<"$checks" >/dev/null 2>&1; then
+    :
+  elif [ "$rc" = 1 ] && grep -q "no required checks reported" "$err"; then
     checks='[]'
-  elif [ "$rc" != 0 ] && [ "$rc" != 8 ]; then
+  else
     cat "$err" >&2
     rm -f "$err"
     echo "::error::#$number の必須のチェックを読めなかった" >&2

@@ -67,8 +67,47 @@ main() {
 	check TC-385-16 'staging 向けで、返信待ちの指摘があり未解決' '.baseRefName = "staging" | .unansweredThreads = 1 | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-17 'release 向けで、必須のチェックが付いていない' '.baseRefName = "release" | .mergeStateStatus = "BLOCKED"' '状態:CI未実行'
 
+	# facts: gh をスタブにして、必須のチェックの終了コードごとに数えられるかを確かめる
+	check_checks TC-385-18 '必須のチェックが失敗(gh は終了コード 1 で、JSON を標準出力に出す)' 1 '[{"bucket":"fail"},{"bucket":"pass"}]' '' '1 0'
+	check_checks TC-385-19 '必須のチェックが実行中(終了コード 8)' 8 '[{"bucket":"pending"},{"bucket":"pass"}]' '' '0 1'
+	check_checks TC-385-20 '必須のチェックがすべて成功(終了コード 0)' 0 '[{"bucket":"pass"}]' '' '0 0'
+	check_checks TC-385-21 '必須のチェックが 1 つも付いていない(終了コード 1、標準出力は空)' 1 '' 'no required checks reported on the branch' '0 0'
+	check_checks TC-385-22 '必須のチェックを読めない(JSON でも未付与でもない)' 1 '' 'HTTP 500' 'error'
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
+}
+
+check_checks() {
+	local id=$1 title=$2 rc=$3 out=$4 err=$5 expected=$6 actual bin
+	bin=$(mktemp -d)
+	cat >"$bin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+"pr checks")
+	printf '%s' "$STUB_OUT"
+	printf '%s' "$STUB_ERR" >&2
+	exit "$STUB_RC"
+	;;
+"pr view")
+	echo '{"state":"OPEN","isDraft":false,"labels":[],"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"develop","headRefOid":"abc","commits":[{"committedDate":"2026-01-01T00:00:00Z"}]}'
+	;;
+"api graphql") echo 0 ;;
+*) echo '[]' ;;
+esac
+STUB
+	chmod +x "$bin/gh"
+	actual=$(PATH="$bin:$PATH" STUB_RC=$rc STUB_OUT=$out STUB_ERR=$err bash "$SCRIPT" o/r 1 --dry-run 2>/dev/null |
+		sed 's/^#1 //; s/ => .*//' | jq -r '"\(.failedChecks) \(.pendingChecks)"' 2>/dev/null) || actual=
+	[ -n "$actual" ] || actual=error
+	rm -rf "$bin"
+	if [ "$actual" = "$expected" ]; then
+		PASSED=$((PASSED + 1))
+		echo "ok   $id $title"
+	else
+		FAILED=$((FAILED + 1))
+		echo "FAIL $id $title: expected '$expected', got '$actual'"
+	fi
 }
 
 check() {
