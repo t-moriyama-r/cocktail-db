@@ -170,14 +170,14 @@ jobs:
           # このワークフロー自身のジョブは除く
           checks=$(gh api --paginate --slurp "repos/$REPO/commits/$head/check-runs?per_page=100" \
             | jq '[.[].check_runs[] | select(.name != "auto-merge")]')
+          # 走らなかったワークフロー(bot の push で承認待ちになった CI など)のチェックは付かないので、必須のチェックが揃っているかも見る(#360)
+          missing=$(bash .ai-dev/.github/scripts/required-checks-missing.sh "$REPO" "$base" "$head") || skip "必須のチェックを確かめられない"
+          [ -z "$missing" ] || skip "必須のチェックが ${head:0:7} に揃っていない: $missing"
           [ "$(jq length <<<"$checks")" -gt 0 ] || skip "${head:0:7} にチェックが 1 つも無い"
           pending=$(jq -r '[.[] | select(.status != "completed") | .name] | join(",")' <<<"$checks")
           [ -z "$pending" ] || skip "チェックが終わっていない: $pending"
           failed=$(jq -r '[.[] | select(.conclusion | IN("success","skipped","neutral") | not) | .name] | join(",")' <<<"$checks")
           [ -z "$failed" ] || skip "チェックが失敗している: $failed"
-          # 走らなかったワークフロー(bot の push で承認待ちになった CI など)のチェックは付かないので、必須のチェックが揃っているかも見る(#360)
-          missing=$(bash .ai-dev/.github/scripts/required-checks-missing.sh "$REPO" "$base" "$head") || skip "必須のチェックを確かめられない"
-          [ -z "$missing" ] || skip "必須のチェックが ${head:0:7} に揃っていない: $missing"
 
           # GitHub はマージできるかを後から計算するので、UNKNOWN の間は少し待って取り直す
           for i in 1 2 3 4 5 6; do
