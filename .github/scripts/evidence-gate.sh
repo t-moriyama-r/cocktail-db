@@ -13,10 +13,11 @@ set -euo pipefail
 repo=$1
 number=$2
 
-pr=$(gh pr view "$number" -R "$repo" --json body,files)
-body=$(jq -r '.body // ""' <<<"$pr" | tr -d '\r')
+body=$(gh pr view "$number" -R "$repo" --json body --jq '.body // ""' | tr -d '\r')
 section=$(awk '/^## /{in_section = /^## 証跡/; next} in_section' <<<"$body")
-code=$(jq -r '.files[].path' <<<"$pr" | grep -Ev \
+# gh pr view --json files は 100 件で切れるので、API をページ送りで読む
+files=$(gh api --paginate "repos/$repo/pulls/$number/files" --jq '.[].filename')
+code=$(grep -v '^$' <<<"$files" | grep -Ev \
 	-e '\.(md|txt)$' \
 	-e '^(docs|\.github|e2e|ops)/' \
 	-e '(^|/)(tests?|__tests__)/' \
@@ -32,9 +33,12 @@ elif [ -z "$code" ]; then
 	[ -n "$(tr -d '[:space:]' <<<"$section")" ] || problems+=('コードを変えていない PR でも、「## 証跡」に撮らない理由(文書だけ・テストだけ など)を書く')
 else
 	images=$(grep -cE '<img [^>]*src="https://github\.com/user-attachments/|!\[[^]]*\]\(https://github\.com/user-attachments/' <<<"$section" || true)
-	videos=$(grep -cE '^[[:space:]]*https://github\.com/user-attachments/assets/[^[:space:]]+[[:space:]]*$' <<<"$section" || true)
-	if grep -qE '未撮影|撮れなかった|撮れず' <<<"$section"; then
-		problems+=('「未撮影」「撮れなかった」のまま。撮れない環境なら ready にせず、draft のまま needs-human で撮影を頼む')
+	# 同じ URL を何行書いても 1 本と数える
+	videos=$(grep -E '^[[:space:]]*https://github\.com/user-attachments/assets/[^[:space:]]+[[:space:]]*$' <<<"$section" | tr -d ' \t' | sort -u | wc -l || true)
+	# 説明の文中の「撮れず」では落とさない。行の頭(箇条書き・太字の記号の後)で宣言している行だけ見る
+	declared=$(grep -E '^[[:space:]]*([-*>]|[0-9]+\.)?[[:space:]]*(\*\*)?(未撮影|撮れなかった|撮れず)' <<<"$section" || true)
+	if [ -n "$declared" ]; then
+		problems+=('「未撮影」「撮れなかった」のまま。撮れない環境なら ready にせず、draft のまま needs-human で撮影を頼む' "該当の行: $(head -3 <<<"$declared" | paste -sd'/' -)")
 	fi
 	[ "$images" -ge 1 ] || problems+=('静止画(修正前後の比較画像)が貼られていない')
 	[ "$videos" -ge 2 ] || problems+=("動画が修正前・修正後の 2 本以上そろっていない(${videos} 本)")

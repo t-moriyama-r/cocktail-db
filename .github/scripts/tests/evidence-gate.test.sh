@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-gate.sh のテスト(TC-380-01〜13)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# evidence-gate.sh のテスト(TC-380-01〜15)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/evidence-gate.test.sh
 
@@ -51,6 +51,10 @@ main() {
 		"$(body "## 証跡" "修正前・修正後" "$IMG" "$IMG" "$IMG")" 1 '(0 本)'
 	check TC-380-13 'ops だけを変えた PR は、撮らない理由があれば通る' '["ops/backup/backup.sh","ops/migrate/run.sh"]' \
 		"$(body "## 証跡" "ops のシェルだけで画面も API も無いので撮らない")" 0
+	check TC-380-14 '同じ動画の URL を 2 行書いても 1 本と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_BEFORE")" 1 '(1 本)'
+	check TC-380-15 '文の途中の「撮れず」は宣言として扱わない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後。旧は動画が撮れず静止画で比べた" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -61,7 +65,8 @@ setup_fake_gh() {
 	cat >"$FAKE/gh" <<-'EOF'
 		#!/usr/bin/env bash
 		case "$*" in
-		  "pr view"*) cat "$FAKE_DIR/pr.json" ;;
+		  "pr view"*) jq -r '.body' "$FAKE_DIR/pr.json" ;;
+		  "api --paginate"*) jq -r '.files[].path' "$FAKE_DIR/pr.json" ;;
 		  *) echo "unexpected gh $*" >&2; exit 1 ;;
 		esac
 	EOF
