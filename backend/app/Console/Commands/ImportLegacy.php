@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\LegacyImport\CategoryImporter;
 use App\Services\LegacyImport\LegacyImporter;
 use App\Services\LegacyImport\MiscImporter;
 use Illuminate\Console\Command;
@@ -21,6 +22,7 @@ final class ImportLegacy extends Command
     /** @var array<string, class-string<LegacyImporter>> 部分の名前 => 移す処理(流す順) */
     private const PARTS = [
         'misc' => MiscImporter::class,
+        'categories' => CategoryImporter::class,
     ];
 
     public function handle(): int

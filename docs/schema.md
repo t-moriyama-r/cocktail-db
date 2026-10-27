@@ -49,14 +49,14 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 |---|---|---|---|---|
 | `id` | `id()` | | 新しく振る | — |
 | `name` | `string(255)` | | 名前 | `name` |
-| `name_search` | `string(255)` | | 検索用に正規化した名前(#44 の `NameNormalizer`) | `name_search` |
+| `name_search` | `string(255)` | | 検索用に正規化した名前(#44 の `NameNormalizer`) | `name_search`(`m_category_kinds` には無いので、`name` から `NameNormalizer` で作る) |
 | `name_eng` | `string(255)` | | 英名 | `name_eng` |
 | `description` | `text` | ○ | 説明 | `description`(`m_middle` は NOT NULL、`m_category_kinds` も NOT NULL) |
 | `role` | `string(20)` | ○ | 根の役割。`soft_drink`・`other`・null。**根だけが値を持つ**(#153) | `m_category_kinds.id` が 4 → `soft_drink`、5 → `other` |
 | `is_major` | `boolean` | | メジャーか(既定 false) | `is_major`(根は false) |
 | `is_like` | `boolean` | | 管理者のおすすめか(既定 false) | `is_like`(根は false) |
 | `is_powder` | `boolean` | | 粉末か(既定 false) | `is_powder`(根は false) |
-| `famous_brand_id` | `foreignId` → `brands` | ○ | 有名な銘柄(度数の計算に使う。#158) | `famous_brand_id`。0 は null にする(ミドルに 119 件) |
+| `famous_brand_id` | `foreignId` → `brands` | ○ | 有名な銘柄(度数の計算に使う。#158) | `famous_brand_id`。0 は null にする(ミドルに 119 件)。カテゴリ木を移す #29 では null で入れ、銘柄を移す #30 で付ける |
 | `youtube` | `string(255)` | ○ | YouTube の動画 | `youtube` |
 | `youtube_created_at` | `dateTime` | ○ | 動画の公開日時 | `youtube_created_at` |
 | `youtube_start_seconds` | `unsignedInteger` | ○ | 動画の開始位置(秒) | `y_hour`・`y_minute`・`y_second`(下の「YouTube の開始位置」) |
@@ -75,7 +75,15 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 #### 並び順
 
-旧には並び順の列が無い。移行では、同じ親の下で旧の ID の昇順に 1 から振る(根は `m_category_kinds` の ID の順)。旧の画面がどの順で並べていたかは確かめていない(未確認。#29・#95 で確かめる)。
+旧には並び順の列が無い。移行(`legacy:import --only=categories`。#29)では、同じ親の下で旧の ID の昇順に 1 から振る(根は `m_category_kinds` の ID の順)。
+
+旧の画面の並べ方は、画面ごとに違う(#29 で旧のソースを読んで確かめた。画面を動かしては確かめていない)。
+
+- 旧の BE は、種別・カテゴリ・ミドルを `ORDER BY` を付けずに返していた(`Kind::all()`・`Middle::all()` など)
+- 検索フォーム(`laravel6/resources/js/components/Forms/Search/Cocktail/form.vue` の `kind_and_categories_aiu`)は、種別ごとにカテゴリを名前の五十音順(カタカナをひらがなにそろえて比べる)に並べ直す。種別は ID の順。ミドルは並べ直さず、BE から来た順
+- 結果の一覧のカテゴリ・ミドル(`components/Results/children/CategoryMiddle.vue`)は、既定で ID の順
+
+移行の並び順は ID の順なので、検索フォームのカテゴリは旧(五十音順)と違う順に出る。検索フォームでどちらに合わせるかは #400 で決める。
 
 ### `category_closures`
 
