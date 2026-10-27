@@ -334,6 +334,16 @@ class CategoryTree
     }
 
     /**
+     * 有名な銘柄が要らないノード(isFamousBrandOptional が true になるノード)の ID を、列 id のサブクエリで返す。
+     *
+     * otherNodeIds と同じく、ノード 1 つを受ける判定をクエリの中で使える形でも持つ。
+     */
+    public function famousBrandOptionalNodeIds(): QueryBuilder
+    {
+        return $this->nodeIdsWithRootRoleIn(self::FAMOUS_BRAND_OPTIONAL_ROLES);
+    }
+
+    /**
      * $node のすぐ下の子を、兄弟の並び順で返す。
      *
      * @return Collection<int, Category>
