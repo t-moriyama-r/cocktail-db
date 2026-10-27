@@ -148,6 +148,7 @@ class AmazonClient
      *
      * 期限が切れたトークン(401 TokenExpired)は、取り直して 1 回だけ送り直す。キャッシュの期限より先に
      * Amazon 側で切れたとき(時計のずれなど)にも、次の回を待たずに取れるようにするため。
+     * それ以外の 401 は送り直さないが、無効なトークンを使い続けないよう、キャッシュからは捨てる。
      *
      * @param  array{id: string, secret: string, partnerTag: string}  $credentials
      * @param  array<string, mixed>  $params
@@ -169,7 +170,6 @@ class AmazonClient
             $this->cache->forget(self::tokenCacheKey($credentials));
             $response = $this->send($operation, $payload, $this->accessToken($credentials));
         }
-        // TokenExpired 以外の 401(トークンが無効にされた など)でも、キャッシュに残すと期限まで毎回 401 になるので捨てる
         if ($response->status() === 401) {
             $this->cache->forget(self::tokenCacheKey($credentials));
         }
