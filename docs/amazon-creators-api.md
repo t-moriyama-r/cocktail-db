@@ -64,7 +64,7 @@ curl -X POST https://api.amazon.co.jp/auth/o2/token \
 - 返る `access_token` を `Authorization: Bearer <access_token>` に付けて API を呼ぶ
 - トークンは 1 時間有効(`expires_in: 3600`)。呼ぶたびに取り直さず、期限が近づくまで使い回す(同じ Client ID を使うプロセスのあいだでも共有する)。毎回取ると、トークンの取得先への呼び出しが無駄になり、制限に当たることがある
 - 期限が切れたトークンでは `401`(`UnauthorizedException`、reason が `TokenExpired`)が返る
-- 資格情報は、クライアント側のコードや公開のリポジトリに置かない(公式の資料にもそう書いてある)。このリポジトリでは GitHub の Secret かサーバーの `.env` に置く
+- 資格情報は、クライアント側のコードや公開のリポジトリに置かない(公式の資料にもそう書いてある)。このリポジトリでは GitHub の Secret かサーバーの `.env` に置く。`App\Services\Affiliate\AmazonClient`(#135)は、`.env` の `AMAZON_CREDENTIAL_ID`・`AMAZON_CREDENTIAL_SECRET`・`AMAZON_PARTNER_TAG` か、管理画面の設定(`settings` 表。保存した値が `.env` より優先する)から読む
 
 出典:
 - Using cURL(Regional Endpoints・Token Generation): https://affiliate.amazon.co.jp/creatorsapi/docs/en-us/get-started/using-curl

@@ -4,6 +4,69 @@
  */
 
 export interface paths {
+    "/cocktails/{cocktail}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * カクテルの詳細を返す。基本情報・技法(と、それを説明する用語の ID)・グラス・氷と、材料を並び順(position)で返す。
+         *     材料ごとに、ノードの根からのパンくずと銘柄を返す。
+         * @description 下書き・無いカクテルは 404(旧は下書きも返し、無い ID は 500 だった。docs/decisions/cocktail-detail.md)。
+         */
+        get: operations["cocktailDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/cocktails/{cocktail}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 公開の詳細(GET /api/cocktails/{id})と同じ形で、下書きも含めてカクテルの詳細を返す。
+         * @description 公開の API はセッションを使わないので、ログインしているかで返すものを変えられない。管理者が下書きを
+         *     公開の詳細と同じ形で確かめられるよう、管理 API に置く。
+         */
+        get: operations["admin.cocktailPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/{cocktail}/same-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 同じ名前の別のカクテルを、ID の順で返す。
+         * @description 「同じ名前」は英名(name_eng)が同じもの(旧 CocktailFactory::sameName)。下書きは返さず、下書き・無いカクテルを
+         *     指定したら 404。英名の無い(null・空の)カクテルは比べる名前が無いので 0 件(docs/decisions/cocktail-detail.md)。
+         */
+        get: operations["cocktailSameName"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/me": {
         parameters: {
             query?: never;
@@ -74,6 +137,89 @@ export interface components {
          * @enum {string}
          */
         CategoryRole: "soft_drink" | "other";
+        /** CocktailDetailResource */
+        CocktailDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_draft: boolean;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+                name_eng: string;
+                /** @description 技法を説明する用語の ID(用語の詳細へのリンク先)。用語の無い技法では null */
+                dictionary_id: number | null;
+            };
+            /** @description グラスは用語辞典の項目なので、ID は用語の詳細へのリンク先になる */
+            glass: {
+                id: number;
+                name: string;
+                name_eng: string;
+            } | null;
+            ice: {
+                id: number;
+                name: string;
+                name_eng: string | null;
+            } | null;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            description: string | null;
+            note: string | null;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            youtube_start_seconds: number | null;
+            instagram: string | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            ingredients: components["schemas"]["CocktailIngredientResource"][];
+        };
+        /** CocktailIngredientResource */
+        CocktailIngredientResource: {
+            position: number;
+            amount: string;
+            is_optional: boolean;
+            /** @description 根が先頭で、材料のノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+            brand: {
+                id: number;
+                name: string;
+                name_eng: string;
+            } | null;
+        };
+        /** CocktailSummaryResource */
+        CocktailSummaryResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+            };
+            recipe_count: number;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            youtube: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        /** NodeRefResource */
+        NodeRefResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+        };
         /** SearchFormMethodResource */
         SearchFormMethodResource: {
             id: number;
@@ -89,7 +235,20 @@ export interface components {
             children: components["schemas"]["SearchFormNodeResource"][];
         };
     };
-    responses: never;
+    responses: {
+        /** @description Not found */
+        ModelNotFoundException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Error overview. */
+                    message: string;
+                };
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -97,6 +256,79 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    cocktailDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CocktailDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailDetailResource"];
+                    };
+                };
+            };
+        };
+    };
+    "admin.cocktailPreview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CocktailDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    cocktailSameName: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+        };
+    };
     "admin.currentAdmin": {
         parameters: {
             query?: never;

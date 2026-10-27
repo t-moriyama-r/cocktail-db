@@ -46,6 +46,7 @@ issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(�
 - `area:admin` は管理画面と管理 API なので、BE・FE の側に当てる(`area:backend` なら `【BE】`、`area:frontend` なら `【FE】`)
 - 複数の領域にまたがるときは、上の表の順(BE → FE → CI → 移行 → 運用)に並べて続ける(例: `【BE】【FE】`)
 - PR は、閉じる issue と同じ接頭辞にして、その後ろに `issue-<番号>: ` を続ける(例: `【CI】issue-262: …`)
+- 昇格の PR(`develop` → `staging`・`staging` → `release`)は `【運用】` を付け、`issue-<番号>: ` の代わりに、`staging` 向けは PR を作った日(`【運用】staging 2026-10-26`)、`release` 向けは本番に出す版(`【運用】release v1.2.0`)を続ける。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9。`release` 向けの形は `branch-flow.yml` が確かめ、マージするとその版のタグと GitHub Release ができる(`release-tag.yml`)
 - Epic(`[Epic] …`)は領域をまたぐので付けない。機能(`feature`)・作業(`task`)には付ける
 - 領域が決まらないときは、作る前に issue で相談する
 

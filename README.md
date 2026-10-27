@@ -21,7 +21,8 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy-dev.yml   develop → dev 環境
 .github/workflows/deploy-stg.yml   staging → stg 環境
 .github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
-.github/workflows/branch-flow.yml  staging・release への PR の元のブランチを確かめる
+.github/workflows/branch-flow.yml  staging・release への PR の元のブランチ(release 向けはタイトルの版も)を確かめる
+.github/workflows/release-tag.yml  release にマージした PR のタイトルの版で、タグと GitHub Release を作る
 .github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画)があるかを確かめる
 ```
 
@@ -104,6 +105,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
+- `staging`・`release` への PR のタイトルは、`staging` 向けが作った日(`【運用】staging 2026-10-26`)、`release` 向けが本番に出す版(`【運用】release v1.2.0`。SemVer)。`release` にマージすると、その版のタグと GitHub Release ができる(`release-tag.yml`)。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9
 - `staging`・`release` への PR は、自動ではマージしない。CI が緑で AI レビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 

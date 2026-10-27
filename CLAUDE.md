@@ -144,6 +144,14 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごと(PR に動きのある日は、CI の終わりに `patrol-kick.yml` が前の回から 1 時間たったところで起こすので 1 時間ごと)に見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
 9. `develop`(dev 環境に出る)→ `staging`(stg 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、必ず人が行う(自動ではマージしない)。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)。
+   - 昇格の PR のタイトル(一覧で、いつの分か・本番のどの版かを分かるようにするため。#334)
+     - `staging` 向け: `【運用】staging <PR を作った日 YYYY-MM-DD>`(例: `【運用】staging 2026-10-26`)。補足は後ろに括弧で足してよい(例: `【運用】staging 2026-10-26(stg 環境への切り替えを含む)`)。機械では確かめない
+     - `release` 向け: `【運用】release v<MAJOR>.<MINOR>.<PATCH>`(例: `【運用】release v1.2.0`)。補足は足さない(足すと下のチェックが落ちる)。形が合わない・版が前のタグ以下のときは、`branch-flow.yml` の `branch-flow` が落ちる(タイトルを直すと流れ直す)
+   - 版の番号は SemVer で、PR を作る人(人かエージェント)が、前のタグ(`git tag -l 'v*'`)と差分から決めてタイトルに書く。前のタグから 1 つだけ上げ、上げた位置より下の数は 0 に戻す
+     - MAJOR: 旧システムからの切り替えのような、利用者から見て大きく変わるとき。最初の本番の版は `v1.0.0` にする
+     - MINOR: 機能を足したとき
+     - PATCH: 不具合の修正・見た目の調整だけのとき
+   - `release` 向けの PR をマージすると、`release-tag.yml` がタイトルの版でマージコミットにタグ(`v1.2.0`)を打ち、GitHub Release(本文は自動生成のリリースノート)を作る。デプロイ(`deploy.yml`)とは別のワークフローで、デプロイの成否とは関係なく作る
    - この PR(昇格の PR)の中身は、`develop` に入る前に PR ごとにレビュー済み。AI レビューは流すが、指摘が残ってもマージは止めず、Actions の Claude Code は直さない(head が保護されたブランチ(`develop`・`staging`)なので直せない)。`needs-human` も付かない。直したい指摘は、`develop` への PR で直す
    - CI が緑で、いまのコミットを AI がレビューし終えると、`ai-auto-merge.yml` が `needs-approval` を付けて Slack に知らせる。残っている指摘の件数も PR にコメントされる。人は差分と指摘を見て、マージするか決める
 
