@@ -17,8 +17,7 @@ use InvalidArgumentException;
 final class AmountFormatter
 {
     /**
-     * 適量の材料の、計算用の量。旧と同じ印の値で、度数の計算はこの値の材料を量ではなく適量として別に扱う。
-     * 量を決められない cup も、ml や分数と混ぜると値が大きく狂うため、旧は適量として扱っていた。
+     * 量を数で決められない材料(適量・cup)の、計算用の量。旧と同じ、ml の量としてはありえない印の値。
      */
     public const TO_TASTE = 999.0;
 
@@ -73,11 +72,10 @@ final class AmountFormatter
     }
 
     /**
-     * 度数の計算に使う量(ml)。書式を整えてから直す。
+     * 度数の計算に使う量(ml)。入力の揺れ(省略記法など)で値が変わらないよう、書式を整えてから直す。
      *
-     * 適量・cup は TO_TASTE を返す。tsp・dash・個など、量として数えない単位は 0。ml と oz は数字の部分をそのまま
-     * 使う(旧は oz を ml に直していなかった)。分数(1/2 など)は、グラス 1 杯を 100 ml とみなした量にする。
-     * どれにも当てはまらない値(少量・10g など)も 0。
+     * tsp・dash や固形(個・片など)は、カクテル全体の量に比べて小さいか液体ではないので、誤差として 0 にする。
+     * cup は、ml や分数と混ぜると値が大きく狂うので、旧と同じく適量と同じ扱いにする。oz を ml に直さないのも旧と同じ。
      *
      * @throws InvalidArgumentException 分数の分母が数でない・0 のとき(旧も計算の途中で例外になっていた)。量が 1 で、
      *                                  $node が木に入っていないとき
@@ -102,15 +100,6 @@ final class AmountFormatter
         }
 
         return 0.0;
-    }
-
-    /**
-     * 旧の正規表現(Rules\Amount)に当てはまる量か。format・toMilliliters はこれに当てはまらない値も受け取るが、
-     * 当てはまる値でも分母が 0 などで toMilliliters が例外になるものがある(1/・2/0 など。旧も同じ)。
-     */
-    public static function isValid(string $amount): bool
-    {
-        return preg_match(self::PATTERN, $amount) === 1;
     }
 
     /**
@@ -144,5 +133,13 @@ final class AmountFormatter
         }
 
         return (float) $parts[0] * 100 / (float) $denominator;
+    }
+
+    /**
+     * 旧の正規表現(Rules\Amount)に当てはまる量か。旧が自動入力で受け付けていた書き方と同じ範囲を受け付ける。
+     */
+    public static function isValid(string $amount): bool
+    {
+        return preg_match(self::PATTERN, $amount) === 1;
     }
 }
