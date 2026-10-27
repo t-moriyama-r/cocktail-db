@@ -75,7 +75,15 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 #### 並び順
 
-旧には並び順の列が無い。移行では、同じ親の下で旧の ID の昇順に 1 から振る(根は `m_category_kinds` の ID の順)。旧の画面がどの順で並べていたかは確かめていない(未確認。#29・#95 で確かめる)。
+旧には並び順の列が無い。移行(`legacy:import --only=categories`。#29)では、同じ親の下で旧の ID の昇順に 1 から振る(根は `m_category_kinds` の ID の順)。
+
+旧の画面の並べ方は、画面ごとに違う(#29 で旧のソースを読んで確かめた。画面を動かしては確かめていない)。
+
+- 旧の BE は、種別・カテゴリ・ミドルを `ORDER BY` を付けずに返していた(`Kind::all()`・`Middle::all()` など)
+- 検索フォーム(`laravel6/resources/js/components/Forms/Search/Cocktail/form.vue` の `kind_and_categories_aiu`)は、種別ごとにカテゴリを名前の五十音順(カタカナをひらがなにそろえて比べる)に並べ直す。種別は ID の順。ミドルは並べ直さず、BE から来た順
+- 結果の一覧のカテゴリ・ミドル(`components/Results/children/CategoryMiddle.vue`)は、既定で ID の順
+
+移行の並び順は ID の順なので、検索フォームのカテゴリは旧(五十音順)と違う順に出る。検索フォームでどちらに合わせるかは #400 で決める。
 
 ### `category_closures`
 
