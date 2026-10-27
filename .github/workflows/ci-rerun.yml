@@ -8,6 +8,8 @@
 # 流し直しは test.yml を PR のブランチで workflow_dispatch する。動いた回は PR に結び付くので、終わると ai-auto-merge.yml・
 # pr-status.yml(workflow_run)も起きる。PR のコードは checkout しない(pull_request_target で書き込みの権限を持つため)
 name: CI の流し直し
+# PR の番号を付けて起こした回は、名前の末尾に「#<番号>」を付ける。patrol-kick.sh は、これの付いた回を全 PR の見回りに数えない
+run-name: "${{ inputs.number && format('{0} #{1}', github.workflow, inputs.number) || github.workflow }}"
 
 on:
   pull_request_target:

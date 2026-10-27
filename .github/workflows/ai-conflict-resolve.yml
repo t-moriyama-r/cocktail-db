@@ -16,6 +16,8 @@
 #
 # 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)。Claude の GitHub App をこのリポジトリに入れておく
 name: コンフリクトを解消する
+# PR の番号を付けて起こした回は、名前の末尾に「#<番号>」を付ける。patrol-kick.sh は、これの付いた回を全 PR の見回りに数えない
+run-name: "${{ inputs.number && format('{0} #{1}', github.workflow, inputs.number) || github.workflow }}"
 
 on:
   schedule:

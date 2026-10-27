@@ -86,6 +86,19 @@ main() {
 		"$(dispatched)|$(cat "$FAKE/status")" 'ci-rerun.yml -R o/r|1'
 
 	reset
+	ran ci-rerun.yml schedule "$(ago 120)"
+	ran ci-rerun.yml workflow_dispatch "$(ago 5)" 'CI の流し直し #12'
+	run
+	expect TC-269-16 'PR の番号を付けて起こした回(PR 1 件だけを見る)は見回りに数えない' "$(dispatched)" 'ci-rerun.yml -R o/r'
+
+	reset
+	ran ai-conflict-resolve.yml schedule "$(ago 120)"
+	ran ai-conflict-resolve.yml workflow_dispatch "$(ago 10)"
+	ran_more ai-conflict-resolve.yml workflow_dispatch "$(ago 1)" 'コンフリクトを解消する #3'
+	run
+	expect TC-269-17 '番号付きの回が新しくても、その前の番号の無い回から測る' "$(dispatched)" ''
+
+	reset
 	run
 	expect TC-269-12 'どの見回りも間隔の内なら、何も起こさずに成功で終える' "$(dispatched)|$(cat "$FAKE/status")" '|0'
 
@@ -101,13 +114,16 @@ setup_fake_gh() {
 echo "gh $*" >>"$FAKE/calls"
 case "$1 $2" in
 	"api repos/o/r/actions/workflows/"*)
-		# repos/o/r/actions/workflows/<wf>/runs?event=<event>&per_page=1
+		# repos/o/r/actions/workflows/<wf>/runs?event=<event>&per_page=<n> --jq <filter>
 		path=${2#repos/o/r/actions/workflows/}
 		wf=${path%%/*}
 		event=${path#*event=}
 		event=${event%%&*}
+		[ "$3" = --jq ] || { echo "unexpected: gh $*" >&2; exit 2; }
 		if [ -f "$FAKE/list-fails-$wf" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
-		cat "$FAKE/runs/$wf/$event" 2>/dev/null || echo ""
+		# 一覧は新しい回から並ぶ
+		cat "$FAKE/runs/$wf/$event" 2>/dev/null |
+			jq -s '{workflow_runs: (sort_by(.created_at) | reverse)}' | jq -r "$4"
 		;;
 	"workflow run")
 		if [ -f "$FAKE/dispatch-fails-$3" ]; then echo "HTTP 500: dispatch failed" >&2; exit 1; fi
@@ -128,10 +144,17 @@ reset() {
 	done
 }
 
-# ワークフロー・イベント・その回が作られた時刻
+# ワークフロー・イベント・その回が作られた時刻・その回の名前(省くと番号の無い名前)。そのイベントの回をこの 1 件にする
 ran() {
 	mkdir -p "$FAKE/runs/$1"
-	echo "$3" >"$FAKE/runs/$1/$2"
+	: >"$FAKE/runs/$1/$2"
+	ran_more "$@"
+}
+
+# ran と同じ。そのイベントの回に 1 件足す
+ran_more() {
+	mkdir -p "$FAKE/runs/$1"
+	jq -nc --arg at "$3" --arg title "${4:-$1}" '{created_at: $at, display_title: $title}' >>"$FAKE/runs/$1/$2"
 }
 
 dispatched() { cat "$FAKE/dispatched" 2>/dev/null; }

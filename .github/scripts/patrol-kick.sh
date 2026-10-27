@@ -11,7 +11,8 @@
 #
 # 「前の見回り」は、そのワークフローの、PATROLS に書いたイベントで起きた回のうち、いちばん新しいものの作られた時刻
 # (待っている・動いている回も数える。起こした直後に重ねて起こさない)。PR 1 件だけを見る回(pull_request_target など)は数えない。
-# workflow_dispatch は番号付き(PR 1 件だけ)の回も数える(実行の一覧からは入力が分からないため)。
+# PR の番号を付けて起こした回(PR 1 件だけを見る)も数えない。一覧には入力が出ないので、ワークフローの run-name が名前の末尾に付ける
+# 「#<番号>」で見分ける。新しいほうから PER_PAGE 件に番号の無い回が無ければ、前の見回りが無いのと同じに扱う(起こしても害は無い)。
 #
 # 一覧を読めなかったときは起こさない(読めないことを「前の見回りが無い」と同じに扱わない)。ほかの見回りは続けて見て、最後に失敗で終える。
 set -euo pipefail
@@ -21,6 +22,7 @@ PATROLS=${PATROLS:-"ai-review-sweep.yml 60 schedule|workflow_dispatch
 ci-rerun.yml 60 schedule|workflow_dispatch
 ai-conflict-resolve.yml 60 schedule|workflow_dispatch|push
 ai-draft-sweep.yml 1440 schedule|workflow_dispatch"}
+PER_PAGE=30
 
 patrol_kick() {
   local repo=$1 now failed=0 wf interval events
@@ -36,7 +38,8 @@ kick_one() {
   local repo=$1 now=$2 wf=$3 interval=$4 events=$5 latest="" e at
   for e in ${events//|/ }; do
     # || で呼ばれると set -e が効かないので、読めなかったら起こさずに戻す
-    at=$(gh api "repos/$repo/actions/workflows/$wf/runs?event=$e&per_page=1" --jq '.workflow_runs[0].created_at // ""') || {
+    at=$(gh api "repos/$repo/actions/workflows/$wf/runs?event=$e&per_page=$PER_PAGE" \
+      --jq '[.workflow_runs[] | select(.display_title | test(" #[0-9]+$") | not)][0].created_at // ""') || {
       echo "::warning::$wf の実行の一覧($e)を読めなかった。起こさない"
       return 1
     }
