@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# copy-storage.sh のテスト(TC-34-xx)。DB は使わない。一時ディレクトリにダミーの画像を作って流す。
+# copy-storage.sh のテスト(TC-34-xx・TC-328-xx)。DB は使わない。一時ディレクトリにダミーの画像を作って流す。
 #
 # 使い方:
 #   ops/migrate/tests/copy-storage.test.sh
@@ -24,6 +24,10 @@ main() {
 	tc_08_argument_errors
 	tc_09_refuses_overlap
 	tc_10_copy_failure
+	tc_328_01_list_failure
+	tc_328_02_dest_created_before_placing
+	tc_328_03_dangling_symlink_dest
+	tc_328_04_cleans_up_list_file
 	echo "passed: $PASSED, failed: $FAILED"
 	[[ $FAILED -eq 0 ]]
 }
@@ -195,6 +199,81 @@ tc_10_copy_failure() {
 
 	expect_status "TC-34-10: 書けなければ 1" 1
 	expect "TC-34-10: 途中のファイルを残さない" test -z "$(ls -A "$DEST/sub")"
+}
+
+# TC-328-01
+tc_328_01_list_failure() {
+	if [[ $EUID -eq 0 ]]; then
+		echo "skip TC-328-01: 読めないディレクトリ(root では読めてしまうので、root 以外で流す CI で確かめる)"
+		return
+	fi
+	new_sandbox
+	add_image "$SOURCE" "a.jpeg" 10
+	add_image "$SOURCE" "locked/b.jpeg" 10
+	chmod 000 "$SOURCE/locked"
+	run_script "$SOURCE" "$DEST"
+	chmod 700 "$SOURCE/locked"
+
+	expect_status "TC-328-01: 一覧を取れなければ 1" 1
+	expect "TC-328-01: 一覧を取れなかったと出す" grep -qF "旧の画像の一覧を取れなかった" <<<"$OUTPUT"
+	expect "TC-328-01: 「copied: 0」で成功したことにしない" test "$(grep -c '^copied:' <<<"$OUTPUT")" = 0
+	expect "TC-328-01: 一覧が取れた分も、何もコピーしない" test -z "$(ls -A "$DEST")"
+}
+
+# TC-328-02: 存在の確認とコピーの間に、新アプリが同じ名前でファイルを作ったことを、cp の差し替えで起こす
+tc_328_02_dest_created_before_placing() {
+	new_sandbox
+	local real_cp shim="$SANDBOX/shim"
+	real_cp=$(command -v cp)
+	mkdir -p "$shim"
+	cat >"$shim/cp" <<SHIM
+#!/usr/bin/env bash
+$real_cp "\$@" || exit \$?
+[[ -z "\${RACE_DEST:-}" ]] || printf '%s' "\${RACE_CONTENT:-}" >"\$RACE_DEST"
+SHIM
+	chmod +x "$shim/cp"
+
+	add_image "$SOURCE" "race.jpeg" 100
+	RACE_DEST="$DEST/race.jpeg" RACE_CONTENT="written by new app" PATH="$shim:$PATH" run_script "$SOURCE" "$DEST"
+	expect_status "TC-328-02: 置く直前に中身の違うファイルが作られたら 2" 2
+	expect_output "TC-328-02: 食い違いに出す" "  race.jpeg"
+	expect "TC-328-02: 新アプリが作ったファイルを上書きしない" grep -qx "written by new app" "$DEST/race.jpeg"
+	expect "TC-328-02: 一時ファイルを残さない" test -z "$(find "$DEST" -name '.copy-storage.*')"
+
+	rm -f "$DEST/race.jpeg"
+	printf '%s' "same bytes" >"$SOURCE/race.jpeg"
+	RACE_DEST="$DEST/race.jpeg" RACE_CONTENT="same bytes" PATH="$shim:$PATH" run_script "$SOURCE" "$DEST"
+	expect_status "TC-328-02: 置く直前に同じ中身のファイルが作られたら 0" 0
+	expect_output "TC-328-02: 同じ中身は skipped にする" "skipped: 1"
+}
+
+# TC-328-03
+tc_328_03_dangling_symlink_dest() {
+	new_sandbox
+	add_image "$SOURCE" "link.jpeg" 100
+	ln -s "$SANDBOX/nowhere" "$DEST/link.jpeg"
+	run_script "$SOURCE" "$DEST"
+
+	expect_status "TC-328-03: 置き先が壊れたシンボリックリンクなら 2" 2
+	expect_output "TC-328-03: 食い違いに出す" "  link.jpeg"
+	expect "TC-328-03: シンボリックリンクを置き換えない" test -L "$DEST/link.jpeg"
+	expect "TC-328-03: リンクの先に何も作らない" test ! -e "$SANDBOX/nowhere"
+}
+
+# TC-328-04
+tc_328_04_cleans_up_list_file() {
+	new_sandbox
+	mkdir -p "$SANDBOX/tmp"
+	add_image "$SOURCE" "a.jpeg" 10
+	TMPDIR="$SANDBOX/tmp" run_script "$SOURCE" "$DEST"
+	expect_status "TC-328-04: 正常に終わる(一覧の一時ファイルの後始末で失敗しない)" 0
+	expect "TC-328-04: 正常に終わったとき、一時ファイルを残さない" test -z "$(ls -A "$SANDBOX/tmp")"
+
+	add_image "$SOURCE" "differ.jpeg" 10
+	add_image "$DEST" "differ.jpeg" 10
+	TMPDIR="$SANDBOX/tmp" run_script "$SOURCE" "$DEST"
+	expect_status "TC-328-04: 食い違いで 2 のとき" 2
+	expect "TC-328-04: 食い違いで終わったときも、一時ファイルを残さない" test -z "$(ls -A "$SANDBOX/tmp")"
 }
 
 # --- 道具 -------------------------------------------------------------------
