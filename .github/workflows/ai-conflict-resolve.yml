@@ -10,6 +10,7 @@
 #   いまのコミットをレビューさせる。新しく付いた needs-human は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
+# schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
 # 同じコミットと develop の組では 1 回だけ試す(目印 <!-- ai-dev:conflict-resolve sha=<コミット> base=<develop> -->)。
 # Claude Code は PR のコード・コメントを読むので、そのジョブにはワークフローを起動できる権限(actions: write)を渡さない
 #
