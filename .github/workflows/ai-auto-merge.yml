@@ -31,7 +31,7 @@ on:
     # CodeRabbit は依頼への返信を「Review triggered」で作ってから「Review finished」に書き換えるので、書き換えでも起動する
     types: [created, edited]
   workflow_run:
-    workflows: [test]   # CI のワークフロー名に合わせる
+    workflows: [test, evidence-gate]   # CI のワークフロー名に合わせる
     types: [completed]
   pull_request_target:
     types: [unlabeled, ready_for_review]
@@ -171,6 +171,10 @@ jobs:
           checks=$(gh api --paginate --slurp "repos/$REPO/commits/$head/check-runs?per_page=100" \
             | jq '[.[].check_runs[] | select(.name != "auto-merge")]')
           [ "$(jq length <<<"$checks")" -gt 0 ] || skip "${head:0:7} にチェックが 1 つも無い"
+          # develop 向けの PR は、evidence-gate のチェックが無い間(ready 直後でまだ走っていない・走らなかった)もマージしない
+          if [ "$base" = develop ]; then
+            [ "$(jq '[.[] | select(.name == "evidence-gate")] | length' <<<"$checks")" -gt 0 ]               || skip "${head:0:7} に evidence-gate のチェックがまだ無い"
+          fi
           pending=$(jq -r '[.[] | select(.status != "completed") | .name] | join(",")' <<<"$checks")
           [ -z "$pending" ] || skip "チェックが終わっていない: $pending"
           failed=$(jq -r '[.[] | select(.conclusion | IN("success","skipped","neutral") | not) | .name] | join(",")' <<<"$checks")
