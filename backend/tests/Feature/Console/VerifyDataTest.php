@@ -206,7 +206,8 @@ it('TC-157-10: --strict のときは、有名な銘柄が無いノードの警�
     [$code, $output] = runVerifyData(['--strict' => true]);
 
     expect($code)->toBe(1)
-        ->and($output)->toContain('--strict なので失敗に数える');
+        ->and($output)->toContain('--strict なので失敗に数える')
+        ->and($output)->not->toContain('失敗に数える破れは無い');
 });
 
 it('TC-157-11: --strict でも、警告が無ければ 0 で終わる', function () {

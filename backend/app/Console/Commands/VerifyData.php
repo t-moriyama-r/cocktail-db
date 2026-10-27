@@ -14,7 +14,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 /**
  * カテゴリ木の外にある、木とつながった値の整合性を調べる。読むだけで、何も書き換えない。
  *
- * 次の決まりは DB の制約では守れず、保存のときの検証と数え直しで守っている(docs/schema.md の「材料が銘柄を持つときの
+ * 次の決まりは DB の制約では守れず、保存のときの検証と数え直しで守る決まり(docs/schema.md の「材料が銘柄を持つときの
  * ノード」「材料とベースに使ってよいノード」、docs/decisions/recipe-count.md、docs/decisions/strength.md)。
  * 保存の処理の取りこぼしや移行で破れても、検索・材料の数・度数の計算が黙って食い違うだけなので、機械で確かめる。
  * 木そのもの(閉包表)は tree:verify が見る。
@@ -43,6 +43,8 @@ final class VerifyData extends Command
 
     private const MISSING_FAMOUS_BRAND = '有名な銘柄が無い';
 
+    private const TABLE_HEADERS = ['調べたこと', '対象', '内容'];
+
     /** @var array<int, string> ノードの ID → 名前 */
     private array $nodeNames = [];
 
@@ -61,24 +63,23 @@ final class VerifyData extends Command
             ...$this->famousBrandSubtreeViolations(),
         ];
         $warnings = $this->missingFamousBrandWarnings($tree);
+        $warningsFail = $warnings !== [] && $this->option('strict');
 
         if ($warnings !== []) {
-            $this->warn(sprintf('警告(%d 件)%s:', count($warnings), $this->option('strict') ? '。--strict なので失敗に数える' : ''));
-            $this->table(['調べたこと', '対象', '内容'], $warnings);
+            $this->warn(sprintf('警告(%d 件)%s:', count($warnings), $warningsFail ? '。--strict なので失敗に数える' : ''));
+            $this->table(self::TABLE_HEADERS, $warnings);
         }
 
         if ($violations !== []) {
             $this->error(sprintf('整合性が破れている(%d 件):', count($violations)));
-            $this->table(['調べたこと', '対象', '内容'], $violations);
+            $this->table(self::TABLE_HEADERS, $violations);
         } elseif ($warnings === []) {
             $this->info('問題なし');
-        } else {
+        } elseif (! $warningsFail) {
             $this->info('失敗に数える破れは無い');
         }
 
-        return $violations !== [] || ($warnings !== [] && $this->option('strict'))
-            ? self::FAILURE
-            : self::SUCCESS;
+        return $violations !== [] || $warningsFail ? self::FAILURE : self::SUCCESS;
     }
 
     /**
@@ -106,7 +107,7 @@ final class VerifyData extends Command
         foreach ($rows as $row) {
             $violations[] = [
                 self::INGREDIENT_BRAND_NODE,
-                sprintf('カクテル #%s %s の %s 行目', self::str($row->cocktail_id), self::str($row->cocktail_name), self::str($row->position)),
+                $this->ingredientLabel($row->cocktail_id, $row->cocktail_name, $row->position),
                 sprintf(
                     '材料のノードは %s、銘柄 #%s %s の所属は %s',
                     $this->nodeLabel($row->category_id),
@@ -171,7 +172,7 @@ final class VerifyData extends Command
             if ($cocktail->recipe_count !== $count) {
                 $violations[] = [
                     self::RECIPE_COUNT,
-                    "カクテル #{$cocktail->id} {$cocktail->name}",
+                    $this->cocktailLabel($cocktail->id, $cocktail->name),
                     "いま {$cocktail->recipe_count}・数え直すと {$count}",
                 ];
             }
@@ -203,7 +204,7 @@ final class VerifyData extends Command
         foreach ($rows as $row) {
             $violations[] = [
                 self::ROOT_INGREDIENT,
-                sprintf('カクテル #%s %s の %s 行目', self::str($row->cocktail_id), self::str($row->cocktail_name), self::str($row->position)),
+                $this->ingredientLabel($row->cocktail_id, $row->cocktail_name, $row->position),
                 "材料のノード {$this->nodeLabel($row->category_id)} が根",
             ];
         }
@@ -227,7 +228,7 @@ final class VerifyData extends Command
         foreach ($cocktails as $cocktail) {
             $violations[] = [
                 self::ROOT_BASE,
-                "カクテル #{$cocktail->id} {$cocktail->name}",
+                $this->cocktailLabel($cocktail->id, $cocktail->name),
                 "ベースのノード {$this->nodeLabel($cocktail->base_category_id)} が根",
             ];
         }
@@ -271,8 +272,9 @@ final class VerifyData extends Command
     }
 
     /**
-     * 有名な銘柄が要るノード(根の役割が null の部分木)で、有名な銘柄が無いもの。度数の計算で、銘柄を持たない材料が
-     * 0% になる。保存のときの検証で必須にしているが、移行したデータには残りうる(docs/decisions/strength.md)。
+     * 有名な銘柄が要るノード(CategoryTree::isFamousBrandOptional が偽になるノード)で、有名な銘柄が無いもの。度数の計算で、
+     * 銘柄を持たない材料が 0% になる。保存のときの検証で必須にする決まりだが、移行したデータには残りうる
+     * (docs/decisions/strength.md)。
      * 根は材料に使えず度数の計算に出てこないので除く。
      *
      * @return list<array{string, string, string}>
@@ -297,6 +299,16 @@ final class VerifyData extends Command
         }
 
         return $warnings;
+    }
+
+    private function cocktailLabel(mixed $id, mixed $name): string
+    {
+        return sprintf('カクテル #%s %s', self::str($id), self::str($name));
+    }
+
+    private function ingredientLabel(mixed $cocktailId, mixed $cocktailName, mixed $position): string
+    {
+        return sprintf('%s の %s 行目', $this->cocktailLabel($cocktailId, $cocktailName), self::str($position));
     }
 
     private function nodeLabel(mixed $id): string
