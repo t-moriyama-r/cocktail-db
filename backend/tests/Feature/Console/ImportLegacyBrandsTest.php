@@ -95,7 +95,8 @@ it('TC-30-01: 銘柄の件数が旧と同じで、件数を出力する', functi
 it('TC-30-02: 銘柄の ID を旧 ID のまま入れ、legacy_id_maps に同じ値の対応を入れる', function () {
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    $legacyIds = DB::connection('legacy')->table('m_brand')->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id)->all();
+    $legacyIds = DB::connection('legacy')->table('m_brand')->orderBy('id')->pluck('id')
+        ->map(fn (mixed $id): int => is_numeric($id) ? (int) $id : throw new RuntimeException('m_brand の id が数でない'))->all();
     $maps = LegacyIdMap::query()->where('legacy_table', 'm_brand')->orderBy('legacy_id')->get();
     expect(Brand::query()->orderBy('id')->pluck('id')->all())->toBe($legacyIds)
         ->and($maps->map(fn (LegacyIdMap $map): array => [$map->legacy_id, $map->new_table, $map->new_id])->all())
@@ -251,9 +252,9 @@ it('TC-30-14: 2 回目の前に旧の値が変わっていたら、銘柄を増�
     expect(Category::query()->findOrFail(brandNodeId('m_category', 1))->famous_brand_id)->toBeNull();
 });
 
-it('TC-30-15: 所属するノードが無いと、例外で止まり、何も入れない(:dataset)', function (bool $importCategories, array $change) {
-    if ($change !== []) {
-        DB::connection('legacy')->table('m_brand')->where('id', 1)->update($change);
+it('TC-30-15: 所属するノードが無いと、例外で止まり、何も入れない(:dataset)', function (bool $importCategories, ?string $column, int $value) {
+    if ($column !== null) {
+        DB::connection('legacy')->table('m_brand')->where('id', 1)->update([$column => $value]);
     }
     if ($importCategories) {
         LegacyImportCommand::run($this, ['--only' => 'categories'])->assertExitCode(0)->run();
@@ -266,9 +267,9 @@ it('TC-30-15: 所属するノードが無いと、例外で止まり、何も入
         ->and(LegacyIdMap::query()->where('legacy_table', 'm_brand')->count())->toBe(0)
         ->and(importedBrandSnapshot()['categories'])->toBe($categoriesBefore);
 })->with([
-    'カテゴリ木を移していない' => [false, []],
-    'ミドルが旧に無い' => [true, ['middle_category' => 99]],
-    'カテゴリが旧に無い' => [true, ['category' => 99]],
+    'カテゴリ木を移していない' => [false, null, 0],
+    'ミドルが旧に無い' => [true, 'middle_category', 99],
+    'カテゴリが旧に無い' => [true, 'category', 99],
 ]);
 
 it('TC-30-16: 有名な銘柄が旧の銘柄に無いと、例外で止まり、何も入れない', function () {
