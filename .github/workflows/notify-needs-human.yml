@@ -4,35 +4,46 @@
 # - needs-decision(issue): 着手する前に、人に決めてもらうことがある
 # - needs-approval(PR): 人の承認(マージ)を待っている
 #
-# 送り先は secret の SLACK_WEBHOOK_URL(Slack の Incoming Webhook)。無ければ何もせず警告だけ出す
+# 送り先は、Slack App の bot(secret SLACK_BOT_TOKEN)と、変数 SLACK_NOTIFY_USER の人の DM。
+# bot が無いリポジトリでは secret SLACK_WEBHOOK_URL(Incoming Webhook)。どちらも無ければ何もせず警告だけ出す(.github/scripts/slack-post.sh)
 #
-# きっかけは 2 つあり、1 件につきどちらか一方だけが 1 通送る
+# bot で送ったときは、頼んだラベルが外れるか PR・issue が閉じたら、その通知に ✅ を付けて本文の先頭に「【済】」を足す(mark-done ジョブ)。
+# ラベルを外すのは Actions の中(GITHUB_TOKEN)のことが多く、そのときはイベントが起きないので、ラベルが外れた・閉じたときのイベントに加えて、
+# ラベルを外すワークフローの終わり(label を done にして呼ぶ)と毎朝の見回りでも動かす。何度動いても、片付いたものに 1 回付けるだけ
+#
+# 頼んだときの通知は、きっかけが 2 つあり、1 件につきどちらか一方だけが 1 通送る
 # - ラベルが付いたとき: 人(と、人のアカウントで動く手元のエージェント)が付けたものだけ。
 #   bot(GitHub Actions の中の Claude Code など)が付けたものは送らない。
 #   GITHUB_TOKEN で付けたラベルはワークフローを起こさないので、Actions の中からはこちらに頼れない
 # - workflow_dispatch: Actions の中から `gh workflow run` で呼ぶ(GITHUB_TOKEN でも起こせる)。
 #   number を空にすると、開いている needs-decision の issue を 1 通にまとめる(issue を一度にたくさん作ったとき)
 #
+# 頼んだときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだ人の番になっているもの(上の 3 つのラベルが
+# 付いて開いている PR・issue)を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件なら送らない。
+# 手動では number を空、label を all にすると同じものを送る
+#
 # 本文が「作成後に書き込む」の仮のもの(目印 ai-dev:pending-body)の issue は、ラベルが付いても送らない。
 # issue-breakdown が一度に作る issue で、作り終えたらまとめて 1 通にするため
 name: 人の判断・承認を Slack に知らせる
 
 on:
-  # コードを checkout しないので、pull_request_target でもフォークのコードは動かない
+  schedule:
+    - cron: '0 0 * * *'   # 毎日 9:00(日本時間)
+  # checkout するのは既定のブランチの .github/scripts だけなので、pull_request_target でもフォークのコードは動かない
   pull_request_target:
-    types: [labeled]
+    types: [labeled, unlabeled, closed]
   issues:
-    types: [labeled]
+    types: [labeled, unlabeled, closed]
   workflow_dispatch:
     inputs:
       number:
-        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る
+        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る(label が all なら 3 つのラベルすべて。done なら番号は見ない)
         required: false
         default: ""
       label:
-        description: 何を頼むか
+        description: 何を頼むか(all は number が空のときだけ)。done は、片付いた通知に「済」を付ける
         type: choice
-        options: [needs-human, needs-decision, needs-approval]
+        options: [needs-human, needs-decision, needs-approval, all, done]
         default: needs-human
 
 permissions:
@@ -44,15 +55,26 @@ jobs:
   notify:
     # 本文はイベントの時点のものを見る(作った直後に本文が書き込まれても、仮の本文だったことで判断する)
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.number != '')
-      || (github.event_name != 'workflow_dispatch'
+      (github.event_name == 'workflow_dispatch' && inputs.number != '' && inputs.label != 'all' && inputs.label != 'done')
+      || (github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
+        && github.event.action == 'labeled'
         && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name)
         && github.event.sender.type != 'Bot'
         && !contains(github.event.issue.body, 'ai-dev:pending-body'))
     runs-on: ubuntu-latest
     steps:
+      # 送るスクリプトだけを取る。pull_request_target でも取るのは既定のブランチのもので、PR のコードは動かない
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Slack に送る
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -60,11 +82,6 @@ jobs:
           LABEL: ${{ inputs.label || github.event.label.name }}
           SENDER: ${{ github.event_name != 'workflow_dispatch' && github.event.sender.login || '' }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
-            exit 0
-          fi
-
           # issue の API は PR も返す(PR なら pull_request が付く)
           target=$(gh api "repos/$REPO/issues/$NUMBER" \
             | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}')
@@ -111,79 +128,171 @@ jobs:
              else ($people | map(select(.user.type != "Bot")) | last // {}) as $c
                | {text: ($c.body // "" | clean), url: ($c.html_url // $target.url)}
              end) as $ask
+          # 頼む中身が無い通知は、開いても答えることが無いので送らない(何も出さない)
+          | select($ask.text != "")
           | {
               unfurl_links: false,
+              # 片付いたときに「済」を付ける通知を、後から見つけるための印(slack-mark-done.sh が読む)
+              metadata: {event_type: "ai_dev_ask", event_payload: {repo: $repo, number: $number, label: $label}},
               text: ([
                 "\($t.head)(\($repo))",
                 "",
-                "*\($target.kind)*: \(link($target.url; "#\($number) \($target.title)"))",
+                # 見出しのリンクから、返事をするコメントへ直接飛べるようにする。目印の無いコメント(人のいちばん新しい
+                # コメント)は頼む中身とは限らないので、そのときは PR・issue を指す
+                "*\($target.kind)*: \(link($marked.html_url // $target.url; "#\($number) \($target.title)"))",
                 (if $target.kind == "PR" then
                   "*対応 issue*: " + (if ($issues | length) > 0
                     then ($issues | map(link(.url; "#\(.number) \(.title)")) | join("、"))
                     else "なし(PR の本文に Closes #番号 が無い)" end)
                  else empty end),
                 (if $sender != "" then "*ラベルを付けた人*: \($sender)" else empty end),
-                (if $ask.text != "" then
-                  "", "*\($t.ask)*", ($ask.text | quote), "", link($ask.url; $t.act)
-                 else
-                  "", "頼む中身が見つからなかった。\(link($target.url; "\($target.kind) を開く"))"
-                 end),
+                "", "*\($t.ask)*", ($ask.text | quote), "", link($ask.url; $t.act),
                 (if $label == "needs-approval" then "問題が無ければ、マージすると承認になる。直してほしいことは PR にコメントする" else empty end)
               ] | join("\n"))
             }
           JQ
 
-          jq -n -f message.jq \
+          message=$(jq -n -f message.jq \
             --arg repo "$REPO" --arg number "$NUMBER" --arg label "$LABEL" --arg sender "$SENDER" \
-            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues" \
-            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues")
+          if [ -z "$message" ]; then
+            echo "#$NUMBER に $LABEL で頼む中身(目印 ai-dev:$LABEL のコメントなど)が見つからなかったので、Slack に送らなかった"
+            exit 0
+          fi
+          .github/scripts/slack-post.sh <<<"$message"
 
-  # 開いている needs-decision の issue を 1 通にまとめる
+  # 人の番になっているものを 1 通にまとめる。ラベルが付いたときの通知は 1 回きりなので、返事をしないまま
+  # 残ったものを毎朝知らせ直す。issue-breakdown が issue を作り終えたときの呼び出し(label を渡さない)は、
+  # 開いている needs-decision の issue だけをまとめる
   digest:
-    if: github.event_name == 'workflow_dispatch' && inputs.number == ''
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.number == '' && inputs.label != 'done')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Slack に送る
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          LABELS: ${{ (github.event_name == 'schedule' || inputs.label == 'all') && 'needs-human needs-decision needs-approval' || 'needs-decision' }}
         run: |
-          if [ -z "$SLACK_WEBHOOK_URL" ]; then
-            echo "::warning::secret SLACK_WEBHOOK_URL が無いので Slack に送らなかった"
-            exit 0
-          fi
+          cat > item.jq <<'JQ'
+          def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("^\\s+|\\s+$"; "");
+          def first_line: split("\n") | map(gsub("^[\\s>*#-]+|\\s+$"; "")) | map(select(. != "")) | (first // "")
+            | if length > 120 then .[0:120] + "…" else . end;
+          # 見出しは、手で書いた本文なら ##、issue forms(.github/ISSUE_TEMPLATE)から作った本文なら ###。
+          # issue forms は空欄に _No response_ と書くので、それは無いものとして扱う
+          def section: ((gsub("\r"; "") | capture("(^|\n)#{2,3} 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n#{2,3} |$)") | .s) // "")
+            | if test("^\\s*_No response_\\s*$") then "" else . end;
 
-          list=$(gh issue list -R "$REPO" --label needs-decision --state open --limit 100 --json number,title,url,body)
-          if [ "$(jq length <<<"$list")" = 0 ]; then
-            echo "needs-decision の issue が無いので送らなかった"
+          # 何を頼んでいるかは、頼むコメント(目印 <!-- ai-dev:<ラベル> -->)の最初の 1 行で示す。目印が無ければ、
+          # needs-decision は本文の「判断が要ること」を使う。public のリポジトリでは誰でもコメントできるので、
+          # 目印を信じるのは、書き込み権限のある人と GitHub App のコメントだけ
+          # --slurpfile で受けるので、ファイルの中身は 1 要素の配列に入っている
+          $target[0] as $target | $comments[0] as $comments | $events[0] as $events
+          | ["OWNER", "MEMBER", "COLLABORATOR"] as $trusted
+          | ($comments | map(select((.author_association as $a | $trusted | index($a)) or .user.type == "Bot"))
+             | map(select(.body | contains("ai-dev:\($label)"))) | last) as $marked
+          | (if $marked then {text: ($marked.body | clean | first_line), url: $marked.html_url}
+             elif $label == "needs-decision" then {text: ($target.body | section | clean | first_line), url: $target.url}
+             else {text: "", url: $target.url} end) as $ask
+          | ($events | map(select(.event == "labeled" and .label.name == $label)) | last | .created_at) as $since
+          | $target + {label: $label, ask: $ask,
+              days: (if $since then (($now - ($since | fromdate)) / 86400 | floor) else null end)}
+          JQ
+
+          # コメントやイベントは長い PR だと引数の長さの上限を超えるので、jq にはファイルで渡す
+          now=$(date -u +%s)
+          : > items.jsonl
+          for label in $LABELS; do
+            # issue の API は PR も返す(PR なら pull_request が付く)。作っている途中の issue(ai-dev:pending-body)は入れない
+            gh api --paginate "repos/$REPO/issues?state=open&labels=$label&per_page=100" \
+              --jq '.[] | select((.body // "") | contains("ai-dev:pending-body") | not)
+                | {number, title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}' \
+              > targets.jsonl
+            while read -r target; do
+              printf '%s\n' "$target" > target.json
+              n=$(jq -r .number target.json)
+              gh api --paginate --slurp "repos/$REPO/issues/$n/comments?per_page=100" | jq 'add // []' > comments.json
+              gh api --paginate --slurp "repos/$REPO/issues/$n/events?per_page=100" | jq 'add // []' > events.json
+              jq -c -n -f item.jq --arg label "$label" --argjson now "$now" \
+                --slurpfile target target.json --slurpfile comments comments.json --slurpfile events events.json \
+                >> items.jsonl
+            done < targets.jsonl
+          done
+
+          if [ ! -s items.jsonl ]; then
+            echo "人の番になっているもの($LABELS)が無いので送らなかった"
             exit 0
           fi
 
           cat > digest.jq <<'JQ'
           def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
           def link($url; $label): "<\($url)|\($label | esc)>";
-          # 見出しは、手で書いた本文なら ##、issue forms(.github/ISSUE_TEMPLATE)から作った本文なら ###。
-          # issue forms は空欄に _No response_ と書くので、それは無いものとして扱う
-          def section: ((gsub("\r"; "") | capture("(^|\n)#{2,3} 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n#{2,3} |$)") | .s) // "")
-            | if test("^\\s*_No response_\\s*$") then "" else . end;
-          # 「判断が要ること」の最初の 1 行で、何を決めるかを示す
-          def first_ask: section | gsub("<!--[\\s\\S]*?-->"; "")
-            | split("\n") | map(gsub("^[\\s>*-]+|\\s+$"; "")) | map(select(. != "")) | (first // "")
-            | if length > 120 then .[0:120] + "…" else . end;
+          def waited: if .days == null then "" elif .days == 0 then "(1 日たっていない)" else "(\(.days) 日前から)" end;
 
           {
-            unfurl_links: false,
-            text: ([
-              ":thinking_face: *着手する前に決めてほしいことが \($list | length) 件あります*(\($repo))",
-              "issue にコメントで答えると、続きが進む",
-              "",
-              ($list | sort_by(.number)[]
-                | "• \(link(.url; "#\(.number) \(.title)"))"
-                  + (.body // "" | first_ask | if . != "" then "\n      \(esc)" else "" end))
-            ] | join("\n"))
-          }
+            "needs-human":    {head: ":raising_hand: *人の判断が必要*(needs-human)", act: "頼むコメントに返信する"},
+            "needs-decision": {head: ":thinking_face: *着手する前に決めてほしい*(needs-decision)", act: "issue にコメントで答えると、続きが進む"},
+            "needs-approval": {head: ":white_check_mark: *承認を待っている*(needs-approval)", act: "問題が無ければマージすると承認になる。直してほしいことは PR にコメントする"}
+          } as $t
+          | ($items | map(.url) | unique | length) as $count
+          | {
+              unfurl_links: false,
+              text: ([
+                (if $labels == "needs-decision"
+                  then ":thinking_face: *着手する前に決めてほしいことが \($count) 件あります*(\($repo))"
+                  else ":bell: *人の返事を待っているものが \($count) 件あります*(\($repo))" end),
+                ($labels | split(" ")[] as $label
+                  | ($items | map(select(.label == $label)) | sort_by(-(.days // 0), .number)) as $list
+                  | select($list | length > 0)
+                  | "", $t[$label].head, $t[$label].act,
+                    # 見出しのリンクも、頼むコメントがあればそこへ向ける(無ければ .ask.url は PR・issue)
+                    ($list[] | "• \(link(.ask.url; "\(.kind) #\(.number) \(.title)"))\(waited)"
+                      + (if .ask.text != "" then "\n      \(link(.ask.url; .ask.text))" else "" end)))
+              ] | join("\n"))
+            }
           JQ
 
-          jq -n -f digest.jq --arg repo "$REPO" --argjson list "$list" \
-            | curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"
+          jq -n -f digest.jq --arg repo "$REPO" --arg labels "$LABELS" --slurpfile items items.jsonl \
+            | .github/scripts/slack-post.sh
+
+  # 頼んだ通知のうち、片付いたもの(ラベルが外れた・閉じた・頼み直した)に「済」を付ける。
+  # 閉じた・外れたは、bot がしたことでも人に見せたいので、送り手が bot でも動く
+  mark-done:
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.label == 'done')
+      || github.event.action == 'closed'
+      || (github.event.action == 'unlabeled'
+        && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name))
+    runs-on: ubuntu-latest
+    # 何度動いても同じ結果になるので、続けて起きたら待っている 1 回にまとめる
+    concurrency:
+      group: slack-mark-done
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # pull_request_target は既定では PR の向き先のブランチを取るので、staging・release 向けでもスクリプトのある既定のブランチを取る(ほかのイベントは github.ref が既定のブランチか、手で動かしたブランチ)
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.repository.default_branch || github.ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: 片付いた通知に「済」を付ける
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_NOTIFY_USER: ${{ vars.SLACK_NOTIFY_USER }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: .github/scripts/slack-mark-done.sh

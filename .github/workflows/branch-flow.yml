@@ -1,0 +1,34 @@
+name: branch-flow
+
+# デプロイするブランチへの PR が、決まった元のブランチから来ているかを確かめる。
+# staging(stg 環境)へは develop から、release(本番)へは staging から出す。ステージングで確かめていないものを本番に出さないため。
+# staging・release の保護で、このジョブ(branch-flow)を必須のチェックにしている
+on:
+  pull_request:
+    branches: [staging, release]
+    # 向き先を変えたときにも確かめ直す
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  branch-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the source branch
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          case "$BASE" in
+            staging) expected=develop ;;
+            release) expected=staging ;;
+            *) echo "$BASE は確かめる対象ではない"; exit 0 ;;
+          esac
+          if [ "$HEAD_REPO" != "$REPO" ] || [ "$HEAD" != "$expected" ]; then
+            echo "::error::$BASE へは $expected から PR を出す($HEAD_REPO の $HEAD からは出さない)"
+            exit 1
+          fi
+          echo "$BASE <- $expected"

@@ -2,14 +2,25 @@ name: test
 
 on:
   pull_request:
-    branches: [develop, release]
+    branches: [develop, staging, release]
   push:
     branches: [develop]
-  # deploy.yml から呼び、テストが通ったときだけデプロイする
+  # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
+  # PR のブランチで流し直す(ci-rerun.yml・ai-conflict-resolve.yml)。base の付け替えや GITHUB_TOKEN・ボットの push では pull_request の回が起きないため
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# staging → release の PR(向き先が release)は、develop → staging で一通り確かめた後なので、lint とテストの確認(必須の
+# backend・backend-lint・frontend)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
+#
+# PR に続けて push したら、前の回は取り消す(private ではジョブが動いた分だけ課金されるため)。
+# deploy-*.yml から workflow_call で呼んだ回は、github.workflow が呼んだ側の名前になるので、PR の回とは別の列になる
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
@@ -34,6 +45,11 @@ jobs:
       DB_DATABASE: testing
       DB_USERNAME: root
       DB_PASSWORD: root
+      # 旧 DB の接続(legacy)。DB 名は phpunit.xml が legacy_test に固定する
+      LEGACY_DB_HOST: 127.0.0.1
+      LEGACY_DB_PORT: 3306
+      LEGACY_DB_USERNAME: root
+      LEGACY_DB_PASSWORD: root
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,7 +87,7 @@ jobs:
           php artisan scramble:export --path=../openapi/openapi.json
           git diff --exit-code -- ../openapi/openapi.json
 
-  # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れを止める
+  # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れと、型の誤りを止める
   backend-lint:
     runs-on: ubuntu-latest
     defaults:
@@ -98,6 +114,86 @@ jobs:
 
       - name: Code style (Pint)
         run: vendor/bin/pint --test
+
+      # 型の合わない呼び出しなどを、テストで通らない経路の分まで止める。設定と検査から外すものは phpstan.neon
+      - name: Static analysis (PHPStan)
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  # DB を使わないシェルスクリプトの検査とテスト。どれも数秒で終わるので 1 つのジョブで順に流す
+  # (private ではジョブごとに 1 分に切り上げて課金されるため)。必須のチェックにはしていない
+  scripts:
+    if: github.base_ref != 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # AI 駆動開発・通知のワークフローが使うスクリプト(.github/scripts)。curl・gh を偽物にして流すので、Slack にも GitHub にも触らない。
+      # GraphQL・jq の $ を単一引用符で渡すので、info(SC2016)は見ない
+      - name: ShellCheck (.github/scripts)
+        run: shellcheck --severity=warning .github/scripts/*.sh .github/scripts/tests/*.sh
+
+      - name: Test .github/scripts
+        run: |
+          for t in .github/scripts/tests/*.test.sh; do
+            echo "::group::$t"
+            bash "$t"
+            echo "::endgroup::"
+          done
+
+      # 画像のコピースクリプト(ops/migrate/copy-storage.sh)
+      - name: ShellCheck (copy-storage)
+        run: shellcheck ops/migrate/copy-storage.sh ops/migrate/tests/copy-storage.test.sh
+
+      - name: Test copy-storage.sh
+        run: ops/migrate/tests/copy-storage.test.sh
+
+  # MariaDB を使う運用スクリプト(ops/backup)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
+  ops-db:
+    if: github.base_ref != 'release'
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: ShellCheck
+        run: shellcheck ops/backup/archive-storage.sh ops/backup/tests/archive-storage.test.sh ops/backup/dump-db.sh ops/backup/tests/dump-db.test.sh
+
+      # 画像の退避スクリプト(ops/backup/archive-storage.sh)
+      - name: Test archive-storage.sh
+        env:
+          TEST_DB_HOST: 127.0.0.1
+          TEST_DB_PORT: 3306
+          TEST_DB_USER: root
+          TEST_DB_PASSWORD: root
+        run: ops/backup/tests/archive-storage.test.sh
+
+      # ops/backup/dump-db.sh を MariaDB に向けて流し、ダンプを別の DB に入れられること・出力にパスワードが出ないことを確かめる。
+      # ランナーに入っている mysqldump は MySQL 8 のもので、MariaDB に向けると落ちることがある。
+      # サーバーと同じ MariaDB のクライアント(mariadb-dump)で流すため、mariadb の image の中で動かす
+      - name: Test dump-db.sh
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -w /w \
+            -e DUMP_TEST_DB_HOST=127.0.0.1 \
+            -e DUMP_TEST_DB_PORT=3306 \
+            -e DUMP_TEST_DB_ROOT_PASSWORD=root \
+            -e DUMP_TEST_REQUIRE_DB=1 \
+            mariadb:10.11 bash ops/backup/tests/dump-db.test.sh
 
   frontend:
     runs-on: ubuntu-latest
@@ -134,6 +230,7 @@ jobs:
 
   # 本番と同じく、ビルドした FE を Laravel から同じオリジンで配信し、ブラウザで画面を確かめる
   e2e:
+    if: github.base_ref != 'release'
     runs-on: ubuntu-latest
     services:
       mariadb:

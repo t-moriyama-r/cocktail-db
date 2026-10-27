@@ -1,6 +1,10 @@
 # AI 駆動開発の設定(ai-driven-dev スキル)
-merge: auto          # auto: CodeRabbit の指摘への対応が終わり、CI が緑なら自動でマージする(ai-auto-merge.yml) / review: 人がマージする
+# 向き先が staging・release の PR(昇格の PR)は、この設定によらず自動ではマージしない(デプロイになるので人がマージする。ai-auto-merge.yml)。
+# AI レビューは流すが、指摘が残ってもマージは止めず、Actions の Claude Code も直さない。CI が緑でレビュー済みなら needs-approval で知らせる
+merge: auto          # auto: CodeRabbit の指摘への対応が終わり、CI が緑なら自動でマージする(ai-auto-merge.yml) / review: 人がマージする(マージできる状態になったら needs-approval を付けて知らせる)
 reviewer: coderabbit # coderabbit / claude / both
                      # coderabbit でも、CodeRabbit が上限(Review limit reached / rate limited)を返した回だけは、
                      # 代わりに Claude がそのコミットをレビューする(ai-claude-review.yml)。次の依頼はまた CodeRabbit に出す
+                     # Actions からの依頼は、オーナーの PAT(secret CODERABBIT_REQUEST_TOKEN)で書く。ボットの依頼には CodeRabbit が応じないため(#227)。
+                     # 依頼に 30 分返事が無い・依頼を書けないときも、Claude が代わりにレビューする(.github/scripts/request-review.sh)
 review_rounds: 2     # レビューの指摘に対応して再レビューを頼む回数の上限

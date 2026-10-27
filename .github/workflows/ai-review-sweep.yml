@@ -1,0 +1,123 @@
+# レビューが止まったままの PR を 2 時間ごとに見て、止まったところから動かし直す。あわせて、開いている PR の状態のラベルをすべて出し直す
+#
+# private のリポジトリでは、定期実行は PR が無くても 1 回 1 分ずつ課金される。1 時間ごとの定期実行を 2 本(この見回りと
+# pr-status.yml の出し直し)持つと月 1,400 分ほどになるので、1 本のジョブにまとめて 2 時間ごとにしている。
+# 人が作業しているあいだは、pr-patrol スキルで同じ見回りを早めに起こせる
+#
+# ai-review-loop.yml・ai-claude-review.yml はレビューやコメントが付いたときに動くが、Claude Code が途中で止まった・上限に当たった・
+# レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
+# 候補はシェルで絞り、理由をジョブのログに出す。Claude Code はここでは動かさず、次のワークフローを workflow_dispatch で呼ぶ
+#
+# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-approval が
+# 付いていない(人の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
+# ai-in-actions が付いていれば 3 時間待つ(Actions が対応している途中。止まって印だけ残ったものは、そのあと拾う)
+#
+# 向き先が staging・release の PR(昇格の PR)は、返信待ちの指摘があっても ai-review-loop.yml を呼ばない(head が保護されたブランチ(develop・staging)で
+# 直しを push できず、指摘が残ってもマージは止めない)。レビュー済みなら ai-auto-merge.yml を呼び、人に知らせる
+#
+# 呼ぶもの(上から順に見て、最初に当てはまったもの):
+#   - AI レビュアーの未解決のスレッドのうち、最後のコメントがエージェントの返信(<!-- ai-dev:agent -->)でないものがある → ai-review-loop.yml
+#   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
+#     → .github/scripts/request-review.sh。オーナーの依頼がまだ無ければオーナーの PAT で CodeRabbit に頼み、
+#       依頼に上限が返った・30 分たっても返事もレビューも無い・依頼を書けなかったときだけ ai-claude-review.yml を呼ぶ。
+#       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)
+#   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
+#     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる
+#
+# ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい。
+# 必要な secret: CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)
+name: 止まったレビューを見回る
+
+on:
+  schedule:
+    - cron: '30 */2 * * *'   # 2 時間ごと(ほかの定期実行の 0・10・20 分と重ならないよう 30 分)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-review-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # 状態のラベル(pr-status.sh)
+      issues: write
+      checks: read
+      statuses: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      MIN_IDLE_MINUTES: 60
+      MIN_IDLE_MINUTES_IN_ACTIONS: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: 候補を絞って、止まったところのワークフローを呼ぶ
+        env:
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+        run: |
+          now=$(date -u +%s)
+          for n in $(gh pr list -R "$REPO" --state open --author "$OWNER" --limit 100 --json number --jq '.[].number'); do
+            skip() { echo "#$n 見送り: $*"; }
+            pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,baseRefName,labels,updatedAt,headRefOid,commits)
+            promotion=false
+            case "$(jq -r .baseRefName <<<"$pr")" in staging | release) promotion=true ;; esac
+            if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft"; continue; fi
+            if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
+            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
+            if [ -n "$label" ]; then skip "ラベル $label"; continue; fi
+            min=$MIN_IDLE_MINUTES
+            if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then min=$MIN_IDLE_MINUTES_IN_ACTIONS; fi
+            idle=$(( (now - $(date -u -d "$(jq -r .updatedAt <<<"$pr")" +%s)) / 60 ))
+            if [ "$idle" -lt "$min" ]; then skip "最後の動きから ${idle} 分(${min} 分たつまで待つ)"; continue; fi
+            if [ "$promotion" = false ]; then
+              unanswered=$(bash .github/scripts/unanswered-review-threads.sh "$REPO" "$n")
+              if [ "$unanswered" != 0 ]; then
+                echo "#$n 返信待ちのスレッドが $unanswered 件。ai-review-loop.yml を呼ぶ"
+                gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
+                continue
+              fi
+            fi
+            head=$(jq -r .headRefOid <<<"$pr")
+            committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+            comments=$(gh api --paginate --slurp "repos/$REPO/issues/$n/comments?per_page=100" | jq 'add // []')
+            # 「いまのコミットを見た」は ai-auto-merge.yml と同じに数える。そのコミットへの本文のあるレビューか、
+            # そのコミットより後の「Review finished」「No actionable comments」のコメント(指摘が無いとレビューは付かない)
+            reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$n/reviews?per_page=100" \
+              | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
+                  or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
+            finished=$(jq --arg since "$committed" 'map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
+                | any(.body // "" | test("Review finished|No actionable comments|LGTM"))' <<<"$comments")
+            if [ "$reviewed" = true ] || [ "$finished" = true ]; then
+              # ai-in-actions が残ったままだと ai-auto-merge.yml は見送るので、終わりの処理(ラベルを外す)を ai-review-loop.yml にさせる
+              if [ "$promotion" = false ] && jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then
+                echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済みだが ai-in-actions が残っている。ai-review-loop.yml を呼ぶ"
+                gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
+                continue
+              fi
+              # マージできる状態かは ai-auto-merge.yml が決める。人の手でマージする PR(no-auto-merge・needs-review・merge: review)なら、
+              # マージせずに needs-approval を付けて人に知らせる
+              echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済み。ai-auto-merge.yml を呼ぶ"
+              gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$n"
+              continue
+            fi
+            echo "#$n ${head:0:7} を誰もレビューしていない"
+            bash .github/scripts/request-review.sh "$REPO" "$n" || echo "::warning::#$n のレビューの依頼に失敗した"
+          done
+
+      # 状態のラベルは表示のためのものなので、上の見回りが失敗しても出し直す。決め方は pr-status.sh(pr-status.yml と同じ)
+      - name: 開いている PR の状態のラベルを出し直す
+        if: always()
+        run: |
+          for n in $(gh pr list -R "$REPO" --state open --limit 100 --json number --jq '.[].number'); do
+            bash .github/scripts/pr-status.sh "$REPO" "$n" || echo "::warning::#$n の状態のラベルを付け替えられなかった"
+          done
