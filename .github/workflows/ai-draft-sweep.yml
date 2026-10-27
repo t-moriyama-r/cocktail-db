@@ -9,6 +9,8 @@
 # - notify: 新しく付いた needs-human を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
+# schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 24 時間たったところで起こす(#269)
+#
 # GITHUB_TOKEN で ready にしても ai-auto-merge.yml の ready_for_review は起きないが、
 # CodeRabbit のレビュー・コメントで ai-auto-merge.yml が起きるので、マージの流れはそのまま続く
 #
