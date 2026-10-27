@@ -10,6 +10,39 @@
         }
     ],
     "paths": {
+        "/admin/me": {
+            "get": {
+                "operationId": "admin.currentAdmin",
+                "summary": "\u30ed\u30b0\u30a4\u30f3\u3057\u3066\u3044\u308b\u7ba1\u7406\u8005\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "CurrentAdmin"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/hello": {
             "get": {
                 "operationId": "hello",
@@ -38,6 +71,115 @@
                         }
                     }
                 }
+            }
+        },
+        "/search-form": {
+            "get": {
+                "operationId": "searchForm",
+                "description": "\u6728\u306f\u6839\u304b\u3089\u4e00\u756a\u6df1\u3044\u6bb5\u307e\u3067\u5165\u308c\u5b50\u3067\u8fd4\u3059(docs/schema.md \u306e\u300c\u691c\u7d22\u30d5\u30a9\u30fc\u30e0(#95)\u306b\u51fa\u3059\u6df1\u3055\u300d)\u3002\u6839\u3082\u5b50\u3082\u5144\u5f1f\u306e\u4e26\u3073\u9806\u3002\n\u30ab\u30af\u30c6\u30eb\u306b\u4f7f\u308f\u308c\u3066\u3044\u308b\u304b\u3067\u306f\u7d5e\u3089\u305a\u3001\u4e0b\u66f8\u304d\u306e\u30ab\u30af\u30c6\u30eb\u3067\u3057\u304b\u4f7f\u3063\u3066\u3044\u306a\u3044\u30ce\u30fc\u30c9\u3082\u8fd4\u3059(\u65e7\u306e getKindsForForm \u3082\n\u3059\u3079\u3066\u306e\u30ab\u30c6\u30b4\u30ea\u30fb\u30df\u30c9\u30eb\u3092\u8fd4\u3057\u3066\u3044\u305f)\u3002\u6280\u6cd5\u306f ID \u306e\u9806\u3002",
+                "summary": "\u691c\u7d22\u30d5\u30a9\u30fc\u30e0\u306b\u51fa\u3059\u30ab\u30c6\u30b4\u30ea\u306e\u6728\u3068\u6280\u6cd5\u306e\u4e00\u89a7\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "SearchForm"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "categories": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SearchFormNodeResource"
+                                            }
+                                        },
+                                        "methods": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SearchFormMethodResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "categories",
+                                        "methods"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "CategoryRole": {
+                "type": "string",
+                "description": "\u30ab\u30c6\u30b4\u30ea\u6728\u306e\u6839\u306e\u5f79\u5272(categories.role\u3002docs/decisions/category-root-role.md\u3002#153)\u3002 \u65e7\u306f\u7a2e\u5225\u306e ID(m_category.kind)\u3092\u6570\u5b57\u3067\u6c7a\u3081\u6253\u3061\u3057\u3066\u5224\u5b9a\u3057\u3066\u3044\u305f\u3002\u65b0\u3057\u3044\u6728\u3067\u306f\u7a2e\u5225\u304c\u6839\u306e\u30ce\u30fc\u30c9\u306b\u306a\u308a ID \u3082 \u632f\u308a\u76f4\u3059\u306e\u3067\u3001\u5f79\u5272\u306e\u540d\u524d\u3067\u6301\u3064\u3002\u5f79\u5272\u306e\u7121\u3044\u6839(\u65e7\u306e\u84b8\u7559\u9152\u30fb\u91b8\u9020\u9152\u30fb\u6df7\u6210\u9152)\u306f null \u3067\u3001\u3053\u3053\u306b\u306f\u73fe\u308c\u306a\u3044\u3002\n| |\n|---|\n| `soft_drink` <br/> \u65e7\u306e kind 4 |\n| `other` <br/> \u65e7\u306e kind 5(\u30ac\u30fc\u30cb\u30c3\u30b7\u30e5\u306a\u3069) |",
+                "enum": [
+                    "soft_drink",
+                    "other"
+                ],
+                "title": "CategoryRole"
+            },
+            "SearchFormMethodResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name"
+                ],
+                "title": "SearchFormMethodResource"
+            },
+            "SearchFormNodeResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "is_major": {
+                        "type": "boolean",
+                        "description": "\u65e7\u306e\u753b\u9762\u306e\u300c\u30e1\u30b8\u30e3\u30fc\u3067\u306a\u3044\u9805\u76ee\u306e\u8868\u793a/\u975e\u8868\u793a\u300d\u306b\u4f7f\u3046"
+                    },
+                    "root_role": {
+                        "anyOf": [
+                            {
+                                "description": "\u30ce\u30fc\u30c9\u306e\u6839\u306e\u5f79\u5272\u3002\u3042\u308b\u3082\u306e\u691c\u7d22\u3067\u300c\u305d\u306e\u4ed6\u300d(other)\u3092\u6301\u3063\u3066\u3044\u306a\u304f\u3066\u3088\u3044\u3053\u3068\u3092\u753b\u9762\u3067\u793a\u3059\u306e\u306b\u4f7f\u3046\n| |\n|---|\n| `soft_drink` <br/> \u65e7\u306e kind 4 |\n| `other` <br/> \u65e7\u306e kind 5(\u30ac\u30fc\u30cb\u30c3\u30b7\u30e5\u306a\u3069) |",
+                                "$ref": "#/components/schemas/CategoryRole"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "children": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SearchFormNodeResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "is_major",
+                    "root_role",
+                    "children"
+                ],
+                "title": "SearchFormNodeResource"
             }
         }
     }
