@@ -10,6 +10,39 @@
         }
     ],
     "paths": {
+        "/admin/me": {
+            "get": {
+                "operationId": "admin.currentAdmin",
+                "summary": "\u30ed\u30b0\u30a4\u30f3\u3057\u3066\u3044\u308b\u7ba1\u7406\u8005\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "CurrentAdmin"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/hello": {
             "get": {
                 "operationId": "hello",
