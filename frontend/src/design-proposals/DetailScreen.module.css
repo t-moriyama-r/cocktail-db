@@ -1,0 +1,109 @@
+.detail p {
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.nameEng {
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: 0.6em;
+}
+
+/* 属性の一覧。狭い幅は 2 列、広い幅は 1 行に並べる(旧は表を 2 種類描き分けていた) */
+.attributes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.attributes > div {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.attributes dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.attributes dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.baseAttr {
+  grid-column: 1 / -1;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.recipe {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.recipe th,
+.recipe td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.recipe th {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.recipe tbody tr:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+.recipe .amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.materialEng {
+  display: none;
+}
+
+.note {
+  margin-top: var(--space-4);
+}
+
+.note p {
+  margin: var(--space-1) 0 0;
+}
+
+@media (min-width: 600px) {
+  .attributes {
+    grid-template-columns: 2fr repeat(4, 1fr) 2fr;
+  }
+
+  .attributes > div {
+    border-bottom: none;
+    border-right: 1px solid var(--color-border);
+  }
+
+  .baseAttr {
+    grid-column: auto;
+  }
+
+  .materialEng {
+    display: table-cell;
+  }
+}
+
+@media (min-width: 960px) {
+  .body {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+  }
+}
