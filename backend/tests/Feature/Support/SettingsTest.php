@@ -24,6 +24,8 @@ it('TC-131-01: 保存した値は暗号化されて DB に入り、APP_KEY で�
 
     $raw = DB::table('settings')->where('key', 'amazon.secret')->value('value');
 
+    expect($raw)->toBeString();
+    assert(is_string($raw));
     expect($raw)->not->toContain('plain-secret-value')
         ->and(Crypt::decryptString($raw))->toBe('plain-secret-value');
 });
@@ -71,10 +73,9 @@ it('TC-131-07: 保存した値を復号できない(別の APP_KEY で暗号化�
         'key' => 'amazon.secret',
         'value' => $otherKey->encryptString('encrypted-with-other-key'),
     ]);
-    Log::spy();
+    Log::shouldReceive('warning')->once()->with(Mockery::any(), ['key' => 'amazon.secret']);
 
     expect(settings()->get('amazon.secret'))->toBe('FROM-ENV');
-    Log::shouldHaveReceived('warning')->once()->withArgs(fn ($message, $context) => $context === ['key' => 'amazon.secret']);
 });
 
 it('TC-131-08: 保存し直すと値を上書きし、行は 1 件のまま、変えた人を記録する', function () {
@@ -84,10 +85,9 @@ it('TC-131-08: 保存し直すと値を上書きし、行は 1 件のまま、�
     settings()->set('rakuten.app_id', 'OLD', $first);
     settings()->set('rakuten.app_id', 'NEW', $second);
 
-    $rows = Setting::query()->where('key', 'rakuten.app_id')->get();
-    expect($rows)->toHaveCount(1)
-        ->and($rows->first()->value)->toBe('NEW')
-        ->and($rows->first()->updated_by)->toBe($second->id)
+    $row = Setting::query()->where('key', 'rakuten.app_id')->sole();
+    expect($row->value)->toBe('NEW')
+        ->and($row->updated_by)->toBe($second->id)
         ->and(settings()->get('rakuten.app_id'))->toBe('NEW');
 });
 

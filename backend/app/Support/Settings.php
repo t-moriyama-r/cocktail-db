@@ -51,12 +51,15 @@ final class Settings
         }
 
         try {
-            return $setting->value;
+            // value は encrypted のキャストで、読んだときに復号される
+            $value = $setting->getAttribute('value');
         } catch (DecryptException) {
             Log::warning('設定の値を復号できないので、.env の値を使う', ['key' => $key]);
 
             return null;
         }
+
+        return is_string($value) ? $value : null;
     }
 
     /**
@@ -65,8 +68,9 @@ final class Settings
      */
     private function fromEnv(string $key): ?string
     {
-        $value = config('settings', [])[$key] ?? null;
+        $values = config('settings');
+        $value = is_array($values) ? ($values[$key] ?? null) : null;
 
-        return $value === null ? null : (string) $value;
+        return is_scalar($value) ? (string) $value : null;
     }
 }
