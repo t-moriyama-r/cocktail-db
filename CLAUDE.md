@@ -113,7 +113,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 ## カテゴリ木
 
 - カテゴリ木(閉包テーブル `category_closures`)は、`CategoryTree` サービス(`app/Services/CategoryTree.php`)経由でだけ書き換える。閉包テーブルを直接 INSERT・UPDATE・DELETE しない
-- `CategoryTree` に無い書き換え(ノードの削除など)が要るときは、閉包テーブルを直接書かずに `CategoryTree` にメソッドを足す。足すのがその issue の範囲を超えるなら、issue で相談する
+- `CategoryTree` に無い書き換えが要るときは、閉包テーブルを直接書かずに `CategoryTree` にメソッドを足す。足すのがその issue の範囲を超えるなら、issue で相談する
 
 ## 旧ソースの参照
 
