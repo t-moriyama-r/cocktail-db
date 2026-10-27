@@ -24,8 +24,10 @@ here=$(cd "$(dirname "$0")" && pwd)
 main() {
   if [ "$(bash "$here/head-reviewed.sh" "$repo" "$number")" = true ]; then echo reviewed; return; fi
 
-  local pushed comments request
-  pushed=$(gh pr view "$number" -R "$repo" --json commits | jq -r '.commits[-1].committedDate')
+  local head pushed comments request
+  head=$(gh pr view "$number" -R "$repo" --json headRefOid | jq -r .headRefOid)
+  # --json commits は先頭 100 件までなので、101 件目からの PR では最後の要素がいまのコミットにならない(RC-06)。いまのコミットの日時を直接取る
+  pushed=$(gh api "repos/$repo/commits/$head" --jq .commit.committer.date)
   comments=$(gh api --paginate --slurp "repos/$repo/issues/$number/comments?per_page=100" | jq 'add // []')
   request=$(last_owner_request "$comments" "$pushed")
   if [ -z "$request" ]; then echo request; return; fi

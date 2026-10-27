@@ -110,7 +110,7 @@ jobs:
           fi
           [ -n "$NUMBER" ] || skip "PR が見つからない"
 
-          pr=$(gh pr view "$NUMBER" -R "$REPO" --json state,isDraft,baseRefName,headRefOid,author,labels,mergeable,isCrossRepository,commits,closingIssuesReferences)
+          pr=$(gh pr view "$NUMBER" -R "$REPO" --json state,isDraft,baseRefName,headRefOid,author,labels,mergeable,isCrossRepository,closingIssuesReferences)
           head=$(jq -r .headRefOid <<<"$pr")
           [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "#$NUMBER は開いていない"
           [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "#$NUMBER は下書き"
@@ -144,7 +144,8 @@ jobs:
           # 無ければ「Review finished」「No actionable comments」のコメントだけが付く(どちらか片方のこともあり、後から別のコメントが続くこともある)。
           # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける。
           # CodeRabbit はスレッドへの返信のたびに本文が空のレビューを最新のコミットに付けるので、本文の無いレビューは数えない
-          pushed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+          # --json commits は先頭 100 件までなので(RC-06)、いまのコミットの日時を直接取る
+          pushed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date) || skip "いまのコミット ${head:0:7} の日時を読めない"
           reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/reviews?per_page=100" \
             | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
                 or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
