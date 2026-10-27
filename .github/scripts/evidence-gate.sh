@@ -18,7 +18,7 @@ body=$(jq -r '.body // ""' <<<"$pr" | tr -d '\r')
 section=$(awk '/^## /{in_section = /^## 証跡/; next} in_section' <<<"$body")
 code=$(jq -r '.files[].path' <<<"$pr" | grep -Ev \
 	-e '\.(md|txt)$' \
-	-e '^(docs|\.github|e2e)/' \
+	-e '^(docs|\.github|e2e|ops)/' \
 	-e '(^|/)(tests?|__tests__)/' \
 	-e '\.(test|spec)\.[cm]?[jt]sx?$' \
 	-e 'Test\.php$' \

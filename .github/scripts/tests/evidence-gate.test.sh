@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-gate.sh のテスト(TC-380-01〜12)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# evidence-gate.sh のテスト(TC-380-01〜13)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/evidence-gate.test.sh
 
@@ -49,6 +49,8 @@ main() {
 		"$(body "## 何をしたか" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER" "## 証跡" "修正前・修正後は上" "## 確かめたこと" "CI")" 1 '静止画'
 	check TC-380-12 '<img> に埋めた URL は動画として数えない' "$CODE" \
 		"$(body "## 証跡" "修正前・修正後" "$IMG" "$IMG" "$IMG")" 1 '(0 本)'
+	check TC-380-13 'ops だけを変えた PR は、撮らない理由があれば通る' '["ops/backup/backup.sh","ops/migrate/run.sh"]' \
+		"$(body "## 証跡" "ops のシェルだけで画面も API も無いので撮らない")" 0
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
