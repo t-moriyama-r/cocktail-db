@@ -7,6 +7,7 @@
 - stg 環境(ステージング): https://cocktail-stg.trc-vlackhistory.net/ (`staging`。同上)
 - BE: Laravel 13(PHP 8.4)。`/api/*` が API、それ以外のパスは React の SPA を返す
 - FE: React + Vite(TypeScript)。ビルド結果は `backend/public/spa` に出力し、Laravel の `resources/views/spa.blade.php` がマニフェストを読んで HTML を組み立てる
+- スタイル: CSS Modules + CSS 変数(下の「画面のスタイル」)
 - 型の共有: Laravel のコードから Scramble で `openapi/openapi.json` を出力し、FE は openapi-typescript で型を生成して openapi-fetch で呼ぶ
 - サーバー: mixhost(共用レンタルサーバー、cPanel)。GitHub Actions から SSH(rsync)でデプロイ
 
@@ -52,6 +53,19 @@ npm run dev                  # http://localhost:5173 。/api は Laravel に流�
 ```
 
 Laravel から本番と同じ形で確かめるときは、`frontend` で `npm run build` してから http://127.0.0.1:8000 を開く。
+
+## 画面のスタイル
+
+CSS Modules(画面ごとの `*.module.css`)と CSS 変数で書く。色・余白・文字の大きさの変数と幅の区切り(600px・960px・1264px。旧と同じ)は `frontend/src/styles/` にある。
+
+選んだ理由(候補の比べ方は #294 と `docs/design/style.md` の「方式の候補」):
+
+- 依存を足さずに始められる。Vite が CSS Modules を標準で扱い、実行時のコードも無い(Tailwind CSS・vanilla-extract は依存を足す)
+- 旧の SCSS(幅の区切りなど)をほぼそのまま CSS に直せる
+- 見た目の違いを変数に寄せられる。#294 の試作では、画面の CSS を変えずに変数だけで 3 案を切り替えられた
+- oxlint は CSS を見ないので、ぶつからない。クラス名に型が付かないのは弱いところで、要るとなったら後から型を出す道具を足す
+
+書き方と見た目の基準(色・余白・文字の大きさ・幅の区切り)は `docs/design/style.md` にある。
 
 ## API を変えたら
 
