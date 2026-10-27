@@ -193,20 +193,25 @@ describe('CategoryTree', () => {
     // getAllByRole は 600 個の役割を計算して遅いので、描いた数は DOM から直接数える
     const countRows = () => container.querySelectorAll('input[type="checkbox"]').length
 
-    // 1 回目は JIT のコンパイルと jsdom の初期化の時間が大きく混ざるので、一度開いて閉じてから測る
+    // 1 回目は JIT のコンパイルと jsdom の初期化の時間が大きく混ざるので、一度開いて閉じてから測る。
+    // 同じ PC で動くほかの処理に割り込まれた回で落ちないよう、3 回測っていちばん速い回を見る
     fireEvent.click(openAll)
     fireEvent.click(closeAll)
 
-    const started = performance.now()
-    fireEvent.click(openAll)
-    const openedCount = countRows()
-    fireEvent.click(closeAll)
-    const closedCount = countRows()
-    const elapsed = performance.now() - started
+    const trials = Array.from({ length: 3 }, () => {
+      const started = performance.now()
+      fireEvent.click(openAll)
+      const openedCount = countRows()
+      fireEvent.click(closeAll)
+      const closedCount = countRows()
+      return { openedCount, closedCount, elapsed: performance.now() - started }
+    })
 
-    expect(openedCount).toBe(600)
-    expect(closedCount).toBe(6)
-    expect(elapsed).toBeLessThan(1000)
+    for (const { openedCount, closedCount } of trials) {
+      expect(openedCount).toBe(600)
+      expect(closedCount).toBe(6)
+    }
+    expect(Math.min(...trials.map(({ elapsed }) => elapsed))).toBeLessThan(1000)
   })
 })
 
