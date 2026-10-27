@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Tests\TestCase;
 
 // 管理画面の画像のアップロード(#288)。旧の StorageCommon::saveFromDetailAdmin と、編集のリクエストの
 // input_image の規則(nullable|image)の置き換え。
@@ -212,20 +213,29 @@ it('TC-288-11: 画像も remove_image も無ければ、今の値のままでフ
     'remove_image が "0"' => ['0'],
 ]);
 
-it('TC-288-12: 今の値が外部の URL・パスを含む値なら、差し替え・削除でディスクのファイルを消さない', function (string $current) {
+/** 今の値が $current の行で差し替えと remove_image をして、前からあったディスクのファイルが残ることを確かめる */
+function adminAssertKeepsDiskFiles(TestCase $test, string $current): void
+{
     Storage::disk('public')->put('keep.png', adminImageBytes('png'));
     Storage::disk('public')->put('dir/keep.png', adminImageBytes('png'));
 
-    $new = $this->post('/api/admin/__image_probe', [
+    $new = adminStoredName($test->post('/api/admin/__image_probe', [
         'image' => adminUpload('a.png', adminImageBytes('png')),
         'current' => $current,
-    ])->assertOk()->json('image');
-    $this->post('/api/admin/__image_probe', ['remove_image' => '1', 'current' => $current])
+    ])->assertOk());
+    $test->post('/api/admin/__image_probe', ['remove_image' => '1', 'current' => $current])
         ->assertOk()->assertExactJson(['image' => null]);
 
     expect(adminStoredImages())->toEqualCanonicalizing(['keep.png', 'dir/keep.png', $new]);
+}
+
+it('TC-288-12: 今の値が外部の URL なら、差し替え・削除でディスクのファイルを消さない', function () {
+    adminAssertKeepsDiskFiles($this, 'https://example.com/keep.png');
+});
+
+it('TC-288-15: 今の値がパスを含む値なら、差し替え・削除でその先のファイルを消さない', function (string $current) {
+    adminAssertKeepsDiskFiles($this, $current);
 })->with([
-    '外部の URL' => ['https://example.com/keep.png'],
     'ディレクトリ付き' => ['dir/keep.png'],
     '上の階層' => ['../keep.png'],
 ]);
