@@ -59,6 +59,7 @@ class DescriptionMarkup
     /**
      * 保存する形にする(旧の mark_up)。添えた名前(`{!…!}`)を取り除き、名前で書いた記法を ID に直し、
      * 名前の一致する語(旧で決め打ちしていた漢字の名前と、片仮名の並び)を記法に置き換える。
+     * 名前の一致する語は根(旧の種別)にはリンクしない。旧は種別を探しておらず、「ソフトドリンク」などが記法にならなかった。
      *
      * @param  string  $attribute  422 のエラーを付ける入力の名前
      *
@@ -78,7 +79,7 @@ class DescriptionMarkup
 
         foreach (self::KANJI_PATTERNS as $pattern) {
             $text = (string) preg_replace_callback($pattern, function (array $m): string {
-                $id = $this->findNodeId($m[0]);
+                $id = $this->findNodeId($m[0], withRoots: false);
 
                 return $id === null ? $m[0] : "@n{$id}@";
             }, $text);
@@ -86,7 +87,11 @@ class DescriptionMarkup
 
         return (string) preg_replace_callback(self::KATAKANA_PATTERN, function (array $m): string {
             $name = $m[0];
-            foreach (['n', 'c', 'b', 'd'] as $kind) {
+            $id = $this->findNodeId($name, withRoots: false);
+            if ($id !== null) {
+                return "@n{$id}@";
+            }
+            foreach (['c', 'b', 'd'] as $kind) {
                 $id = $this->findId($kind, $name);
                 if ($id !== null) {
                     return "@{$kind}{$id}@";
@@ -101,11 +106,12 @@ class DescriptionMarkup
      * 編集で開く形にする(旧の at_id_append_note)。ID の記法の後に、指す先の名前を `{!名前!}` で添える。
      * 2 段より深いノードは、旧のミドルと同じく「親の名前/名前」にする(同じ名前のノードを見分けるため)。
      * 指す先が無い記法は、旧と同じく取り除く(消したページへのリンクが残っていたもの)。
+     * 空の文字列は、旧と同じく null にする。
      */
     public function withNotes(?string $text): ?string
     {
         if ($text === null || $text === '') {
-            return $text;
+            return null;
         }
 
         return (string) preg_replace_callback(self::ID_REFERENCE_PATTERN, function (array $m): string {
@@ -131,12 +137,13 @@ class DescriptionMarkup
 
         return (string) preg_replace_callback(self::NAMED_REFERENCE_PATTERN, function (array $m) use ($attribute): string {
             [$whole, $command, $name] = $m;
-            if (is_numeric($name)) {
-                return $whole;
-            }
             $kind = strtolower($command);
             if (! in_array($kind, ['n', 'c', 'b', 'd'], true)) {
+                // ID で書いた記法(旧の `@m12@` など)も、表示できない参照として残さないよう止める
                 throw ValidationException::withMessages([$attribute => ['記法の種類がありません(n・c・b・d のどれか): '.$whole]]);
+            }
+            if (is_numeric($name)) {
+                return $whole;
             }
             $id = $this->findId($kind, $name);
             if ($id === null) {
@@ -163,9 +170,9 @@ class DescriptionMarkup
 
     /**
      * 名前が一致するノードの ID。同じ名前のノードが複数あれば、浅いもの(祖先の少ないもの)、同じ深さなら ID の小さいもの。
-     * 旧はカテゴリをミドルより先に探していたので、浅い方を先にする。
+     * 旧はカテゴリをミドルより先に探していたので、浅い方を先にする。$withRoots が false なら根(旧の種別)を除く。
      */
-    private function findNodeId(string $name): ?int
+    private function findNodeId(string $name, bool $withRoots = true): ?int
     {
         $depth = CategoryClosure::query()
             ->selectRaw('count(*)')
@@ -174,6 +181,7 @@ class DescriptionMarkup
         return $this->idOrNull(
             Category::query()
                 ->where('name_search', NameNormalizer::normalize($name))
+                ->when(! $withRoots, fn (Builder $query) => $query->has('ancestors'))
                 ->orderBy($depth)
                 ->orderBy('id')
                 ->value('id'),

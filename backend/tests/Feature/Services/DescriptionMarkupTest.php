@@ -150,12 +150,15 @@ it('TC-287-07: 名前で書いた記法の名前が見つからなければ 422'
     expectMarkupRejected(fn () => $this->markup->toStored('@cないカクテル@', 'note'), 'note');
 });
 
-it('TC-287-08: 記法の種類が n・c・b・d でなければ 422(旧の p・m も)', function () {
+it('TC-287-08: 記法の種類が n・c・b・d でなければ、名前でも ID でも 422(旧の p・m も)', function () {
     descriptionMarkupTree();
 
     expectMarkupRejected(fn () => $this->markup->toStored('@xラム@'));
     expectMarkupRejected(fn () => $this->markup->toStored('@pラム@'));
     expectMarkupRejected(fn () => $this->markup->toStored('@mラム@'));
+    expectMarkupRejected(fn () => $this->markup->toStored('前に@x12@を見る'));
+    expectMarkupRejected(fn () => $this->markup->toStored('前に@p12@を見る'));
+    expectMarkupRejected(fn () => $this->markup->toStored('前に@m12@を見る'));
 });
 
 it('TC-287-09: 文末の閉じていない記法(@ と英字の後が数字)は 422。メールアドレスのような書き方は通す', function () {
@@ -175,14 +178,14 @@ it('TC-287-10: 旧で決め打ちしていた漢字の名前を、ミドルの�
 it('TC-287-11: 決め打ちの漢字の名前のノードが無ければ、そのまま残す', function () {
     descriptionMarkupTree();
 
-    expect($this->markup->toStored('生姜と醤油'))->toBe('生姜と醤油');
+    expect($this->markup->toStored('巨峰とグラニュー糖'))->toBe('巨峰とグラニュー糖');
 });
 
-it('TC-287-12: null と空の文字列はそのまま返す', function () {
+it('TC-287-12: 保存のときは null と空の文字列をそのまま返し、編集で開くときはどちらも null を返す', function () {
     expect($this->markup->toStored(null))->toBeNull()
         ->and($this->markup->toStored(''))->toBe('')
         ->and($this->markup->withNotes(null))->toBeNull()
-        ->and($this->markup->withNotes(''))->toBe('');
+        ->and($this->markup->withNotes(''))->toBeNull();
 });
 
 it('TC-287-13: 同じ名前のノードが複数あれば、浅いもの、同じ深さなら ID の小さいものを選ぶ', function () {
@@ -190,12 +193,12 @@ it('TC-287-13: 同じ名前のノードが複数あれば、浅いもの、同�
 
     expect($this->markup->toStored('ホワイト'))->toBe("@n{$n['ラム/ホワイト']->id}@");
 
-    $rootWhite = app(CategoryTree::class)->addNode(
-        null,
+    $shallowWhite = app(CategoryTree::class)->addNode(
+        $n['蒸留酒'],
         Category::factory()->make(['name' => 'ホワイト', 'name_search' => 'ホワイト'])->getAttributes(),
     );
 
-    expect($this->markup->toStored('ホワイト'))->toBe("@n{$rootWhite->id}@");
+    expect($this->markup->toStored('ホワイト'))->toBe("@n{$shallowWhite->id}@");
 });
 
 it('TC-287-14: 編集で開くとき、ID の記法に指す先の名前を添える', function () {
@@ -234,4 +237,20 @@ it('TC-287-17: 名前を添えて開き、そのまま保存すると、添え�
 
 it('TC-287-18: UTF-8 でない文字列は 422', function () {
     expectMarkupRejected(fn () => $this->markup->toStored("ラム\xff"));
+});
+
+it('TC-287-19: 名前の一致する語は根にリンクしない。名前で書いた記法なら根も指せる', function () {
+    $n = descriptionMarkupTree();
+    $soft = app(CategoryTree::class)->addNode(
+        null,
+        Category::factory()->make(['name' => 'ソフトドリンク', 'name_search' => 'ソフトドリンク', 'role' => 'soft_drink'])->getAttributes(),
+    );
+    $white = app(CategoryTree::class)->addNode(
+        null,
+        Category::factory()->make(['name' => 'ホワイト', 'name_search' => 'ホワイト'])->getAttributes(),
+    );
+
+    expect($this->markup->toStored('ソフトドリンクで割る'))->toBe('ソフトドリンクで割る')
+        ->and($this->markup->toStored('ホワイト'))->toBe("@n{$n['ラム/ホワイト']->id}@")
+        ->and($this->markup->toStored('@nソフトドリンク@と@nホワイト@'))->toBe("@n{$soft->id}@と@n{$white->id}@");
 });
