@@ -112,6 +112,7 @@ jobs:
           gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:draft-sweep sha=$PICKED_HEAD --> draft のまま止まっていたので、Actions の Claude Code が引き継ぐ($ROUND 回目)"
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
 
+      # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
         if: steps.live.outputs.run
         with:

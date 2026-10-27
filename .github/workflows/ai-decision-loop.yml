@@ -56,6 +56,9 @@ jobs:
       # 判断を本文に反映するときに、設計書・既存のコードを読めるようにする
       - uses: actions/checkout@v6
         if: steps.live.outputs.open == 'true'
+        with:
+          # Claude Code は push しない(issue の本文を直すだけ)ので、トークンを .git/config に残さない
+          persist-credentials: false
 
       - uses: anthropics/claude-code-action@v1
         if: steps.live.outputs.open == 'true'
