@@ -111,7 +111,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 | `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(draft も。1 時間ごと)。直せない衝突は `needs-human` で人に頼む |
 | `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
 | `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある(向き先が `staging`・`release` の PR と、`needs-approval` の PR は除く) | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
-| `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない(`needs-approval` の PR は除く) | CodeRabbit(上限なら `ai-claude-review.yml`) |
+| `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない(`needs-approval` の PR は除く) | CodeRabbit(上限なら `ai-claude-review.yml`)。push されたコミットは、CI の終わりに `review-on-push.yml` が依頼を出す(取りこぼしは `ai-review-sweep.yml` が拾う) |
 | `状態:CI実行中` | 必須のチェックが終わっていない | CI(`test.yml`) |
 | `状態:指摘の解決待ち` | 解決(resolve)されていないスレッドがある。指摘への返信は済んでいる(直さない理由を返したスレッドは、Actions が解決にしない)。ブランチ保護が会話の解決を必須にしているので、このままではマージできない | 人が返信を確かめてスレッドを解決にする(納得できなければ返信する)。解決しても、ラベルが変わるのは次の出し直し(下)のとき |
 | `状態:CI未実行` | GitHub がマージを止めていて(`BLOCKED`)、上のどれでもない。いまの保護では、必須のチェックがいまのコミットで成功で付いていないとき(ドキュメントだけの変更で `test.yml` が動かなかった、CI が承認待ちで走っていない、など) | 自動では直らない。CI を流し直すか、人が保護を飛ばしてマージするかを決める |
