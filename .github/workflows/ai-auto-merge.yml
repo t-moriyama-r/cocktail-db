@@ -1,4 +1,4 @@
-# CodeRabbit の指摘への対応が終わり(最新のコミットを見て、指摘が残っていない)、CI が緑の PR を、マージできる状態とみなし、
+# CodeRabbit の指摘への対応が終わり(最新のコミットを見て、指摘が残っていない)、CI が緑(必須のチェックがすべて成功で付いている)の PR を、マージできる状態とみなし、
 # 自動でマージする。人の手でマージする PR なら、マージせずに needs-approval を付けて人に知らせる。
 # 人に頼むのを、自動のレビューと CI が終わった後の 1 回にするため、マージできる状態かの判定はここだけで行う
 #
@@ -173,6 +173,9 @@ jobs:
           # このワークフロー自身のジョブは除く
           checks=$(gh api --paginate --slurp "repos/$REPO/commits/$head/check-runs?per_page=100" \
             | jq '[.[].check_runs[] | select(.name != "auto-merge")]')
+          # 走らなかったワークフロー(bot の push で承認待ちになった CI など)のチェックは付かないので、必須のチェックが揃っているかも見る(#360)
+          missing=$(bash .ai-dev/.github/scripts/required-checks-missing.sh "$REPO" "$base" "$head") || skip "必須のチェックを確かめられない"
+          [ -z "$missing" ] || skip "必須のチェックが ${head:0:7} に揃っていない: $missing"
           [ "$(jq length <<<"$checks")" -gt 0 ] || skip "${head:0:7} にチェックが 1 つも無い"
           # draft の間は CI(test.yml)・evidence-gate のジョブを飛ばす(#410)。飛ばしたジョブのチェックは成功に数えられるので、
           # GITHUB_TOKEN で ready にした(ready_for_review の回が起きない)PR が、CI を流さないまま通らないよう、

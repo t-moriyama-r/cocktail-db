@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Brand;
 use App\Models\Category;
-use App\Models\CategoryClosure;
 use App\Models\Cocktail;
 use App\Models\Dictionary;
 use App\Support\NameNormalizer;
@@ -20,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  */
 class DescriptionMarkup
 {
+    public function __construct(private readonly CategoryTree $tree) {}
+
     /**
      * 片仮名の並び(旧と同じ。2 文字以上で、先頭は長音・中黒でない)。名前が一致すれば記法に置き換える。
      */
@@ -170,23 +171,12 @@ class DescriptionMarkup
     }
 
     /**
-     * 名前が一致するノードの ID。同じ名前のノードが複数あれば、浅いもの(祖先の少ないもの)、同じ深さなら ID の小さいもの。
-     * 旧はカテゴリをミドルより先に探していたので、浅い方を先にする。$withRoots が false なら根(旧の種別)を除く。
+     * 名前が一致するノードの ID。同じ名前のノードが複数あるときの選び方は CategoryTree::findByName。
+     * $withRoots が false なら根(旧の種別)を除く。
      */
     private function findNodeId(string $name, bool $withRoots = true): ?int
     {
-        $depth = CategoryClosure::query()
-            ->selectRaw('count(*)')
-            ->whereColumn('descendant_id', (new Category)->qualifyColumn('id'));
-
-        return $this->idOrNull(
-            Category::query()
-                ->where('name_search', NameNormalizer::normalize($name))
-                ->when(! $withRoots, fn (Builder $query) => $query->has('ancestors'))
-                ->orderBy($depth)
-                ->orderBy('id')
-                ->value('id'),
-        );
+        return $this->tree->findByName($name, $withRoots)?->id;
     }
 
     private function idOrNull(mixed $id): ?int
