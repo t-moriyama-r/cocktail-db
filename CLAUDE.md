@@ -29,7 +29,7 @@
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
 | `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップと復元の検証、`ops/migrate`: 移行) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
-| `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`) | — |
+| `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`、画面のスタイルの書き方と見た目の基準は `docs/design/style.md`) | — |
 
 ### BE のテスト
 
@@ -95,6 +95,10 @@ npm test                              # php artisan serve を起こして Playwr
 docker run --rm -e SHELLCHECK_OPTS=--severity=warning -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12
 ```
 
+## レビューで繰り返し出た指摘
+
+2 件以上の PR のレビューで出た種類の指摘は、`docs/review-checklist.md` にルールとして置いてある。コードを書く前と、PR にする前に読み、当てはまるところを直す。レビューの指摘を直すとき・コンフリクトを解くときも同じ。
+
 ## API を変えたら
 
 BE の API の形(ルート・リクエスト・レスポンス)を変えたら、同じ PR で次を行う。
@@ -129,6 +133,9 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
 4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする。同じファイルを変える PR がまだ開いていて、その上に積むときだけ、ブランチと PR の向き先を土台の PR のブランチにする(土台がマージされると GitHub が向き先を `develop` に付け替え、`ci-rerun.yml` が 1 時間以内に CI を流し直す)
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**画面に出る挙動が変わるなら、修正前後のスクリーンショット・動画・比較画像(修正前後を並べた画像)の 3 つをすべて貼る**。どれか 1 つで済ませない。画面に出ない変更(API だけ・DB だけ・テストだけ・ドキュメントだけ)は、撮らない理由を書く
+   - **見た目の案を人に選んでもらう PR**(閉じる issue に `needs-review` が付き、PR 本文で色・余白・レイアウト・スタイルの方式などの案を並べて選んでもらうもの。例: #348)は、決着したら、本文に「最終的にどうなったか(証跡)」の節を置き、同じ中身を PR の最後のコメントにも貼る。選ぶ前の案の画像だけでは、何に決まって最終的にどう見えるのかが PR から分からないため
+   - 節に書くのは、決まったこと(どのコメントで誰が決めたか)、まだ決まっていないこと、決まった後に変えたところ(レビュー対応で色を変えた、など)、最終の見た目の証跡(決める前 → 最終の比較画像と、最終の見た目の動画)。見た目が変わるたびに(人の判断を反映した・レビュー対応で直した)撮り直して差し替える
+   - Actions の Claude Code は画面を撮れない。この種の PR で見た目を変えたら、節を文字で書いたうえで、何を撮ればよいかをコメントして `needs-human` を付ける(`ai-review-loop.yml`)。撮って貼るのは手元のエージェントで、貼ったら `needs-human` を外す(外すと `ai-auto-merge.yml` がマージできる状態かを見直す)。貼るコメントの先頭には `<!-- ai-dev:agent -->` を付ける(オーナーのアカウントで書いた印の無いコメントは、Actions に人の返信として拾われる)
 6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や画面の証跡が要るものは `needs-human` を付ける)
 7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごとに見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
@@ -148,6 +155,7 @@ CLAUDE.md・`README.md`・`docs/` の記述と、既存コードの実際の書�
 - 文書を直すのは、issue の範囲に入っているときだけ。ついでに直さない(1 PR = 1 issue)
 - ただし、その PR の実装で古くなる記述(「まだ無い」「#<番号> で作る」と書いたものを作った・ジョブやコマンドの中身を変えた・表や列を足した、など)は、同じ PR で直す。これは issue の範囲に入る。古い記述が残ると、次に読むエージェントが実態と違う規約に従ってしまう
 - PR を作る前に、差分に出た名前(ファイル・クラス・コマンド・ワークフローのジョブ・表・issue の番号)で `CLAUDE.md`・`README.md`・`docs/` を grep し、この PR で古くなる記述が無いかを確かめる
+- ワークフローの cron・間隔・モデルを変えたときは、ほかのワークフローのコメントにも書かれている(「ほかの定期実行の 0・20 分と重ならないよう」など)。`grep -rn "schedule:" -A2 .github/workflows/` で全部の cron を出し、ワークフローのコメントと文書の「〇時間ごと」「〇分」と突き合わせる
 
 ## 禁止事項
 

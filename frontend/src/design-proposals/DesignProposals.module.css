@@ -1,0 +1,35 @@
+/* 案と画面の切り替えの帯。案の配色の外に置くため、トークンを使わず固定の色にする */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 6px 12px;
+  background: #333;
+  color: #eee;
+  font: 13px/1.5 sans-serif;
+}
+
+.bar ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar p {
+  margin: 0;
+  color: #bbb;
+}
+
+.bar a {
+  color: #9cf;
+}
+
+.bar a[aria-current='page'] {
+  color: #fff;
+  font-weight: 700;
+  text-decoration: underline;
+}
