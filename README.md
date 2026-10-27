@@ -21,6 +21,7 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy-stg.yml   staging → stg 環境
 .github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
 .github/workflows/branch-flow.yml  staging・release への PR の元のブランチを確かめる
+.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画)があるかを確かめる
 ```
 
 サーバー上の配置:
