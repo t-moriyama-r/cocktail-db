@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 /**
  * カクテル。
@@ -88,6 +89,22 @@ class Cocktail extends Model
     protected function published(Builder $query): void
     {
         $query->where('is_draft', false);
+    }
+
+    /**
+     * 技法。外部キー(NOT NULL・RESTRICT)で必ずあるので、無ければデータの壊れとして例外にする。
+     */
+    public function requiredMethod(): Method
+    {
+        return $this->method ?? throw new LogicException("カクテル {$this->id} の技法が無い");
+    }
+
+    /**
+     * 度数(%)。列の volume は小数 1 桁の文字列で読まれるので、数にして返す(旧の API・画面は strength と呼んでいた)。
+     */
+    public function strength(): float
+    {
+        return (float) $this->volume;
     }
 
     /**

@@ -93,9 +93,9 @@ it('TC-40-17: 無い ID は 404', function () {
     $this->getJson('/api/cocktails/999999/same-name')->assertNotFound();
 });
 
-it('TC-40-18: 英名の無いカクテルは、ほかに英名の無いカクテルがあっても 0 件', function () {
-    $target = sameNameCocktail(null);
-    sameNameCocktail(null);
+it('TC-40-18: 英名の無い(null・空の)カクテルは、ほかに英名の無いカクテルがあっても 0 件', function (?string $nameEng) {
+    $target = sameNameCocktail($nameEng);
+    sameNameCocktail($nameEng);
 
     assertSameNames($this, $target, []);
-});
+})->with(['null' => [null], '空の文字' => ['']]);

@@ -56,7 +56,7 @@ export interface paths {
         /**
          * 同じ名前の別のカクテルを、ID の順で返す。
          * @description 「同じ名前」は英名(name_eng)が同じもの(旧 CocktailFactory::sameName)。下書きは返さず、下書き・無いカクテルを
-         *     指定したら 404。英名の無いカクテルは比べる名前が無いので 0 件(docs/decisions/cocktail-detail.md)。
+         *     指定したら 404。英名の無い(null・空の)カクテルは比べる名前が無いので 0 件(docs/decisions/cocktail-detail.md)。
          */
         get: operations["cocktailSameName"];
         put?: never;
@@ -163,7 +163,6 @@ export interface components {
                 name: string;
                 name_eng: string | null;
             } | null;
-            /** @description 度数(%)。列の名前は volume だが、旧の API と画面は strength と呼んでいた */
             strength: number;
             sweet_degree: number | null;
             rate: number | null;

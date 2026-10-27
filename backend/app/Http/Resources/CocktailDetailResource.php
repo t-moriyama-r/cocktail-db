@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use App\Models\Cocktail;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use LogicException;
 
 /**
  * カクテルの詳細(GET /api/cocktails/{id}・GET /api/admin/cocktails/{id}/preview。#40)。
@@ -25,8 +24,7 @@ class CocktailDetailResource extends JsonResource
         $cocktail = $this->resource->loadMissing([
             'baseCategory', 'method', 'glass', 'ice', 'ingredients.category', 'ingredients.brand',
         ]);
-        // 技法は外部キー(NOT NULL・RESTRICT)で必ずある
-        $method = $cocktail->method ?? throw new LogicException("カクテル {$cocktail->id} の技法が無い");
+        $method = $cocktail->requiredMethod();
         $glass = $cocktail->glass;
         $ice = $cocktail->ice;
 
@@ -55,8 +53,7 @@ class CocktailDetailResource extends JsonResource
                 'name' => $ice->name,
                 'name_eng' => $ice->name_eng,
             ],
-            // 度数(%)。列の名前は volume だが、旧の API と画面は strength と呼んでいた
-            'strength' => (float) $cocktail->volume,
+            'strength' => $cocktail->strength(),
             'sweet_degree' => $cocktail->sweet_degree,
             'rate' => $cocktail->rate,
             'description' => $cocktail->description,
