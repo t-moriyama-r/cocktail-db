@@ -5,6 +5,8 @@
 # ai-auto-merge.yml が GITHUB_TOKEN でブランチを消したときはワークフローも起きないので、1 時間ごとの見回りで拾う。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
 # edited は、起きたときに早く拾うためのもの。付け替えは push ではないので、push 直後の待ち(MIN_AGE_MINUTES)を 0 にする。
+# Actions の Claude(claude[bot])が push したコミットでは、pull_request の回が承認待ち(action_required)のまま走らない。承認待ちの回しか無い PR も
+# 動いていないものとして流し直す(#365)。claude[bot] が push するワークフロー(ai-review-loop.yml・ai-draft-sweep.yml)は、終わりに番号を付けてこれを呼ぶ(ai-conflict-resolve.yml は ci-rerun.sh を直接呼ぶ)。
 # 流し直しは test.yml を PR のブランチで workflow_dispatch する。動いた回は PR に結び付くので、終わると ai-auto-merge.yml・
 # pr-status.yml(workflow_run)も起きる。PR のコードは checkout しない(pull_request_target で書き込みの権限を持つため)
 name: CI の流し直し

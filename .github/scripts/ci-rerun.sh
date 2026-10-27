@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI(test.yml)がいまのコミットで一度も動いていない PR に、CI を流し直させる
+# CI(test.yml)がいまのコミットで一度も動いていない(承認待ちの回しか無い)PR に、CI を流し直させる
 #
 # 使い方:
 #   ci-rerun.sh <owner/repo>              既定のブランチ向けの開いている PR すべてを見る
@@ -9,6 +9,10 @@
 # 付け替えはプッシュではないので test.yml が動かず、必須のチェックがそろわないまま止まる。ほかにも GITHUB_TOKEN で push した
 # コミットは test.yml を起こさない。そのため、何が起きたかではなく「いまのコミットで test.yml が動いたか」で決める。
 # 何度呼んでも、動いていない PR に 1 回流させるだけ。
+# 承認待ち(conclusion が action_required)の回は、動いたものに数えない。Actions の Claude(claude[bot])が push したコミットでは、
+# pull_request の回が「Approve and run」を待ったまま走らず、必須のチェックが付かない(#353・#365)。GITHUB_TOKEN の workflow_dispatch は
+# 承認が要らないので、承認待ちの回しか無ければ流し直す。承認待ちの回があるなら pull_request の回はもう作られているので、push 直後の待ちはしない。
+# 流し直した回(承認待ちでない回)ができると、次からは「動いた」とみなして重ねて流さない。
 # 流し直しは、test.yml を PR のブランチで workflow_dispatch する(GITHUB_TOKEN で push しても CI は起きないので、既定のブランチを
 # 取り込んで push する形にはしない)。そのため、試すのは PR のブランチの先頭で、既定のブランチとのマージではない
 # (必須のチェックは「最新に追いついていること」を求めていないので、これでマージできる)。
@@ -47,15 +51,22 @@ rerun_one() {
   # フォークのブランチでは、こちらから test.yml を動かせない(動かすのも危ない)
   if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; return; fi
   if [ "$(jq -r .baseRefName <<<"$pr")" != "$default" ]; then skip "向き先が $default ではない(積んでいる途中)"; return; fi
-  if [ "$(gh api "repos/$repo/actions/workflows/$WORKFLOW/runs?head_sha=$sha&per_page=1" --jq .total_count)" != 0 ]; then
+  # 回の数と、そのうち承認待ちの数。1 つのコミットの回は多くても数個なので、100 件で足りる
+  local runs total waiting
+  runs=$(gh api "repos/$repo/actions/workflows/$WORKFLOW/runs?head_sha=$sha&per_page=100" \
+    --jq '"\(.total_count) \([.workflow_runs[] | select(.conclusion == "action_required")] | length)"') || return 1  # 読めなかったのを「回が無い」と取り違えて流さない
+  read -r total waiting <<<"$runs"
+  if [ "$total" != "$waiting" ]; then
     skip "$WORKFLOW はいまのコミットで動いた・動いている"
     return
   fi
-  # コミットの日付は push の時刻ではない(古い日付のコミットを push できる)ので、push に近い PR の更新時刻で測る
-  local updated age
-  updated=$(jq -r .updatedAt <<<"$pr")
-  age=$((($(date -u +%s) - $(date -u -d "$updated" +%s)) / 60))
-  if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "PR の更新から $age 分しかたっていない"; return; fi
+  if [ "$total" = 0 ]; then
+    # コミットの日付は push の時刻ではない(古い日付のコミットを push できる)ので、push に近い PR の更新時刻で測る
+    local updated age
+    updated=$(jq -r .updatedAt <<<"$pr")
+    age=$((($(date -u +%s) - $(date -u -d "$updated" +%s)) / 60))
+    if [ "$age" -lt "$MIN_AGE_MINUTES" ]; then skip "PR の更新から $age 分しかたっていない"; return; fi
+  fi
   if [ "$(jq -r .mergeable <<<"$pr")" = CONFLICTING ]; then
     skip "コンフリクトは ai-conflict-resolve.yml が直す"
     return
@@ -63,7 +74,11 @@ rerun_one() {
 
   local out
   if out=$(gh workflow run "$WORKFLOW" -R "$repo" --ref "$branch" 2>&1); then
-    echo "#$n で $WORKFLOW を流し直した($branch の ${sha:0:7})"
+    if [ "$total" = 0 ]; then
+      echo "#$n で $WORKFLOW を流し直した($branch の ${sha:0:7})"
+    else
+      echo "#$n で $WORKFLOW を流し直した($branch の ${sha:0:7}。承認待ちの回しか無かった)"
+    fi
   elif ! grep -q 'HTTP 422' <<<"$out"; then
     # API の一時的なエラー・レート制限など。人に頼まず、次の見回りに任せる
     skip "$WORKFLOW を動かせなかったが、workflow_dispatch が無いためではなさそう(次の見回りでやり直す): $out"
