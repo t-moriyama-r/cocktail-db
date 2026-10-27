@@ -42,6 +42,25 @@ reviews:
       instructions: *legacy-diff
     - path: "e2e/**"
       instructions: *legacy-diff
+    # テストの書き方(CLAUDE.md の「テストの書き方」の「モックの範囲と確かめる対象」)。
+    # 上の backend/**・frontend/**・e2e/** の指示と重ねて効く
+    - path: "backend/tests/**"
+      instructions: &test-rules |
+        テストは振る舞いを変えないリファクタで落ちないように書く(CLAUDE.md の「モックの範囲と確かめる対象」)。次に当てはまれば指摘する。
+        - 自前のクラス・モジュール・フックをモックしている(`vi.mock` で自分たちのモジュールを差し替える、Mockery・`shouldReceive`・
+          `$this->mock()` で自分たちのクラスを差し替える、など)。差し替えてよいのは、プロセスの外にあって自分たちが持っていないもの
+          (外部 API・時刻・乱数・メール送信など)だけ。DB をモックしている・SQLite で代用している
+        - 呼び出しの回数・引数を確かめている(`toHaveBeenCalledTimes`・`toHaveBeenCalledWith`・`shouldReceive(...)->once()` など)のに、
+          その送信そのもの(ログに残す・メールを送る・外部 API に送る中身など)が仕様ではない
+        - 外から見える結果(返り値・HTTP の応答・DB に残った行・画面に出た文字や役割)ではなく、内部の state・private なメソッド・
+          コンポーネントの中の値に依存して確かめている
+        - FE の API の差し替えが `fetch` の層でない、応答に `src/api/schema.ts` の型を当てていない(手で型を書いている)、
+          差し替えの仕組みをテストのファイルごとに作っている(テストのセットアップの 1 か所に置く)
+        - 振る舞いを変えないリファクタの PR なのに、既存のテストを書き換えている
+    - path: "frontend/src/**/*.test.{ts,tsx}"
+      instructions: *test-rules
+    - path: "e2e/tests/**"
+      instructions: *test-rules
     - path: "docs/decisions/**"
       instructions: |
         旧と挙動を変える決定には、「旧との差分」の節があり、差分ごとに「旧で何が起きていて、新で何に変えるか」が
