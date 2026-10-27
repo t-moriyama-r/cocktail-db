@@ -61,6 +61,8 @@ bash ops/backup/tests/pull-backups.test.sh
 
    `.env` を別に作る(アプリの `.env` を触らない)なら、`DB_*` と `BACKUP_DIR` を書いた権限 600 のファイルを作り、画像のディレクトリを `--storage-dir <アプリのディレクトリ>/storage/app/public` で渡す(`archive-storage.sh` は、渡さないと `.env` のあるディレクトリの `storage/app/public` を見る)
 
+   画像が `.env` のあるディレクトリの `storage/app/public` に無いときも `--storage-dir` を渡す。下の 3 の手で流すときと、5 の cron の 2 行の両方に付ける。どこにあるかは、アプリの `public/storage` のリンク先を見る(`ls -l <アプリのディレクトリ>/public/storage`。旧アプリは、別のディレクトリの `storage/app/public` を指している)
+
 3. 一度、手で流す。`BACKUP_DIR/db/` と `BACKUP_DIR/storage/` に 1 組ずつできることを確かめる
 
    ```bash
