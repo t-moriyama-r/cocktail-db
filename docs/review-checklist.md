@@ -97,7 +97,8 @@ concurrency:
 ```jq
 # 良い: 信頼できる人か bot が書いたものから、目印のあるコメントを選ぶ(notify-needs-human.yml)
 # `.user.type == "Bot"` は Bot 全般を信頼する前提。絞るなら `.user.login` の許可リストにする
-$comments | map(select((.author_association as $a | $trusted | index($a)) or .user.type == "Bot"))
+["OWNER","MEMBER","COLLABORATOR"] as $trusted
+  | $comments | map(select((.author_association as $a | $trusted | index($a)) or .user.type == "Bot"))
   | map(select(.body | contains("ai-dev:\($label)"))) | last
 ```
 
