@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CategoryRole;
 use Database\Factories\CategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -95,6 +96,7 @@ class Category extends Model
     protected function casts(): array
     {
         return [
+            'role' => CategoryRole::class,
             'is_major' => 'boolean',
             'is_like' => 'boolean',
             'is_powder' => 'boolean',
