@@ -92,7 +92,7 @@ it('TC-40-01: 基本情報・ベース・技法(用語の ID つき)・グラス
         'name' => 'カルーア・フィズ', 'name_eng' => 'Kahlua Fizz', 'base_category_id' => $n['日本酒']->id,
         'method_id' => $method->id, 'glass_dictionary_id' => $glass->id, 'ice_id' => $ice->id,
         'volume' => 8.7, 'sweet_degree' => -3, 'rate' => 2, 'is_major' => true,
-        'description' => '名前はカルーアの@b1@から。', 'note' => '補足',
+        'description' => '名前はカルーアから。', 'note' => '補足',
         'instagram' => 'BTRQfTjlnAT', 'youtube' => 'abcdefghijk', 'youtube_start_seconds' => 61,
         'image' => 'kahlua.jpg', 'image_txt' => '出典', 'image_url' => 'https://example.com/',
     ]);
@@ -113,8 +113,9 @@ it('TC-40-01: 基本情報・ベース・技法(用語の ID つき)・グラス
         ->assertJsonPath('data.strength', 8.7)
         ->assertJsonPath('data.sweet_degree', -3)
         ->assertJsonPath('data.rate', 2)
-        ->assertJsonPath('data.description', '名前はカルーアの@b1@から。')
-        ->assertJsonPath('data.note', '補足')
+        // 説明文・補足は区切りの並び(#286。参照の入った説明文は TC-286-12)
+        ->assertJsonPath('data.description', [['type' => 'text', 'text' => '名前はカルーアから。']])
+        ->assertJsonPath('data.note', [['type' => 'text', 'text' => '補足']])
         ->assertJsonPath('data.instagram', 'BTRQfTjlnAT')
         ->assertJsonPath('data.youtube', 'abcdefghijk')
         ->assertJsonPath('data.youtube_start_seconds', 61)
@@ -260,4 +261,47 @@ it('TC-40-12: 公開の詳細の API は、セッションのクッキーを付�
     $this->getJson("/api/cocktails/{$cocktail->id}")
         ->assertOk()
         ->assertCookieMissing(config()->string('session.cookie'));
+});
+
+it('TC-286-12: 公開の詳細は、説明文・補足を区切りの並びで返す(下書き・無い参照はリンクにしない)', function () {
+    $n = cocktailDetailTree();
+    $kahlua = Brand::factory()->create(['name' => 'カルーア', 'youtube' => 'abcdefghijk']);
+    $draft = Cocktail::factory()->create(['name' => 'カルーア・ミルク', 'base_category_id' => $n['日本酒']->id, 'is_draft' => true]);
+    $cocktail = Cocktail::factory()->create([
+        'base_category_id' => $n['日本酒']->id,
+        'description' => "名前は@b{$kahlua->id}@から。\n@N{$n['コーヒー・リキュール']->id}@を使う。",
+        'note' => "@c{$draft->id}@と@c999999@に似ている。",
+    ]);
+
+    $this->getJson("/api/cocktails/{$cocktail->id}")
+        ->assertOk()
+        ->assertJsonPath('data.description', [
+            ['type' => 'text', 'text' => '名前は'],
+            ['type' => 'brand', 'id' => $kahlua->id, 'text' => 'カルーア', 'has_youtube' => true],
+            ['type' => 'text', 'text' => "から。\n"],
+            ['type' => 'node', 'id' => $n['コーヒー・リキュール']->id, 'text' => 'コーヒー・リキュール', 'has_youtube' => false],
+            ['type' => 'text', 'text' => 'を使う。'],
+        ])
+        ->assertJsonPath('data.note', [
+            ['type' => 'text', 'text' => 'カルーア・ミルクとに似ている。'],
+        ]);
+});
+
+it('TC-286-13: 管理 API の詳細(下書きの確認)も、説明文・補足を同じ区切りの並びで返す', function () {
+    $n = cocktailDetailTree();
+    $draft = Cocktail::factory()->create([
+        'base_category_id' => $n['日本酒']->id,
+        'is_draft' => true,
+        'description' => "@n{$n['日本酒']->id}@の一杯。",
+        'note' => null,
+    ]);
+    actingAsCocktailAdmin($this);
+
+    $this->getJson("/api/admin/cocktails/{$draft->id}/preview")
+        ->assertOk()
+        ->assertJsonPath('data.description', [
+            ['type' => 'node', 'id' => $n['日本酒']->id, 'text' => '日本酒', 'has_youtube' => false],
+            ['type' => 'text', 'text' => 'の一杯。'],
+        ])
+        ->assertJsonPath('data.note', null);
 });

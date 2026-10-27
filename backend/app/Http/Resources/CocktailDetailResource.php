@@ -3,13 +3,14 @@
 namespace App\Http\Resources;
 
 use App\Models\Cocktail;
+use App\Support\DescriptionParser;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * カクテルの詳細(GET /api/cocktails/{id}・GET /api/admin/cocktails/{id}/preview。#40)。
  *
- * 説明文(description)・補足(note)は、保存した記法(`@n<ID>@` など)のまま返す。リンクの区切りの並びにするのは #286。
+ * 説明文(description)・補足(note)は、文字の区切りとリンクの区切りの並び(DescriptionParser。#286)で返す。
  * 画像(image)は保存した値のまま返す(public ディスクのファイル名か、外部の URL。AdminImageStore)。
  *
  * @property Cocktail $resource
@@ -27,6 +28,7 @@ class CocktailDetailResource extends JsonResource
         $method = $cocktail->requiredMethod();
         $glass = $cocktail->glass;
         $ice = $cocktail->ice;
+        $parser = app(DescriptionParser::class);
 
         return [
             'id' => $cocktail->id,
@@ -56,8 +58,11 @@ class CocktailDetailResource extends JsonResource
             'strength' => $cocktail->strength(),
             'sweet_degree' => $cocktail->sweet_degree,
             'rate' => $cocktail->rate,
-            'description' => $cocktail->description,
-            'note' => $cocktail->note,
+            // 区切りの形(DescriptionParser の TextPart・LinkPart)を、Scramble が OpenAPI に出せるよう書く
+            /** @var list<array{type: 'text', text: string}|array{type: 'node'|'cocktail'|'brand'|'dictionary', id: int, text: string, has_youtube: bool}>|null */
+            'description' => $parser->parse($cocktail->description),
+            /** @var list<array{type: 'text', text: string}|array{type: 'node'|'cocktail'|'brand'|'dictionary', id: int, text: string, has_youtube: bool}>|null */
+            'note' => $parser->parse($cocktail->note),
             'youtube' => $cocktail->youtube,
             'youtube_created_at' => $cocktail->youtube_created_at,
             'youtube_start_seconds' => $cocktail->youtube_start_seconds,
