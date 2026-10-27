@@ -14,7 +14,7 @@ export default function CocktailTable({ cocktails, caption }: { cocktails: Sampl
       <thead>
         <tr>
           <th className={styles.method}>製法</th>
-          <th className={styles.name} aria-sort="ascending">
+          <th className={styles.name}>
             名前 <span aria-hidden="true">▲</span>
           </th>
           <th className={styles.nameEng}>Name</th>

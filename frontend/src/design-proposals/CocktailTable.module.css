@@ -60,8 +60,14 @@
 
 /* 600px 未満: 名前を 1 段目、数値の列を 2 段目に並べる。英名・ベースは旧と同じく出さない */
 @media (max-width: 599px) {
+  /* 見出しは目から隠すだけにして、スクリーンリーダーには残す(display: none だと読み上げられない) */
   .table thead {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .table tbody tr {
