@@ -85,7 +85,7 @@ verify_restore() {
 
   if [[ $source_summary != "$scratch_summary" ]]; then
     printf 'verify-restore: 元の DB と復元した DB が一致しない(テーブル<TAB>行数<TAB>チェックサム。- が元、+ が復元)\n' >&2
-    diff <(printf '%s\n' "$source_summary") <(printf '%s\n' "$scratch_summary") | grep '^[<>]' | sed 's/^</-/; s/^>/+/' >&2 || true
+    diff <(printf '%s\n' "$source_summary") <(printf '%s\n' "$scratch_summary") | grep '^[<>]' | sed 's/^< /-/; s/^> /+/' >&2 || true
     return 2
   fi
 
@@ -156,7 +156,7 @@ sql_in() {
 }
 
 quote_identifier() {
-  printf '`%s`' "${1//\`/\`\`}"
+  printf '%s' "\`${1//\`/\`\`}\`"
 }
 
 # 以下の .env の読み方とオプションファイルの書き方は dump-db.sh と同じ
