@@ -26,6 +26,7 @@
 | `skip_words` | スキップ語 | `skip_db` | 振る(旧は無し) | #23 |
 | `settings` | 画面から変える設定 | 無し(新設。#69) | — | #23 |
 | `users` | 管理者 | `users` | 旧 ID のまま | Laravel の雛形にある |
+| `admin_login_links` | 非常用のログイン URL の発行の記録 | 無し(新設) | — | #115 |
 
 ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にすると ID がぶつかるので、ノードだけ振り直して `legacy_id_maps` に残す。カクテル・銘柄は URL(`/detail/cocktail/{id}`・`/detail/brand/{id}`)を変えないため旧 ID のまま入れ、カクテルが指す技法・氷・用語辞典(`method_id`・`ice_id`・`glass_dictionary_id`)も旧 ID のまま入れる。旧 ID のまま入れた表も、`legacy_id_maps` に同じ値の対応を入れる(#30・#31)。旧 ID のまま入れた表は、移行の後の自動採番が旧の最大値の次から始まる。
 
@@ -294,6 +295,19 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 
 手元のダンプには `users` の行が入っていなかったので、件数は確かめていない(未確認。#33 は管理者 1 件を移す)。
 
+### `admin_login_links`(新設。#115)
+
+非常用のログイン URL(`php artisan admin:login-link`)を 1 回しか使えないようにする、発行ごとの記録。
+
+| 列 | 型 | null | 中身 |
+|---|---|---|---|
+| `id` | `id()` | | |
+| `user_id` | `foreignId` → `users` | | ログインさせるユーザー |
+| `token_hash` | `char(64)` | | URL に載せたトークンの SHA-256。unique。トークンそのものは持たない(ダンプが漏れても URL を組み立てられないように) |
+| `expires_at` | `timestamp` | | 発行から 10 分後。URL の署名の期限と同じ秒 |
+| `used_at` | `timestamp` | ○ | 使った時刻。入っていれば使えない |
+| `created_at`・`updated_at` | `timestamps()` | ○ | |
+
 ## YouTube の開始位置
 
 旧の `y_hour`・`y_minute`・`y_second` を、秒の 1 列 `youtube_start_seconds` にまとめる(#19 のコメントで決めた)。管理画面では時・分・秒で入力し、保存のときに秒にする。対象は `categories`・`brands`・`cocktails`・`dictionaries`。
@@ -320,6 +334,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `affiliates.brand_id` → `brands` | CASCADE(銘柄のアフィリエイトは銘柄に付いたもの) |
 | `dictionaries.dictionary_category_id` → `dictionary_categories` | RESTRICT |
 | `settings.updated_by` → `users` | SET NULL |
+| `admin_login_links.user_id` → `users` | CASCADE(ユーザーを消すと、そのユーザーの URL も使えなくなる) |
 
 - `categories.famous_brand_id` → `brands` と `brands.category_id` → `categories` は互いを指す。`categories` を作る #21 の時点では `brands` が無いので、`famous_brand_id` の外部キーは `brands` を作る #22 のマイグレーションで足す
 
