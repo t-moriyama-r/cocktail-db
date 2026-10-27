@@ -41,6 +41,16 @@ class Affiliate extends Model
     }
 
     /**
+     * 商品の銘柄。ノードの行では null。銘柄を消すと、その銘柄の行も消える(外部キーの CASCADE)。
+     *
+     * @return BelongsTo<Brand, $this>
+     */
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

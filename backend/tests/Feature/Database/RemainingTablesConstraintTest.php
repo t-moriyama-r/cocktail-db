@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Affiliate;
+use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
@@ -19,15 +20,17 @@ use Illuminate\Support\Facades\DB;
 uses(RefreshDatabase::class)->group('db');
 
 it('TC-23-13: 技法は旧 ID のまま入れられ、その後の自動採番は旧の最大値の次から始まる', function () {
+    // RefreshDatabase は行を戻しても自動採番の位置を戻さない。CocktailFactory が技法を作る(#325)ので、
+    // ほかのテストが進めた位置より大きい旧 ID にする
     DB::table('methods')->insert([
-        ['id' => 3, 'name' => 'シェイク', 'name_eng' => 'Shake', 'description' => ''],
-        ['id' => 6, 'name' => 'ブレンド', 'name_eng' => 'Blend', 'description' => ''],
+        ['id' => 1000003, 'name' => 'シェイク', 'name_eng' => 'Shake', 'description' => ''],
+        ['id' => 1000006, 'name' => 'ブレンド', 'name_eng' => 'Blend', 'description' => ''],
     ]);
 
     $added = Method::create(['name' => '新しい技法', 'name_eng' => 'New', 'description' => '説明']);
 
-    expect($added->id)->toBe(7)
-        ->and(Method::query()->orderBy('id')->pluck('id')->all())->toBe([3, 6, 7]);
+    expect($added->id)->toBe(1000007)
+        ->and(Method::query()->orderBy('id')->pluck('id')->all())->toBe([1000003, 1000006, 1000007]);
 });
 
 it('TC-23-14: 設定の値は DB に暗号化して保存し、モデルからは元の値で読める', function () {
@@ -95,19 +98,21 @@ it('TC-23-20: 1 つのノードに、ノードの行(brand_id が null)は 2 行
 
 it('TC-23-21: 1 つのノードに、ノードの行と銘柄の行を 1 行ずつ、別の銘柄の行もそれぞれ入れられる', function () {
     $category = Category::factory()->create();
+    $first = Brand::factory()->for($category)->create();
+    $second = Brand::factory()->for($category)->create();
 
     Affiliate::factory()->create(['category_id' => $category->id]);
-    Affiliate::factory()->create(['category_id' => $category->id, 'brand_id' => 10]);
-    Affiliate::factory()->create(['category_id' => $category->id, 'brand_id' => 11]);
+    Affiliate::factory()->create(['category_id' => $category->id, 'brand_id' => $first->id]);
+    Affiliate::factory()->create(['category_id' => $category->id, 'brand_id' => $second->id]);
 
-    expect(Affiliate::query()->orderBy('brand_key')->pluck('brand_key')->all())->toBe([0, 10, 11]);
+    expect(Affiliate::query()->orderBy('brand_key')->pluck('brand_key')->all())->toBe([0, $first->id, $second->id]);
 });
 
 it('TC-23-22: 同じノードの同じ銘柄の行は 2 行入れられない', function () {
-    $category = Category::factory()->create();
-    Affiliate::factory()->create(['category_id' => $category->id, 'brand_id' => 10]);
+    $brand = Brand::factory()->create();
+    Affiliate::factory()->create(['category_id' => $brand->category_id, 'brand_id' => $brand->id]);
 
-    expect(fn () => Affiliate::factory()->create(['category_id' => $category->id, 'brand_id' => 10]))
+    expect(fn () => Affiliate::factory()->create(['category_id' => $brand->category_id, 'brand_id' => $brand->id]))
         ->toThrow(QueryException::class);
 });
 
@@ -119,7 +124,8 @@ it('TC-23-23: 別のノードなら、それぞれにノードの行を入れら
 });
 
 it('TC-23-24: brand_id を後から null にすると、brand_key も 0 に変わる', function () {
-    $affiliate = Affiliate::factory()->create(['brand_id' => 10]);
+    $brand = Brand::factory()->create();
+    $affiliate = Affiliate::factory()->create(['category_id' => $brand->category_id, 'brand_id' => $brand->id]);
 
     $affiliate->update(['brand_id' => null]);
 
