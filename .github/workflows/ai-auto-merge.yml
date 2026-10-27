@@ -18,6 +18,11 @@
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
 # - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)
 #
+# 自動でマージする PR で、ほかの条件がそろい、止めているのがエージェントの返信済みで未解決のスレッドだけのときは、
+# 人が解決するまで誰の番でもないまま止まるので、残っているスレッドへのリンクと決めてほしいことをコメントし、needs-human を付けて
+# Slack に知らせる(.github/scripts/thread-handoff.sh。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、
+# 人がすべて解決したら、見回り(ai-review-sweep.yml)がその needs-human を外して、ここを呼び直す(#388)
+#
 # マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
@@ -156,15 +161,11 @@ jobs:
             unanswered=$(bash .ai-dev/.github/scripts/unanswered-review-threads.sh "$REPO" "$NUMBER")
             [ "$unanswered" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $unanswered 件ある"
           else
-            unresolved=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
-              query($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                  pullRequest(number: $number) {
-                    reviewThreads(first: 100) { nodes { isResolved comments(first: 1) { nodes { author { login } } } } }
-                  }
-                }
-              }' | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length')
-            [ "$unresolved" = 0 ] || skip "#$NUMBER に未解決の指摘が $unresolved 件ある"
+            # 返信待ちのスレッドは ai-review-loop.yml が対応するので見送る。エージェントが返信済みで未解決のスレッドだけなら、
+            # 人が解決するまで止まるので、ほかの条件(チェック・コンフリクト)を見たうえで、最後に人に頼む(#388)
+            threads=$(bash .ai-dev/.github/scripts/thread-handoff.sh check "$REPO" "$NUMBER")
+            read -r unresolved waiting <<<"$threads"
+            [ "$waiting" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $waiting 件ある(未解決は $unresolved 件)"
           fi
 
           # このワークフロー自身のジョブは除く
@@ -217,6 +218,14 @@ jobs:
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
             gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
             echo "#$NUMBER はマージできる状態。人の手でマージするので needs-approval を付けて知らせた($human)"
+            exit 0
+          fi
+
+          # ほかの条件はそろい、止めているのは返信済みで未解決のスレッドだけ。人が解決するか、直してほしいと返すまで進まないので、
+          # needs-human で頼む(同じコミットでは 1 回だけ)。人がすべて解決すると、見回り(ai-review-sweep.yml)が外してここへ戻す
+          if [ "${unresolved:-0}" != 0 ]; then
+            bash .ai-dev/.github/scripts/thread-handoff.sh ask "$REPO" "$NUMBER"
+            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER" || echo "::warning::状態のラベルを付け替えられなかった"
             exit 0
           fi
 
