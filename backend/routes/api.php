@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
+use App\Http\Controllers\Admin\ParaphraseController;
+use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailSameNameController;
 use App\Http\Controllers\HelloController;
@@ -20,4 +22,6 @@ Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/me', CurrentAdminController::class);
     Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
+    Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}']);
+    Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}']);
 });
