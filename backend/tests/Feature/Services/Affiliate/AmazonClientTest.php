@@ -312,6 +312,21 @@ it('TC-135-15: 送り直しても 401 なら、もう送り直さずに AmazonAp
         ->and(apiAuthorizations())->toHaveCount(2);
 });
 
+it('TC-135-26: TokenExpired 以外の 401 は送り直さないが、トークンを捨て、次の呼び出しで取り直す', function () {
+    fakeAmazon([AMAZON_SEARCH_URL => Http::sequence()
+        ->push(['type' => 'UnauthorizedException', 'message' => 'The access token is invalid.', 'reason' => 'InvalidToken'], 401)
+        ->push(amazonFixture('search-items')),
+    ]);
+
+    expect(amazonThrown(AmazonApiException::class, fn () => amazonClient()->searchItems('ジン'))->status)->toBe(401)
+        ->and(apiAuthorizations())->toBe(['Bearer token-1']);
+
+    amazonClient()->searchItems('ジン');
+
+    expect(tokenRequestCount())->toBe(2)
+        ->and(apiAuthorizations())->toBe(['Bearer token-1', 'Bearer token-2']);
+});
+
 it('TC-135-16: 資格情報を変えたら、前の資格情報のトークンを使わない', function () {
     fakeAmazon([AMAZON_SEARCH_URL => Http::response(amazonFixture('search-items'))]);
 

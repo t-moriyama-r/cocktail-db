@@ -169,6 +169,10 @@ class AmazonClient
             $this->cache->forget(self::tokenCacheKey($credentials));
             $response = $this->send($operation, $payload, $this->accessToken($credentials));
         }
+        // TokenExpired 以外の 401(トークンが無効にされた など)でも、キャッシュに残すと期限まで毎回 401 になるので捨てる
+        if ($response->status() === 401) {
+            $this->cache->forget(self::tokenCacheKey($credentials));
+        }
 
         if ($response->status() === 404 && self::stringAt($response->json(), 'type') === 'ResourceNotFoundException') {
             return [];
