@@ -90,6 +90,9 @@ class CategoryTree
      * 役割を持つ根を別のノードの下へ移すと、根でないノードが役割を持つことになる(役割は根だけが持つ)ので、これも止める。
      * 役割の無い部分木を別の根の下へ移すのは許し、移した先の根の役割になる(#153 の決まったこと)。
      *
+     * 移して部分木の根の役割が変わったときは、部分木のノード(とそこにぶら下がる銘柄)を材料に使うカクテルの
+     * 材料の数を、同じトランザクションで数え直す(「その他」の根に出入りすると数が変わる。#156)。
+     *
      * @throws InvalidArgumentException 移すノード・親が木に入っていないとき、親が自分か自分の子孫のとき、役割を持つ根を親の下へ移すとき
      */
     public function moveSubtree(Category $node, ?Category $newParent): void
@@ -99,6 +102,7 @@ class CategoryTree
                 throw new InvalidArgumentException('移すノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
             }
             $subtreeIds = $this->subtreeIds($node);
+            $roleBefore = $this->rootRole($node);
 
             if ($newParent !== null) {
                 if (Category::query()->whereKey($node->getKey())->whereNotNull('role')->exists()) {
@@ -126,6 +130,12 @@ class CategoryTree
                         ->where('s.ancestor_id', $node->getKey())
                         ->selectRaw('p.ancestor_id, s.descendant_id, p.depth + s.depth + 1'),
                 );
+            }
+
+            if ($this->rootRole($node) !== $roleBefore) {
+                // RecipeCounter は判定(otherNodeIds)にこのクラスを使うので、コンストラクタで受けると互いを要して作れない。
+                // ここで作って渡す
+                (new RecipeCounter($this))->recountSubtree($node);
             }
         });
     }
