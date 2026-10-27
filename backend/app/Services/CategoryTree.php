@@ -207,13 +207,13 @@ class CategoryTree
     {
         $this->assertInTree($node);
 
-        $role = DB::table('category_closures as root_closure')
-            ->join('categories as root', 'root.id', '=', 'root_closure.ancestor_id')
-            ->where('root_closure.descendant_id', $node->getKey())
-            ->whereIn('root_closure.ancestor_id', $this->rootIds())
-            ->value('root.role');
+        $idColumn = (new Category)->qualifyColumn('id');
+        $root = Category::query()
+            ->whereIn($idColumn, $this->rootIds())
+            ->whereIn($idColumn, CategoryClosure::query()->select('ancestor_id')->where('descendant_id', $node->getKey()))
+            ->first();
 
-        return $role === null ? null : CategoryRole::from($role);
+        return $root?->role;
     }
 
     /**

@@ -65,11 +65,12 @@ function rootRoleJudgements(Category $node): array
  */
 function rootRoleOtherNodeNames(): array
 {
-    return Category::query()
+    return array_values(Category::query()
         ->whereIn('id', app(CategoryTree::class)->otherNodeIds())
         ->orderBy('name')
-        ->pluck('name')
-        ->all();
+        ->get()
+        ->map(fn (Category $node): string => $node->name)
+        ->all());
 }
 
 /**
@@ -81,13 +82,12 @@ function rootRoleOtherNodeNamesOneByOne(): array
 {
     $tree = app(CategoryTree::class);
 
-    return Category::query()
+    return array_values(Category::query()
         ->orderBy('name')
         ->get()
         ->filter(fn (Category $node): bool => $tree->isOther($node))
         ->map(fn (Category $node): string => $node->name)
-        ->values()
-        ->all();
+        ->all());
 }
 
 dataset('root role partitions', [

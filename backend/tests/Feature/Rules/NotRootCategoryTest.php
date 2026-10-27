@@ -11,18 +11,16 @@ use Illuminate\Support\Facades\Validator;
 uses(RefreshDatabase::class)->group('db');
 
 /**
- * category_id を NotRootCategory で検証し、エラーの文を返す(通れば空)。
- *
- * @return list<string>
+ * category_id を NotRootCategory で検証し、エラーの数を返す(通れば 0)。
  */
-function notRootCategoryErrors(mixed $value): array
+function notRootCategoryErrors(mixed $value): int
 {
     $validator = Validator::make(
         ['category_id' => $value],
         ['category_id' => [app(NotRootCategory::class)]],
     );
 
-    return $validator->errors()->get('category_id');
+    return count($validator->errors()->get('category_id'));
 }
 
 it('TC-155-12: 根の ID は通らず、根の直下・深さ 5 のノードの ID は通る', function () {
@@ -33,14 +31,14 @@ it('TC-155-12: 根の ID は通らず、根の直下・深さ 5 のノードの 
         $nodes[] = $tree->addNode($nodes[$depth - 1], Category::factory()->make()->getAttributes());
     }
 
-    expect(notRootCategoryErrors($root->id))->toHaveCount(1)
-        ->and(notRootCategoryErrors((string) $root->id))->toHaveCount(1)
-        ->and(notRootCategoryErrors($nodes[1]->id))->toBe([])
-        ->and(notRootCategoryErrors((string) $nodes[5]->id))->toBe([]);
+    expect(notRootCategoryErrors($root->id))->toBe(1)
+        ->and(notRootCategoryErrors((string) $root->id))->toBe(1)
+        ->and(notRootCategoryErrors($nodes[1]->id))->toBe(0)
+        ->and(notRootCategoryErrors((string) $nodes[5]->id))->toBe(0);
 });
 
 it('TC-155-13: 無い ID・ID の形でない値では何も言わない(ほかの規則の役目)', function (mixed $value) {
-    expect(notRootCategoryErrors($value))->toBe([]);
+    expect(notRootCategoryErrors($value))->toBe(0);
 })->with([
     '無い ID' => [999999],
     '数字でない文字列' => ['abc'],
