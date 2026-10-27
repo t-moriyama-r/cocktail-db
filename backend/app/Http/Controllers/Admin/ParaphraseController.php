@@ -71,7 +71,8 @@ class ParaphraseController extends Controller
      */
     public function update(SaveParaphraseRequest $request, Paraphrase $paraphrase): ParaphraseResource
     {
-        $paraphrase->update($request->validated());
+        // 省かれたキーは null にそろえる(検証は middle 無しで解決しているので、古い middle を残さない)
+        $paraphrase->update($request->validated() + ['middle' => null, 'command' => null, 'note' => null]);
 
         return ParaphraseResource::make($paraphrase);
     }

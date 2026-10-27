@@ -297,7 +297,16 @@ it('TC-316-13: 更新すると 200 で書き換えた語を返し、行が書き
     ]);
 });
 
-it('TC-316-14: 削除すると 204 で行が消え、無い ID は 404', function () {
+it('TC-316-23: 更新でキーを省くと、既存の middle・command・note は null になる', function () {
+    paraphraseTree();
+    $p = Paraphrase::query()->create(['name' => 'カカオ', 'converted' => 'クレーム・ド・カカオ', 'middle' => 'ホワイト', 'command' => 'hot', 'note' => '前']);
+
+    $this->putJson("/api/admin/paraphrases/{$p->id}", ['name' => 'カカオ', 'converted' => 'クレーム・ド・カカオ'])->assertOk();
+
+    expect($p->fresh()?->only(['middle', 'command', 'note']))->toBe(['middle' => null, 'command' => null, 'note' => null]);
+});
+
+it('TC-316-14:削除すると 204 で行が消え、無い ID は 404', function () {
     $p = Paraphrase::query()->create(['name' => 'カカオ', 'converted' => 'クレーム・ド・カカオ']);
     $kept = Paraphrase::query()->create(['name' => 'ジン', 'converted' => 'ジン']);
 
