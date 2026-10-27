@@ -42,12 +42,19 @@ final class VerifyCategoryTree extends Command
     /** @var array<int, list<int>> 子の ID → 親の ID(depth 1 の行の祖先)。正しい木なら 1 つ */
     private array $parentsOf = [];
 
-    /** @var array<int, true> 根ではないのに親が 1 つに決まらないか、親をたどると輪になるノード */
+    /** @var array<int, int> 根でないノードの ID → 1 つに決まった親の ID。親をたどる処理はこれだけを見る */
+    private array $parentOf = [];
+
+    /** @var list<list<int>> 親をたどると戻ってくる輪(ノードの ID の小さい順) */
+    private array $cycles = [];
+
+    /** @var array<int, true> 根ではないのに親が 1 つに決まらないか、輪に入るノード */
     private array $unresolvable = [];
 
     public function handle(CategoryTree $tree): int
     {
         $this->load($tree);
+        $this->resolveParents();
 
         $violations = [
             ...$this->selfRowViolations(),
@@ -110,77 +117,42 @@ final class VerifyCategoryTree extends Command
     }
 
     /**
-     * 根でない(自分より上の祖先からの行がある)のに、親が 1 つに決まらないと、パンくずや forest がどの親につなげるかが決まらない。
-     *
-     * @return list<array{string, string, string}>
+     * 根でないノードの親を 1 つに決め、決まらないノードと輪を集める。親の行が 0 個・2 個以上のノードや輪に入るノードは
+     * 作り直す閉包表が決まらないので、どの判定もここで決めた結果だけを見る(判定ごとに親の数を数え直さない)。
      */
-    private function parentViolations(): array
+    private function resolveParents(): void
     {
-        $violations = [];
         foreach (array_keys($this->names) as $id) {
             if (isset($this->rootIds[$id])) {
                 continue;
             }
             $parents = $this->parentsOf[$id] ?? [];
-            if ($parents === []) {
+            if (count($parents) === 1) {
+                $this->parentOf[$id] = $parents[0];
+            } else {
                 $this->unresolvable[$id] = true;
-                $violations[] = [self::PARENT_ROW, $this->label($id), '祖先の行があるのに、親の行が無い'];
-            } elseif (count($parents) > 1) {
-                $this->unresolvable[$id] = true;
-                $violations[] = [self::PARENT_ROW, $this->label($id), sprintf(
-                    '親の行が %d つある(%s)',
-                    count($parents),
-                    implode('・', array_map(fn (int $parent): string => $this->label($parent), $parents)),
-                )];
             }
         }
 
-        return $violations;
-    }
-
-    /**
-     * 親をたどって自分に戻ると、根に届かないので作り直す閉包表が決まらない。親が 1 つのノードだけをたどる
-     * (親が決まらないノードは parentViolations が挙げている)。輪ごとに 1 件にまとめる。
-     *
-     * @return list<array{string, string, string}>
-     */
-    private function cycleViolations(): array
-    {
-        $violations = [];
-        /** @var array<int, true> $finished 輪に入らないと分かったか、輪として挙げたノード */
+        /** @var array<int, true> $finished 輪に入らないと分かったか、輪として集めたノード */
         $finished = [];
-        foreach (array_keys($this->parentsOf) as $start) {
+        foreach (array_keys($this->parentOf) as $start) {
             $path = [];
             $current = $start;
-            $returned = false;
-            while (! isset($finished[$current])) {
+            while (! isset($finished[$current]) && isset($this->parentOf[$current])) {
                 if (isset($path[$current])) {
-                    $returned = true;
+                    $cycle = $this->cycleFrom($current);
+                    $this->cycles[] = $cycle;
+                    foreach ($cycle as $id) {
+                        $this->unresolvable[$id] = true;
+                    }
                     break;
                 }
                 $path[$current] = true;
-                $parents = $this->parentsOf[$current] ?? [];
-                if (count($parents) !== 1) {
-                    break;
-                }
-                $current = $parents[0];
-            }
-
-            if ($returned) {
-                $cycle = $this->cycleFrom($current);
-                foreach ($cycle as $id) {
-                    $this->unresolvable[$id] = true;
-                }
-                $violations[] = [
-                    self::CYCLE,
-                    implode('・', array_map(fn (int $id): string => $this->label($id), $cycle)),
-                    '親をたどると自分に戻る',
-                ];
+                $current = $this->parentOf[$current];
             }
             $finished += $path;
         }
-
-        return $violations;
     }
 
     /**
@@ -191,7 +163,7 @@ final class VerifyCategoryTree extends Command
     private function cycleFrom(int $start): array
     {
         $cycle = [$start];
-        for ($current = $this->parentsOf[$start][0]; $current !== $start; $current = $this->parentsOf[$current][0]) {
+        for ($current = $this->parentOf[$start]; $current !== $start; $current = $this->parentOf[$current]) {
             $cycle[] = $current;
         }
         sort($cycle);
@@ -200,11 +172,50 @@ final class VerifyCategoryTree extends Command
     }
 
     /**
+     * 根でない(自分より上の祖先からの行がある)のに、親が 1 つに決まらないと、パンくずや forest がどの親につなげるかが決まらない。
+     *
+     * @return list<array{string, string, string}>
+     */
+    private function parentViolations(): array
+    {
+        $violations = [];
+        foreach (array_keys($this->names) as $id) {
+            if (isset($this->rootIds[$id]) || isset($this->parentOf[$id])) {
+                continue;
+            }
+            $parents = $this->parentsOf[$id] ?? [];
+            $violations[] = [self::PARENT_ROW, $this->label($id), $parents === []
+                ? '祖先の行があるのに、親の行が無い'
+                : sprintf(
+                    '親の行が %d つある(%s)',
+                    count($parents),
+                    implode('・', array_map(fn (int $parent): string => $this->label($parent), $parents)),
+                )];
+        }
+
+        return $violations;
+    }
+
+    /**
+     * 親をたどって自分に戻ると、根に届かない。輪ごとに 1 件にまとめる。
+     *
+     * @return list<array{string, string, string}>
+     */
+    private function cycleViolations(): array
+    {
+        return array_map(fn (array $cycle): array => [
+            self::CYCLE,
+            implode('・', array_map(fn (int $id): string => $this->label($id), $cycle)),
+            '親をたどると自分に戻る',
+        ], $this->cycles);
+    }
+
+    /**
      * 閉包表は、各ノードの親をたどった祖先それぞれへの行(depth は段数)だけでできているはず。作り直した行と
      * いまの行を比べ、足りない行・余分な行・depth が違う行を挙げる。
      *
-     * 親が決まらないノードや輪を通るノードは作り直せないので比べない(上の判定が挙げている)。自分の行も
-     * selfRowViolations が見るので比べない。
+     * 親が決まらないノードや輪を通るノードは作り直せないので比べない(同じ破れを「親」「循環」と重ねて挙げないため)。
+     * 自分の行(depth 0)も「自分の行」で見るので比べない。
      *
      * @return list<array{string, string, string}>
      */
@@ -254,17 +265,16 @@ final class VerifyCategoryTree extends Command
             if (isset($this->unresolvable[$current])) {
                 return null;
             }
-            $parents = $this->parentsOf[$current] ?? [];
-            if ($parents === []) {
+            if (! isset($this->parentOf[$current])) {
                 return $ancestors;
             }
-            $current = $parents[0];
+            $current = $this->parentOf[$current];
             $ancestors[$current] = $depth;
         }
     }
 
     private function label(int $id): string
     {
-        return "#{$id} ".($this->names[$id] ?? '(categories に無い)');
+        return "#{$id} {$this->names[$id]}";
     }
 }
