@@ -29,9 +29,9 @@ main() {
 	expect TC-388-01 '解決済みを除いた未解決の数と、そのうち返信待ちの数を出す' "$(out)" '2 0'
 
 	reset
-	threads "$AGENT" '人が立てたスレッド' '<!-- ai-dev:agent --> <!-- ai-dev:claude-review --> 指摘'
+	threads "$AGENT" 'human:人が立てたスレッド' '<!-- ai-dev:agent --> <!-- ai-dev:claude-review --> 指摘' '人の返信が最後'
 	run check
-	expect TC-388-02 '最後が人のコメント・代わりの Claude の指摘のスレッドは、返信待ちに数える' "$(out)" '3 2'
+	expect TC-388-02 'AI レビュアーのスレッドで最後がエージェントの返信でないもの(代わりの Claude の指摘・人の返信)だけを返信待ちに数える' "$(out)" '4 2'
 
 	reset
 	run check
@@ -94,6 +94,13 @@ main() {
 	threads "$AGENT" '人が立てたスレッド'
 	run ask
 	expect TC-388-11 '返信待ちのスレッドがあれば頼まない(ai-review-loop.yml が対応する)' "$(commented)$(labeled)$(notified)" ''
+
+	reset
+	pr 7
+	threads "$AGENT" 'human:人が立てたスレッド'
+	run ask
+	expect TC-388-27 '人が立てたスレッド(AI レビュアーが返す相手ではない)は人の番として頼む' \
+		"$(commented | grep -c 'https://example.test/t')|$(labeled)" '2|7 -R o/r --add-label needs-human'
 
 	reset
 	pr 7
@@ -187,6 +194,32 @@ main() {
 	run bogus
 	expect TC-388-23 '知らない使い方は失敗で終わる' "$RC" 2
 
+	# --- public のリポジトリなので、書き込み権限の無い人のコメントの目印は信じない ---
+
+	reset
+	pr 7 needs-human
+	threads resolved
+	comments 'bot:<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:ci-rerun sha=sha7 --> CI を流せない' "outsider:$ASKED"
+	label_events 'github-actions[bot]'
+	run release
+	expect TC-388-24 'ほかの理由の頼みごとの後に、書き込み権限の無い人が目印を書いても外さない' "$(labeled)$(notified)$(dispatched)" ''
+
+	reset
+	pr 7
+	threads "$AGENT"
+	comments "outsider:$ASKED"
+	run ask
+	expect TC-388-25 '書き込み権限の無い人が同じコミットの目印を書いても、頼むのを止めない' \
+		"$(commented | grep -c 'thread-handoff sha=sha7')|$(labeled)" '1|7 -R o/r --add-label needs-human'
+
+	reset
+	pr 7 needs-human
+	threads resolved
+	comments "bot:$ASKED"
+	label_events 'github-actions[bot]'
+	run release
+	expect TC-388-26 'Actions(GitHub App)が書いた頼むコメントの目印は信じる' "$(dispatched)" 'ai-auto-merge.yml -R o/r -f number=7'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -201,7 +234,17 @@ case "$*" in
 	"pr view"*) cat "$FAKE/pr.json" ;;
 	"api graphql"*)
 		if [ -f "$FAKE/graphql-fails" ]; then echo "HTTP 502: graphql failed" >&2; exit 1; fi
-		cat "$FAKE/threads" ;;
+		# --jq はページごとに当てる(unanswered-review-threads.sh が使う)
+		expr=
+		while [ $# -gt 0 ]; do
+			if [ "$1" = --jq ]; then expr=$2; fi
+			shift
+		done
+		if [ -n "$expr" ]; then
+			while IFS= read -r line; do jq -c "$expr" <<<"$line"; done <"$FAKE/threads"
+		else
+			cat "$FAKE/threads"
+		fi ;;
 	"api --paginate --slurp repos/o/r/issues/7/comments"*) cat "$FAKE/comments" ;;
 	"api --paginate --slurp repos/o/r/issues/7/events"*) cat "$FAKE/events" ;;
 	"workflow run notify-needs-human.yml"*)
@@ -234,15 +277,18 @@ pr() {
 }
 
 # レビュースレッド。引数ごとに 1 つで、値はそのスレッドの最後のコメント(resolved なら解決済み)。
+# 立てたのは CodeRabbit。先頭が human: なら人(オーナー)が立てたスレッド。
 # GraphQL の --paginate は、ページごとの JSON を続けて出すので、2 ページに分けて返す
 threads() {
 	local i=0 body nodes=()
 	for body in "$@"; do
 		i=$((i + 1))
 		if [ "$body" = resolved ]; then
-			nodes+=("$(jq -n --arg i "$i" '{isResolved: true, path: "a.php", first: {nodes: [{url: "https://example.test/t\($i)"}]}, last: {nodes: [{body: "x"}]}}')")
+			nodes+=("$(node_json "$i" true coderabbitai x)")
+		elif [ "${body#human:}" != "$body" ]; then
+			nodes+=("$(node_json "$i" false t-moriyama-r "${body#human:}")")
 		else
-			nodes+=("$(jq -n --arg i "$i" --arg b "$body" '{isResolved: false, path: "a.php", first: {nodes: [{url: "https://example.test/t\($i)"}]}, last: {nodes: [{body: $b}]}}')")
+			nodes+=("$(node_json "$i" false coderabbitai "$body")")
 		fi
 	done
 	{
@@ -250,13 +296,23 @@ threads() {
 		page "${nodes[@]:1}"
 	} >"$FAKE/threads"
 }
+node_json() {
+	jq -n -c --arg i "$1" --argjson resolved "$2" --arg author "$3" --arg b "$4" \
+		'{isResolved: $resolved, path: "a.php",
+		  first: {nodes: [{url: "https://example.test/t\($i)", author: {login: $author}, body: "指摘"}]},
+		  last: {nodes: [{body: $b}]}}'
+}
 page() {
 	printf '%s\n' "$@" | jq -s -c '{data: {repository: {pullRequest: {reviewThreads: {nodes: .}}}}}'
 }
 
-# PR のコメント(--slurp なので、ページの配列を 1 つの配列に入れて返す)
+# PR のコメント(--slurp なので、ページの配列を 1 つの配列に入れて返す)。既定はオーナーが書いたもの。
+# 先頭が bot: なら Actions(github-actions[bot])、outsider: なら書き込み権限の無い人のコメント
 comments() {
-	printf '%s\n' "$@" | jq -R -s -c 'split("\n") | map(select(. != "") | {body: .}) | [.]' >"$FAKE/comments"
+	printf '%s\n' "$@" | jq -R -s -c 'split("\n") | map(select(. != "")
+		| if startswith("bot:") then {body: .[4:], author_association: "NONE", user: {type: "Bot"}}
+		  elif startswith("outsider:") then {body: .[9:], author_association: "NONE", user: {type: "User"}}
+		  else {body: ., author_association: "OWNER", user: {type: "User"}} end) | [.]' >"$FAKE/comments"
 }
 
 # needs-human を付けた人(古い順)

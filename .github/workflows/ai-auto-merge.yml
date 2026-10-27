@@ -161,7 +161,8 @@ jobs:
             unanswered=$(bash .ai-dev/.github/scripts/unanswered-review-threads.sh "$REPO" "$NUMBER")
             [ "$unanswered" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $unanswered 件ある"
           else
-            # 返信待ちのスレッドは ai-review-loop.yml が対応するので見送る。エージェントが返信済みで未解決のスレッドだけなら、
+            # 返信待ちのスレッド(AI レビュアーの指摘で、エージェントがまだ返していないもの)は ai-review-loop.yml が対応するので見送る。
+            # それ以外の未解決のスレッド(エージェントが返したもの・人が立てたもの)だけなら、
             # 人が解決するまで止まるので、ほかの条件(チェック・コンフリクト)を見たうえで、最後に人に頼む(#388)
             threads=$(bash .ai-dev/.github/scripts/thread-handoff.sh check "$REPO" "$NUMBER")
             read -r unresolved waiting <<<"$threads"

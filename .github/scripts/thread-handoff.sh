@@ -11,9 +11,9 @@
 # 残る PR をマージしない(develop のブランチ保護も会話の解決を求める)ので、誰かが解決するまで止まる。返信待ちのスレッドが
 # 無いので見回りも「対応済み」とみなし、人に何も届かないまま止まっていた(#388)。人が動くのは Slack に知らせが来たときだけ。
 #
-# 返信待ちは、最後のコメントがエージェントの返信(目印 ai-dev:agent)でないスレッド。エージェントは人と同じアカウントで書くので
-# 作者では見分けない。代わりの Claude のレビュー(ai-dev:claude-review)も ai-dev:agent を付けるが、それは指摘であって返信ではない。
-# 人が立てたスレッドも数える(マージを止めるのは、誰が立てたスレッドでも同じ)。
+# 返信待ちは、ai-review-loop.yml が対応する AI レビュアーのスレッドのうち、エージェントがまだ返していないもの
+# (unanswered-review-threads.sh。見回りと同じ数え方)。それ以外の未解決のスレッド(エージェントが返したもの・人が立てたもの)は、
+# 人が解決するか返信するまで誰も動かないので、人の番として頼む。
 #
 # 頼むのはコミットごとに 1 回(目印 ai-dev:thread-handoff sha=<コミット>)。頼むコメントは、Slack の通知が引用するので
 # ラベルより先に書く。コメントだけ書けて止まった回の後は、コメントを書き直さずにラベルと通知だけを足す。
@@ -23,11 +23,13 @@
 set -euo pipefail
 
 MARKER=ai-dev:thread-handoff
+HERE=$(cd "$(dirname "$0")" && pwd)
+USAGE="使い方: thread-handoff.sh check|ask|release <owner/repo> <PR の番号>"
 
 thread_handoff() {
   local mode=${1:-} repo=${2:-} n=${3:-}
   if [ -z "$repo" ] || [ -z "$n" ]; then
-    echo "使い方: thread-handoff.sh check|ask|release <owner/repo> <PR の番号>" >&2
+    echo "$USAGE" >&2
     return 2
   fi
   case "$mode" in
@@ -35,20 +37,21 @@ thread_handoff() {
     ask) ask "$repo" "$n" ;;
     release) release "$repo" "$n" ;;
     *)
-      echo "使い方: thread-handoff.sh check|ask|release <owner/repo> <PR の番号>" >&2
+      echo "$USAGE" >&2
       return 2
       ;;
   esac
 }
 
 check() {
-  local repo=$1 n=$2 threads
+  local repo=$1 n=$2 threads waiting
   threads=$(unresolved_threads "$repo" "$n")
-  jq -r '"\(length) \(map(select(.answered | not)) | length)"' <<<"$threads"
+  waiting=$(bash "$HERE/unanswered-review-threads.sh" "$repo" "$n")
+  echo "$(jq length <<<"$threads") $waiting"
 }
 
 ask() {
-  local repo=$1 n=$2 pr sha marker threads count links comments labeled
+  local repo=$1 n=$2 pr sha marker threads count waiting links comments labeled
   pr=$(gh pr view "$n" -R "$repo" --json headRefOid,labels)
   sha=$(jq -r .headRefOid <<<"$pr")
   marker="$MARKER sha=$sha"
@@ -58,7 +61,8 @@ ask() {
     echo "#$n 見送り: 未解決のスレッドが無い"
     return
   fi
-  if ! jq -e 'all(.answered)' <<<"$threads" >/dev/null; then
+  waiting=$(bash "$HERE/unanswered-review-threads.sh" "$repo" "$n")
+  if [ "$waiting" != 0 ]; then
     echo "#$n 見送り: 返信待ちのスレッドがある(ai-review-loop.yml が対応する)"
     return
   fi
@@ -69,7 +73,7 @@ ask() {
   else
     links=$(jq -r '.[] | "- \(.url)\(if .path then "(`\(.path)`)" else "" end)"' <<<"$threads")
     gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- $marker -->
-AI レビュアーの指摘にはエージェントが返信したが、解決(Resolve)されていないスレッドが $count 件残っていて、自動マージが止まっている(CI は緑・コンフリクトなし)。スレッドごとに決めてほしい。
+解決(Resolve)されていないスレッドが $count 件残っていて、自動マージが止まっている(AI レビュアーの指摘にはエージェントが返信済み・CI は緑・コンフリクトなし)。スレッドごとに決めてほしい。
 
 - 返信の内容で良ければ、そのスレッドを Resolve する
 - 直してほしければ、そのスレッドに返信する(Actions の Claude Code が直す)
@@ -129,7 +133,7 @@ release() {
   echo "#$n スレッドがすべて解決されたので、needs-human を外して ai-auto-merge.yml を呼んだ"
 }
 
-# 未解決のスレッドを、リンク・ファイル・エージェントが返信済みか、の配列で出す
+# 未解決のスレッドを、リンクとファイルの配列で出す
 unresolved_threads() {
   local repo=$1 n=$2
   gh api graphql --paginate -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$n" -f query='
@@ -142,20 +146,21 @@ unresolved_threads() {
               isResolved
               path
               first: comments(first: 1) { nodes { url } }
-              last: comments(last: 1) { nodes { body } }
             }
           }
         }
       }
     }' | jq -s '[.[].data.repository.pullRequest.reviewThreads.nodes[]
       | select(.isResolved | not)
-      | {url: .first.nodes[0].url, path,
-         answered: (.last.nodes[0].body // "" | contains("ai-dev:agent") and (contains("ai-dev:claude-review") | not))}]'
+      | {url: .first.nodes[0].url, path}]'
 }
 
+# PR のコメントのうち、目印を信じてよいもの(書き込み権限のある人と GitHub App)だけを出す。
+# public のリポジトリでは誰でもコメントでき、目印を書き込めるため(notify-needs-human.yml と同じ見分け方)
 issue_comments() {
   local repo=$1 n=$2
-  gh api --paginate --slurp "repos/$repo/issues/$n/comments?per_page=100" | jq 'add // []'
+  gh api --paginate --slurp "repos/$repo/issues/$n/comments?per_page=100" \
+    | jq 'add // [] | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or .user.type == "Bot"))'
 }
 
 thread_handoff "$@"
