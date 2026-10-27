@@ -39,7 +39,18 @@ it('TC-6-05: 「up」で始まっても up そのものでなければ SPA の H
     'up の下' => '/up/x',
 ]);
 
-it('TC-6-07: api そのもの・api/ の下の存在しないパスは SPA を返さず 404 になる', function (string $path) {
+it('TC-115-18: 非常用のログイン URL 以外の /admin 以下は、これまでどおり SPA の HTML を返す', function (string $path) {
+    $this->get($path)
+        ->assertOk()
+        ->assertSee('<div id="root"></div>', false);
+})->with([
+    '管理画面' => '/admin',
+    '管理画面の下' => '/admin/cocktails',
+    'ユーザーの無い login-link' => '/admin/login-link',
+    'ユーザーが数字でない login-link' => '/admin/login-link/abc',
+]);
+
+it('TC-6-07:api そのもの・api/ の下の存在しないパスは SPA を返さず 404 になる', function (string $path) {
     $this->get($path)
         ->assertNotFound()
         ->assertDontSee('<div id="root"></div>', false);
