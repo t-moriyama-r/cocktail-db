@@ -403,6 +403,7 @@ LIMIT 1;
 | `isFamousBrandOptional(Category)` | 根の役割が `soft_drink` か `other` か(有名な銘柄が要らない) | `KindFactory::is_kind5_fromKindId`(kind 4・5) |
 | `isNonLiquor(Category)` | 根の役割が `soft_drink` か `other` か(洋酒ではない) | `kind >= 4`(`AffiliateFactory`) |
 | `otherNodeIds()` | `isOther` が真になるノードの ID のサブクエリ(クエリの中で判定するとき。あるもの検索・材料の数) | — |
+| `famousBrandOptionalNodeIds()` | `isFamousBrandOptional` が真になるノードの ID のサブクエリ(クエリの中で判定するとき。`data:verify`) | — |
 
 材料とベースに根を使わせない検証(下の「材料とベースに使ってよいノード」)は、検証の規則 `App\Rules\NotRootCategory` で行う。
 
