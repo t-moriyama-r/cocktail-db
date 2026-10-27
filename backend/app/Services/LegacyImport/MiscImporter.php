@@ -54,6 +54,7 @@ final class MiscImporter implements LegacyImporter
                 'image_txt' => $row['image_txt'],
                 'image_url' => $row['image_url'],
             ]);
+            $this->linkMethodsToDictionaries();
             $tables[] = $this->copyByName($legacy, 'paraphrases', 'paraphrases', fn (array $row) => [
                 'name' => $row['name'],
                 'converted' => $row['converted'],
@@ -101,6 +102,20 @@ final class MiscImporter implements LegacyImporter
         LegacyIdMap::record($legacyTable, $newTable, $newIdByLegacyId);
 
         return $newTable;
+    }
+
+    /**
+     * 技法に、その技法を説明する用語(methods.dictionary_id)を入れる。
+     *
+     * 旧は対応を持たず、技法の ID と用語の ID がたまたま同じ(1〜6)ことに頼って用語へリンクしていた。旧の本番の
+     * データでは技法と同じ名前の用語が 1 つずつあるので、ID ではなく名前の一致で結び付ける。同じ名前の用語が
+     * 無ければ null、2 つ以上あれば ID の小さい方にする。
+     */
+    private function linkMethodsToDictionaries(): void
+    {
+        DB::table('methods')->update([
+            'dictionary_id' => DB::raw('(SELECT MIN(dictionaries.id) FROM dictionaries WHERE dictionaries.name = methods.name)'),
+        ]);
     }
 
     /**

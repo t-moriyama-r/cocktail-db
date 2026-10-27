@@ -242,7 +242,11 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 ### `methods`(旧 `m_method`。6 件)
 
-`id`(旧 ID のまま)・`name` `string(255)`・`name_eng` `string(255)`・`description` `text`。旧と同じ列。
+`id`(旧 ID のまま)・`name` `string(255)`・`name_eng` `string(255)`・`description` `text`。旧と同じ列に、`dictionary_id` を足す(#40)。
+
+- `dictionary_id` `foreignId` → `dictionaries`、null 可: その技法を説明する用語。カクテルの詳細の「製法」から用語の詳細へのリンク先に使う。旧は対応を持たず、技法の ID と用語の ID がたまたま同じ(1〜6)ことに頼っていた。ID の一致に頼らず列に持つ
+- 移行(#33 の `MiscImporter`)では、技法と同じ名前の用語を入れる。同じ名前の用語が無ければ null(旧の本番のデータでは 6 つとも同じ名前の用語がある)
+- 決めたことと旧との差分は [cocktail-detail.md](decisions/cocktail-detail.md)
 
 ### `ices`(旧 `m_ice`。2 件)
 
@@ -334,6 +338,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `affiliates.category_id` → `categories` | RESTRICT |
 | `affiliates.brand_id` → `brands` | CASCADE(銘柄のアフィリエイトは銘柄に付いたもの) |
 | `dictionaries.dictionary_category_id` → `dictionary_categories` | RESTRICT |
+| `methods.dictionary_id` → `dictionaries` | RESTRICT |
 | `settings.updated_by` → `users` | SET NULL |
 | `admin_login_links.user_id` → `users` | CASCADE(ユーザーを消すと、そのユーザーの URL も使えなくなる) |
 
