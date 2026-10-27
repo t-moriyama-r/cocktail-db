@@ -15,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // mixhost の LiteSpeed の後ろで https を正しく判定するため
         $middleware->trustProxies(at: '*');
+
+        // 管理 API(/api/admin/*)。管理画面はログインで作ったセッションのクッキーで API を呼ぶので、公開の API と違い
+        // セッションと CSRF の確かめ(web のグループ)を通してから、ログインしているかを確かめる
+        $middleware->group('admin', ['web', 'auth']);
+        // ログインの画面は SPA の中にあり、サーバーに login のルートは無い。既定の route('login') への転送をやめ、401 を返させる
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
