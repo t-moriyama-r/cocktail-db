@@ -41,6 +41,25 @@ final class LegacyRows
     }
 
     /**
+     * 別の表の行を指す列の値。旧は外部キーを持たず、指す先が無いことを null でも 0 でも表していたので、どちらも null にする
+     * (旧の画面も、これらの列を真偽で見て 0 を「無し」として扱っていた)。
+     *
+     * @param  array<mixed>  $row
+     *
+     * @throws UnexpectedValueException null でも数でもないとき
+     */
+    public static function nullableId(array $row, string $column, string $table): ?int
+    {
+        $value = $row[$column] ?? null;
+        if ($value === null) {
+            return null;
+        }
+        $id = self::int($row, $column, $table);
+
+        return $id === 0 ? null : $id;
+    }
+
+    /**
      * @param  array<mixed>  $row
      *
      * @throws UnexpectedValueException 値が文字列でないとき
