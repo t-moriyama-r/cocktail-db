@@ -247,8 +247,8 @@ main() {
 	pr 7 develop false MERGEABLE
 	runs skipped
 	run 7
-	expect TC-410-03 'draft のときに飛ばした回しか無ければ、走っていないとみなして閉じて開き直す' 		"$(reopened | tr '
-' ' ')" 'closed pat open pat '
+	expect TC-410-03 'draft のときに飛ばした回しか無ければ、走っていないとみなして閉じて開き直す' \
+		"$(reopened | tr '\n' ' ')" 'closed pat open pat '
 
 	reset
 	pr 7 develop false MERGEABLE
