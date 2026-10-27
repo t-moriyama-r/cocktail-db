@@ -77,15 +77,17 @@ function markupDictionary(string $name): Dictionary
  */
 function expectMarkupRejected(callable $call, string $attribute = 'description'): void
 {
+    $caught = null;
     try {
         $call();
     } catch (ValidationException $e) {
-        expect($e->status)->toBe(422)
-            ->and($e->errors())->toHaveKey($attribute);
-
-        return;
+        $caught = $e;
     }
-    test()->fail('ValidationException が投げられなかった');
+
+    expect($caught)->toBeInstanceOf(ValidationException::class);
+    assert($caught instanceof ValidationException);
+    expect($caught->status)->toBe(422)
+        ->and($caught->errors())->toHaveKey($attribute);
 }
 
 beforeEach(function () {
