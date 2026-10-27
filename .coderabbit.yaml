@@ -62,7 +62,10 @@ reviews:
     - path: "frontend/src/**/*.test.{ts,tsx}"
       instructions: *test-rules
     - path: "e2e/tests/**"
-      instructions: *test-rules
+      instructions: |
+        E2E は実サーバーを相手にするので、モックの話は当てはまらない(CLAUDE.md の「モックの範囲と確かめる対象」)。次に当てはまれば指摘する。
+        - 画面に出た文字や役割ではなく、内部の state・DOM の作り(クラス名・要素の順番など)に依存して確かめている
+        - API や自前のモジュールを差し替えている(外部サービス・時刻など、プロセスの外のものだけ差し替えてよい)
     - path: "docs/decisions/**"
       instructions: |
         旧と挙動を変える決定には、「旧との差分」の節があり、差分ごとに「旧で何が起きていて、新で何に変えるか」が
