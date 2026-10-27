@@ -4,6 +4,27 @@
  */
 
 export interface paths {
+    "/admin/cocktails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 管理画面のカクテルの一覧。公開済みか下書きのどちらかを、名前の昇順で 1 ページずつ返す。
+         * @description 名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順(旧の管理画面の
+         *     一覧と同じ並び)。q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         */
+        get: operations["admin.cocktailIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/me": {
         parameters: {
             query?: never;
@@ -74,6 +95,14 @@ export interface components {
          * @enum {string}
          */
         CategoryRole: "soft_drink" | "other";
+        /** CocktailListItemResource */
+        CocktailListItemResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_draft: boolean;
+            updated_at: string | null;
+        };
         /** SearchFormMethodResource */
         SearchFormMethodResource: {
             id: number;
@@ -89,7 +118,24 @@ export interface components {
             children: components["schemas"]["SearchFormNodeResource"][];
         };
     };
-    responses: never;
+    responses: {
+        /** @description Validation error */
+        ValidationException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Errors overview. */
+                    message: string;
+                    /** @description A detailed description of each field that failed validation. */
+                    errors: {
+                        [key: string]: string[];
+                    };
+                };
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -97,6 +143,61 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "admin.cocktailIndex": {
+        parameters: {
+            query: {
+                /** @description published: 公開済み / draft: 下書き */
+                status: "published" | "draft";
+                /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
+                q?: string | null;
+                page?: number | null;
+                per_page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `CocktailListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailListItemResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
     "admin.currentAdmin": {
         parameters: {
             query?: never;
