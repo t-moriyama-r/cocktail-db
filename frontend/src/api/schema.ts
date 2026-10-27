@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/admin/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ログインしている管理者を返す。 */
+        get: operations["admin.currentAdmin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hello": {
         parameters: {
             query?: never;
@@ -33,6 +50,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "admin.currentAdmin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: number;
+                        name: string;
+                    };
+                };
+            };
+        };
+    };
     hello: {
         parameters: {
             query?: never;
