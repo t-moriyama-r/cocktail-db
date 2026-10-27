@@ -11,6 +11,8 @@
 # 承認待ちの回は GITHUB_TOKEN(actions: write)で承認する。pull_request の回が無い(承認できなかった)ときは、オーナーの PAT で PR を閉じて開き直し、
 # reopened で pull_request の回を起こす(GITHUB_TOKEN の開き直しではワークフローが起きない)。走った回が終わると ai-auto-merge.yml・
 # pr-status.yml(workflow_run)も起きる。PR のコードは checkout しない(pull_request_target で書き込みの権限を持つため)
+#
+# 必要な secret: CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)。無ければ開き直さずに人に頼む
 name: CI の流し直し
 # PR の番号を付けて起こした回は、名前の末尾に「#<番号>」を付ける。patrol-kick.sh は、これの付いた回を全 PR の見回りに数えない
 run-name: "${{ inputs.number && format('{0} #{1}', github.workflow, inputs.number) || github.workflow }}"

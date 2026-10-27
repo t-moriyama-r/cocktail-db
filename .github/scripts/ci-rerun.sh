@@ -13,14 +13,14 @@
 # そのため、何が起きたかではなく「いまのコミットに pull_request の回があり、承認待ちでないか」で決める。
 # - 承認待ち(conclusion が action_required)の回がある: Actions の Claude(claude[bot])や GITHUB_TOKEN が push したコミットでは、
 #   pull_request の回が「Approve and run」を待ったまま走らない(#353・#365)。その回を承認して走らせる。test.yml のほかの
-#   ワークフロー(evidence-gate など)の回も、待ったままだと自動マージが止まる(すべてのチェックの成功を見る)ので、まとめて承認する
+#   pull_request のワークフローの回も、待ったままだと自動マージが止まる(すべてのチェックの成功を見る)ので、まとめて承認する
 # - pull_request の回が 1 つも無い: 土台がマージされて向き先が付け替わった(付け替えは push ではない)、GITHUB_TOKEN で push した、など。
 #   PR を閉じて開き直すと、reopened で pull_request の回が起きる。GITHUB_TOKEN で開き直してもワークフローは起きないので、オーナーの PAT で行う。
 #   push の直後は、pull_request の回が作られる前のことがあるので、少し待つ(MIN_AGE_MINUTES)
 # - 承認できなかったときも、開き直す(オーナーの開き直しで起きた回は承認が要らない)
 # 走った回(承認待ちでない回)ができると、次からは「走った」とみなして重ねて何もしない。何度呼んでもよい。
-# 閉じて開き直すと pr-status.yml・notify-needs-human.yml(closed で Slack の通知に「済」を付ける mark-done)が動く。mark-done は動いたときの
-# PR の状態で決め、そのときにはもう開き直しているので、通知に「済」は付かない。PR の下書きの状態・ラベル・レビューはそのまま残る。
+# 閉じて開き直すと、closed・reopened で動くワークフロー(Slack の通知に「済」を付ける mark-done など)も動く。どれも動いたときの PR の状態で
+# 決め、そのときにはもう開き直しているので害は無い。PR の下書きの状態・ラベル・レビューはそのまま残る。
 # 開き直せなかったときに閉じたまま残すと、開いている PR しか見ない見回りが二度と拾わないので、GITHUB_TOKEN でも開き直し、人に頼む。
 # コンフリクトしているものは、pull_request の回が作られない。ai-conflict-resolve.yml が develop を取り込んで直す(その push で回が起きる)。
 # ここで needs-human を付けると、needs-human の付いた PR を見送る ai-conflict-resolve.yml が動かなくなるので、何もせずに見送る。
@@ -32,6 +32,8 @@ set -euo pipefail
 WORKFLOW=${CI_WORKFLOW:-test.yml}
 # push の直後は、pull_request の回が作られる前のことがある。その間に開き直さない
 MIN_AGE_MINUTES=${MIN_AGE_MINUTES:-10}
+# PR_REOPEN_TOKEN に渡している secret の名前。人に頼むときに、どれを入れ直せばよいかを書く
+REOPEN_SECRET=CODERABBIT_REQUEST_TOKEN
 
 ci_rerun() {
   local repo=$1 number=${2:-} default n
@@ -105,17 +107,18 @@ approve() {
 # オーナーの PAT で PR を閉じて開き直し、pull_request の回を起こす
 reopen() {
   local repo=$1 default=$2 n=$3 sha=$4 asked=$5 out
+  local why="いまのコミット(${sha:0:7})で CI の pull_request の回が走っていないが、"
   local ask="$default を取り込んで push してほしい(オーナーの push なら CI が動く)。このコメントに「取り込んで」と返信すれば、Actions の Claude Code が取り込んで push する(その回が承認待ちになれば、次の見回りで承認する)"
   if [ -z "${PR_REOPEN_TOKEN:-}" ]; then
-    tell "$repo" "$n" "$sha" "$asked" "いまのコミット(${sha:0:7})で CI の pull_request の回が走っていないが、PR を開き直すトークン(secret CODERABBIT_REQUEST_TOKEN)が無いので、こちらから走らせられなかった。$ask"
+    tell "$repo" "$n" "$sha" "$asked" "${why}PR を開き直すトークン(secret $REOPEN_SECRET)が無いので、こちらから走らせられなかった。$ask"
     return
   fi
   if ! out=$(GH_TOKEN=$PR_REOPEN_TOKEN gh api -X PATCH "repos/$repo/pulls/$n" -f state=closed 2>&1 >/dev/null); then
     if grep -qE 'HTTP 40[134]' <<<"$out"; then
-      tell "$repo" "$n" "$sha" "$asked" "いまのコミット(${sha:0:7})で CI の pull_request の回が走っていないが、PR を開き直すトークン(secret CODERABBIT_REQUEST_TOKEN)で PR を閉じられなかった(期限切れ・権限不足。Pull requests: Read and write が要る)。トークンを入れ直すか、$ask"
+      tell "$repo" "$n" "$sha" "$asked" "${why}PR を開き直すトークン(secret $REOPEN_SECRET)で PR を閉じられなかった(期限切れ・権限不足。Pull requests: Read and write が要る)。トークンを入れ直すか、$ask"
     else
       # API の一時的なエラー・レート制限など。人に頼まず、次の見回りに任せる
-      skip "PR を閉じられなかったが、トークンのためではなさそう(次の見回りでやり直す): $out"
+      echo "#$n 見送り: PR を閉じられなかったが、トークンのためではなさそう(次の見回りでやり直す): $out"
     fi
     return
   fi
@@ -124,7 +127,7 @@ reopen() {
     return
   fi
   # 閉じたまま残すと、開いている PR しか見ない見回りが二度と拾わない。GITHUB_TOKEN でも開き直す(CI は起きない)
-  gh api -X PATCH "repos/$repo/pulls/$n" -f state=open >/dev/null || true
+  gh api -X PATCH "repos/$repo/pulls/$n" -f state=open >/dev/null || echo "::warning::#$n を GITHUB_TOKEN でも開き直せなかった(閉じたまま)"
   tell "$repo" "$n" "$sha" "$asked" "いまのコミット(${sha:0:7})で CI の pull_request の回を起こすために PR を閉じたが、オーナーのトークンで開き直せなかった。PR が閉じたままなら開き直してほしい(オーナーが開き直せば CI が動く)。開いていれば、$ask"
 }
 

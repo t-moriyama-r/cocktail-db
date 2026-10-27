@@ -194,19 +194,19 @@ main() {
 
 	reset
 	pr 7 develop false MERGEABLE
-	runs action_required evidence-gate.yml/action_required
+	runs action_required other.yml/action_required
 	run 7
 	expect TC-389-03 'ほかのワークフローの承認待ちの回も、まとめて承認する' "$(approved | tr '\n' ' ')" '101 gh-token 102 gh-token '
 
 	reset
 	pr 7 develop false MERGEABLE
-	runs success evidence-gate.yml/action_required
+	runs success other.yml/action_required
 	run 7
 	expect TC-389-04 'CI は走り終わり、ほかのワークフローだけ承認待ちなら、それを承認する' "$(approved)|$(reopened)" '102 gh-token|'
 
 	reset
 	pr 7 develop false MERGEABLE
-	runs success evidence-gate.yml/action_required
+	runs success other.yml/action_required
 	touch "$FAKE/approve-fails"
 	run 7
 	expect TC-389-05 'CI が走り終わっていれば、ほかの回を承認できなくても開き直さない(次の見回りでやり直す)' \
@@ -288,7 +288,7 @@ reset() {
 pr() {
 	local labels=
 	if [ -n "${6:-}" ]; then labels="{\"name\":\"$6\"}"; fi
-	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefName\":\"issue-$1\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"mergeable\":\"$4\",\"labels\":[$labels]}" >"$FAKE/pr-$1.json"
+	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"mergeable\":\"$4\",\"labels\":[$labels]}" >"$FAKE/pr-$1.json"
 }
 
 # いまのコミットの回。引数ごとに 1 回で、形は [<ワークフローのファイル>/][<イベント>:]<conclusion>。
@@ -303,7 +303,7 @@ runs() {
 		id=$((id + 1))
 		list="${list:+$list,}{\"id\":$id,\"event\":\"$ev\",\"path\":\".github/workflows/$wf\",\"conclusion\":$c}"
 	done
-	echo "{\"total_count\":$#,\"workflow_runs\":[$list]}" >"$FAKE/runs"
+	echo "{\"workflow_runs\":[$list]}" >"$FAKE/runs"
 }
 # PR の更新時刻(push の時刻の代わり)
 updated() { echo "$1" >"$FAKE/updated"; }

@@ -14,7 +14,8 @@
 # 同じコミットと develop の組では 1 回だけ試す(目印 <!-- ai-dev:conflict-resolve sha=<コミット> base=<develop> -->)。
 # Claude Code は PR のコード・コメントを読むので、そのジョブにはワークフローを起動できる権限(actions: write)を渡さない
 #
-# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)。Claude の GitHub App をこのリポジトリに入れておく
+# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)。Claude の GitHub App をこのリポジトリに入れておく。
+# CODERABBIT_REQUEST_TOKEN(ci-rerun.sh が CI の回の無い PR を開き直すのに使う。ci-rerun.yml と同じ)
 name: コンフリクトを解消する
 # PR の番号を付けて起こした回は、名前の末尾に「#<番号>」を付ける。patrol-kick.sh は、これの付いた回を全 PR の見回りに数えない
 run-name: "${{ inputs.number && format('{0} #{1}', github.workflow, inputs.number) || github.workflow }}"
