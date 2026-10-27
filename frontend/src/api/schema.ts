@@ -242,8 +242,28 @@ export interface components {
             strength: number;
             sweet_degree: number | null;
             rate: number | null;
-            description: string | null;
-            note: string | null;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            note: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
             youtube: string | null;
             /** Format: date-time */
             youtube_created_at: string | null;
