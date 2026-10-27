@@ -171,7 +171,7 @@ jobs:
           persist-credentials: false
 
       - name: ShellCheck
-        run: shellcheck ops/backup/archive-storage.sh ops/backup/tests/archive-storage.test.sh ops/backup/dump-db.sh ops/backup/tests/dump-db.test.sh
+        run: shellcheck ops/backup/archive-storage.sh ops/backup/tests/archive-storage.test.sh ops/backup/dump-db.sh ops/backup/tests/dump-db.test.sh ops/backup/verify-restore.sh ops/backup/tests/verify-restore.test.sh
 
       # 画像の退避スクリプト(ops/backup/archive-storage.sh)
       - name: Test archive-storage.sh
@@ -194,6 +194,18 @@ jobs:
             -e DUMP_TEST_DB_ROOT_PASSWORD=root \
             -e DUMP_TEST_REQUIRE_DB=1 \
             mariadb:10.11 bash ops/backup/tests/dump-db.test.sh
+
+      # ops/backup/verify-restore.sh で、dump-db.sh のダンプを使い捨ての DB に戻して元の DB と比べ、一致すれば通り、
+      # ダンプの後に 1 行消す・値を変えると失敗することを確かめる。dump-db.sh と同じく mariadb の image の中で動かす
+      - name: Test verify-restore.sh
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -w /w \
+            -e VERIFY_TEST_DB_HOST=127.0.0.1 \
+            -e VERIFY_TEST_DB_PORT=3306 \
+            -e VERIFY_TEST_DB_ROOT_PASSWORD=root \
+            -e VERIFY_TEST_REQUIRE_DB=1 \
+            mariadb:10.11 bash ops/backup/tests/verify-restore.test.sh
 
   frontend:
     runs-on: ubuntu-latest
