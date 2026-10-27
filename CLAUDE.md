@@ -28,7 +28,7 @@
 | `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
-| `ops/` | (まだ無い)サーバーで動かす運用スクリプト(バックアップ・切り替えなど)。#14 などで作る | — |
+| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップと復元の検証、`ops/migrate`: 移行) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
 | `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`) | — |
 
 ### BE のテスト
@@ -43,7 +43,7 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。`release` 向けの PR は、lint とテストの確認(必須の `backend`・`backend-lint`・`frontend`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめる。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`scripts` ジョブが `.github/scripts` と `ops/migrate` のシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。`release` 向けの PR は、lint とテストの確認(必須の `backend`・`backend-lint`・`frontend`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`scripts` ジョブが `.github/scripts` と `ops/migrate` のシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 
@@ -101,7 +101,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 ## カテゴリ木
 
 - カテゴリ木(閉包テーブル `category_closures`)は、`CategoryTree` サービス(`app/Services/CategoryTree.php`)経由でだけ書き換える。閉包テーブルを直接 INSERT・UPDATE・DELETE しない
-- `CategoryTree` は **まだ無い**。#24 で作る。それより前の issue で閉包テーブルを書き換える必要が出たら、直接書かずに #24 を待つか、issue で相談する
+- `CategoryTree` に無い書き換え(ノードの削除など)が要るときは、閉包テーブルを直接書かずに `CategoryTree` にメソッドを足す。足すのがその issue の範囲を超えるなら、issue で相談する
 
 ## 旧ソースの参照
 
@@ -116,7 +116,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 ブランチとコミットの決まりは `README.md` の「ブランチ」のとおり。要点と、PR の流れ:
 
 1. 1 PR = 1 issue。ついでの修正を混ぜない(見つけたら別の issue にする)
-   - issue・PR のタイトルの先頭に、対象を示す接頭辞(`【BE】`・`【FE】`・`【CI】`・`【移行】`・`【運用】`)を付ける。`area:*` ラベルとの対応は `docs/labels.md` の「タイトルの接頭辞」。PR のタイトルは `【CI】issue-<番号>: <何をしたか>` の形にする
+   - issue・PR のタイトルの先頭に、対象を示す接頭辞(`【BE】`・`【FE】`・`【CI】`・`【移行】`・`【運用】`)を付ける。`area:*` ラベルとの対応は `docs/labels.md` の「タイトルの接頭辞」。PR のタイトルは、閉じる issue と同じ接頭辞の後に `issue-<番号>: <何をしたか>` を続ける(例: `【BE】issue-90: …`)
 2. ブランチは issue から `develop` を元に作る: `gh issue develop <番号> --base develop --name issue-<番号>-<短い英名> --checkout`
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
 4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする。同じファイルを変える PR がまだ開いていて、その上に積むときだけ、ブランチと PR の向き先を土台の PR のブランチにする(土台がマージされると GitHub が向き先を `develop` に付け替え、`ci-rerun.yml` が 1 時間以内に CI を流し直す)
@@ -138,6 +138,8 @@ CLAUDE.md・`README.md`・`docs/` の記述と、既存コードの実際の書�
 
 - 見つけた食い違いは、作業の最後の返答(PR の本文ではなく、エージェントがユーザーに返す最後の返答)に**すべて**挙げる。どの文書のどの記述と、どのコードの書き方が食い違うか、どちらに従ったかを書く。直すかどうかはユーザーが決める
 - 文書を直すのは、issue の範囲に入っているときだけ。ついでに直さない(1 PR = 1 issue)
+- ただし、その PR の実装で古くなる記述(「まだ無い」「#<番号> で作る」と書いたものを作った・ジョブやコマンドの中身を変えた・表や列を足した、など)は、同じ PR で直す。これは issue の範囲に入る。古い記述が残ると、次に読むエージェントが実態と違う規約に従ってしまう
+- PR を作る前に、差分に出た名前(ファイル・クラス・コマンド・ワークフローのジョブ・表・issue の番号)で `CLAUDE.md`・`README.md`・`docs/` を grep し、この PR で古くなる記述が無いかを確かめる
 
 ## 禁止事項
 
