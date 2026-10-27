@@ -28,7 +28,7 @@
 | `users` | 管理者 | `users` | 旧 ID のまま | Laravel の雛形にある |
 | `admin_login_links` | 非常用のログイン URL の発行の記録 | 無し(新設) | — | #115 |
 
-ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にすると ID がぶつかるので、ノードだけ振り直して `legacy_id_maps` に残す。カクテル・銘柄は URL(`/detail/cocktail/{id}`・`/detail/brand/{id}`)を変えないため旧 ID のまま入れ、カクテルが指す技法・氷・用語辞典(`method_id`・`ice_id`・`glass_dictionary_id`)も旧 ID のまま入れる。旧 ID のまま入れた表も、`legacy_id_maps` に同じ値の対応を入れる(#30・#31)。旧 ID のまま入れた表は、移行の後の自動採番が旧の最大値の次から始まる。
+ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にすると ID がぶつかるので、ノードだけ振り直して `legacy_id_maps` に残す。カクテル・銘柄は URL(`/detail/cocktail/{id}`・`/detail/brand/{id}`)を変えないため旧 ID のまま入れ、カクテルが指す技法・氷・用語辞典(`method_id`・`ice_id`・`glass_dictionary_id`)も旧 ID のまま入れる。旧 ID のまま入れた表も、`legacy_id_maps` に同じ値の対応を入れる(技法・氷・辞典の分類・用語辞典・ユーザーは #33、カクテル・銘柄は #30・#31)。旧に作成・更新日時の列が無い表(用語辞典・言い換え・スキップ語など)は、取り込みで `created_at`・`updated_at` を null にする。旧 ID のまま入れた表は、移行の後の自動採番が旧の最大値の次から始まる。
 
 旧の表で移さないもの:
 
@@ -86,7 +86,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 - 主キーは (`ancestor_id`, `descendant_id`)。インデックスは (`descendant_id`, `depth`)。祖先を近い順・遠い順に引く(パンくず・根の役割)のに使う
 - ノードごとに自分自身の行(depth 0)を持つ
-- **書き換えるのは `CategoryTree`(#24)だけ**。直接 INSERT・UPDATE・DELETE しない(CLAUDE.md)
+- **書き換えるのは `CategoryTree`(`app/Services/CategoryTree.php`)だけ**。直接 INSERT・UPDATE・DELETE しない(CLAUDE.md)
 - 外部キーは `ON DELETE CASCADE`。ノードを消すとき(`CategoryTree::deleteLeaf`)に、そのノードの行も一緒に消えるようにする
 
 ### `legacy_id_maps`
