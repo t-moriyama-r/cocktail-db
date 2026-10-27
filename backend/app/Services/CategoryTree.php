@@ -2,9 +2,14 @@
 
 namespace App\Services;
 
+use App\Enums\CategoryDeleteBlocker;
 use App\Enums\CategoryRole;
+use App\Models\Affiliate;
+use App\Models\Brand;
 use App\Models\Category;
 use App\Models\CategoryClosure;
+use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -138,6 +143,67 @@ class CategoryTree
                 (new RecipeCounter($this))->recountSubtree($node);
             }
         });
+    }
+
+    /**
+     * 葉の $node を、閉包表の行(自分の行と、祖先からの行)ごと消す。
+     *
+     * 子があるノードを消すと、子は祖先とのつながりを失って根に化けるので、消せるのは葉だけにする。部分木をまとめて
+     * 消す操作は作らない(docs/schema.md の「カテゴリを消すとき」)。銘柄・材料・ベース・アフィリエイトから
+     * 指されているノードは外部キーの RESTRICT でも消えないが、それではどれが邪魔をしているのかが分からないので、
+     * 先に調べて理由をすべて例外に載せる(管理画面に出す。#121)。
+     *
+     * 調べてから消すまでのあいだに子や銘柄を足されると、調べた結果が古くなる。ノードの行と、閉包表の自分を
+     * 子孫とする行をロックしてから調べる(子を足す addNode は親のそれらの行を読み、銘柄などを足すときは
+     * 外部キーの確かめでノードの行を読むので、ロックが外れるまで待つ)。
+     *
+     * @throws InvalidArgumentException $node が木に入っていないとき
+     * @throws CategoryNotDeletableException 消せない理由があるとき
+     */
+    public function deleteLeaf(Category $node): void
+    {
+        DB::transaction(function () use ($node) {
+            $this->assertInTree($node);
+            Category::query()->whereKey($node->getKey())->lockForUpdate()->get();
+            CategoryClosure::query()->where('descendant_id', $node->getKey())->lockForUpdate()->get();
+
+            $blockers = $this->deleteBlockers($node);
+            if ($blockers !== []) {
+                throw new CategoryNotDeletableException($blockers);
+            }
+
+            // 閉包表の行は外部キーの CASCADE で一緒に消える
+            Category::query()->whereKey($node->getKey())->delete();
+        });
+    }
+
+    /**
+     * $node を deleteLeaf で消せない理由。消せるなら空。理由は CategoryDeleteBlocker の定義の順。
+     *
+     * 見るのは $node を直接指すものだけ。子孫を指すものは、子がある(Children)ことで止まる。
+     *
+     * @return list<CategoryDeleteBlocker>
+     *
+     * @throws InvalidArgumentException $node が木に入っていないとき
+     */
+    public function deleteBlockers(Category $node): array
+    {
+        $this->assertInTree($node);
+        $id = $node->getKey();
+
+        $found = [
+            CategoryDeleteBlocker::Children->value => CategoryClosure::query()
+                ->where('ancestor_id', $id)->where('depth', '>', 0)->exists(),
+            CategoryDeleteBlocker::Brands->value => Brand::query()->where('category_id', $id)->exists(),
+            CategoryDeleteBlocker::Ingredients->value => CocktailIngredient::query()->where('category_id', $id)->exists(),
+            CategoryDeleteBlocker::BaseCocktails->value => Cocktail::query()->where('base_category_id', $id)->exists(),
+            CategoryDeleteBlocker::Affiliates->value => Affiliate::query()->where('category_id', $id)->exists(),
+        ];
+
+        return array_values(array_filter(
+            CategoryDeleteBlocker::cases(),
+            fn (CategoryDeleteBlocker $blocker): bool => $found[$blocker->value],
+        ));
     }
 
     /**

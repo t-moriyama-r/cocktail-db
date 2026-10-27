@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\MethodFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -11,5 +13,8 @@ use Illuminate\Database\Eloquent\Model;
 #[Fillable(['name', 'name_eng', 'description'])]
 class Method extends Model
 {
+    /** @use HasFactory<MethodFactory> */
+    use HasFactory;
+
     public $timestamps = false;
 }

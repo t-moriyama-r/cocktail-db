@@ -48,24 +48,28 @@ main() {
 }
 
 # gh api・gh pr view・gh pr list に、$FAKE_DIR に置いた JSON を返す。--jq は本物の jq で当てる
+# 外の jq の出力から \r を落とす。Windows の jq は CRLF で出し、Git Bash のコマンド置換は最後の行の \r しか落とさないので、
+# 番号が 1\r のようになって pr-1\r.json を探してしまう(#362)。本物の gh の --jq は Windows でも LF で出す
 setup_fake_gh() {
 	cat >"$FAKE/gh" <<-'EOF'
 		#!/usr/bin/env bash
+		# tr にパイプしても、jq が失敗したら gh も失敗で返す(ファイルが無いときなど)
+		set -o pipefail
 		jq_expr=.
 		args=("$@")
 		for i in "${!args[@]}"; do [ "${args[$i]}" = --jq ] && jq_expr=${args[$((i + 1))]}; done
 		case "$*" in
 		  "api repos/o/r --jq"*) echo develop ;;
 		  "api repos/o/r/branches/develop"*) echo "$FAKE_BASE" ;;
-		  "pr list"*) jq -r "$jq_expr" "$FAKE_DIR/list.json" ;;
+		  "pr list"*) jq -r "$jq_expr" "$FAKE_DIR/list.json" | tr -d '\r' ;;
 		  "pr view"*)
 		    n=$3
 		    # pr-<番号>.json.<回数> があれば、呼ばれた回数ごとに返すものを変える(UNKNOWN から変わる場合)
 		    count=$(($(cat "$FAKE_DIR/count-$n" 2>/dev/null || echo 0) + 1))
 		    echo "$count" >"$FAKE_DIR/count-$n"
 		    if [ -f "$FAKE_DIR/pr-$n.json.$count" ]; then cat "$FAKE_DIR/pr-$n.json.$count"; else cat "$FAKE_DIR/pr-$n.json"; fi ;;
-		  *"/commits/"*) jq -r "$jq_expr" "$FAKE_DIR/commit.json" ;;
-		  *"/comments"*) jq -r "$jq_expr" "$FAKE_DIR/comments-$(sed -E 's#.*/issues/([0-9]+)/.*#\1#' <<<"$*").json" ;;
+		  *"/commits/"*) jq -r "$jq_expr" "$FAKE_DIR/commit.json" | tr -d '\r' ;;
+		  *"/comments"*) jq -r "$jq_expr" "$FAKE_DIR/comments-$(sed -E 's#.*/issues/([0-9]+)/.*#\1#' <<<"$*").json" | tr -d '\r' ;;
 		  *) echo "unexpected gh $*" >&2; exit 1 ;;
 		esac
 	EOF

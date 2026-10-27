@@ -9,6 +9,8 @@
 # - notify: 新しく付いた needs-human を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
+# schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 24 時間たったところで起こす(#269)
+#
 # GITHUB_TOKEN で ready にしても ai-auto-merge.yml の ready_for_review は起きないが、
 # CodeRabbit のレビュー・コメントで ai-auto-merge.yml が起きるので、マージの流れはそのまま続く
 #
@@ -202,6 +204,12 @@ jobs:
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
           fi
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
+
+      # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
+      # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。
+      # push していない回・CI が普通に動いた回では、ci-rerun.yml が見送る。呼べなくても、1 時間ごとの ci-rerun.yml が拾う
+      - name: 承認待ちで止まった CI を流し直させる
+        run: gh workflow run ci-rerun.yml -R "$REPO" -f number="$PR" || echo "::warning::ci-rerun.yml を呼べなかった(1 時間ごとの見回りで拾う)"
 
       # 引き継いで ready にした PR だけ。draft のまま・人の番(needs-human)の PR は request-review.sh が見送る
       - name: ready にした PR のレビューを CodeRabbit に頼む

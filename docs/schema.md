@@ -159,7 +159,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `image_url` | `text` | ○ | | `image_url` |
 | `created_at`・`updated_at` | `timestamps()` | ○ | | `created_at`・`updated_at` |
 
-インデックス: `name`・`name_eng`・`name_search`・`base_category_id`・`method_id`・`glass_dictionary_id`・`is_draft`・`is_major`・`rate`・`youtube_created_at`・`recipe_count`(旧と同じ列)。
+インデックス: `name`・`name_eng`・`name_search`・`base_category_id`・`method_id`・`glass_dictionary_id`・`is_draft`・`is_major`・`rate`・`youtube_created_at`・`recipe_count`(旧と同じ列)と、外部キーのための `ice_id`(MariaDB は外部キーの列に索引が要る。#325)。
 
 - 旧の `updated_at` は `ON UPDATE current_timestamp()` だった。新しい DB では Eloquent が更新する
 - 別名(`cocktail_aliases`)と同じレシピの判定(`cocktails.recipe_signature`)は #82 で書き足す
@@ -338,6 +338,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `admin_login_links.user_id` → `users` | CASCADE(ユーザーを消すと、そのユーザーの URL も使えなくなる) |
 
 - `categories.famous_brand_id` → `brands` と `brands.category_id` → `categories` は互いを指す。`categories` を作る #21 の時点では `brands` が無いので、`famous_brand_id` の外部キーは `brands` を作る #22 のマイグレーションで足す
+- `cocktails.method_id`・`glass_dictionary_id`・`ice_id` と `affiliates.brand_id` は、#22(`brands`・`cocktails`)と #23(`methods`・`dictionaries`・`ices`・`affiliates`)を並行で作ったため、どちらのマイグレーションでも相手の表が無く、両方の後のマイグレーション(#325)で足す
 
 ### カテゴリを消すとき
 

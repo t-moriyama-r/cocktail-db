@@ -113,7 +113,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 ## カテゴリ木
 
 - カテゴリ木(閉包テーブル `category_closures`)は、`CategoryTree` サービス(`app/Services/CategoryTree.php`)経由でだけ書き換える。閉包テーブルを直接 INSERT・UPDATE・DELETE しない
-- `CategoryTree` に無い書き換え(ノードの削除など)が要るときは、閉包テーブルを直接書かずに `CategoryTree` にメソッドを足す。足すのがその issue の範囲を超えるなら、issue で相談する
+- `CategoryTree` に無い書き換えが要るときは、閉包テーブルを直接書かずに `CategoryTree` にメソッドを足す。足すのがその issue の範囲を超えるなら、issue で相談する
 
 ## 旧ソースの参照
 
@@ -136,8 +136,8 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
    - **見た目の案を人に選んでもらう PR**(閉じる issue に `needs-review` が付き、PR 本文で色・余白・レイアウト・スタイルの方式などの案を並べて選んでもらうもの。例: #348)は、決着したら、本文に「最終的にどうなったか(証跡)」の節を置き、同じ中身を PR の最後のコメントにも貼る。選ぶ前の案の画像だけでは、何に決まって最終的にどう見えるのかが PR から分からないため
    - 節に書くのは、決まったこと(どのコメントで誰が決めたか)、まだ決まっていないこと、決まった後に変えたところ(レビュー対応で色を変えた、など)、最終の見た目の証跡(決める前 → 最終の比較画像と、最終の見た目の動画)。見た目が変わるたびに(人の判断を反映した・レビュー対応で直した)撮り直して差し替える
    - Actions の Claude Code は画面を撮れない。この種の PR で見た目を変えたら、節を文字で書いたうえで、何を撮ればよいかをコメントして `needs-human` を付ける(`ai-review-loop.yml`)。撮って貼るのは手元のエージェントで、貼ったら `needs-human` を外す(外すと `ai-auto-merge.yml` がマージできる状態かを見直す)。貼るコメントの先頭には `<!-- ai-dev:agent -->` を付ける(オーナーのアカウントで書いた印の無いコメントは、Actions に人の返信として拾われる)
-6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や画面の証跡が要るものは `needs-human` を付ける)
-7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごとに見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
+6. CI が通ったら ready にし、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て(GitHub の `schedule` が遅れた・落とされたときは、PR に動きがあれば `patrol-kick.yml` が起こす)、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や画面の証跡が要るものは `needs-human` を付ける)
+7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごと(PR に動きのある日は、CI の終わりに `patrol-kick.yml` が前の回から 1 時間たったところで起こすので 1 時間ごと)に見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
 9. `develop`(dev 環境に出る)→ `staging`(stg 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、必ず人が行う(自動ではマージしない)。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)。
    - この PR(昇格の PR)の中身は、`develop` に入る前に PR ごとにレビュー済み。AI レビューは流すが、指摘が残ってもマージは止めず、Actions の Claude Code は直さない(head が保護されたブランチ(`develop`・`staging`)なので直せない)。`needs-human` も付かない。直したい指摘は、`develop` への PR で直す

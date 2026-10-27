@@ -2,7 +2,9 @@
 #
 # private のリポジトリでは、定期実行は PR が無くても 1 回 1 分ずつ課金される。1 時間ごとの定期実行を 2 本(この見回りと
 # pr-status.yml の出し直し)持つと月 1,400 分ほどになるので、1 本のジョブにまとめて 2 時間ごとにしている。
-# 人が作業しているあいだは、pr-patrol スキルで同じ見回りを早めに起こせる
+# 人が作業しているあいだは、pr-patrol スキルで同じ見回りを早めに起こせる。
+# schedule は GitHub が混むと遅れたり落とされたりするので、PR に動きがあれば、CI の終わりに patrol-kick.yml が
+# 前の回から 1 時間たったところで起こす(PR に動きのある日は 1 時間ごとになる。#269)
 #
 # ai-review-loop.yml・ai-claude-review.yml はレビューやコメントが付いたときに動くが、Claude Code が途中で止まった・上限に当たった・
 # レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
@@ -22,7 +24,12 @@
 #       依頼に上限が返った・30 分たっても返事もレビューも無い・依頼を書けなかったときだけ ai-claude-review.yml を呼ぶ。
 #       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)
 #   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
-#     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる
+#     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる。
+#     返信済みで未解決のスレッドだけが残っていれば、ai-auto-merge.yml が needs-human で人に頼む
+#
+# needs-human の付いた PR は人の番なので上のどれも呼ばないが、ai-auto-merge.yml が「返信済みで未解決のスレッド」の理由で付けたものは、
+# 人がスレッドをすべて解決したら外して ai-auto-merge.yml を呼ぶ(.github/scripts/thread-handoff.sh release。スレッドの解決では
+# ワークフローが起きない。pull_request_review_thread は Actions のトリガーに無い。#388)。最後の動きからの時間は待たない
 #
 # ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい。
 # 必要な secret: CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)
@@ -30,7 +37,7 @@ name: 止まったレビューを見回る
 
 on:
   schedule:
-    - cron: '30 */2 * * *'   # 2 時間ごと(ほかの定期実行の 0・10・20 分と重ならないよう 30 分)
+    - cron: '30 */2 * * *'   # 2 時間ごと(ほかの定期実行の 0・10・20 分と重ならないよう 30 分)。PR に動きがあれば patrol-kick.yml も起こす
   workflow_dispatch:
 
 permissions:
@@ -73,6 +80,12 @@ jobs:
             case "$(jq -r .baseRefName <<<"$pr")" in staging | release) promotion=true ;; esac
             if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft"; continue; fi
             if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
+            # 返信済みで未解決のスレッドを人に頼んだ PR は、人がすべて解決したら needs-human を外して自動マージの判定に戻す。
+            # スレッドの解決ではワークフローが起きないので、ここで拾う。解決は PR の更新に数えられることがあるので、待たずに見る
+            if jq -e '.labels | any(.name == "needs-human")' <<<"$pr" >/dev/null; then
+              bash .github/scripts/thread-handoff.sh release "$REPO" "$n" || echo "::warning::#$n の needs-human を外せるか確かめられなかった"
+              continue
+            fi
             label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
             if [ -n "$label" ]; then skip "ラベル $label"; continue; fi
             min=$MIN_IDLE_MINUTES

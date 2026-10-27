@@ -5,16 +5,20 @@
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
-# - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きないことがあり(#227)、ボットの「@coderabbitai review」に
-#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ test.yml を流し、ready の PR は代わりの Claude(ai-claude-review.yml)に
+# - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
+#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
 #   いまのコミットをレビューさせる。新しく付いた needs-human は Slack に知らせ、状態のラベルを付け替える
 #
-# 起動: 1 時間ごと・develop への push(コンフリクトが出た直後)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
+# 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
+# schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
 # 同じコミットと develop の組では 1 回だけ試す(目印 <!-- ai-dev:conflict-resolve sha=<コミット> base=<develop> -->)。
 # Claude Code は PR のコード・コメントを読むので、そのジョブにはワークフローを起動できる権限(actions: write)を渡さない
 #
-# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)。Claude の GitHub App をこのリポジトリに入れておく
+# 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)。Claude の GitHub App をこのリポジトリに入れておく。
+# CODERABBIT_REQUEST_TOKEN(ci-rerun.sh が CI の回の無い PR を開き直すのに使う。ci-rerun.yml と同じ)
 name: コンフリクトを解消する
+# PR の番号を付けて起こした回は、名前の末尾に「#<番号>」を付ける。patrol-kick.sh は、これの付いた回を全 PR の見回りに数えない
+run-name: "${{ inputs.number && format('{0} #{1}', github.workflow, inputs.number) || github.workflow }}"
 
 on:
   schedule:
@@ -38,7 +42,19 @@ env:
   REPO: ${{ github.repository }}
 
 jobs:
+  # Claude Code のアクションは push のイベントに対応していない(Unsupported event type: push で落ちる。#396)。
+  # push の回は自分を workflow_dispatch で起こし直すだけにし、その回で拾わせる
+  kick:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: workflow_dispatch で起こし直す
+        run: gh workflow run ai-conflict-resolve.yml -R "$REPO" --ref "${{ github.event.repository.default_branch }}"
+
   pick:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -192,7 +208,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      actions: write   # CI・代わりのレビュー・通知・状態のラベルのワークフローを gh workflow run で呼ぶ
+      actions: write   # CI の承認待ちの回を承認する。代わりのレビュー・通知・状態のラベルのワークフローを gh workflow run で呼ぶ
       checks: read
       statuses: read
     strategy:
@@ -220,6 +236,9 @@ jobs:
 
       - name: CI・レビュー・通知を続ける
         if: steps.tried.outcome == 'success'
+        env:
+          # ci-rerun.sh が、pull_request の回が無い PR を閉じて開き直す(オーナーの PAT。ci-rerun.yml と同じ)
+          PR_REOPEN_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,headRefOid,labels)
           head=$(jq -r .headRefOid <<<"$pr")
@@ -229,18 +248,14 @@ jobs:
 
           if [ "$(jq -r .state <<<"$pr")" = OPEN ] && [ -n "$resolved_head" ] && [ "$head" = "$resolved_head" ]; then
             echo "#$PR は ${head:0:7} に進んだ"
-            # ボットの push で test.yml が起きないことがある(#227)。少し待っても回が無ければ、PR のブランチで流す
+            # ボットの push で test.yml が起きないことがあり(#227)、起きても承認待ち(action_required)のまま走らないことがある(#365)。
+            # 少し待って回ができるのを待ち、承認待ちの回があれば ci-rerun.sh が承認し、回が無ければ PR を閉じて開き直す(待ったので push 直後の待ちはしない)。
+            # 走らせられなければ ci-rerun.sh が人に頼む。読めなかったなどで落ちても、1 時間ごとの ci-rerun.yml が拾うので、後ろのレビューの依頼まで進む
             for _ in $(seq 1 $((CI_WAIT_SECONDS / 15))); do
               [ "$(gh run list -R "$REPO" --workflow test.yml --commit "$head" --json databaseId --jq length)" -gt 0 ] && break
               sleep 15
             done
-            if [ "$(gh run list -R "$REPO" --workflow test.yml --commit "$head" --json databaseId --jq length)" -gt 0 ]; then
-              echo "${head:0:7} で test.yml が動いている"
-            elif gh workflow run test.yml -R "$REPO" --ref "$BRANCH"; then
-              echo "${head:0:7} で test.yml が動かなかったので流した"
-            else
-              echo "::warning::#$PR の test.yml を流せなかった(ブランチの test.yml に workflow_dispatch が無い)"
-            fi
+            MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
             # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
             # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
             held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision"))] | join(",")' <<<"$pr")
