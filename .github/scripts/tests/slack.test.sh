@@ -116,6 +116,18 @@ main() {
 	run_mark >/dev/null
 	expect TC-221-18 '1 件書き換えられなくても、ほかの通知へ進み、成功で終わる' "$?:$(sent chat.update .ts | paste -sd,)" '0:100,200'
 
+	reset
+	history "$(ask 100 7 needs-human),$(padding 200)"
+	issue 7 open '[]'
+	run_mark >/dev/null
+	expect TC-422-01 '履歴の 1 ページが 1 引数の上限(128KB)を超えても、片付いた通知に「済」を付ける' "$(sent chat.update .ts)" 100
+
+	reset
+	echo '{"ok":true,"messages":"broken"}' >"$FAKE/res/conversations.history.json"
+	out=$(run_mark)
+	expect TC-422-02 '履歴を組み立てられないときは、「無かった」で済ませず、警告を出して成功で終わる' \
+		"$?:$(grep -c '::warning::' <<<"$out"):$(grep -c '無かった' <<<"$out")" '0:1:0'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -189,6 +201,16 @@ ask() {
 
 done_msg() {
 	ask "$@" | sed 's/"ai_dev_ask"/"ai_dev_done"/'
+}
+
+# 「済」を付けた通知を、1 件 1KB の本文で n 件つないだもの(履歴を大きくするため)
+padding() {
+	local text i msgs=()
+	text=$(printf 'x%.0s' {1..1000})
+	for ((i = 1; i <= $1; i++)); do
+		msgs+=("$(done_msg "$((1000 + i))" 9 needs-human | sed "s/\"ask 9\"/\"$text\"/")")
+	done
+	(IFS=,; echo "${msgs[*]}")
 }
 
 issue() {
