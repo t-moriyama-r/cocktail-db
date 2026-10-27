@@ -4,6 +4,19 @@ FE(`frontend/`)の画面のスタイルの書き方と、見た目の基準(色�
 
 > **方式は CSS Modules + CSS 変数をおすすめとして進め、見た目は一旦案 A(旧に寄せる)で進める(#294・#348)。** 最終の選定はまだで、案 B・C は比較のために残している。PR のコメントで最終の選定が出たら、この文書を選ばれた方式と案 1 つに絞る。それまでの画面の実装は案 A のトークンを使う。
 
+## 画面の実装での使い方
+
+画面の実装が使う土台は `frontend/src/styles/` にある(#295)。`src/main.tsx` が、画面の CSS Modules より先に読む。
+
+| ファイル | 中身 |
+|---|---|
+| `tokens.css` | 色・余白・文字の大きさなどの変数(`:root`)。値は案 A。見た目を変えるときは、画面の CSS ではなくここを変える |
+| `base.css` | ページ全体の土台(`box-sizing: border-box`・`body` の余白を消す・地の色と文字・リンクの色・画像を親の幅に収める) |
+| `breakpoints.ts` | 幅の区切りの値(下の「幅の区切り」)と、メディアクエリの文字列を作る `mediaUp`・`mediaDown`。JS で幅を見るときに使う |
+
+- 画面ごとのスタイルは `*.module.css` に書き、色・余白・文字の大きさは数値ではなく `tokens.css` の変数を使う
+- 試作(`src/design-proposals/`)は案ごとの変数を `src/design-proposals/tokens.css` に持っていて、`styles/` の土台は読まない
+
 ## 試作の画面の開き方
 
 見た目の案は、開発サーバーだけで開ける試作の画面(`frontend/design.html` → `frontend/src/design-proposals/`)で見比べる。本番のビルド(`vite.config.ts` の `build.rollupOptions.input` は `src/main.tsx` だけ)には入らない。
@@ -68,7 +81,7 @@ npm run dev
 
 ## 幅の区切り
 
-旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。CSS 変数はメディアクエリに使えないので、各 `*.module.css` に数値で書く。
+旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。
 
 | 名前 | 幅 | 変わるもの(試作) |
 |---|---|---|
