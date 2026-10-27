@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import FontAwesomeIcon from './FontAwesomeIcon'
 
 /**
@@ -14,7 +15,7 @@ export default function MethodIcon({ method }: { method: { id: number; name: str
 }
 
 /** 技法の ID とアイコン(旧 Results/Tables/Cocktails.vue と同じ対応) */
-const METHOD_ICONS: Partial<Record<number, 'slash' | 'fill-drip' | 'glass-martini-alt' | 'blender' | 'glass-whiskey' | 'mug-hot'>> = {
+const METHOD_ICONS: Partial<Record<number, ComponentProps<typeof FontAwesomeIcon>['icon']>> = {
   1: 'slash',
   2: 'fill-drip',
   3: 'glass-martini-alt',

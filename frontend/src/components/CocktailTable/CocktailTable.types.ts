@@ -22,14 +22,14 @@ export type CocktailSort = {
 }
 
 /**
- * 手元で並べ替える(5 件・7 件の一覧)。最初は渡した順のまま出し、見出しを押すと表の中で並べ替える
+ * 表の中で並べ替える。最初は渡した順のまま出し、見出しを押すと表の中で並べ替える
  */
 export type CocktailTableLocalSort = {
   mode: 'local'
 }
 
 /**
- * 並びを外から渡す(検索結果。サーバーで並べ替える)。表は渡した行の順のまま出し、見出しに sort の印を付ける。
+ * 並びを外から渡す。表は渡した行の順のまま出し、見出しに sort の印を付ける。
  * 見出しを押すと、次の並び(同じ列なら逆、ほかの列なら列ごとの初めの向き)を onSortChange で返す
  */
 export type CocktailTableControlledSort = {

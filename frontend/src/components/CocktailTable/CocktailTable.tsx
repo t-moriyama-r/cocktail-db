@@ -4,6 +4,7 @@ import styles from './CocktailTable.module.css'
 import type { CocktailSort, CocktailSortKey, CocktailTableRow, CocktailTableSortMode } from './CocktailTable.types'
 import FontAwesomeIcon from './FontAwesomeIcon'
 import MethodIcon from './MethodIcon'
+import SortableHeader from './SortableHeader'
 import { nextCocktailSort } from './nextCocktailSort'
 import { rateStars } from './rateStars'
 import { sortCocktails } from './sortCocktails'
@@ -11,11 +12,11 @@ import { strengthLabel } from './strengthLabel'
 import { sweetDegreeLabel } from './sweetDegreeLabel'
 
 /**
- * カクテルの一覧の表(旧 Results/Tables/Cocktails.vue)。トップ・名前検索・銘柄・用語・検索結果・カテゴリ・カクテルの各画面で使う。
+ * カクテルの一覧の表(旧 Results/Tables/Cocktails.vue)。
  *
  * 旧は開いたときの幅で PC 用とスマホ用の別の DOM を描き分け、回転しても変わらなかった。
  * 新は同じ表を CSS だけで組み替え、幅が変わればその場で切り替える(600px 未満で名前の段と数値の段の 2 段にする)。
- * 並べ替えは、渡した一覧を表の中で並べ替える形と、並びを外(サーバー)で決めて渡す形の 2 つを持つ。
+ * 並べ替えは、渡した一覧を表の中で並べ替える形と、並びを外で決めて渡す形の 2 つを持つ。
  */
 type Props = {
   cocktails: readonly CocktailTableRow[]
@@ -72,7 +73,7 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
               <Link to={cocktailPath(c.id)}>{c.name_eng}</Link>
             </td>
             <td className={styles.base}>
-              <Link to={`/category/${c.base.id}`}>
+              <Link to={categoryPath(c.base.id)}>
                 {c.base.name}
                 <span className={styles.baseEng}>({c.base.name_eng})</span>
               </Link>
@@ -97,41 +98,12 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
   )
 }
 
-/**
- * 並べ替えられる列の見出し。押せることがキーボード・読み上げでも分かるよう、見出しの中をボタンにする。
- * いま並べ替えている列には、向きの印と aria-sort を付ける
- */
-function SortableHeader({
-  sortKey,
-  current,
-  className,
-  onSort,
-  children,
-}: {
-  sortKey: CocktailSortKey
-  current: CocktailSort | null
-  className: string
-  onSort: (key: CocktailSortKey) => void
-  children: string
-}) {
-  const isSorted = current?.key === sortKey
-  const ariaSort = isSorted ? (current.isAsc ? 'ascending' : 'descending') : undefined
-  return (
-    <th className={className} aria-sort={ariaSort} scope="col">
-      <button type="button" className={styles.sortButton} onClick={() => onSort(sortKey)}>
-        {children}
-        {isSorted && (
-          <span className={styles.sortMark} aria-hidden="true">
-            {current.isAsc ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
-    </th>
-  )
-}
-
 function cocktailPath(id: number): string {
   return `/detail/cocktail/${id}`
+}
+
+function categoryPath(id: number): string {
+  return `/category/${id}`
 }
 
 /** 動画は YouTube の動画の ID で持っていて、旧と同じく YouTube の動画のページを開く */

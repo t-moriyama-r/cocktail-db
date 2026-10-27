@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import { rateStars } from './rateStars'
 import { strengthLabel } from './strengthLabel'
 import { sweetDegreeLabel } from './sweetDegreeLabel'
-import { toSortableKana } from './toSortableKana'
 
 describe('甘さの言葉', () => {
   test.each([
@@ -45,11 +44,5 @@ describe('度数', () => {
     [null, '0.0'],
   ] as const)('TC-298-03: 度数 %s は「%s」(小数 1 桁。無いときは 0.0)', (strength, label) => {
     expect(strengthLabel(strength)).toBe(label)
-  })
-})
-
-describe('並べ替えで比べる文字', () => {
-  test('TC-298-13: カタカナをひらがなに、全角の英数字を半角にそろえ、大文字と小文字はそろえない', () => {
-    expect(toSortableKana('マティーニＸＹＺ１２３abc')).toBe('まてぃーにXYZ123abc')
   })
 })

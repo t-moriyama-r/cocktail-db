@@ -1,31 +1,29 @@
 /**
- * 表に出す Font Awesome のアイコン(技法・動画)。旧は @fortawesome/vue-fontawesome で出していた。
- * 使うのは 7 つだけなので、依存を足さずに、旧の画面のビルドに入っていた Font Awesome Free 5.14.0 の形(SVG の path)をそのまま持つ。
+ * Font Awesome のアイコン。旧は @fortawesome/vue-fontawesome で出していた。
+ * 使うのは数個だけなので、依存を足さずに、旧の画面のビルドに入っていた Font Awesome Free 5.14.0 の形(SVG の path)をそのまま持つ。
  * 色は文字の色(currentColor)を使い、高さは文字にそろえる(Font Awesome の svg-inline と同じ)。
+ * アイコンだけでは意味が伝わらない人(読み上げ)のために、読み上げる名前を必ず受け取る。
  *
  * Font Awesome Free 5.14.0 by @fontawesome - https://fontawesome.com
  * License - https://fontawesome.com/license/free (Icons: CC BY 4.0)
  */
 type Props = {
   icon: keyof typeof ICONS
-  /** 読み上げる名前。無ければ飾りとして読み上げない */
-  label?: string
-  className?: string
+  /** 読み上げる名前 */
+  label: string
 }
 
-export default function FontAwesomeIcon({ icon, label, className }: Props) {
+export default function FontAwesomeIcon({ icon, label }: Props) {
   const { width, height, path } = ICONS[icon]
   return (
     <svg
-      className={className}
       viewBox={`0 0 ${width} ${height}`}
       width={`${width / height}em`}
       height="1em"
       fill="currentColor"
       data-icon={icon}
-      role={label ? 'img' : undefined}
+      role="img"
       aria-label={label}
-      aria-hidden={label ? undefined : true}
       focusable="false"
     >
       <path d={path} />

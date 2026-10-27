@@ -1,8 +1,8 @@
 import type { CocktailSort, CocktailSortKey, CocktailTableRow } from './CocktailTable.types'
-import { toSortableKana } from './toSortableKana'
+import { toComparableKana } from '../../utils/toComparableKana'
 
 /**
- * カクテルの一覧を、表の見出しで選んだ列で並べ替える(手元で並べ替える一覧用。旧 Results/Tables/Cocktails.vue の sortedList と同じ並び)。
+ * カクテルの一覧を、表の見出しで選んだ列で並べ替える(旧 Results/Tables/Cocktails.vue の sortedList と同じ並び)。
  *
  * 甘さ・評価・動画は「値が無い」ものが比べようのない行なので、向きによらずいつも最後に置く。
  * 動画のある行どうしは、動画の新しさを見たいので更新日時で比べる(旧も updated_at で比べていた)。
@@ -32,10 +32,10 @@ export function sortCocktails(cocktails: readonly CocktailTableRow[], sort: Cock
  */
 const SORT_VALUE: Record<CocktailSortKey, (cocktail: CocktailTableRow) => string | number | null> = {
   method: (c) => c.method.id,
-  name: (c) => toSortableKana(c.name),
+  name: (c) => toComparableKana(c.name),
   // 英名は大文字と小文字が混ざると並びが割れるので、小文字にそろえる(旧と同じ)。英名の無い行は旧のデータに無い
   name_eng: (c) => (c.name_eng ?? '').toLowerCase(),
-  base: (c) => toSortableKana(c.base.name),
+  base: (c) => toComparableKana(c.base.name),
   recipe_count: (c) => c.recipe_count,
   sweet_degree: (c) => c.sweet_degree,
   rate: (c) => c.rate,
