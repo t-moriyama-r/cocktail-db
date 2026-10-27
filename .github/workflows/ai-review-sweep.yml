@@ -22,7 +22,8 @@
 #   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
 #     → .github/scripts/request-review.sh。オーナーの依頼がまだ無ければオーナーの PAT で CodeRabbit に頼み、
 #       依頼に上限が返った・30 分たっても返事もレビューも無い・依頼を書けなかったときだけ ai-claude-review.yml を呼ぶ。
-#       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)
+#       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)。
+#       push されたコミットの依頼は、CI の終わりに review-on-push.yml が出す(#366)。ここはそれが動かなかった・失敗したときの取りこぼしを拾う
 #   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
 #     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる。
 #     返信済みで未解決のスレッドだけが残っていれば、ai-auto-merge.yml が needs-human で人に頼む
