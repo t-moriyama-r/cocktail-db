@@ -68,8 +68,9 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 インデックス: `name_search`・`name_eng`・`is_major`・`is_like`・`youtube_created_at`(旧と同じ列)。`role` は根の数しか値を持たないので張らない。
 
-- 根の役割の値・判定(「その他」「有名な銘柄が要らない」「洋酒ではない」)は [category-root-role.md](decisions/category-root-role.md)(#153)。役割を変えられるのは根だけ。根以外に値を入れないことは、`CategoryTree` と管理画面の検証で守る
-- 根の判定は、閉包表で祖先を持たない(depth > 0 の行で `descendant_id` にならない)こと
+- 根の役割の値・判定(「その他」「有名な銘柄が要らない」「洋酒ではない」)は [category-root-role.md](decisions/category-root-role.md)(#153)。役割を変えられるのは根だけ。根以外に値を入れないことは、`CategoryTree` と管理画面の検証で守る。`CategoryTree` は、親のあるノードを役割つきで作ること(`addNode`)と、役割を持つ根をほかのノードの下へ移すこと(`moveSubtree`)を例外で止める(#155)
+- モデルでは `role` を `App\Enums\CategoryRole`(`SoftDrink`・`Other`)で読み書きする。判定は `CategoryTree` の述語を使い、`role` の値を直接比べない(下の「ノードの根の役割を引く」)
+- 根の判定は、閉包表で祖先を持たない(depth > 0 の行で `descendant_id` にならない)こと。`CategoryTree::rootIds()`(根の ID のサブクエリ)・`isRoot()` がこの定義を持つ
 - 有名な銘柄は、そのノードの部分木にぶら下がる銘柄から選ぶ。根の役割が null の部分木では、保存のときの検証で必須にする(DB は null 可。#158)
 
 #### 並び順
@@ -376,6 +377,18 @@ WHERE cc.descendant_id = :node_id
 ORDER BY cc.depth DESC
 LIMIT 1;
 ```
+
+アプリからは `CategoryTree` の次のメソッドで引く(#155)。どれも、木に入っていないノードでは例外にする。
+
+| メソッド | 返すもの | 旧 |
+|---|---|---|
+| `rootRole(Category)` | ノードの根の役割(`CategoryRole` か null)。根自身ならその役割 | 種別の ID(`m_category.kind`) |
+| `isOther(Category)` | 根の役割が `other` か | `KindFactory::is_garnish_fromKindId`(kind 5) |
+| `isFamousBrandOptional(Category)` | 根の役割が `soft_drink` か `other` か(有名な銘柄が要らない) | `KindFactory::is_kind5_fromKindId`(kind 4・5) |
+| `isNonLiquor(Category)` | 根の役割が `soft_drink` か `other` か(洋酒ではない) | `kind >= 4`(`AffiliateFactory`) |
+| `otherNodeIds()` | `isOther` が真になるノードの ID のサブクエリ(クエリの中で判定するとき。あるもの検索・材料の数) | — |
+
+材料とベースに根を使わせない検証(下の「材料とベースに使ってよいノード」)は、検証の規則 `App\Rules\NotRootCategory` で行う。
 
 ### 検索フォーム(#95)に出す深さ
 
