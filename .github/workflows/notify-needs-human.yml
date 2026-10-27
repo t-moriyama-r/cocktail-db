@@ -102,9 +102,9 @@ jobs:
           # 通知の文面。Slack の mrkdwn で、& < > はエスケープが要る
           def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
           def link($url; $label): "<\($url)|\($label | esc)>";
-          # 頼むコメントの図(```mermaid などのコードブロック)と、畳んだ説明(<details>)は、Slack ではコードのまま出て読めないので外す
+          # 頼むコメントの図(```mermaid などのコードブロック)は、Slack ではコードのまま出て読めないので置き換える
           def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("```[\\s\\S]*?```"; "(図は GitHub で見る)")
-            | gsub("<details>[\\s\\S]*?</details>"; "") | gsub("^\\s+|\\s+$"; "");
+            | gsub("^\\s+|\\s+$"; "");
           def quote: (if length > 600 then .[0:600] + "…" else . end) | esc | split("\n") | map("> " + .) | join("\n");
           # 見出しは、手で書いた本文なら ##、issue forms(.github/ISSUE_TEMPLATE)から作った本文なら ###。
           # issue forms は空欄に _No response_ と書くので、それは無いものとして扱う
@@ -190,7 +190,7 @@ jobs:
         run: |
           cat > item.jq <<'JQ'
           def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("```[\\s\\S]*?```"; "(図は GitHub で見る)")
-            | gsub("<details>[\\s\\S]*?</details>"; "") | gsub("^\\s+|\\s+$"; "");
+            | gsub("^\\s+|\\s+$"; "");
           def first_line: split("\n") | map(gsub("^[\\s>*#-]+|\\s+$"; "")) | map(select(. != "")) | (first // "")
             | if length > 120 then .[0:120] + "…" else . end;
           # 見出しは、手で書いた本文なら ##、issue forms(.github/ISSUE_TEMPLATE)から作った本文なら ###。
