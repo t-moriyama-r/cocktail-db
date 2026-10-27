@@ -32,6 +32,7 @@
 # - 名前が上の形に合わないもの(作りかけの .partial、作業用の .work.*、日付として読めない日時、手で置いたファイル)には
 #   触らない
 # - db/ と storage/ は別々に数える。2 つのスクリプトは日時を別々に取るので、同じ回でも秒がずれる
+# - プロセス置換(<(…))を使わない。本番のサーバー(CageFS)には /dev/fd が無く、プロセス置換が失敗する
 
 set -euo pipefail
 
@@ -56,11 +57,12 @@ prune_backups() {
   [[ -d $backup_dir ]] || die "バックアップのディレクトリが無い: $backup_dir"
 
   if [[ -d $backup_dir/db ]]; then
-    local prefix
+    local prefixes prefix
+    prefixes=$(db_prefixes "$backup_dir/db")
     while IFS= read -r prefix; do
       [[ -n $prefix ]] || continue
       prune_group "$backup_dir/db" "$prefix-" "$DB_MAIN" "$daily" "$weekly" "$dry_run" "${DB_SIDES[@]}"
-    done < <(db_prefixes "$backup_dir/db")
+    done <<<"$prefixes"
   fi
   if [[ -d $backup_dir/storage ]]; then
     prune_group "$backup_dir/storage" '' "$STORAGE_MAIN" "$daily" "$weekly" "$dry_run" "${STORAGE_SIDES[@]}"
@@ -112,7 +114,8 @@ prune_group() {
   local label=${dir##*/}/${prefix%-}
 
   local -A kept_days=() kept_weeks=()
-  local stamp day week keep kept=0 removed=0
+  local stamps stamp day week keep kept=0 removed=0
+  stamps=$(group_stamps "$dir" "$prefix" "$main")
   while IFS= read -r stamp; do
     [[ -n $stamp ]] || continue
     day=${stamp%%-*}
@@ -137,7 +140,7 @@ prune_group() {
     # 途中で落ちても本体の無い組として数えられずに残らないよう、本体を最後に消す
     remove_set "$dir/$prefix$stamp" "$dry_run" "${sides[@]}" "$main"
     removed=$((removed + 1))
-  done < <(group_stamps "$dir" "$prefix" "$main")
+  done <<<"$stamps"
 
   if ((dry_run)); then
     printf 'prune-backups: %s 残す %d 組、消す予定 %d 組\n' "$label" "$kept" "$removed"

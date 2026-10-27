@@ -26,6 +26,7 @@ run_tests() {
   tc_verify_failure_keeps_generations
   tc_archive_dir_mismatch
   tc_usage_errors
+  tc_no_process_substitution
 
   printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"
   [[ $FAILED -eq 0 ]]
@@ -129,6 +130,13 @@ tc_usage_errors() {
   # どれもダンプを始める前に止まる
   [[ ! -s $case_dir/calls.log ]] || ok=0
   check "TC-17-17: 引数の誤り(値の無い --verify-restore・世代数の誤り・.env 無し)では、ダンプを始める前に 1 で止まる" "$ok"
+}
+
+tc_no_process_substitution() {
+  # 本番のサーバー(CageFS)には /dev/fd が無く、プロセス置換が失敗する。コメントの行は見ない
+  local ok=1
+  grep -nE '^[^#]*<\(' "$SRC"/*.sh >&2 && ok=0
+  check "TC-17-27: サーバーで動くスクリプト(ops/backup/*.sh)は、プロセス置換(<(…))を使わない" "$ok"
 }
 
 # ---- 補助 ----

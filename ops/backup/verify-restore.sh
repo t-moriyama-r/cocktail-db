@@ -85,7 +85,12 @@ verify_restore() {
 
   if [[ $source_summary != "$scratch_summary" ]]; then
     printf 'verify-restore: 元の DB と復元した DB が一致しない(テーブル<TAB>行数<TAB>チェックサム。- が元、+ が復元)\n' >&2
-    diff <(printf '%s\n' "$source_summary") <(printf '%s\n' "$scratch_summary") | grep '^[<>]' | sed 's/^< /-/; s/^> /+/' >&2 || true
+    # 本番のサーバー(CageFS)には /dev/fd が無く、プロセス置換(<(…))が使えないので、片方を一時ファイルに書いて比べる
+    local scratch_file
+    scratch_file=$(mktemp "${TMPDIR:-/tmp}/verify-restore.XXXXXXXX.tsv")
+    printf '%s\n' "$scratch_summary" >"$scratch_file"
+    printf '%s\n' "$source_summary" | diff - "$scratch_file" | grep '^[<>]' | sed 's/^< /-/; s/^> /+/' >&2 || true
+    rm -f -- "$scratch_file"
     return 2
   fi
 
