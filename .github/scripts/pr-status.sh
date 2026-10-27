@@ -32,15 +32,20 @@ main() {
 
 # 上から見て最初に当てはまったものにする。誰の番かが変わるところで分け、レビューの流れが止まるもの(コンフリクト・CI の失敗)は
 # 人が気づけるよう別にする。mergeable が UNKNOWN(push の直後に GitHub が計算している間)はコンフリクトとみなさない
+#
+# 向き先が staging・release の PR(昇格の PR)は、中身が develop に入る前にレビュー済みで、head が保護されたブランチ(develop・staging)なので
+# Actions の Claude Code が指摘を直せない。指摘が残っていてもマージを止めず、レビューが済めば人のマージ待ちにする
 decide() {
   jq -r --arg p "$PREFIX" '
     (.labels // []) as $l
+    | ((.baseRefName // "") | IN("staging", "release")) as $promotion
     | if .state != "OPEN" then ""
       elif .isDraft then $p + "作業中"
       elif ($l | index("needs-human") or index("needs-decision")) then $p + "人の判断待ち"
       elif ($l | index("needs-approval")) then $p + "人のマージ待ち"
       elif .mergeable == "CONFLICTING" then $p + "コンフリクト"
       elif (.failedChecks // 0) > 0 then $p + "CI失敗"
+      elif $promotion then (if .headReviewed then $p + "人のマージ待ち" else $p + "レビュー待ち" end)
       elif ($l | index("ai-in-actions")) or (.unansweredThreads // 0) > 0 then $p + "レビュー対応中"
       elif .headReviewed | not then $p + "レビュー待ち"
       else $p + "マージ待ち"
@@ -49,7 +54,7 @@ decide() {
 
 facts() {
   local repo=$1 number=$2 pr
-  pr=$(gh pr view "$number" -R "$repo" --json state,isDraft,labels,mergeable)
+  pr=$(gh pr view "$number" -R "$repo" --json state,isDraft,labels,mergeable,baseRefName)
   if [ "$(jq -r .state <<<"$pr")" != OPEN ]; then
     jq '{state, labels: [.labels[].name]}' <<<"$pr"
     return
@@ -65,7 +70,7 @@ facts() {
   unanswered=$(bash "$HERE/unanswered-review-threads.sh" "$repo" "$number")
   reviewed=$(bash "$HERE/head-reviewed.sh" "$repo" "$number")
   jq --argjson failed "$failed" --argjson unanswered "$unanswered" --argjson reviewed "$reviewed" \
-    '{state, isDraft, mergeable, labels: [.labels[].name], failedChecks: $failed, unansweredThreads: $unanswered, headReviewed: $reviewed}' <<<"$pr"
+    '{state, isDraft, mergeable, baseRefName, labels: [.labels[].name], failedChecks: $failed, unansweredThreads: $unanswered, headReviewed: $reviewed}' <<<"$pr"
 }
 
 apply() {
@@ -90,7 +95,7 @@ ensure_label() {
     レビュー待ち) color=c5def5 description="AI レビュアーがいまのコミットを見るのを待っている" ;;
     レビュー対応中) color=0e8a16 description="レビューの指摘に、Actions の Claude Code が対応する番" ;;
     人の判断待ち) color=d93f0b description="人の判断を待っている(needs-human・needs-decision)" ;;
-    人のマージ待ち) color=fbca04 description="人の確認とマージを待っている(needs-approval)" ;;
+    人のマージ待ち) color=fbca04 description="人の確認とマージを待っている(needs-approval・staging/release 向けの PR)" ;;
     コンフリクト) color=b60205 description="develop とコンフリクトしている。Actions の Claude Code が取り込んで直す" ;;
     CI失敗) color=b60205 description="必須のチェックが失敗している" ;;
     マージ待ち) color=5319e7 description="レビューの対応が済み、自動マージを待っている" ;;

@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+# staging → release の PR(向き先が release)は、develop → staging で一通り確かめた後なので、lint とテストの確認(必須の
+# backend・backend-lint・frontend)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
+#
 # PR に続けて push したら、前の回は取り消す(private ではジョブが動いた分だけ課金されるため)。
 # deploy-*.yml から workflow_call で呼んだ回は、github.workflow が呼んだ側の名前になるので、PR の回とは別の列になる
 concurrency:
@@ -119,6 +122,7 @@ jobs:
   # DB を使わないシェルスクリプトの検査とテスト。どれも数秒で終わるので 1 つのジョブで順に流す
   # (private ではジョブごとに 1 分に切り上げて課金されるため)。必須のチェックにはしていない
   scripts:
+    if: github.base_ref != 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -147,6 +151,7 @@ jobs:
 
   # MariaDB を使う運用スクリプト(ops/backup)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
   ops-db:
+    if: github.base_ref != 'release'
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -225,6 +230,7 @@ jobs:
 
   # 本番と同じく、ビルドした FE を Laravel から同じオリジンで配信し、ブラウザで画面を確かめる
   e2e:
+    if: github.base_ref != 'release'
     runs-on: ubuntu-latest
     services:
       mariadb:

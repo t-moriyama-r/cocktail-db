@@ -5,8 +5,13 @@
 # 人の手でマージする PR: 既定のブランチの .github/ai-dev.yml が `merge: auto` でない・ラベル no-auto-merge が付いている・
 # 閉じる issue に needs-review が付いている(人が中身を確かめるもの)
 #
+# 向き先が staging・release の PR(昇格の PR)は、自動ではマージしない。マージはデプロイになるので、必ず人がする。
+# 中身は develop に入る前に PR ごとにレビュー済みで、head が保護されたブランチ(develop・staging)なので Actions の Claude Code が指摘を直せない。
+# そのため、AI レビューの指摘が残っていてもマージを止めず(残っている件数をコメントに書く)、CI が緑で、いまのコミットを
+# AI がレビューし終えたら、needs-approval を付けて人に知らせる
+#
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
-# - 下書き・向き先が develop 以外(staging・release へのマージはデプロイになるので、人がする)・作ったのがオーナー以外
+# - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
 # - ラベル needs-human / needs-decision / needs-approval / ai-in-actions が付いている(人の番か、Actions が対応している途中)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
@@ -52,7 +57,8 @@ jobs:
   auto-merge:
     # PR の上で起きたことだけ。issue_comment は CodeRabbit のレビューの終わりを表すコメント(指摘なしで終わったときはレビューが付かない)だけ。
     # CodeRabbit はサマリーのコメントを何度も書き換えるので、ほかのコメントでは動かさない(private では動いたジョブが 1 分ずつ課金される)。
-    # ラベルを外したときは、マージを止めるラベルが外れたときだけ。CI は既定のブランチへの push の回(PR ではない)を除く
+    # ラベルを外したときは、マージを止めるラベルが外れたときだけ。CI は既定のブランチへの push の回(PR ではない)を除く。
+    # develop から staging への PR の CI は、head のブランチが develop なので、event が pull_request の回だけを拾う
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
@@ -62,7 +68,8 @@ jobs:
         && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
           || contains(github.event.comment.body, 'LGTM')))
       || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
-        && github.event.workflow_run.head_branch != github.event.repository.default_branch)
+        && (github.event.workflow_run.head_branch != github.event.repository.default_branch
+          || github.event.workflow_run.event == 'pull_request'))
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -102,7 +109,13 @@ jobs:
           head=$(jq -r .headRefOid <<<"$pr")
           [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "#$NUMBER は開いていない"
           [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "#$NUMBER は下書き"
-          [ "$(jq -r .baseRefName <<<"$pr")" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH ではない"
+          # 昇格の PR(staging・release 向け)は、自動ではマージしない。人の手でマージするものとして扱う
+          base=$(jq -r .baseRefName <<<"$pr")
+          promotion=false
+          case "$base" in
+            staging | release) promotion=true ;;
+            *) [ "$base" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH・staging・release ではない" ;;
+          esac
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$NUMBER はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$NUMBER を作ったのがオーナーではない"
 
@@ -119,6 +132,9 @@ jobs:
             fi
           done
 
+          # 昇格の PR は、ほかの理由(no-auto-merge・needs-review)より、デプロイになることを理由にする
+          if [ "$promotion" = true ]; then human="向き先が $base なので、マージはデプロイになる(人がマージする)"; fi
+
           # CodeRabbit が最新のコミットを見たか。指摘があればそのコミットへのレビューが付き、
           # 無ければ「Review finished」「No actionable comments」のコメントだけが付く(どちらか片方のこともあり、後から別のコメントが続くこともある)。
           # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける。
@@ -132,7 +148,11 @@ jobs:
                 | any(.body // "" | test("Review finished|No actionable comments|LGTM"))')
           [ "$reviewed" = true ] || [ "$finished" = true ] || skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
 
-          if [ -n "$human" ]; then
+          # 昇格の PR は、残っている指摘でマージを止めない(件数を人に知らせるだけ)
+          unanswered=0
+          if [ "$promotion" = true ]; then
+            unanswered=$(bash .ai-dev/.github/scripts/unanswered-review-threads.sh "$REPO" "$NUMBER")
+          elif [ -n "$human" ]; then
             unanswered=$(bash .ai-dev/.github/scripts/unanswered-review-threads.sh "$REPO" "$NUMBER")
             [ "$unanswered" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $unanswered 件ある"
           else
@@ -177,12 +197,22 @@ jobs:
             summary=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
               | jq -r --arg since "$pushed" 'add // [] | map(select(.created_at > $since and (.body | contains("ai-dev:approval-summary")))) | last | .html_url // empty')
             # Slack の通知とまとめは、この目印のコメントを引用する(まとめは最初の 1 行だけ)
+            if [ "$promotion" = true ]; then
+              ready="マージできる状態になった(AI レビュー済み・CI 緑・コンフリクトなし)。人の手でマージする PR なので、確かめてマージしてほしい。"
+              remaining="- AI レビューの指摘: ${unanswered} 件が返信待ちで残っている(中身は develop に入る前にレビュー済みなので、マージは止めていない。見て、マージするか決める)
+          "
+              ask="- 問題が無ければ、マージすると承認になる。直してほしいことは develop への PR で直す(この PR の head は保護されたブランチなので、Actions の Claude Code は直さない)"
+            else
+              ready="マージできる状態になった(AI レビューの指摘への対応済み・CI 緑・コンフリクトなし)。人の手でマージする PR なので、確かめてマージしてほしい。"
+              remaining=""
+              ask="- 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
+            fi
             gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->
-          マージできる状態になった(AI レビューの指摘への対応済み・CI 緑・コンフリクトなし)。人の手でマージする PR なので、確かめてマージしてほしい。
+          $ready
 
           - 人の手でマージする理由: $human
-          ${summary:+- 見てほしいところ: $summary
-          }- 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
+          ${remaining}${summary:+- 見てほしいところ: $summary
+          }$ask"
             gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
             gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
@@ -190,6 +220,8 @@ jobs:
             exit 0
           fi
 
+          # 昇格の PR は上で人の手でマージするものにしてあるので、ここへは来ない。それでも、デプロイになるマージは絶対にしない
+          [ "$base" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH ではないので、自動ではマージしない"
           gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head"
           echo "#$NUMBER をマージした"
 

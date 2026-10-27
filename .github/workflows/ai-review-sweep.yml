@@ -12,6 +12,9 @@
 # 付いていない(人の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
 # ai-in-actions が付いていれば 3 時間待つ(Actions が対応している途中。止まって印だけ残ったものは、そのあと拾う)
 #
+# 向き先が staging・release の PR(昇格の PR)は、返信待ちの指摘があっても ai-review-loop.yml を呼ばない(head が保護されたブランチ(develop・staging)で
+# 直しを push できず、指摘が残ってもマージは止めない)。レビュー済みなら ai-auto-merge.yml を呼び、人に知らせる
+#
 # 呼ぶもの(上から順に見て、最初に当てはまったもの):
 #   - AI レビュアーの未解決のスレッドのうち、最後のコメントがエージェントの返信(<!-- ai-dev:agent -->)でないものがある → ai-review-loop.yml
 #   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
@@ -65,7 +68,9 @@ jobs:
           now=$(date -u +%s)
           for n in $(gh pr list -R "$REPO" --state open --author "$OWNER" --limit 100 --json number --jq '.[].number'); do
             skip() { echo "#$n 見送り: $*"; }
-            pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,labels,updatedAt,headRefOid,commits)
+            pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,baseRefName,labels,updatedAt,headRefOid,commits)
+            promotion=false
+            case "$(jq -r .baseRefName <<<"$pr")" in staging | release) promotion=true ;; esac
             if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft"; continue; fi
             if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
             label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
@@ -74,11 +79,13 @@ jobs:
             if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then min=$MIN_IDLE_MINUTES_IN_ACTIONS; fi
             idle=$(( (now - $(date -u -d "$(jq -r .updatedAt <<<"$pr")" +%s)) / 60 ))
             if [ "$idle" -lt "$min" ]; then skip "最後の動きから ${idle} 分(${min} 分たつまで待つ)"; continue; fi
-            unanswered=$(bash .github/scripts/unanswered-review-threads.sh "$REPO" "$n")
-            if [ "$unanswered" != 0 ]; then
-              echo "#$n 返信待ちのスレッドが $unanswered 件。ai-review-loop.yml を呼ぶ"
-              gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
-              continue
+            if [ "$promotion" = false ]; then
+              unanswered=$(bash .github/scripts/unanswered-review-threads.sh "$REPO" "$n")
+              if [ "$unanswered" != 0 ]; then
+                echo "#$n 返信待ちのスレッドが $unanswered 件。ai-review-loop.yml を呼ぶ"
+                gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
+                continue
+              fi
             fi
             head=$(jq -r .headRefOid <<<"$pr")
             committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
@@ -92,7 +99,7 @@ jobs:
                 | any(.body // "" | test("Review finished|No actionable comments|LGTM"))' <<<"$comments")
             if [ "$reviewed" = true ] || [ "$finished" = true ]; then
               # ai-in-actions が残ったままだと ai-auto-merge.yml は見送るので、終わりの処理(ラベルを外す)を ai-review-loop.yml にさせる
-              if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then
+              if [ "$promotion" = false ] && jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then
                 echo "#$n 返信待ちのスレッドが無く、${head:0:7} はレビュー済みだが ai-in-actions が残っている。ai-review-loop.yml を呼ぶ"
                 gh workflow run ai-review-loop.yml -R "$REPO" -f number="$n"
                 continue

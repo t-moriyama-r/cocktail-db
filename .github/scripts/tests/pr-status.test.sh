@@ -35,6 +35,19 @@ main() {
 	check TC-216-16 'それ以外はマージ待ち' '.' '状態:マージ待ち'
 	check TC-216-17 '関係の無いラベルは見ない' '.labels = ["task", "area:infra", "no-auto-merge", "状態:レビュー待ち"]' '状態:マージ待ち'
 
+	# 昇格の PR(向き先が staging・release)。指摘が残ってもマージを止めず、Actions の Claude Code の対応も待たない
+	check TC-332-01 'develop 向けで返信待ちの指摘がある(従来どおり)' '.baseRefName = "develop" | .unansweredThreads = 2' '状態:レビュー対応中'
+	check TC-332-02 'staging 向けは、返信待ちの指摘があっても人のマージ待ち' '.baseRefName = "staging" | .unansweredThreads = 2' '状態:人のマージ待ち'
+	check TC-332-03 'release 向けは、返信待ちの指摘があっても人のマージ待ち' '.baseRefName = "release" | .unansweredThreads = 1' '状態:人のマージ待ち'
+	check TC-332-04 'staging 向けで ai-in-actions が残っていても、レビュー対応中にしない' '.baseRefName = "staging" | .labels = ["ai-in-actions"]' '状態:人のマージ待ち'
+	check TC-332-05 'staging 向けで、いまのコミットが未レビューならレビュー待ち' '.baseRefName = "staging" | .headReviewed = false | .unansweredThreads = 1' '状態:レビュー待ち'
+	check TC-332-06 'staging 向けでも CI の失敗が先' '.baseRefName = "staging" | .failedChecks = 1' '状態:CI失敗'
+	check TC-332-07 'staging 向けでもコンフリクトが先' '.baseRefName = "staging" | .mergeable = "CONFLICTING"' '状態:コンフリクト'
+	check TC-332-08 'staging 向けで needs-human は人の判断待ち' '.baseRefName = "staging" | .labels = ["needs-human"]' '状態:人の判断待ち'
+	check TC-332-09 'staging 向けで needs-approval は人のマージ待ち' '.baseRefName = "staging" | .labels = ["needs-approval"] | .headReviewed = false' '状態:人のマージ待ち'
+	check TC-332-10 'staging 向けの下書きは作業中' '.baseRefName = "staging" | .isDraft = true' '状態:作業中'
+	check TC-332-11 'develop・main など、昇格でない向き先は従来どおり' '.baseRefName = "issue-1-base" | .unansweredThreads = 1' '状態:レビュー対応中'
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }

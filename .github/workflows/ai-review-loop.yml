@@ -10,6 +10,9 @@
 #           指摘が無くなったとき、人の承認が要る issue(needs-review)の PR なら、見てほしいところをコメントしておく。
 #           needs-approval は付けない。終わった後に ai-auto-merge.yml を呼び、マージできる状態になったらそちらが付けて人に知らせる
 #
+# 向き先が staging・release の PR(昇格の PR)では、resume・review とも Claude Code を動かさない。head が保護されたブランチ(develop・staging)なので
+# 直しを push できず、中身は develop に入る前に PR ごとにレビュー済み。指摘が残ってもマージは止めず、人が見て判断する(ai-auto-merge.yml)
+#
 # Claude の GitHub App はワークフローのファイルへの書き込み権限を持たない(claude-code-action の FAQ)。
 # そのためワークフローを直すことになったら、Claude Code は push せずに差分をコメントし、needs-human で手元に当ててもらう
 #
@@ -69,13 +72,27 @@ jobs:
     timeout-minutes: 30
     outputs:
       before: ${{ steps.labels.outputs.before }}
+      promotion: ${{ steps.target.outputs.promotion }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR: ${{ github.event.issue.number || github.event.pull_request.number }}
     steps:
+      # issue_comment のイベントには PR の向き先が無いので、ここで調べる。昇格の PR なら、以降の手順をすべて飛ばす
+      - name: 昇格の PR(staging・release 向け)か確かめる
+        id: target
+        run: |
+          base=$(gh pr view "$PR" -R "$REPO" --json baseRefName --jq .baseRefName)
+          case "$base" in
+            staging | release)
+              echo "#$PR は昇格の PR($base 向き)。head が保護されたブランチ(develop・staging)なので、Claude Code は動かさない"
+              echo "promotion=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       # 状態のラベルを付け替えるスクリプト。PR のコードではなく既定のブランチのものを使う
       - uses: actions/checkout@v6
+        if: steps.target.outputs.promotion != 'true'
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev
@@ -85,6 +102,7 @@ jobs:
       # needs-approval は、直すことになったときに Claude Code が外す(承認だけの返信なら付けたままにする)
       - name: needs-human を外し、Actions で引き継いだ印を付ける
         id: labels
+        if: steps.target.outputs.promotion != 'true'
         run: |
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "人の判断の後、GitHub Actions の Claude Code が引き継いだ PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
@@ -95,14 +113,17 @@ jobs:
 
       - name: PR のブランチを取る
         id: pr
+        if: steps.target.outputs.promotion != 'true'
         run: echo "head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v6
+        if: steps.target.outputs.promotion != 'true'
         with:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        if: steps.target.outputs.promotion != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
@@ -142,7 +163,7 @@ jobs:
 
   notify-resume:
     needs: resume
-    if: always() && needs.resume.result != 'skipped'
+    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.promotion != 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: write   # 通知・代わりのレビューのワークフローを gh workflow run で呼ぶ
@@ -225,11 +246,15 @@ jobs:
         id: pr
         run: |
           skip() { echo "#$PR 見送り: $*"; exit 0; }
-          pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,isCrossRepository,author,headRefName,labels,commits)
+          pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,isCrossRepository,author,baseRefName,headRefName,labels,commits)
           [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "閉じている"
           [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "draft"
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "フォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "オーナーの PR でない"
+          # 昇格の PR は、head が保護されたブランチ(develop・staging)で直しを push できない。指摘が残ってもマージは止めず、人が見て判断する(ai-auto-merge.yml)
+          case "$(jq -r .baseRefName <<<"$pr")" in
+            staging | release) skip "昇格の PR($(jq -r .baseRefName <<<"$pr") 向き)は、Claude Code で指摘に対応しない" ;;
+          esac
           label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
           [ -z "$label" ] || skip "ラベル $label"
           # 返信待ちのスレッドが無く、AI レビュアーの最後の動きの後にエージェントがもうコメントしていれば、このレビューへの対応は済んでいる。
