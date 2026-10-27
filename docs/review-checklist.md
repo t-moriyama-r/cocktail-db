@@ -91,11 +91,12 @@ concurrency:
 
 公開リポジトリでは、誰でも PR・issue にコメントを書ける。コメントの目印(`<!-- ai-dev:... -->`)や本文のキーワード(`Review limit reached` など)だけで判定すると、外の人が同じ文字列を書くだけで、見回りから外す・通知に自分の文を載せる・実行を取り消す、ができてしまう。
 
-- 目印・キーワードで判定するときは、書いた人(`author_association` がオーナー・メンバーか、`user.login` が決まった bot か)も条件に入れる
+- 目印・キーワードで判定するときは、書いた人(`author_association` がオーナー・メンバーか、`user.login` が決まった bot か)も条件に入れる。`.user.type == "Bot"` だと、どの GitHub App の bot でも通る。Bot 全般を信頼するなら、その前提を書き、そうでなければ `user.login` の許可リストにする
 - ワークフローの `if`・`concurrency` で本文を見るときも、投稿者を一緒に見る
 
 ```jq
 # 良い: 信頼できる人か bot が書いたものから、目印のあるコメントを選ぶ(notify-needs-human.yml)
+# `.user.type == "Bot"` は Bot 全般を信頼する前提。絞るなら `.user.login` の許可リストにする
 $comments | map(select((.author_association as $a | $trusted | index($a)) or .user.type == "Bot"))
   | map(select(.body | contains("ai-dev:\($label)"))) | last
 ```
