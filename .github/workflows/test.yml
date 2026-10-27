@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 # staging → release の PR(向き先が release)は、develop → staging で一通り確かめた後なので、lint とテストの確認(必須の
-# backend・backend-lint・frontend)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
+# backend・backend-lint・frontend・actionlint)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
 #
 # PR に続けて push したら、前の回は取り消す(private ではジョブが動いた分だけ課金されるため)。
 # deploy-*.yml から workflow_call で呼んだ回は、github.workflow が呼んだ側の名前になるので、PR の回とは別の列になる
@@ -118,6 +118,24 @@ jobs:
       # 型の合わない呼び出しなどを、テストで通らない経路の分まで止める。設定と検査から外すものは phpstan.neon
       - name: Static analysis (PHPStan)
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  # ワークフローの YAML の誤り(構文・存在しないジョブや step の参照・式の型など)と、run に書いたシェルの誤りを止める。
+  # run のシェルは actionlint が shellcheck に渡す。scripts ジョブと同じく、GraphQL・jq の $ を単一引用符で渡すので info(SC2016)と
+  # style は見ない。staging・release 向けの PR でも流す(数秒で終わり、必須のチェックにするため)
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # 手元でも同じ結果になるよう、image の版を固定する(手元のコマンドは CLAUDE.md の「ワークフローを変えたら」)
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+        with:
+          args: -color
 
   # DB を使わないシェルスクリプトの検査とテスト。どれも数秒で終わるので 1 つのジョブで順に流す
   # (private ではジョブごとに 1 分に切り上げて課金されるため)。必須のチェックにはしていない
