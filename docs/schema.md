@@ -278,6 +278,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 旧と同じ列に `id` を足す。`converted`・`middle` は**名前のまま**持つ(ノードの ID にしない)。自動取り込み(#68)が名前で引くため(#33)。
 
+名前をノード・銘柄に解決する決まり(管理 API の保存の検証と、一覧で返す解決した先)は [paraphrase-target.md](decisions/paraphrase-target.md)(#316)。
+
 ### `skip_words`(旧 `skip_db`。5 件)
 
 `id`・`name` `string(256)` unique・`timestamps()`。旧と同じ列に `id` を足す。
