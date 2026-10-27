@@ -62,6 +62,8 @@ issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(�
 
 CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑で、コンフリクトの無い PR を、`ai-auto-merge.yml` がマージできる状態とみなし、自動でマージする。
 
+ほかの条件がそろい、止めているのがエージェントの返信済みで未解決のスレッドだけのとき(Actions の Claude Code が直さない理由を返したスレッドは解決にしない。人が立てたスレッドも含む)は、人が解決するまで止まるので、`ai-auto-merge.yml` が残っているスレッドへのリンクと決めてほしいこと(返信で良ければ解決する・直してほしければそのスレッドに返信する)をコメントし、`needs-human` を付けて Slack に知らせる(`.github/scripts/thread-handoff.sh`。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、人がすべて解決したら、`ai-review-sweep.yml` の見回りがこの理由で付けた `needs-human` を外し、`ai-auto-merge.yml` を呼び直す。
+
 人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、同じ条件がそろったところで、マージせずに `needs-approval` を付けて Slack に知らせる(下の「人に頼む」)。直さない理由を返して未解決のまま残るスレッドもあるので、こちらは未解決ではなく返信待ちのスレッドが 0 件かで見る。自動のレビューと CI が終わる前には人を呼ばない。
 
 向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。AI レビューは流すが、指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを AI がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
@@ -81,7 +83,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
 - 付いたときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだこれらのラベルが付いて開いている PR・issue を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件の日は送らない。手動で送るときは、`notify-needs-human.yml` を `number` を空、`label` を `all` にして動かす
-- 頼んだラベルが外れるか、PR・issue が閉じるか、同じラベルで頼み直したら、その通知に ✅ のリアクションが付き、本文の先頭に「【済】」が付く(bot で送ったときだけ)。ラベルが外れた・閉じたときのイベント、ラベルを外すワークフロー(`ai-review-loop.yml`・`ai-decision-loop.yml`)の終わり、毎朝の見回りで、`notify-needs-human.yml` の `mark-done` ジョブが付ける。手動で付けさせるときは、`label` を `done` にして動かす
+- 頼んだラベルが外れるか、PR・issue が閉じるか、同じラベルで頼み直したら、その通知に ✅ のリアクションが付き、本文の先頭に「【済】」が付く(bot で送ったときだけ)。ラベルが外れた・閉じたときのイベント、ラベルを外すワークフロー(`ai-review-loop.yml`・`ai-decision-loop.yml`・`ai-review-sweep.yml`)の終わり、毎朝の見回りで、`notify-needs-human.yml` の `mark-done` ジョブが付ける。手動で付けさせるときは、`label` を `done` にして動かす
 
 ### Slack の設定
 
@@ -93,7 +95,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
-| `needs-human` | 人の判断が要る PR・issue | エージェント(手元・Actions)が、レビューの指摘で判断に迷うとき・指摘が堂々めぐりになったとき・`develop` とのコンフリクトで両方の意図を残せないとき・再レビューの回数(`review_rounds`)を超えたとき・見た目の案を人に選んでもらう PR で見た目が決まった・変わったのに Actions では最終の証跡を撮れないとき(CLAUDE.md の手順 5)に付ける。人が付けてもよい | Slack に知らせる。自動でマージしない。PR なら、オーナーがコメントすると `ai-review-loop.yml` の Claude Code がこのラベルを外して `ai-in-actions` を付け、判断どおりに直して再レビューを頼む。issue に付けたときは通知だけで、引き継ぐワークフローは無い |
+| `needs-human` | 人の判断が要る PR・issue | エージェント(手元・Actions)が、レビューの指摘で判断に迷うとき・指摘が堂々めぐりになったとき・`develop` とのコンフリクトで両方の意図を残せないとき・再レビューの回数(`review_rounds`)を超えたとき・返信済みで未解決のスレッドだけが自動マージを止めているとき(`ai-auto-merge.yml`。上の「PR のマージ」)・見た目の案を人に選んでもらう PR で見た目が決まった・変わったのに Actions では最終の証跡を撮れないとき(CLAUDE.md の手順 5)に付ける。人が付けてもよい | Slack に知らせる。自動でマージしない。PR なら、オーナーがコメントすると `ai-review-loop.yml` の Claude Code がこのラベルを外して `ai-in-actions` を付け、判断どおりに直して再レビューを頼む。返信済みで未解決のスレッドの理由で付けたものは、人がスレッドをすべて解決すると `ai-review-sweep.yml` が外す。issue に付けたときは通知だけで、引き継ぐワークフローは無い |
 | `needs-decision` | 着手する前に決めることがある issue | 上の「着手の順番」 | Slack に知らせる(本文の「判断が要ること」を添える) |
 | `needs-approval` | マージできる状態になり、人の承認(マージ)を待っている PR | `ai-auto-merge.yml` が、人の手でマージする PR(上の「PR のマージ」)で、レビューの指摘への対応が終わり、CI が緑でコンフリクトが無くなったときに付ける。付ける前に、マージできる状態になったことを PR にコメントする(閉じる issue に `needs-review` があれば、Claude Code が書いた見てほしいところへのリンクを添える) | Slack に知らせる。自動でマージしない。人は証跡を見て、よければマージする(マージが承認)。オーナーが PR にコメントすると、`ai-review-loop.yml` の Claude Code が、直してほしいことがあればこのラベルを外して直し、再レビューを頼む。マージできる状態に戻れば、`ai-auto-merge.yml` がまた付ける。「OK」だけなら、マージで承認するよう返す |
 
