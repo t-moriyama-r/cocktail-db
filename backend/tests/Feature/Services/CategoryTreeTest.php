@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 
-// CategoryTree(#89)のノードの追加と参照を、MariaDB の閉包表で確かめる。
+// CategoryTree のノードの追加と参照(#89)・部分木の移動(#90)を、MariaDB の閉包表で確かめる。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
 
 uses(RefreshDatabase::class)->group('db');
@@ -241,4 +241,179 @@ it('TC-21-13: CategoryTree で組んだ木で、Category の parent・children�
         ->and(categoryTreeDepthById($root->ancestors()))->toBe([])
         ->and(categoryTreeDepthById($root->descendants()))->toBe([$mid->id => 1, $sibling->id => 1, $leaf->id => 2])
         ->and(categoryTreeDepthById($leaf->descendants()))->toBe([]);
+});
+
+// ---- 部分木の移動(#90) ----
+
+/**
+ * 移動のテストに使う木。キーはノードの名前、値は親のキー(根は null)。親が先に来る順に並べる。
+ *
+ * r1 ─ a ─ a1 ─ a11
+ *    │   └ a2
+ *    └ b ─ b1 ─ b11 ─ b111 ─ b1111(深さ 5)
+ * r2 ─ c ─ c1
+ *
+ * @return array<string, string|null>
+ */
+function categoryTreeMoveFixture(): array
+{
+    return [
+        'r1' => null, 'a' => 'r1', 'a1' => 'a', 'a11' => 'a1', 'a2' => 'a',
+        'b' => 'r1', 'b1' => 'b', 'b11' => 'b1', 'b111' => 'b11', 'b1111' => 'b111',
+        'r2' => null, 'c' => 'r2', 'c1' => 'c',
+    ];
+}
+
+/**
+ * 親のキーの対応どおりに、CategoryTree::addNode で木を組む。
+ *
+ * @param  array<string, string|null>  $parentKeyByKey
+ * @return array<string, Category>
+ */
+function categoryTreeBuild(array $parentKeyByKey): array
+{
+    $tree = app(CategoryTree::class);
+    $nodes = [];
+    foreach ($parentKeyByKey as $key => $parentKey) {
+        $nodes[$key] = $tree->addNode($parentKey === null ? null : $nodes[$parentKey], categoryTreeAttrs());
+    }
+
+    return $nodes;
+}
+
+/**
+ * 親のキーの対応だけから作り直した閉包表の行([祖先の ID, 子孫の ID, depth])。CategoryTree を通さずに数える。
+ *
+ * @param  array<string, string|null>  $parentKeyByKey
+ * @param  array<string, Category>  $nodes
+ * @return list<array{int, int, int}>
+ */
+function categoryTreeRebuiltRows(array $parentKeyByKey, array $nodes): array
+{
+    $rows = [];
+    foreach (array_keys($parentKeyByKey) as $key) {
+        $ancestorKey = $key;
+        $depth = 0;
+        while ($ancestorKey !== null) {
+            $rows[] = [$nodes[$ancestorKey]->id, $nodes[$key]->id, $depth];
+            $ancestorKey = $parentKeyByKey[$ancestorKey];
+            $depth++;
+        }
+    }
+
+    return $rows;
+}
+
+dataset('allowed moves', [
+    'TC-90-01: 葉を別の木の中間ノードの下へ' => ['a2', 'c'],
+    'TC-90-02: 子孫を持つ中間ノードを別の木の葉の下へ' => ['a', 'c1'],
+    'TC-90-03: 中間ノードを深い位置(深さ 5 の葉)の下へ' => ['a1', 'b1111'],
+    'TC-90-04: 葉を別の木の根の直下へ' => ['a11', 'r2'],
+    'TC-90-05: 子孫を持つ中間ノードを根へ(null)' => ['b1', null],
+    'TC-90-06: 根を部分木ごと別の木の葉の下へ' => ['r2', 'a2'],
+]);
+
+it('TC-90-01〜06: 部分木を移すと、閉包表が移した後の親子から作り直した閉包表とすべて一致する', function (string $nodeKey, ?string $newParentKey) {
+    $parentKeyByKey = categoryTreeMoveFixture();
+    $nodes = categoryTreeBuild($parentKeyByKey);
+
+    app(CategoryTree::class)->moveSubtree($nodes[$nodeKey], $newParentKey === null ? null : $nodes[$newParentKey]);
+
+    $parentKeyByKey[$nodeKey] = $newParentKey;
+    expect(categoryTreeClosureRows())->toEqualCanonicalizing(categoryTreeRebuiltRows($parentKeyByKey, $nodes));
+})->with('allowed moves');
+
+it('TC-90-07・08: 今と同じ位置へ移しても、閉包表は前と同じ', function (string $nodeKey, ?string $newParentKey) {
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+    $rowsBefore = categoryTreeClosureRows();
+
+    app(CategoryTree::class)->moveSubtree($nodes[$nodeKey], $newParentKey === null ? null : $nodes[$newParentKey]);
+
+    expect(categoryTreeClosureRows())->toEqualCanonicalizing($rowsBefore);
+})->with([
+    'TC-90-07: 中間ノードを今と同じ親へ' => ['a1', 'a'],
+    'TC-90-08: 根を根へ(null)' => ['r1', null],
+]);
+
+it('TC-90-09〜11: 自分自身・子・孫の下へは移せず、ノードも閉包表も変わらない', function (string $newParentKey) {
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+    $categoriesBefore = Category::count();
+    $rowsBefore = categoryTreeClosureRows();
+
+    expect(fn () => app(CategoryTree::class)->moveSubtree($nodes['a'], $nodes[$newParentKey]))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect(Category::count())->toBe($categoriesBefore)
+        ->and(categoryTreeClosureRows())->toEqualCanonicalizing($rowsBefore);
+})->with([
+    'TC-90-09: 自分自身' => ['a'],
+    'TC-90-10: 子' => ['a1'],
+    'TC-90-11: 孫' => ['a11'],
+]);
+
+it('TC-90-12: 部分木を移しても、移した部分木の中のノードを指さない行(兄弟・元の親・移した先・別の木)は変わらない', function () {
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+    $movedIds = [$nodes['a1']->id, $nodes['a11']->id];
+    $untouched = fn (): array => array_values(array_filter(
+        categoryTreeClosureRows(),
+        fn (array $row): bool => ! in_array($row[1], $movedIds, true),
+    ));
+    $untouchedBefore = $untouched();
+
+    app(CategoryTree::class)->moveSubtree($nodes['a1'], $nodes['b']);
+
+    expect($untouched())->toEqualCanonicalizing($untouchedBefore)
+        ->and($untouchedBefore)->toContain(
+            [$nodes['a']->id, $nodes['a2']->id, 1],
+            [$nodes['b']->id, $nodes['b1111']->id, 4],
+            [$nodes['r2']->id, $nodes['c1']->id, 2],
+        );
+});
+
+it('TC-90-13: 木に入っていない新しい親(閉包表に自分の行が無い)の下へは移せず、閉包表は変わらない', function () {
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+    $outside = Category::factory()->create();
+    $rowsBefore = categoryTreeClosureRows();
+
+    expect(fn () => app(CategoryTree::class)->moveSubtree($nodes['a'], $outside))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect(categoryTreeClosureRows())->toEqualCanonicalizing($rowsBefore);
+});
+
+it('TC-90-14: 保存していない新しい親の下へは移せず、閉包表は変わらない', function () {
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+    $rowsBefore = categoryTreeClosureRows();
+
+    expect(fn () => app(CategoryTree::class)->moveSubtree($nodes['a'], Category::factory()->make()))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect(categoryTreeClosureRows())->toEqualCanonicalizing($rowsBefore);
+});
+
+it('TC-90-15: 木に入っていないノード・保存していないノードは移せず、閉包表は変わらない', function () {
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+    $outside = Category::factory()->create();
+    $rowsBefore = categoryTreeClosureRows();
+
+    expect(fn () => app(CategoryTree::class)->moveSubtree($outside, $nodes['a']))
+        ->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(CategoryTree::class)->moveSubtree(Category::factory()->make(), $nodes['a']))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect(categoryTreeClosureRows())->toEqualCanonicalizing($rowsBefore);
+});
+
+it('TC-90-16: 移した後の path・children・roots が新しい位置を返す', function () {
+    $tree = app(CategoryTree::class);
+    $nodes = categoryTreeBuild(categoryTreeMoveFixture());
+
+    $tree->moveSubtree($nodes['a'], $nodes['c1']);
+    $tree->moveSubtree($nodes['b'], null);
+
+    $ids = fn (string ...$keys): array => array_map(fn (string $key): int => $nodes[$key]->id, $keys);
+    expect($tree->path($nodes['a11'])->pluck('id')->all())->toBe($ids('r2', 'c', 'c1', 'a', 'a1', 'a11'))
+        ->and($tree->children($nodes['r1'])->all())->toBe([])
+        ->and($tree->children($nodes['c1'])->pluck('id')->all())->toBe($ids('a'))
+        ->and($tree->roots()->pluck('id')->all())->toEqualCanonicalizing($ids('r1', 'b', 'r2'));
 });

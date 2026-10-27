@@ -57,6 +57,54 @@ class CategoryTree
     }
 
     /**
+     * $node の部分木を、$newParent の下(null なら根)へ移す。
+     *
+     * 消すのは、部分木の中のノードを指す行のうち、祖先が部分木の外にあるものだけ。部分木の中どうしの行は、
+     * 移しても段数が変わらないので残し、部分木と関係の無いノードの行には触れない(旧は親の付け替えで、
+     * 関係の無いレコードまで書き換えていた)。新しい祖先からの行は、新しい親の祖先の行と部分木の行の
+     * 組み合わせで足す。
+     *
+     * 自分や子孫の下へ移すと親子が輪になり、根に届かないノードができる。親や移すノードが木に入っていないと、
+     * 祖先からの行が写せず、黙って根になってしまう。どちらも何も書き換えずに例外にする。
+     *
+     * @throws InvalidArgumentException 移すノード・親が木に入っていないとき、親が自分か自分の子孫のとき
+     */
+    public function moveSubtree(Category $node, ?Category $newParent): void
+    {
+        DB::transaction(function () use ($node, $newParent) {
+            if (! $this->isInTree($node)) {
+                throw new InvalidArgumentException('移すノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
+            }
+            $subtreeIds = $this->subtreeIds($node);
+
+            if ($newParent !== null) {
+                if (! $this->isInTree($newParent)) {
+                    throw new InvalidArgumentException('新しい親のノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
+                }
+                if (in_array($newParent->getKey(), $subtreeIds, true)) {
+                    throw new InvalidArgumentException('自分自身・自分の子孫の下へは移せない');
+                }
+            }
+
+            CategoryClosure::query()
+                ->whereIn('descendant_id', $subtreeIds)
+                ->whereNotIn('ancestor_id', $subtreeIds)
+                ->delete();
+
+            if ($newParent !== null) {
+                CategoryClosure::query()->insertUsing(
+                    ['ancestor_id', 'descendant_id', 'depth'],
+                    DB::table('category_closures as p')
+                        ->crossJoin('category_closures as s')
+                        ->where('p.descendant_id', $newParent->getKey())
+                        ->where('s.ancestor_id', $node->getKey())
+                        ->selectRaw('p.ancestor_id, s.descendant_id, p.depth + s.depth + 1'),
+                );
+            }
+        });
+    }
+
+    /**
      * 根から $node までのパンくず。根が先頭で、$node が末尾。
      *
      * @return Collection<int, Category>
@@ -105,6 +153,18 @@ class CategoryTree
         $this->orderAsSiblings($children);
 
         return $children->get();
+    }
+
+    /**
+     * $node が閉包表に自分の行(depth 0)を持つか。保存していないノードは持たない。
+     */
+    private function isInTree(Category $node): bool
+    {
+        return $node->getKey() !== null && CategoryClosure::query()
+            ->where('ancestor_id', $node->getKey())
+            ->where('descendant_id', $node->getKey())
+            ->where('depth', 0)
+            ->exists();
     }
 
     /**
