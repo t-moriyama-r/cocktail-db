@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\BrandController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
 use App\Http\Controllers\CocktailDetailController;
@@ -20,4 +21,10 @@ Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/me', CurrentAdminController::class);
     Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
+
+    // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
+    Route::get('/brands', [BrandController::class, 'index']);
+    Route::post('/brands', [BrandController::class, 'store']);
+    Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
+    Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
 });
