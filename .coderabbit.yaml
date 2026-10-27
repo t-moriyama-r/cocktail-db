@@ -46,3 +46,11 @@ reviews:
       instructions: |
         旧と挙動を変える決定には、「旧との差分」の節があり、差分ごとに「旧で何が起きていて、新で何に変えるか」が
         1 行で書かれているかを確かめる(CLAUDE.md の「テストの書き方」の「旧との差分」)。無ければ指摘する。
+
+# レビューで繰り返し出た指摘のルール(CLAUDE.md の「レビューで繰り返し出た指摘」)。CLAUDE.md は既定で読まれるので、足すのはこのファイルだけ
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/CLAUDE.md"
+      - "docs/review-checklist.md"
