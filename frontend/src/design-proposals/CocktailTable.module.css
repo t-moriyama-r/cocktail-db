@@ -1,0 +1,99 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+}
+
+.caption {
+  padding: 0 0 var(--space-2);
+  text-align: left;
+  color: var(--color-text-muted);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: var(--color-text-muted);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+/* 旧は動画のあるカクテルの行を目立たせていた(hasMovie) */
+.hasMovie .name a {
+  font-weight: 700;
+}
+
+.num {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.table .num {
+  text-align: center;
+}
+
+.method {
+  white-space: nowrap;
+}
+
+.rateCol {
+  text-align: center;
+}
+
+.baseEng {
+  margin-left: 0.25em;
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+}
+
+/* 600px 未満: 名前を 1 段目、数値の列を 2 段目に並べる。英名・ベースは旧と同じく出さない */
+@media (max-width: 599px) {
+  .table thead {
+    display: none;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .table td {
+    padding: 0 var(--space-1);
+    border-bottom: none;
+    text-align: center;
+  }
+
+  .table td.name {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding-bottom: var(--space-1);
+    text-align: left;
+    font-size: var(--font-size-base);
+  }
+
+  .table td.nameEng,
+  .table td.base {
+    display: none;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.75em;
+  }
+}

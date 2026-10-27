@@ -1,0 +1,133 @@
+/*
+ * 見た目の案ごとのデザイントークン(色・余白・文字の大きさ)。
+ * 画面の CSS Modules はこの変数だけを参照するので、案を切り替えても画面の CSS は変わらない。
+ * 幅の区切り(600px・960px・1264px)は CSS の変数をメディアクエリに使えないため、各 CSS Modules に直接書く。
+ */
+
+/* 幅に余白と線を含める(含めないと width: 100% の要素が余白の分だけ画面からはみ出す) */
+[data-proposal] *,
+[data-proposal] *::before,
+[data-proposal] *::after {
+  box-sizing: border-box;
+}
+
+/*
+ * 余白と文字の大きさの段階は 3 案で共通にし、案ごとには倍率と基準の大きさだけを変える。
+ * 計算に使う --space-scale・--font-size-base が案の要素の上にあるので、:root ではなく同じ要素で計算する
+ * (:root で計算すると、そこには倍率が無いので値が無効になる)
+ */
+[data-proposal] {
+  --space-1: calc(4px * var(--space-scale));
+  --space-2: calc(8px * var(--space-scale));
+  --space-3: calc(12px * var(--space-scale));
+  --space-4: calc(16px * var(--space-scale));
+  --space-5: calc(24px * var(--space-scale));
+  --space-6: calc(32px * var(--space-scale));
+
+  --font-size-sm: calc(var(--font-size-base) * 0.875);
+  --font-size-lg: calc(var(--font-size-base) * 1.25);
+  --font-size-xl: calc(var(--font-size-base) * 1.5);
+  --font-size-title: calc(var(--font-size-base) * 2.25);
+
+  --font-family-ja: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
+  --content-max-width: 1200px;
+}
+
+/* 案 A: 旧に寄せる。旧の header.vue・index.vue・detail.scss の配色と線の引き方に合わせる */
+[data-proposal='a'] {
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-text: #212121;
+  --color-text-muted: #616161;
+  --color-link: #337ab7;
+  --color-link-hover: #23527c;
+  --color-accent: #e91e63;
+  --color-on-accent: #ffffff;
+  --color-header-bg: #99ddff;
+  --color-header-text: #337ab7;
+  --color-border: #bbddff;
+  --color-row-alt: #f5faff;
+  --color-heading-line: #4499ff;
+  --color-rate: #f9a825;
+  --color-footer-bg: #f5f5f5;
+
+  --font-family: var(--font-family-ja);
+  --font-size-base: 15px;
+  --line-height: 1.6;
+  --space-scale: 1;
+  --radius: 2px;
+  --header-height: 40px;
+  --header-shadow: 0 10px 3px rgb(0 0 0 / 10%);
+
+  --heading-border-left: 5px solid var(--color-heading-line);
+  --heading-border-bottom: 2px solid var(--color-heading-line);
+  --heading-bg: transparent;
+  --heading-color: var(--color-text);
+  --heading-weight: 400;
+}
+
+/* 案 B: 夜のバー。暗い地で文字のコントラストを保つため、本文は真っ白にせず少し落とす */
+[data-proposal='b'] {
+  --color-bg: #12172b;
+  --color-surface: #1b2140;
+  --color-text: #e8e6e1;
+  --color-text-muted: #a9a8b8;
+  --color-link: #f2b84b;
+  --color-link-hover: #ffd88a;
+  --color-accent: #f2b84b;
+  --color-on-accent: #12172b;
+  --color-header-bg: #0b0f1f;
+  --color-header-text: #f2b84b;
+  --color-border: #2e3660;
+  --color-row-alt: #20274a;
+  --color-heading-line: #f2b84b;
+  --color-rate: #f2b84b;
+  --color-footer-bg: #0b0f1f;
+
+  --font-family: var(--font-family-ja);
+  --font-size-base: 15px;
+  --line-height: 1.7;
+  --space-scale: 1.1;
+  --radius: 8px;
+  --header-height: 52px;
+  --header-shadow: 0 1px 0 #2e3660;
+
+  --heading-border-left: none;
+  --heading-border-bottom: 1px solid var(--color-border);
+  --heading-bg: transparent;
+  --heading-color: var(--color-accent);
+  --heading-weight: 700;
+}
+
+/* 案 C: 白地でシンプル。差し色を 1 色に絞り、線を減らして余白で区切る */
+[data-proposal='c'] {
+  --color-bg: #fafaf7;
+  --color-surface: #ffffff;
+  --color-text: #1f2a24;
+  --color-text-muted: #5f6b64;
+  --color-link: #1e7a55;
+  --color-link-hover: #145c3f;
+  --color-accent: #1e7a55;
+  --color-on-accent: #ffffff;
+  --color-header-bg: #ffffff;
+  --color-header-text: #1f2a24;
+  --color-border: #e3e6e1;
+  --color-row-alt: #f4f6f2;
+  --color-heading-line: #1e7a55;
+  --color-rate: #c98a12;
+  --color-footer-bg: #ffffff;
+
+  --font-family: var(--font-family-ja);
+  --font-size-base: 16px;
+  --line-height: 1.75;
+  --space-scale: 1.25;
+  --radius: 12px;
+  --header-height: 56px;
+  --header-shadow: 0 1px 0 #e3e6e1;
+
+  --heading-border-left: none;
+  --heading-border-bottom: none;
+  --heading-bg: transparent;
+  --heading-color: var(--color-text);
+  --heading-weight: 700;
+}
