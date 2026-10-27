@@ -28,28 +28,21 @@ final class CategoryImporter implements LegacyImporter
         5 => CategoryRole::Other,
     ];
 
+    /** ノードを書く新しい表。legacy_id_maps の new_table にも入れる */
+    private const NEW_TABLE = 'categories';
+
     public function __construct(private readonly CategoryTree $tree) {}
 
     public function import(): array
     {
         DB::transaction(function () {
-            $kindNodeIds = $this->importLevel('m_category_kinds', null, fn (array $row) => [
-                'name' => $row['name'],
-                // 旧の種別には name_search の列が無いので、新で作るときと同じ変換で作る
-                'name_search' => NameNormalizer::normalize(self::stringColumn($row, 'name', 'm_category_kinds')),
-                'name_eng' => $row['name_eng'],
-                'description' => $row['description'],
-                'role' => self::ROLE_BY_LEGACY_KIND[self::intColumn($row, 'id', 'm_category_kinds')] ?? null,
-                // 旧の種別には作成・更新日時の列が無い
-                'created_at' => null,
-                'updated_at' => null,
-            ]);
+            $kindNodeIds = $this->importLevel('m_category_kinds', null, $this->kindAttrs(...));
             $categoryNodeIds = $this->importLevel('m_category', [$kindNodeIds, 'kind'], $this->nodeAttrs(...));
             $this->importLevel('m_middle', [$categoryNodeIds, 'parent'], $this->nodeAttrs(...));
         });
 
         return [
-            'categories' => DB::table('categories')->count(),
+            self::NEW_TABLE => DB::table(self::NEW_TABLE)->count(),
             'category_closures' => DB::table('category_closures')->count(),
         ];
     }
@@ -65,19 +58,16 @@ final class CategoryImporter implements LegacyImporter
      */
     private function importLevel(string $legacyTable, ?array $parent, callable $toAttrs): array
     {
-        $existing = [];
-        foreach (LegacyIdMap::query()->where('legacy_table', $legacyTable)->where('new_table', 'categories')->get() as $map) {
-            $existing[$map->legacy_id] = $map->new_id;
-        }
+        $existing = LegacyIdMap::newIdsByLegacyId($legacyTable, self::NEW_TABLE);
 
         $nodeIds = [];
         $siblingCounts = [];
-        foreach ($this->legacyRows($legacyTable) as $row) {
-            $legacyId = self::intColumn($row, 'id', $legacyTable);
+        foreach (LegacyRows::ordered($legacyTable, 'id') as $row) {
+            $legacyId = LegacyRows::int($row, 'id', $legacyTable);
             $parentNodeId = null;
             if ($parent !== null) {
                 [$parentNodeIds, $parentColumn] = $parent;
-                $parentLegacyId = self::intColumn($row, $parentColumn, $legacyTable);
+                $parentLegacyId = LegacyRows::int($row, $parentColumn, $legacyTable);
                 $parentNodeId = $parentNodeIds[$parentLegacyId]
                     ?? throw new UnexpectedValueException("{$legacyTable} の id {$legacyId} の親({$parentColumn} = {$parentLegacyId})が旧に無い");
             }
@@ -90,58 +80,30 @@ final class CategoryImporter implements LegacyImporter
                 : $this->createNode($parentNodeId, $attrs);
         }
 
-        LegacyIdMap::record($legacyTable, 'categories', $nodeIds);
+        LegacyIdMap::record($legacyTable, self::NEW_TABLE, $nodeIds);
 
         return $nodeIds;
     }
 
     /**
-     * @param  array<string, mixed>  $attrs
-     * @return int 作ったノードの ID
-     */
-    private function createNode(?int $parentNodeId, array $attrs): int
-    {
-        $parent = $parentNodeId === null ? null : Category::query()->findOrFail($parentNodeId);
-        $timestamps = ['created_at' => $attrs['created_at'], 'updated_at' => $attrs['updated_at']];
-        unset($attrs['created_at'], $attrs['updated_at']);
-        $node = $this->tree->addNode($parent, [...$attrs, 'famous_brand_id' => null]);
-
-        // Category は作成・更新日時を自分で付けるので、旧の日時(null を含む)は作った後に書く
-        $this->writeColumns($node->id, $timestamps);
-
-        return $node->id;
-    }
-
-    /**
-     * @param  array<string, mixed>  $attrs
-     * @return int 書き直したノードの ID
-     */
-    private function updateNode(string $legacyTable, int $legacyId, int $nodeId, ?int $parentNodeId, array $attrs): int
-    {
-        $node = Category::query()->find($nodeId)
-            ?? throw new UnexpectedValueException("{$legacyTable} の id {$legacyId} の移した先のノード {$nodeId} が無い");
-
-        if ($node->parent?->id !== $parentNodeId) {
-            $this->tree->moveSubtree($node, $parentNodeId === null ? null : Category::query()->findOrFail($parentNodeId));
-        }
-
-        $this->writeColumns($nodeId, $attrs);
-
-        return $nodeId;
-    }
-
-    /**
-     * ノードの列を、Eloquent を通さずに書く。通すと更新日時が今の時刻になり、旧の日時が残らない。
+     * 旧の種別の行を、根のノードの列にする。
      *
-     * @param  array<string, mixed>  $columns
+     * @param  array<mixed>  $row
+     * @return array<string, mixed>
      */
-    private function writeColumns(int $nodeId, array $columns): void
+    private function kindAttrs(array $row): array
     {
-        if (array_key_exists('role', $columns)) {
-            $columns['role'] = $columns['role'] instanceof CategoryRole ? $columns['role']->value : null;
-        }
-
-        DB::table('categories')->where('id', $nodeId)->update($columns);
+        return [
+            'name' => $row['name'],
+            // 旧の種別には name_search の列が無いので、新で作るときと同じ変換で作る
+            'name_search' => NameNormalizer::normalize(LegacyRows::string($row, 'name', 'm_category_kinds')),
+            'name_eng' => $row['name_eng'],
+            'description' => $row['description'],
+            'role' => self::ROLE_BY_LEGACY_KIND[LegacyRows::int($row, 'id', 'm_category_kinds')] ?? null,
+            // 旧の種別には作成・更新日時の列が無い
+            'created_at' => null,
+            'updated_at' => null,
+        ];
     }
 
     /**
@@ -173,31 +135,41 @@ final class CategoryImporter implements LegacyImporter
     }
 
     /**
-     * @return list<array<mixed>> 旧の行(ID の昇順)
+     * 作成・更新日時は旧の値(null を含む)にするので、Eloquent に今の時刻を入れさせない。
+     *
+     * @param  array<string, mixed>  $attrs
+     * @return int 書き直したノードの ID
      */
-    private function legacyRows(string $table): array
+    private function updateNode(string $legacyTable, int $legacyId, int $nodeId, ?int $parentNodeId, array $attrs): int
     {
-        $rows = [];
-        foreach (DB::connection('legacy')->table($table)->orderBy('id')->get() as $row) {
-            $rows[] = (array) $row;
+        $node = Category::query()->find($nodeId)
+            ?? throw new UnexpectedValueException("{$legacyTable} の id {$legacyId} の移した先のノード {$nodeId} が無い");
+
+        if ($node->parent?->id !== $parentNodeId) {
+            $this->tree->moveSubtree($node, $parentNodeId === null ? null : Category::query()->findOrFail($parentNodeId));
         }
 
-        return $rows;
+        Category::withoutTimestamps(fn () => $node->forceFill($attrs)->save());
+
+        return $nodeId;
     }
 
     /**
-     * @param  array<mixed>  $row
+     * 作成・更新日時は addNode では入れられない(作るときに今の時刻が入る)ので、作った後に旧の値で書き直す。
+     *
+     * @param  array<string, mixed>  $attrs
+     * @return int 作ったノードの ID
      */
-    private static function intColumn(array $row, string $column, string $table): int
+    private function createNode(?int $parentNodeId, array $attrs): int
     {
-        return is_numeric($row[$column] ?? null) ? (int) $row[$column] : throw new UnexpectedValueException("{$table} の {$column} が数でない");
-    }
+        $parent = $parentNodeId === null ? null : Category::query()->findOrFail($parentNodeId);
+        $node = $this->tree->addNode($parent, array_diff_key($attrs, array_flip(['created_at', 'updated_at'])));
 
-    /**
-     * @param  array<mixed>  $row
-     */
-    private static function stringColumn(array $row, string $column, string $table): string
-    {
-        return is_string($row[$column] ?? null) ? $row[$column] : throw new UnexpectedValueException("{$table} の {$column} が文字列でない");
+        Category::withoutTimestamps(fn () => $node->forceFill([
+            'created_at' => $attrs['created_at'],
+            'updated_at' => $attrs['updated_at'],
+        ])->save());
+
+        return $node->id;
     }
 }

@@ -42,6 +42,21 @@ class LegacyIdMap extends Model
     }
 
     /**
+     * 旧の表の ID から新しい表の ID を引く対応(record で書いたもの)を読む。
+     *
+     * @return array<int, int> 旧 ID => 新 ID
+     */
+    public static function newIdsByLegacyId(string $legacyTable, string $newTable): array
+    {
+        $newIds = [];
+        foreach (static::query()->where('legacy_table', $legacyTable)->where('new_table', $newTable)->get() as $map) {
+            $newIds[$map->legacy_id] = $map->new_id;
+        }
+
+        return $newIds;
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
