@@ -8,7 +8,7 @@
 #
 #   --storage-dir     archive-storage.sh に渡す画像のディレクトリ(省くと archive-storage.sh の既定)
 #   --verify-restore  ダンプの直後に verify-restore.sh で、ダンプを使い捨ての DB に戻して元と比べる(月 1 回の確かめ)
-#   --daily・--weekly  prune-backups.sh に渡す世代数(既定 7・4)
+#   --daily・--weekly  prune-backups.sh に渡す世代数(省くと prune-backups.sh の既定)
 #
 # 終了コード:
 #   0  ダンプ・退避(・復元の確かめ)がすべて通り、古い世代を消した
@@ -26,13 +26,12 @@
 set -uo pipefail
 
 daily_backup() {
-  local env_file='' storage_dir='' scratch_db='' daily=7 weekly=4
+  local env_file='' storage_dir='' scratch_db='' prune_args=()
   while [[ $# -gt 0 ]]; do
     case $1 in
       --storage-dir) require_value "$@"; storage_dir=$2; shift 2 ;;
       --verify-restore) require_value "$@"; scratch_db=$2; shift 2 ;;
-      --daily) require_value "$@"; daily=$2; shift 2 ;;
-      --weekly) require_value "$@"; weekly=$2; shift 2 ;;
+      --daily | --weekly) require_value "$@"; prune_args+=("$1" "$2"); shift 2 ;;
       -*) usage ;;
       *)
         [[ -z $env_file ]] || usage
@@ -43,10 +42,7 @@ daily_backup() {
   done
   [[ -n $env_file ]] || usage
   # 世代数の誤りで、バックアップを取った後に世代を消せずに終わらないよう、先に確かめる
-  if [[ ! $daily =~ ^[0-9]+$ ]] || ((10#$daily < 1)); then
-    die "--daily には 1 以上の整数を渡す"
-  fi
-  [[ $weekly =~ ^[0-9]+$ ]] || die "--weekly には 0 以上の整数を渡す"
+  bash "$HERE/prune-backups.sh" --check "${prune_args[@]}" || exit 1
 
   log "始める"
 
@@ -86,7 +82,7 @@ daily_backup() {
     exit "$status"
   fi
 
-  bash "$HERE/prune-backups.sh" "$backup_dir" --daily "$daily" --weekly "$weekly" || {
+  bash "$HERE/prune-backups.sh" "$backup_dir" "${prune_args[@]}" || {
     status=$?
     log "古い世代を消せなかった(終了コード $status)"
     exit "$status"

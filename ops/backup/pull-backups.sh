@@ -6,7 +6,7 @@
 #
 #   <取り元>        rsync の取り元。サーバーなら <user>@<host>:<BACKUP_DIR>(ssh で繋ぐ)
 #   <手元の保管先>  取ったものを置くディレクトリ。無ければ作る(700)
-#   --daily・--weekly  取った後に prune-backups.sh で手元に残す世代数(既定 7・4。サーバーと同じ)
+#   --daily・--weekly  取った後に prune-backups.sh で手元に残す世代数(省くと prune-backups.sh の既定。サーバーと同じ)
 #
 # 取るのは db/ と storage/ の中身だけ。名前が . で始まるもの(作りかけの .partial・作業用の .work.*)は取らない。
 #
@@ -24,11 +24,10 @@
 set -euo pipefail
 
 pull_backups() {
-  local src='' dest='' daily=7 weekly=4
+  local src='' dest='' prune_args=()
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --daily) require_value "$@"; daily=$2; shift 2 ;;
-      --weekly) require_value "$@"; weekly=$2; shift 2 ;;
+      --daily | --weekly) require_value "$@"; prune_args+=("$1" "$2"); shift 2 ;;
       -*) usage ;;
       *)
         if [[ -z $src ]]; then
@@ -43,6 +42,8 @@ pull_backups() {
     esac
   done
   [[ -n $src && -n $dest ]] || usage
+  # 世代数の誤りに、全部取った後で気づかないよう、先に確かめる
+  bash "$HERE/prune-backups.sh" --check "${prune_args[@]}" || exit 1
   command -v rsync >/dev/null 2>&1 || die "rsync が無い(WSL なら sudo apt install rsync)"
   command -v sha256sum >/dev/null 2>&1 || die "sha256sum が無い"
 
@@ -64,7 +65,7 @@ pull_backups() {
     exit 2
   fi
 
-  bash "$HERE/prune-backups.sh" "$dest" --daily "$daily" --weekly "$weekly"
+  bash "$HERE/prune-backups.sh" "$dest" "${prune_args[@]}"
 }
 
 HERE=$(cd "$(dirname "$0")" && pwd)

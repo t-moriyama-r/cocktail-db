@@ -41,7 +41,10 @@ tc_usage_errors() {
   bash "$SCRIPT" "$dir" --daily x >/dev/null 2>&1 && ok=0
   bash "$SCRIPT" "$dir" --weekly -1 >/dev/null 2>&1 && ok=0
   bash "$SCRIPT" "$dir" --weekly >/dev/null 2>&1 && ok=0
-  check "TC-17-01: 引数の誤り(ディレクトリが無い・--daily 0・数でない世代数)では 1 で止まる" "$ok"
+  # --check は世代数だけを確かめ、ディレクトリを見ない
+  bash "$SCRIPT" --check --daily 0 >/dev/null 2>&1 && ok=0
+  bash "$SCRIPT" --check --daily 3 --weekly 0 >/dev/null 2>&1 || ok=0
+  check "TC-17-01: 引数の誤り(ディレクトリが無い・--daily 0・数でない世代数)では 1 で止まる(--check も同じ判定)" "$ok"
 }
 
 tc_daily_keeps_newest_days() {

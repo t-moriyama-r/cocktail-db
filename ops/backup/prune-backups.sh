@@ -3,11 +3,13 @@
 # バックアップの古い世代を消す。サーバーの BACKUP_DIR にも、手元の PC に取った写しにも使う。
 #
 #   ops/backup/prune-backups.sh <バックアップのディレクトリ> [--daily N] [--weekly N] [--dry-run]
+#   ops/backup/prune-backups.sh --check [--daily N] [--weekly N]
 #
 #   <バックアップのディレクトリ>  BACKUP_DIR(db/ と storage/ を持つディレクトリ)
 #   --daily N   日次の世代数(既定 7。1 以上)
 #   --weekly N  週次の世代数(既定 4。0 なら週次は残さない)
 #   --dry-run   消すものを出すだけで、消さない
+#   --check     世代数の指定を確かめるだけで、ディレクトリを見ない(誤りなら 1)
 #
 # 残すもの(db/ のダンプは DB 名ごとに、storage/ のアーカイブはそれだけで数える):
 #   日次  ある組のうち新しい日から N 日分の、それぞれの日でいちばん新しい組
@@ -34,12 +36,13 @@
 set -euo pipefail
 
 prune_backups() {
-  local backup_dir='' daily=7 weekly=4 dry_run=0
+  local backup_dir='' daily=7 weekly=4 dry_run=0 check_only=0
   while [[ $# -gt 0 ]]; do
     case $1 in
       --daily) daily=$(require_count "$1" "${2-}" 1) || exit 1; shift 2 ;;
       --weekly) weekly=$(require_count "$1" "${2-}" 0) || exit 1; shift 2 ;;
       --dry-run) dry_run=1; shift ;;
+      --check) check_only=1; shift ;;
       -*) usage ;;
       *)
         [[ -z $backup_dir ]] || usage
@@ -48,6 +51,7 @@ prune_backups() {
         ;;
     esac
   done
+  ((check_only == 0)) || return 0
   [[ -n $backup_dir ]] || usage
   [[ -d $backup_dir ]] || die "バックアップのディレクトリが無い: $backup_dir"
 
@@ -70,7 +74,7 @@ STORAGE_SIDES=(.tar.gz.sha256 .check.tsv)
 STAMP_PATTERN='[0-9]{8}-[0-9]{6}'
 
 usage() {
-  sed -n '5,10p' "$0" >&2
+  sed -n '5,12p' "$0" >&2
   exit 1
 }
 
@@ -130,7 +134,8 @@ prune_group() {
       kept=$((kept + 1))
       continue
     fi
-    remove_set "$dir/$prefix$stamp" "$dry_run" "$main" "${sides[@]}"
+    # 途中で落ちても本体の無い組として数えられずに残らないよう、本体を最後に消す
+    remove_set "$dir/$prefix$stamp" "$dry_run" "${sides[@]}" "$main"
     removed=$((removed + 1))
   done < <(group_stamps "$dir" "$prefix" "$main")
 
