@@ -23,7 +23,7 @@
 # - BACKUP_DIR は絶対パス(先頭の ~/ は $HOME にする)。シンボリックリンクを解決した先に public_html が
 #   入っていたら止める(cPanel では ~/www が public_html へのリンクのため)。Web から見える場所にダンプを置かない
 # - 行数はダンプの後に数える。ダンプ中に書き込みがあると、ダンプの中身と少しずれることがある
-# - 定期実行は #17 で行う
+# - 定期実行は daily-backup.sh から行う(docs/backup.md)
 
 set -euo pipefail
 
