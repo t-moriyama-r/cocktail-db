@@ -17,7 +17,7 @@ final class IssueAdminLoginLink extends Command
 {
     protected $signature = 'admin:login-link {email? : ログインするユーザーの email(ユーザーが 2 人以上いるときに指定する)}';
 
-    protected $description = '管理画面に入る、10 分だけ有効で 1 回しか使えないログイン URL を出す';
+    protected $description = '管理画面に入る、期限付きで 1 回しか使えないログイン URL を出す';
 
     public function handle(AdminLoginLinks $links): int
     {

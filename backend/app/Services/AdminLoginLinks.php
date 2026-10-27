@@ -39,6 +39,9 @@ final class AdminLoginLinks
     /**
      * 署名を確かめた後の URL のユーザーとトークンから、ログインさせるユーザーを返す。使えなければ null。
      *
+     * 持ち主と期限は署名でも守られているが、記録の側でも確かめる。APP_KEY が漏れて署名を作れる人がいても、
+     * 発行した記録の持ち主・期限を越えては使えないようにするため。
+     *
      * 同じ URL が同時に 2 回開かれても 1 回しか通さないように、使った印は「まだ使っていない」ことを
      * 条件にした 1 回の UPDATE で付け、書き換えた行があったときだけ通す。
      */
@@ -54,7 +57,7 @@ final class AdminLoginLinks
             ->whereNull('used_at')
             ->update(['used_at' => Carbon::now()]);
 
-        return $consumed === 1 ? $link->user()->first() : null;
+        return $consumed === 1 ? $link->user : null;
     }
 
     private static function hash(string $token): string
