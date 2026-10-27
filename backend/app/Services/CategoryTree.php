@@ -75,20 +75,16 @@ class CategoryTree
             if (! $this->isInTree($node)) {
                 throw new InvalidArgumentException('移すノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
             }
+            $subtreeIds = $this->subtreeIds($node);
+
             if ($newParent !== null) {
                 if (! $this->isInTree($newParent)) {
                     throw new InvalidArgumentException('新しい親のノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
                 }
-                $isOwnSubtree = CategoryClosure::query()
-                    ->where('ancestor_id', $node->getKey())
-                    ->where('descendant_id', $newParent->getKey())
-                    ->exists();
-                if ($isOwnSubtree) {
+                if (in_array($newParent->getKey(), $subtreeIds, true)) {
                     throw new InvalidArgumentException('自分自身・自分の子孫の下へは移せない');
                 }
             }
-
-            $subtreeIds = $this->subtreeIds($node);
 
             CategoryClosure::query()
                 ->whereIn('descendant_id', $subtreeIds)
