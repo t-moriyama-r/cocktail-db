@@ -8,14 +8,18 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * レシピの材料が、選んだノードと「一致する」かの判定(docs/search.md の「新しい木での意味」。#161)。
+ * 選んだノードの集合と、レシピの材料が「一致する」かを、閉包表で判定する(docs/search.md の「新しい木での意味」。#161)。
  *
- * 条件検索・別のカクテル・材料名からの検索が同じ意味で一致を判定するよう、一致するノードの集合の引き方と、
- * それを使う絞り込みをここに集める。材料のノードは cocktail_ingredients.category_id で見る。銘柄は条件に
- * 使わない(旧と同じ)ので、銘柄つきの材料も材料のノードで一致する。
+ * 材料のノードは cocktail_ingredients.category_id で見る。銘柄は条件に使わない(旧と同じ)ので、銘柄つきの材料も
+ * 材料のノードで一致する。
  */
 class IngredientMatch
 {
+    /**
+     * 根の役割のうち「その他」(docs/decisions/category-root-role.md。#153)。
+     */
+    private const OTHER_ROLE = 'other';
+
     /**
      * 選んだノードの集合 S と一致する材料ノードの ID の集合を、列 id のサブクエリで返す。
      *
@@ -53,7 +57,8 @@ class IngredientMatch
      */
     public function whereUsesAny(Builder $cocktails, array $nodeIds): Builder
     {
-        return $cocktails->whereExists($this->ingredientsMatching($cocktails, $nodeIds));
+        return $cocktails->whereHas('ingredients', fn (Builder $ingredients) => $ingredients
+            ->whereIn('category_id', $this->matchingNodeIds($nodeIds)));
     }
 
     /**
@@ -69,7 +74,7 @@ class IngredientMatch
     public function whereUsesEach(Builder $cocktails, array $conditions): Builder
     {
         foreach ($conditions as $nodeIds) {
-            $cocktails->whereExists($this->ingredientsMatching($cocktails, $nodeIds));
+            $this->whereUsesAny($cocktails, $nodeIds);
         }
 
         return $cocktails;
@@ -89,43 +94,13 @@ class IngredientMatch
      */
     public function whereMakeableWith(Builder $cocktails, array $nodeIds): Builder
     {
-        $missing = $this->ingredientsOf($cocktails)
-            ->where('ingredient.is_optional', false)
-            ->whereNotIn('ingredient.category_id', $this->matchingNodeIds($nodeIds))
+        return $cocktails->whereDoesntHave('ingredients', fn (Builder $ingredients) => $ingredients
+            ->where('is_optional', false)
+            ->whereNotIn('category_id', $this->matchingNodeIds($nodeIds))
             ->whereNotExists(fn (QueryBuilder $other) => $other
                 ->from('category_closures as root_closure')
                 ->join('categories as root', 'root.id', '=', 'root_closure.ancestor_id')
-                ->whereColumn('root_closure.descendant_id', 'ingredient.category_id')
-                ->where('root.role', self::OTHER_ROLE));
-
-        return $cocktails->whereNotExists($missing);
-    }
-
-    /**
-     * 根の役割のうち「その他」(docs/decisions/category-root-role.md。#153)。
-     */
-    private const OTHER_ROLE = 'other';
-
-    /**
-     * $cocktails の各カクテルの材料のうち、S と一致するもの。
-     *
-     * @param  Builder<Cocktail>  $cocktails
-     * @param  list<int>  $nodeIds
-     */
-    private function ingredientsMatching(Builder $cocktails, array $nodeIds): QueryBuilder
-    {
-        return $this->ingredientsOf($cocktails)
-            ->whereIn('ingredient.category_id', $this->matchingNodeIds($nodeIds));
-    }
-
-    /**
-     * $cocktails の各カクテルの材料(相関サブクエリ)。
-     *
-     * @param  Builder<Cocktail>  $cocktails
-     */
-    private function ingredientsOf(Builder $cocktails): QueryBuilder
-    {
-        return DB::table('cocktail_ingredients as ingredient')
-            ->whereColumn('ingredient.cocktail_id', $cocktails->getModel()->getQualifiedKeyName());
+                ->whereColumn('root_closure.descendant_id', $ingredients->qualifyColumn('category_id'))
+                ->where('root.role', self::OTHER_ROLE)));
     }
 }
