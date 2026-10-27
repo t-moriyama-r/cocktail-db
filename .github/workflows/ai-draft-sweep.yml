@@ -207,7 +207,8 @@ jobs:
 
       # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
       # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。
-      # push していない回・CI が普通に動いた回では、ci-rerun.yml が見送る。呼べなくても、1 時間ごとの ci-rerun.yml が拾う
+      # GITHUB_TOKEN で ready にした回は ready_for_review の CI が起きず、draft のときに飛ばした回しか無い(#410)ので、ci-rerun.yml が開き直して流す。
+      # draft のまま残した回・CI が普通に動いた回では、ci-rerun.yml が見送る。呼べなくても、1 時間ごとの ci-rerun.yml が拾う
       - name: 承認待ちで止まった CI を流し直させる
         run: gh workflow run ci-rerun.yml -R "$REPO" -f number="$PR" || echo "::warning::ci-rerun.yml を呼べなかった(1 時間ごとの見回りで拾う)"
 

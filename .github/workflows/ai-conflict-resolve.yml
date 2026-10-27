@@ -1,6 +1,6 @@
 # develop とコンフリクトした PR に、Actions の Claude Code が develop を取り込んでコンフリクトを解消し、レビューと自動マージの流れに戻す
 #
-# コンフリクトした PR は、pull_request の CI が動かず、レビュアーも自動マージも先へ進めないので、誰の番でもないまま止まる。draft も同じ。
+# コンフリクトした PR は、pull_request の CI が動かず、レビュアーも自動マージも先へ進めないので、誰の番でもないまま止まる。draft は選ばない(実装している途中。落ちた draft は ai-draft-sweep.yml が引き継ぐ。#410)。
 # - pick: シェルで候補を絞る(.github/scripts/conflict-candidates.sh。見送った理由はジョブのログに出す)
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
