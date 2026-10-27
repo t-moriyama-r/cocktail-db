@@ -129,7 +129,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # 手元でも同じ結果になるよう、image の版を固定する(手元のコマンドは CLAUDE.md の「CI のワークフローを変えたら」)
+      # 手元でも同じ結果になるよう、image の版を固定する(手元のコマンドは CLAUDE.md の「ワークフローを変えたら」)
       - name: actionlint
         uses: docker://rhysd/actionlint:1.7.12
         env:
