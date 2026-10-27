@@ -7,7 +7,7 @@ on:
     branches: [develop]
   # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
-  # PR のブランチで流し直す(ci-rerun.yml・ai-conflict-resolve.yml)。base の付け替えや GITHUB_TOKEN・ボットの push では pull_request の回が起きない・承認待ちのまま走らないため
+  # 手で PR のブランチを試すとき。この回のチェックはブランチ保護の必須のチェックに数えられないので、PR を通すには pull_request の回を走らせる(ci-rerun.yml。#389)
   workflow_dispatch:
 
 permissions:

@@ -6,7 +6,7 @@
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
-#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ test.yml を流し(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
+#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
 #   いまのコミットをレビューさせる。新しく付いた needs-human は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
@@ -195,7 +195,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      actions: write   # CI・代わりのレビュー・通知・状態のラベルのワークフローを gh workflow run で呼ぶ
+      actions: write   # CI の承認待ちの回を承認する。代わりのレビュー・通知・状態のラベルのワークフローを gh workflow run で呼ぶ
       checks: read
       statuses: read
     strategy:
@@ -223,6 +223,9 @@ jobs:
 
       - name: CI・レビュー・通知を続ける
         if: steps.tried.outcome == 'success'
+        env:
+          # ci-rerun.sh が、pull_request の回が無い PR を閉じて開き直す(オーナーの PAT。ci-rerun.yml と同じ)
+          PR_REOPEN_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,headRefOid,labels)
           head=$(jq -r .headRefOid <<<"$pr")
@@ -233,8 +236,8 @@ jobs:
           if [ "$(jq -r .state <<<"$pr")" = OPEN ] && [ -n "$resolved_head" ] && [ "$head" = "$resolved_head" ]; then
             echo "#$PR は ${head:0:7} に進んだ"
             # ボットの push で test.yml が起きないことがあり(#227)、起きても承認待ち(action_required)のまま走らないことがある(#365)。
-            # 少し待って回ができるのを待ち、回が無い・承認待ちの回しか無ければ、ci-rerun.sh が PR のブランチで流す(待ったので push 直後の待ちはしない)。
-            # 流せなければ ci-rerun.sh が人に頼む。読めなかったなどで落ちても、1 時間ごとの ci-rerun.yml が拾うので、後ろのレビューの依頼まで進む
+            # 少し待って回ができるのを待ち、承認待ちの回があれば ci-rerun.sh が承認し、回が無ければ PR を閉じて開き直す(待ったので push 直後の待ちはしない)。
+            # 走らせられなければ ci-rerun.sh が人に頼む。読めなかったなどで落ちても、1 時間ごとの ci-rerun.yml が拾うので、後ろのレビューの依頼まで進む
             for _ in $(seq 1 $((CI_WAIT_SECONDS / 15))); do
               [ "$(gh run list -R "$REPO" --workflow test.yml --commit "$head" --json databaseId --jq length)" -gt 0 ] && break
               sleep 15
