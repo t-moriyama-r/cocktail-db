@@ -5,8 +5,8 @@
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
-# - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きないことがあり(#227)、ボットの「@coderabbitai review」に
-#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ test.yml を流し、ready の PR は代わりの Claude(ai-claude-review.yml)に
+# - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
+#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ test.yml を流し(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
 #   いまのコミットをレビューさせる。新しく付いた needs-human は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
@@ -232,18 +232,14 @@ jobs:
 
           if [ "$(jq -r .state <<<"$pr")" = OPEN ] && [ -n "$resolved_head" ] && [ "$head" = "$resolved_head" ]; then
             echo "#$PR は ${head:0:7} に進んだ"
-            # ボットの push で test.yml が起きないことがある(#227)。少し待っても回が無ければ、PR のブランチで流す
+            # ボットの push で test.yml が起きないことがあり(#227)、起きても承認待ち(action_required)のまま走らないことがある(#365)。
+            # 少し待って回ができるのを待ち、回が無い・承認待ちの回しか無ければ、ci-rerun.sh が PR のブランチで流す(待ったので push 直後の待ちはしない)。
+            # 流せなければ ci-rerun.sh が人に頼む。読めなかったなどで落ちても、1 時間ごとの ci-rerun.yml が拾うので、後ろのレビューの依頼まで進む
             for _ in $(seq 1 $((CI_WAIT_SECONDS / 15))); do
               [ "$(gh run list -R "$REPO" --workflow test.yml --commit "$head" --json databaseId --jq length)" -gt 0 ] && break
               sleep 15
             done
-            if [ "$(gh run list -R "$REPO" --workflow test.yml --commit "$head" --json databaseId --jq length)" -gt 0 ]; then
-              echo "${head:0:7} で test.yml が動いている"
-            elif gh workflow run test.yml -R "$REPO" --ref "$BRANCH"; then
-              echo "${head:0:7} で test.yml が動かなかったので流した"
-            else
-              echo "::warning::#$PR の test.yml を流せなかった(ブランチの test.yml に workflow_dispatch が無い)"
-            fi
+            MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
             # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
             # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
             held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision"))] | join(",")' <<<"$pr")
