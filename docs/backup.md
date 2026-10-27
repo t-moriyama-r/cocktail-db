@@ -76,18 +76,23 @@ bash ops/backup/tests/pull-backups.test.sh
 
 4. 月 1 回の復元の確かめに使う、捨ててよい DB を cPanel の「MySQL データベース」で作り(例: `<user>_cocktail_verify`)、アプリの DB ユーザーに全権限を付ける。中身は空のままにする(`verify-restore.sh` は、空でない DB には戻さない。終わったら空に戻す)
 
-5. cPanel の「Cron ジョブ」に登録する(毎日 3:00。1 日だけは復元の確かめを付ける)
+5. cPanel の「Cron ジョブ」に 2 つ登録する(毎日 3:00。毎月 1 日だけは復元の確かめを付ける)。cPanel の画面では、失敗を知らせるメールアドレスは画面の上の「Cron の電子メール」に入れ、ジョブごとに時刻(分・時・日・月・曜日)とコマンドを入れる(`MAILTO=`・`PATH=` の行は書けないので、`PATH` はコマンドの先頭に付ける)
 
-   ```cron
-   MAILTO=<失敗を知らせるメールアドレス>
-   PATH=/usr/local/bin:/usr/bin:/bin
-   0 3 2-31 * * mkdir -p $HOME/backup-logs && bash $HOME/cocktail-ops/backup/daily-backup.sh <アプリのディレクトリ>/.env >>$HOME/backup-logs/daily-backup.log 2>&1 || echo "daily-backup が失敗した(終了コード $?)。ログ: backup-logs/daily-backup.log"
-   0 3 1 * * mkdir -p $HOME/backup-logs && bash $HOME/cocktail-ops/backup/daily-backup.sh <アプリのディレクトリ>/.env --verify-restore <user>_cocktail_verify >>$HOME/backup-logs/daily-backup.log 2>&1 || echo "daily-backup(復元の確かめ付き)が失敗した(終了コード $?)。ログ: backup-logs/daily-backup.log"
+   | 分 | 時 | 日 | 月 | 曜日 | コマンド |
+   |---|---|---|---|---|---|
+   | 0 | 3 | 2-31 | * | * | 下の 1 つ目 |
+   | 0 | 3 | 1 | * | * | 下の 2 つ目 |
+
+   ```bash
+   mkdir -p $HOME/backup-logs && PATH=/usr/local/bin:/usr/bin:/bin bash $HOME/cocktail-ops/backup/daily-backup.sh <アプリのディレクトリ>/.env >>$HOME/backup-logs/daily-backup.log 2>&1 || echo "daily-backup が失敗した(終了コード $?)。ログ: backup-logs/daily-backup.log"
+   mkdir -p $HOME/backup-logs && PATH=/usr/local/bin:/usr/bin:/bin bash $HOME/cocktail-ops/backup/daily-backup.sh <アプリのディレクトリ>/.env --verify-restore <user>_cocktail_verify >>$HOME/backup-logs/daily-backup.log 2>&1 || echo "daily-backup(復元の確かめ付き)が失敗した(終了コード $?)。ログ: backup-logs/daily-backup.log"
    ```
 
+   SSH で `crontab -e` から入れるときは、先頭に `MAILTO=<失敗を知らせるメールアドレス>` の行を置き、`0 3 2-31 * * <1 つ目>`・`0 3 1 * * <2 つ目>` の 2 行にする。どちらで入れても、`crontab -l` で 2 行あることを確かめる
+
    - 出力はログに書くので、cron のメールは失敗したときの `echo` の 1 行だけになる
-   - cron の `PATH` は短いことがある。`mariadb-dump`・`mysqldump` が見つからないと失敗するので、サーバーで `command -v mariadb-dump mysqldump` を見て、その場所を `PATH` に入れる
-   - crontab の中の `%` は改行の意味になる。足すときは `\%` にする(上の行には無い)
+   - cron の `PATH` は短いことがある。`mariadb-dump`・`mysqldump` が見つからないと失敗するので、サーバーで `command -v mariadb-dump mysqldump` を見て、その場所がコマンドの `PATH=` に入っているかを確かめる
+   - cron のコマンドの中の `%` は改行の意味になる。足すときは `\%` にする(上のコマンドには無い)
    - ログは 1 回数行なので、年に一度ほど消せばよい
 
 6. 次の日に、ログの最後が「終わった」になっていること、db/ と storage/ の組が 1 つ増えていることを確かめる
