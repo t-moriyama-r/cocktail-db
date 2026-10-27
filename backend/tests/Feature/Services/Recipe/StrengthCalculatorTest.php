@@ -141,12 +141,13 @@ it('TC-160-07: 度数 0 の材料だけなら 0% になる', function () {
     expect(strengthCalc([['ソーダ', '90ml', false], ['ライム', '30ml', false]]))->toBe(0.0);
 });
 
-it('TC-160-08: 量のある材料も適量の材料も無ければ、計算できない例外にする', function (array $ingredients) {
-    expect(fn () => strengthCalc($ingredients))->toThrow(StrengthNotCalculableException::class);
-})->with([
-    'tsp・dash だけ' => [[['ジン', '1tsp', false], ['ソーダ', '1dash', false]]],
-    '材料が無い' => [[]],
-]);
+it('TC-160-08: 量のある材料も適量の材料も無ければ、計算できない例外にする', function () {
+    // tsp・dash だけ
+    expect(fn () => strengthCalc([['ジン', '1tsp', false], ['ソーダ', '1dash', false]]))
+        ->toThrow(StrengthNotCalculableException::class);
+    // 材料が無い
+    expect(fn () => strengthCalc([]))->toThrow(StrengthNotCalculableException::class);
+});
 
 it('TC-160-09: 任意の材料と「その他」の材料も、度数の計算に入れる', function () {
     // ジン(任意)40% × 30 + ライム 0% × 30 + ソーダ 0% × 30 = 1200 / 90 = 13.33… → 13.3

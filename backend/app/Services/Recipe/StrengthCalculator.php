@@ -2,9 +2,12 @@
 
 namespace App\Services\Recipe;
 
+use App\Models\Category;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
 use App\Support\AmountFormatter;
+use InvalidArgumentException;
+use LogicException;
 
 /**
  * カクテルの度数(cocktails.volume)を材料から計算する(docs/decisions/strength.md。#158・#160)。
@@ -34,6 +37,7 @@ final class StrengthCalculator
      *
      * @throws StrengthNotCalculableException 量のある材料も適量の材料も無いとき(tsp・dash・個だけ、材料が無い)。
      *                                        旧も 0 で割って保存できなかった。0% にすると、旧と違う度数を黙って保存する
+     * @throws InvalidArgumentException 量を ml に直せないとき(AmountFormatter::toMilliliters)
      */
     public function calculate(iterable $ingredients): float
     {
@@ -41,10 +45,13 @@ final class StrengthCalculator
         $alcoholVolume = 0.0;
         $toTasteStrengths = [];
         foreach ($ingredients as $ingredient) {
-            $strength = $this->ingredientStrength($ingredient);
+            // 材料のノードは外部キー(NOT NULL・RESTRICT)で必ずある
+            $node = $ingredient->category
+                ?? throw new LogicException("カクテル {$ingredient->cocktail_id} の材料 {$ingredient->position} のノードが無い");
+            $strength = self::ingredientStrength($ingredient, $node);
             // 旧は銘柄の所属のカテゴリで量を直していた。材料のノードは銘柄の所属と同じか、その祖先
             // (docs/schema.md の「材料が銘柄を持つときのノード」)で根が同じなので、量の直し方(「その他」の判定)は変わらない
-            $milliliters = $this->amounts->toMilliliters($ingredient->category, $ingredient->amount);
+            $milliliters = $this->amounts->toMilliliters($node, $ingredient->amount);
             if ($milliliters === AmountFormatter::TO_TASTE) {
                 $toTasteStrengths[] = $strength;
 
@@ -73,6 +80,7 @@ final class StrengthCalculator
      * 保存してあるカクテルの材料から度数を計算する。
      *
      * @throws StrengthNotCalculableException calculate と同じ
+     * @throws InvalidArgumentException calculate と同じ
      */
     public function forCocktail(Cocktail $cocktail): float
     {
@@ -88,9 +96,9 @@ final class StrengthCalculator
      * 有名な銘柄があっても 0% にする(#158 で決めた案 X。祖先の銘柄を使うと、祖先の銘柄を変えたときに配下の
      * カクテルの正しい度数が変わり、どの銘柄で計算したかも画面から見えにくくなる)。
      */
-    private function ingredientStrength(CocktailIngredient $ingredient): float
+    private static function ingredientStrength(CocktailIngredient $ingredient, Category $node): float
     {
-        $brand = $ingredient->brand ?? $ingredient->category->famousBrand;
+        $brand = $ingredient->brand ?? $node->famousBrand;
 
         return $brand === null ? 0.0 : (float) $brand->volume;
     }
