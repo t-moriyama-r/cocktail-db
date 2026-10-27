@@ -215,6 +215,11 @@ it('TC-40-08: 無い ID は 404', function () {
     $this->getJson('/api/cocktails/999999')->assertNotFound();
 });
 
+it('TC-40-23: int を超える桁の ID も 500 にならず 404', function () {
+    $this->getJson('/api/cocktails/99999999999999999999')->assertNotFound();
+    $this->getJson('/api/cocktails/99999999999999999999/same-name')->assertNotFound();
+});
+
 it('TC-40-09: ログインした管理者は、管理 API で下書きのカクテルの詳細を公開と同じ形で見られる', function () {
     $n = cocktailDetailTree();
     $draft = Cocktail::factory()->create(['base_category_id' => $n['日本酒']->id, 'is_draft' => true]);

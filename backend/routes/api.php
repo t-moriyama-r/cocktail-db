@@ -12,11 +12,12 @@ Route::get('/hello', HelloController::class);
 
 Route::get('/search-form', SearchFormController::class);
 
-Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->whereNumber('cocktail');
-Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->whereNumber('cocktail');
+// ID は int に収まる桁数に縛る(超える数字は経路に合わず 404。TypeError の 500 にしない)
+Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
+Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
 
 // 管理 API。ミドルウェアの中身は bootstrap/app.php の admin のグループ
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/me', CurrentAdminController::class);
-    Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->whereNumber('cocktail');
+    Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
 });
