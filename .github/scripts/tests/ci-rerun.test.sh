@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ci-rerun.sh のテスト(TC-228-01〜・TC-365-01〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
+# ci-rerun.sh のテスト(TC-228-01〜・TC-365-01〜・TC-389-01〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/ci-rerun.test.sh
 
@@ -25,58 +25,59 @@ main() {
 	pr 7 develop false MERGEABLE
 	runs
 	run 7
-	expect TC-228-01 '付け替わって CI が動いていない PR は、PR のブランチで test.yml を流す' "$(dispatched)" 'test.yml -R o/r --ref issue-7'
+	expect TC-228-01 '付け替わって pull_request の回が無い PR は、閉じて開き直す(workflow_dispatch はしない)' \
+		"$(reopened | tr '\n' ' ')|$(dispatched)" 'closed pat open pat |'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs null
 	run 7
-	expect TC-228-02 'いまのコミットで CI が動いた(動いている)なら流さない' "$(dispatched)$(commented)" ''
+	expect TC-228-02 'いまのコミットで pull_request の回が走った(走っている)なら何もしない' "$(acted)" ''
 
 	reset
 	pr 7 issue-5-base false MERGEABLE
 	runs
 	run 7
-	expect TC-228-03 '向き先が既定のブランチでない(積んでいる途中)なら流さない' "$(dispatched)" ''
+	expect TC-228-03 '向き先が既定のブランチでない(積んでいる途中)なら何もしない' "$(acted)" ''
 
 	reset
 	pr 7 develop true MERGEABLE
 	runs
 	run 7
-	expect TC-228-04 'フォークからの PR では流さない' "$(dispatched)" ''
+	expect TC-228-04 'フォークからの PR では何もしない' "$(acted)" ''
 
 	reset
 	pr 7 develop false MERGEABLE CLOSED
 	runs
 	run 7
-	expect TC-228-05 '閉じた PR では流さない' "$(dispatched)" ''
+	expect TC-228-05 '閉じた PR では何もしない' "$(acted)" ''
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs
 	updated "$NEW"
 	run 7
-	expect TC-228-06 'push の直後(PR の更新から 10 分たっていない)は流さない' "$(dispatched)" ''
+	expect TC-228-06 'push の直後(PR の更新から 10 分たっていない)は開き直さない' "$(acted)" ''
 
 	reset
 	pr 7 develop false CONFLICTING
 	runs
 	run 7
-	expect TC-228-07 'コンフリクトしていたら流さず、人にも頼まない(ai-conflict-resolve.yml が直す)' \
-		"$(dispatched)$(commented)$(labeled)$(notified)" ''
+	expect TC-228-07 'コンフリクトしていたら何もせず、人にも頼まない(ai-conflict-resolve.yml が直す)' \
+		"$(acted)$(commented)$(labeled)$(notified)" ''
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs
-	echo 422 >"$FAKE/dispatch-fails"
+	touch "$FAKE/no-pat"
 	run 7
-	expect TC-228-08 'test.yml を動かせなかったら、そのことを頼み、Slack に知らせる' \
-		"$(commented | grep -c 'workflow_dispatch が無い')|$(notified | grep -c needs-human)" '1|1'
+	expect TC-228-08 '開き直すトークンが無ければ、そのことを頼み、Slack に知らせる' \
+		"$(commented | grep -c 'CODERABBIT_REQUEST_TOKEN')|$(notified | grep -c needs-human)|$(reopened)" '1|1|'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs
-	echo 422 >"$FAKE/dispatch-fails"
+	touch "$FAKE/no-pat"
 	echo '<!-- ai-dev:agent --> <!-- ai-dev:ci-rerun sha=sha7 -->' >"$FAKE/comments"
 	run 7
 	expect TC-228-09 '同じコミットでもう頼んでいたら、もう頼まない' "$(commented)$(labeled)$(notified)" ''
@@ -87,13 +88,13 @@ main() {
 	runs
 	echo "7 8" >"$FAKE/list"
 	run
-	expect TC-228-10 '番号なしなら、既定のブランチ向けの開いている PR をすべて見る' "$(dispatched | wc -l | tr -d ' ')" 2
+	expect TC-228-10 '番号なしなら、既定のブランチ向けの開いている PR をすべて見る' "$(grep -c '^open' "$FAKE/reopened")" 2
 
 	# grep -q に直接つなぐと、目印を見つけた時点で gh が SIGPIPE で止まり、pipefail で見落とす
 	reset
 	pr 7 develop false MERGEABLE
 	runs
-	echo 422 >"$FAKE/dispatch-fails"
+	touch "$FAKE/no-pat"
 	{ echo '<!-- ai-dev:ci-rerun sha=sha7 -->'; head -c 300000 /dev/zero | tr '\0' 'x'; echo; } >"$FAKE/comments"
 	run 7
 	expect TC-228-11 'コメントが大きくても、同じコミットで頼み直さない' "$(commented)" ''
@@ -101,78 +102,140 @@ main() {
 	reset
 	pr 7 develop false MERGEABLE
 	runs
-	echo 502 >"$FAKE/dispatch-fails"
+	echo 502 >"$FAKE/close-fails"
 	run 7
-	expect TC-228-15 'workflow_dispatch が無いためでない失敗(一時的なエラー)では、人に頼まず次の見回りに任せる' 		"$(commented)$(labeled)$(notified)" ''
+	expect TC-228-15 'トークンのためでない失敗(一時的なエラー)で閉じられなければ、人に頼まず次の見回りに任せる' \
+		"$(commented)$(labeled)$(notified)" ''
 
 	# 前の回でラベルと通知までで止まり、コメントだけ書けなかったとき
 	reset
 	pr 7 develop false MERGEABLE OPEN needs-human
 	runs
-	echo 422 >"$FAKE/dispatch-fails"
+	touch "$FAKE/no-pat"
 	run 7
 	expect TC-228-16 'needs-human がもう付いていたら、Slack に知らせ直さず、頼むコメントだけ書く' \
 		"$(commented | grep -c 'ai-dev:ci-rerun sha=sha7')|$(labeled)$(notified)" '1|'
 
-	# 承認待ち(action_required)の回は、動いたものに数えない(#365)
+	# 承認待ち(action_required)の回は、走ったものに数えない(#365)。承認して走らせる(#389)
 	reset
 	pr 7 develop false MERGEABLE
 	runs action_required
 	run 7
-	expect TC-365-01 '承認待ちの回しか無ければ、PR のブランチで test.yml を流す' "$(dispatched)" 'test.yml -R o/r --ref issue-7'
+	expect TC-365-01 '承認待ちの回しか無ければ、その回を承認する(開き直さない・workflow_dispatch しない)' \
+		"$(approved)|$(reopened)$(dispatched)" '101 gh-token|'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs action_required
 	updated "$NEW"
 	run 7
-	expect TC-365-02 '承認待ちの回しか無ければ、push の直後(10 分たっていない)でも流す' "$(dispatched)" 'test.yml -R o/r --ref issue-7'
+	expect TC-365-02 '承認待ちの回は、push の直後(10 分たっていない)でも承認する' "$(approved)" '101 gh-token'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs action_required null
 	run 7
-	expect TC-365-03 '承認待ちの回のほかに動いている回(流し直した回など)があれば流さない' "$(dispatched)$(commented)" ''
+	expect TC-365-03 '承認待ちの回のほかに走っている回があっても、承認待ちの回は承認し、開き直さない' \
+		"$(approved)|$(reopened)$(commented)" '101 gh-token|'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs action_required success
 	run 7
-	expect TC-365-04 '承認待ちの回のほかに動き終わった回があれば流さない' "$(dispatched)$(commented)" ''
+	expect TC-365-04 '承認待ちの回のほかに走り終わった回があっても、承認待ちの回は承認し、開き直さない' \
+		"$(approved)|$(reopened)$(commented)" '101 gh-token|'
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs success
 	run 7
-	expect TC-365-05 '承認待ちでない回が動き終わっていれば、これまでどおり流さない' "$(dispatched)$(commented)" ''
+	expect TC-365-05 '承認待ちでない回が走り終わっていれば、これまでどおり何もしない' "$(acted)$(commented)" ''
 
 	reset
 	pr 7 develop false CONFLICTING
 	runs action_required
 	run 7
-	expect TC-365-06 '承認待ちでも、コンフリクトしていたら流さない(ai-conflict-resolve.yml が直す)' \
-		"$(dispatched)$(commented)$(labeled)$(notified)" ''
+	expect TC-365-06 '承認待ちでも、コンフリクトしていたら何もしない(ai-conflict-resolve.yml が直す)' \
+		"$(acted)$(commented)$(labeled)$(notified)" ''
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs action_required
-	echo 422 >"$FAKE/dispatch-fails"
+	touch "$FAKE/approve-fails"
 	run 7
-	expect TC-365-07 '承認待ちで test.yml を動かせなかったら、これまでどおり人に頼む' \
-		"$(commented | grep -c 'workflow_dispatch が無い')|$(notified | grep -c needs-human)" '1|1'
+	expect TC-365-07 '承認できなければ、オーナーのトークンで閉じて開き直す' "$(reopened | tr '\n' ' ')" 'closed pat open pat '
 
 	reset
 	pr 7 develop false MERGEABLE
 	runs
 	touch "$FAKE/runs-fail"
 	run 7
-	expect TC-365-08 '回の一覧を読めなかったら、回が無いとみなして流さず、失敗で終わる' "$(dispatched)$(commented)|$RC" '|1'
+	expect TC-365-08 '回の一覧を読めなかったら、回が無いとみなして開き直さず、失敗で終わる' "$(acted)$(commented)|$RC" '|1'
 
 	reset
 	pr 7 develop true MERGEABLE
 	runs action_required
 	run 7
-	expect TC-365-09 '承認待ちでも、フォークからの PR では流さない' "$(dispatched)" ''
+	expect TC-365-09 '承認待ちでも、フォークからの PR では承認しない' "$(acted)" ''
+
+	# workflow_dispatch の回は、必須のチェックに数えられない(#389)
+	reset
+	pr 7 develop false MERGEABLE
+	runs workflow_dispatch:success
+	run 7
+	expect TC-389-01 'workflow_dispatch の回しか無ければ、走っていないとみなして閉じて開き直す' \
+		"$(reopened | tr '\n' ' ')" 'closed pat open pat '
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs workflow_dispatch:success action_required
+	run 7
+	expect TC-389-02 'workflow_dispatch の回が成功していても、pull_request の承認待ちの回は承認する' "$(approved)" '102 gh-token'
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs action_required evidence-gate.yml/action_required
+	run 7
+	expect TC-389-03 'ほかのワークフローの承認待ちの回も、まとめて承認する' "$(approved | tr '\n' ' ')" '101 gh-token 102 gh-token '
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs success evidence-gate.yml/action_required
+	run 7
+	expect TC-389-04 'CI は走り終わり、ほかのワークフローだけ承認待ちなら、それを承認する' "$(approved)|$(reopened)" '102 gh-token|'
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs success evidence-gate.yml/action_required
+	touch "$FAKE/approve-fails"
+	run 7
+	expect TC-389-05 'CI が走り終わっていれば、ほかの回を承認できなくても開き直さない(次の見回りでやり直す)' \
+		"$(reopened)$(commented)$(labeled)" ''
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs
+	echo 401 >"$FAKE/close-fails"
+	run 7
+	expect TC-389-06 'オーナーのトークンで閉じられなければ(期限切れ・権限不足)、人に頼み、Slack に知らせる' \
+		"$(commented | grep -c '期限切れ・権限不足')|$(notified | grep -c needs-human)" '1|1'
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs
+	touch "$FAKE/open-fails"
+	run 7
+	expect TC-389-07 '閉じた後に開き直せなければ、GITHUB_TOKEN で開き直し、人に頼む' \
+		"$(reopened | tr '\n' ' ')|$(commented | grep -c '開き直せなかった')|$(notified | grep -c needs-human)" \
+		'closed pat open gh-token |1|1'
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs action_required
+	touch "$FAKE/approve-fails" "$FAKE/no-pat"
+	run 7
+	expect TC-389-08 '承認できず、開き直すトークンも無ければ、人に頼む' \
+		"$(commented | grep -c 'CODERABBIT_REQUEST_TOKEN')|$(reopened)" '1|'
 
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
@@ -188,13 +251,21 @@ case "$*" in
 	"api repos/o/r --jq .default_branch") echo develop ;;
 	"pr list"*) tr ' ' '\n' <"$FAKE/list" ;;
 	"pr view"*) jq -c --arg u "$(cat "$FAKE/updated")" '. + {updatedAt: $u}' "$FAKE/pr-$3.json" ;;
-	"api repos/o/r/actions/workflows/"*)
+	"api repos/o/r/actions/runs?"*)
 		if [ -f "$FAKE/runs-fail" ]; then echo "HTTP 502: runs failed" >&2; exit 1; fi
-		jq -r "$4" "$FAKE/runs" ;;
+		# event=pull_request は GitHub の側で絞る。gh の --jq と同じく LF で出す(Windows の jq は CRLF で出す)
+		jq '.workflow_runs |= map(select(.event == "pull_request"))' "$FAKE/runs" | jq -r "$4" | tr -d '\r' ;;
+	"api -X POST repos/o/r/actions/runs/"*"/approve")
+		if [ -f "$FAKE/approve-fails" ]; then echo "gh: Resource not accessible by integration (HTTP 403)" >&2; exit 1; fi
+		id=${4#repos/o/r/actions/runs/}; echo "${id%/approve} $GH_TOKEN" >>"$FAKE/approved" ;;
+	"api -X PATCH repos/o/r/pulls/"*" -f state=closed")
+		if [ -f "$FAKE/close-fails" ]; then echo "gh: failed (HTTP $(cat "$FAKE/close-fails"))" >&2; exit 1; fi
+		echo "closed $GH_TOKEN" >>"$FAKE/reopened" ;;
+	"api -X PATCH repos/o/r/pulls/"*" -f state=open")
+		if [ -f "$FAKE/open-fails" ] && [ "$GH_TOKEN" = pat ]; then echo "gh: failed (HTTP 502)" >&2; exit 1; fi
+		echo "open $GH_TOKEN" >>"$FAKE/reopened" ;;
 	"workflow run notify-needs-human.yml"*) shift 2; echo "$*" >>"$FAKE/notified" ;;
-	"workflow run"*)
-		if [ -f "$FAKE/dispatch-fails" ]; then echo "HTTP $(cat "$FAKE/dispatch-fails"): dispatch failed" >&2; exit 1; fi
-		shift 2; echo "$*" >>"$FAKE/dispatched" ;;
+	"workflow run"*) shift 2; echo "$*" >>"$FAKE/dispatched" ;;
 	"pr edit"*) shift 2; echo "$*" >>"$FAKE/labeled" ;;
 	"api --paginate"*) cat "$FAKE/comments" ;;
 	"pr comment"*) printf '%s\n' "$*" >>"$FAKE/commented" ;;
@@ -205,7 +276,8 @@ SH
 }
 
 reset() {
-	rm -f "$FAKE"/pr-*.json "$FAKE"/calls "$FAKE"/dispatched "$FAKE"/commented "$FAKE"/dispatch-fails "$FAKE"/runs-fail "$FAKE"/labeled "$FAKE"/notified
+	rm -f "$FAKE"/pr-*.json "$FAKE"/calls "$FAKE"/dispatched "$FAKE"/commented "$FAKE"/labeled "$FAKE"/notified \
+		"$FAKE"/approved "$FAKE"/reopened "$FAKE"/runs-fail "$FAKE"/approve-fails "$FAKE"/close-fails "$FAKE"/open-fails "$FAKE"/no-pat
 	: >"$FAKE/comments"
 	: >"$FAKE/calls"
 	echo 7 >"$FAKE/list"
@@ -219,12 +291,17 @@ pr() {
 	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefName\":\"issue-$1\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"mergeable\":\"$4\",\"labels\":[$labels]}" >"$FAKE/pr-$1.json"
 }
 
-# いまのコミットの test.yml の回。引数ごとに 1 回で、値はその回の conclusion(動いている回は null、承認待ちは action_required)
+# いまのコミットの回。引数ごとに 1 回で、形は [<ワークフローのファイル>/][<イベント>:]<conclusion>。
+# 既定は test.yml・pull_request。conclusion は、走っている回は null、承認待ちは action_required。ID は 101 から順に振る
 runs() {
-	local c list=
-	for c in "$@"; do
+	local a wf ev c id=100 list=
+	for a in "$@"; do
+		wf=test.yml ev=pull_request c=$a
+		if [[ $c == */* ]]; then wf=${c%%/*} c=${c#*/}; fi
+		if [[ $c == *:* ]]; then ev=${c%%:*} c=${c#*:}; fi
 		if [ "$c" = null ]; then c=null; else c="\"$c\""; fi
-		list="${list:+$list,}{\"conclusion\":$c}"
+		id=$((id + 1))
+		list="${list:+$list,}{\"id\":$id,\"event\":\"$ev\",\"path\":\".github/workflows/$wf\",\"conclusion\":$c}"
 	done
 	echo "{\"total_count\":$#,\"workflow_runs\":[$list]}" >"$FAKE/runs"
 }
@@ -234,10 +311,18 @@ dispatched() { cat "$FAKE/dispatched" 2>/dev/null; }
 commented() { cat "$FAKE/commented" 2>/dev/null; }
 labeled() { cat "$FAKE/labeled" 2>/dev/null; }
 notified() { cat "$FAKE/notified" 2>/dev/null; }
+# 承認した回の ID と、使ったトークン
+approved() { cat "$FAKE/approved" 2>/dev/null; }
+# 閉じた・開いたことと、使ったトークン
+reopened() { cat "$FAKE/reopened" 2>/dev/null; }
+# CI を走らせようとしたこと(承認・開き直し・workflow_dispatch)すべて
+acted() { approved; reopened; dispatched; }
 
 run() {
 	RC=0
-	PATH="$FAKE/bin:$PATH" bash "$SCRIPT" o/r "$@" >"$FAKE/out" 2>&1 || RC=$?
+	local pat=pat
+	if [ -f "$FAKE/no-pat" ]; then pat=; fi
+	GH_TOKEN=gh-token PR_REOPEN_TOKEN=$pat PATH="$FAKE/bin:$PATH" bash "$SCRIPT" o/r "$@" >"$FAKE/out" 2>&1 || RC=$?
 }
 
 expect() {
