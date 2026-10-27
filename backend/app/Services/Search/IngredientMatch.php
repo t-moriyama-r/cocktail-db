@@ -3,6 +3,7 @@
 namespace App\Services\Search;
 
 use App\Models\Cocktail;
+use App\Services\CategoryTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
@@ -15,10 +16,7 @@ use Illuminate\Support\Facades\DB;
  */
 class IngredientMatch
 {
-    /**
-     * 根の役割のうち「その他」(docs/decisions/category-root-role.md。#153)。
-     */
-    private const OTHER_ROLE = 'other';
+    public function __construct(private readonly CategoryTree $tree) {}
 
     /**
      * 選んだノードの集合 S と一致する材料ノードの ID の集合を、列 id のサブクエリで返す。
@@ -40,10 +38,7 @@ class IngredientMatch
             ->select('closure.ancestor_id as id')
             ->whereIn('closure.descendant_id', $nodeIds)
             ->where('closure.depth', '>', 0)
-            ->whereExists(fn (QueryBuilder $parent) => $parent
-                ->from('category_closures as parent')
-                ->whereColumn('parent.descendant_id', 'closure.ancestor_id')
-                ->where('parent.depth', '>', 0));
+            ->whereNotIn('closure.ancestor_id', $this->tree->rootIds());
 
         return $descendants->union($nonRootAncestors);
     }
@@ -97,10 +92,6 @@ class IngredientMatch
         return $cocktails->whereDoesntHave('ingredients', fn (Builder $ingredients) => $ingredients
             ->where('is_optional', false)
             ->whereNotIn('category_id', $this->matchingNodeIds($nodeIds))
-            ->whereNotExists(fn (QueryBuilder $other) => $other
-                ->from('category_closures as root_closure')
-                ->join('categories as root', 'root.id', '=', 'root_closure.ancestor_id')
-                ->whereColumn('root_closure.descendant_id', $ingredients->qualifyColumn('category_id'))
-                ->where('root.role', self::OTHER_ROLE)));
+            ->whereNotIn('category_id', $this->tree->otherNodeIds()));
     }
 }
