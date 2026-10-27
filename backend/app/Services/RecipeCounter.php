@@ -89,10 +89,9 @@ class RecipeCounter
             ->toBase()
             ->pluck('cocktail_id')
             ->map(fn (mixed $id): int => self::toInt($id))
-            ->values()
             ->all();
 
-        $this->recount($cocktailIds);
+        $this->recount(array_values($cocktailIds));
     }
 
     /**
