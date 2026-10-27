@@ -145,16 +145,17 @@ it('TC-23-10: affiliates の列の型・null 可が設計どおり(#247 の時�
     ]);
 });
 
-it('TC-23-11: affiliates の索引は (category_id, brand_key) の unique・brand_id・last_viewed_at で、外部キーは categories だけ', function () {
+it('TC-23-11: affiliates の索引は (category_id, brand_key) の unique・brand_id・last_viewed_at で、外部キーは categories と brands', function () {
     expect(SchemaShape::indexes('affiliates'))->toEqualCanonicalizing([
         'primary' => ['id'],
         'affiliates_category_id_brand_key_unique' => ['category_id', 'brand_key'],
         'affiliates_brand_id_index' => ['brand_id'],
         'affiliates_last_viewed_at_index' => ['last_viewed_at'],
     ])
-        // brand_id の外部キー(brands への CASCADE)は、brands(#22)と両方そろってから足す
-        ->and(SchemaShape::foreignKeys('affiliates'))->toBe([
+        // brand_id の外部キー(brands への CASCADE)は、brands(#22)と両方そろった後に #325 で足した(TC-325-02)
+        ->and(SchemaShape::foreignKeys('affiliates'))->toEqualCanonicalizing([
             ['category_id', 'categories', 'id', 'restrict'],
+            ['brand_id', 'brands', 'id', 'cascade'],
         ]);
 });
 

@@ -4,6 +4,7 @@ use App\Enums\CategoryRole;
 use App\Models\Category;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
+use App\Models\Method;
 use App\Services\CategoryTree;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -132,8 +133,10 @@ it('TC-95-05: 下書きのカクテルでしか使っていないノードも、
     $usedByDraftOnly = searchFormNode($root, '下書きでしか使わない');
     $unused = searchFormNode($root, 'どこにも使わない');
 
-    $published = Cocktail::factory()->create(['base_category_id' => $usedByPublished->id, 'is_draft' => false]);
-    $draft = Cocktail::factory()->create(['base_category_id' => $usedByDraftOnly->id, 'is_draft' => true]);
+    // カクテルは技法を外部キーで指す(#325)ので、技法を 1 つ作って両方に使う
+    $method = Method::factory()->create(['name' => 'ビルド']);
+    $published = Cocktail::factory()->create(['method_id' => $method->id, 'base_category_id' => $usedByPublished->id, 'is_draft' => false]);
+    $draft = Cocktail::factory()->create(['method_id' => $method->id, 'base_category_id' => $usedByDraftOnly->id, 'is_draft' => true]);
     CocktailIngredient::factory()->create(['cocktail_id' => $published->id, 'category_id' => $usedByPublished->id, 'position' => 1]);
     CocktailIngredient::factory()->create(['cocktail_id' => $draft->id, 'category_id' => $usedByDraftOnly->id, 'position' => 1]);
 
@@ -147,7 +150,7 @@ it('TC-95-05: 下書きのカクテルでしか使っていないノードも、
                     searchFormExpected($unused, null),
                 ]),
             ],
-            'methods' => [],
+            'methods' => [['id' => $method->id, 'name' => 'ビルド']],
         ]);
 });
 
