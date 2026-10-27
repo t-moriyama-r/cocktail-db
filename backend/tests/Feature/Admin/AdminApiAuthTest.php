@@ -7,6 +7,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
 // 管理 API(/api/admin/*。#118)の認可と CSRF。
@@ -49,9 +50,14 @@ function openAdminPage(TestCase $test): array
     ];
 }
 
+/**
+ * 返事が付けたセッションのクッキー(復号した値)を返す。
+ *
+ * @param  TestResponse<Response>  $response
+ */
 function sessionCookie(TestResponse $response): string
 {
-    return $response->getCookie(config('session.cookie'))?->getValue()
+    return $response->getCookie(config()->string('session.cookie'))?->getValue()
         ?? throw new RuntimeException('セッションのクッキーが無い');
 }
 
@@ -75,7 +81,7 @@ it('TC-118-03: 非常用のログイン URL でログインしたセッション
     // 次のリクエストでは、ログインの状態をクッキーのセッションからだけ読ませる
     $this->app['auth']->forgetGuards();
 
-    $this->withCookie(config('session.cookie'), sessionCookie($login))
+    $this->withCookie(config()->string('session.cookie'), sessionCookie($login))
         ->getJson('/api/admin/me')
         ->assertOk()
         ->assertExactJson(['id' => $admin->id, 'name' => $admin->name]);
@@ -98,7 +104,7 @@ it('TC-118-06: ログインしていても、セッションと違うトーク�
     $this->actingAs(User::factory()->create());
     $cookies = openAdminPage($this);
 
-    $this->withCookie(config('session.cookie'), $cookies['session'])
+    $this->withCookie(config()->string('session.cookie'), $cookies['session'])
         ->withHeader($header, 'not-the-session-token')
         ->postJson('/api/admin/__probe')
         ->assertStatus(419);
@@ -108,7 +114,7 @@ it('TC-118-07: ログインして、画面の XSRF-TOKEN のクッキーを X-XS
     $this->actingAs(User::factory()->create());
     $cookies = openAdminPage($this);
 
-    $this->withCookie(config('session.cookie'), $cookies['session'])
+    $this->withCookie(config()->string('session.cookie'), $cookies['session'])
         ->withHeader('X-XSRF-TOKEN', $cookies['xsrf'])
         ->postJson('/api/admin/__probe')
         ->assertOk()
@@ -123,7 +129,7 @@ it('TC-118-08: ログインしていなければ、CSRF のトークンの無い
 it('TC-118-09: ログインしていなければ、正しいトークンの書き込みでも 401', function () {
     $cookies = openAdminPage($this);
 
-    $this->withCookie(config('session.cookie'), $cookies['session'])
+    $this->withCookie(config()->string('session.cookie'), $cookies['session'])
         ->withHeader('X-XSRF-TOKEN', $cookies['xsrf'])
         ->postJson('/api/admin/__probe')
         ->assertUnauthorized();
