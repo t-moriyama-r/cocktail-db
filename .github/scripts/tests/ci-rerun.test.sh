@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ci-rerun.sh のテスト(TC-228-01〜・TC-365-01〜・TC-389-01〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
+# ci-rerun.sh のテスト(TC-228-01〜・TC-365-01〜・TC-389-01〜・TC-410-02〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/ci-rerun.test.sh
 
@@ -237,6 +237,25 @@ main() {
 	expect TC-389-08 '承認できず、開き直すトークンも無ければ、人に頼む' \
 		"$(commented | grep -c 'CODERABBIT_REQUEST_TOKEN')|$(reopened)" '1|'
 
+	reset
+	pr 7 develop false MERGEABLE OPEN '' true
+	runs
+	run 7
+	expect TC-410-02 'draft では、回が無くても何もしない(CI は ready にしてから流す)' "$(acted)$(commented)" ''
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs skipped
+	run 7
+	expect TC-410-03 'draft のときに飛ばした回しか無ければ、走っていないとみなして閉じて開き直す' 		"$(reopened | tr '
+' ' ')" 'closed pat open pat '
+
+	reset
+	pr 7 develop false MERGEABLE
+	runs skipped success
+	run 7
+	expect TC-410-04 '飛ばした回のほかに走り終わった回があれば、何もしない' "$(acted)$(commented)" ''
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -284,11 +303,11 @@ reset() {
 	updated "$OLD"
 }
 
-# PR の番号・向き先・フォークか・mergeable・状態・付いているラベル
+# PR の番号・向き先・フォークか・mergeable・状態・付いているラベル・draft か
 pr() {
 	local labels=
 	if [ -n "${6:-}" ]; then labels="{\"name\":\"$6\"}"; fi
-	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"mergeable\":\"$4\",\"labels\":[$labels]}" >"$FAKE/pr-$1.json"
+	echo "{\"state\":\"${5:-OPEN}\",\"baseRefName\":\"$2\",\"headRefOid\":\"sha$1\",\"isCrossRepository\":$3,\"isDraft\":${7:-false},\"mergeable\":\"$4\",\"labels\":[$labels]}" >"$FAKE/pr-$1.json"
 }
 
 # いまのコミットの回。引数ごとに 1 回で、形は [<ワークフローのファイル>/][<イベント>:]<conclusion>。

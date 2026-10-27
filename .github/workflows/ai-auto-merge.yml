@@ -173,9 +173,14 @@ jobs:
           checks=$(gh api --paginate --slurp "repos/$REPO/commits/$head/check-runs?per_page=100" \
             | jq '[.[].check_runs[] | select(.name != "auto-merge")]')
           [ "$(jq length <<<"$checks")" -gt 0 ] || skip "${head:0:7} にチェックが 1 つも無い"
+          # draft の間は CI(test.yml)・evidence-gate のジョブを飛ばす(#410)。飛ばしたジョブのチェックは成功に数えられるので、
+          # GITHUB_TOKEN で ready にした(ready_for_review の回が起きない)PR が、CI を流さないまま通らないよう、
+          # いまのコミットで CI の pull_request の回が成功していること、evidence-gate を飛ばさずに確かめたことを求める
+          ci=$(gh api "repos/$REPO/actions/runs?head_sha=$head&event=pull_request&per_page=100"             --jq '[.workflow_runs[] | select((.path | endswith("/test.yml")) and .conclusion == "success")] | length')
+          [ "$ci" -gt 0 ] || skip "${head:0:7} で CI(test.yml)の pull_request の回がまだ成功していない(draft のときに飛ばした回だけ・走っている途中)"
           # develop 向けの PR は、evidence-gate のチェックが無い間(ready 直後でまだ走っていない・走らなかった)もマージしない
           if [ "$base" = develop ]; then
-            [ "$(jq '[.[] | select(.name == "evidence-gate")] | length' <<<"$checks")" -gt 0 ]               || skip "${head:0:7} に evidence-gate のチェックがまだ無い"
+            [ "$(jq '[.[] | select(.name == "evidence-gate" and .conclusion != "skipped")] | length' <<<"$checks")" -gt 0 ]               || skip "${head:0:7} に evidence-gate のチェックがまだ無い(draft のときに飛ばしたものだけ)"
           fi
           pending=$(jq -r '[.[] | select(.status != "completed") | .name] | join(",")' <<<"$checks")
           [ -z "$pending" ] || skip "チェックが終わっていない: $pending"
