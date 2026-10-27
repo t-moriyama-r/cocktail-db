@@ -142,7 +142,8 @@ class DescriptionMarkup
                 // ID で書いた記法(旧の `@m12@` など)も、表示できない参照として残さないよう止める
                 throw ValidationException::withMessages([$attribute => ['記法の種類がありません(n・c・b・d のどれか): '.$whole]]);
             }
-            if (is_numeric($name)) {
+            if (preg_match('/^[1-9][0-9]*$/', $name) === 1) {
+                // withNotes の ID_REFERENCE_PATTERN と同じ形のときだけ、ID で書いた記法とみなす
                 return $whole;
             }
             $id = $this->findId($kind, $name);

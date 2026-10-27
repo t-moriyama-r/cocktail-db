@@ -239,6 +239,21 @@ it('TC-287-18: UTF-8 でない文字列は 422', function () {
     expectMarkupRejected(fn () => $this->markup->toStored("ラム\xff"));
 });
 
+it('TC-287-20: ID の形でない数字(@c0@・@c012@・@c1.5@・@c-5@)は ID の記法とみなさず、名前として引いて見つからなければ 422', function () {
+    descriptionMarkupTree();
+
+    foreach (['@c0@', '@c012@', '@c1.5@', '@c-5@'] as $text) {
+        expectMarkupRejected(fn () => $this->markup->toStored($text));
+    }
+    expect($this->markup->toStored('@c12@'))->toBe('@c12@');
+});
+
+it('TC-287-21: @ を 2 つ以上含むメールアドレスの間は、旧と同じく名前で書いた記法とみなし、見つからなければ 422(旧は例外)', function () {
+    descriptionMarkupTree();
+
+    expectMarkupRejected(fn () => $this->markup->toStored('連絡は a@b.com と c@d.com へ'));
+});
+
 it('TC-287-19: 名前の一致する語は根にリンクしない。名前で書いた記法なら根も指せる', function () {
     $n = descriptionMarkupTree();
     $soft = app(CategoryTree::class)->addNode(
