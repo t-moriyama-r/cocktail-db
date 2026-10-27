@@ -5,6 +5,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 // 管理画面の画像のアップロード(#288)。旧の StorageCommon::saveFromDetailAdmin と、編集のリクエストの
 // input_image の規則(nullable|image)の置き換え。
@@ -27,7 +29,7 @@ beforeEach(function () {
     Route::middleware('api')->post('api/admin/__image_probe', function (Request $request, AdminImageStore $store) {
         $request->validate(AdminImageStore::rules());
 
-        return ['image' => $store->update($request->file('image'), $request->boolean('remove_image'), $request->input('current'))];
+        return ['image' => $store->update($request->file('image'), $request->boolean('remove_image'), $request->filled('current') ? $request->string('current')->value() : null)];
     });
 });
 
@@ -69,10 +71,26 @@ function adminPaddedPng(int $size): UploadedFile
     return adminUpload('large.png', $bytes);
 }
 
-/** 置いたファイルの一覧 */
+/**
+ * 置いたファイルの一覧
+ *
+ * @return array<string>
+ */
 function adminStoredImages(): array
 {
     return Storage::disk('public')->allFiles();
+}
+
+/**
+ * 返事の画像の列の値(置いたファイル名)
+ *
+ * @param  TestResponse<Response>  $response
+ */
+function adminStoredName(TestResponse $response): string
+{
+    $name = $response->json('image');
+
+    return is_string($name) ? $name : throw new RuntimeException('ファイル名が返っていない');
 }
 
 it('TC-288-01: PNG を上げると public ディスクの直下にサーバーで付けた名前で置き、そのファイル名を返す', function () {
@@ -80,7 +98,7 @@ it('TC-288-01: PNG を上げると public ディスクの直下にサーバー�
         'image' => adminUpload('my photo.png', adminImageBytes('png')),
     ])->assertOk();
 
-    $name = $response->json('image');
+    $name = adminStoredName($response);
     expect($name)->toMatch('/\A[A-Za-z0-9]{40}\.png\z/')
         ->and(adminStoredImages())->toBe([$name])
         ->and(Storage::disk('public')->get($name))->toBe(adminImageBytes('png'));
@@ -132,7 +150,7 @@ it('TC-288-05: 受け付ける種類でない画像(BMP)は 422', function () {
 });
 
 it('TC-288-06: ちょうど 5MB(5,242,880 バイト)の画像は置ける', function () {
-    $name = $this->post('/api/admin/__image_probe', ['image' => adminPaddedPng(ADMIN_IMAGE_FIVE_MEGABYTES)])->assertOk()->json('image');
+    $name = adminStoredName($this->post('/api/admin/__image_probe', ['image' => adminPaddedPng(ADMIN_IMAGE_FIVE_MEGABYTES)])->assertOk());
 
     expect(Storage::disk('public')->size($name))->toBe(ADMIN_IMAGE_FIVE_MEGABYTES);
 });
