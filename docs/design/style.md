@@ -34,6 +34,8 @@ npm run dev
 
 ## 見た目の案
 
+**決定: 一旦、案 A(旧に寄せる)で進める**(オーナーの判断。#348)。案 B・C は比較のために残す。
+
 3 案とも画面の部品(`frontend/src/design-proposals/*.tsx` と `*.module.css`)は同じで、違いは `frontend/src/design-proposals/tokens.css` のトークンだけにある。スクリーンショットは #294 の PR にある。
 
 | トークン | 案 A: 旧に寄せる | 案 B: 夜のバー | 案 C: 白地でシンプル |
