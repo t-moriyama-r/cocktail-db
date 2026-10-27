@@ -51,6 +51,7 @@ echo "prs=$prs" >> "$GITHUB_OUTPUT"
 
 ワークフローの `concurrency` は、ジョブの `if` で飛ばされる起動(関係ないコメント・ラベルの付け外し)も同じグループに入れる。`cancel-in-progress` や、待てるのは 1 つだけという決まりで、本来動かすべき実行が取り消される。
 
+- 投稿者(`github.event.comment.user.login`)も条件に入れる。本文だけで絞ると、誰でも同じ文言を書いてグループに入れてしまう
 - グループには、動かす起動だけを PR ごとのグループに入れ、ほかは実行ごとのグループ(`github.run_id`)に逃がす
 - 番号の無い起動(`schedule`・`workflow_run`)を、PR ごとのグループと同じ名前にまとめない
 
@@ -58,7 +59,9 @@ echo "prs=$prs" >> "$GITHUB_OUTPUT"
 # 良い: レビューする起動だけを PR ごとに並べ、ほかは実行ごとに分ける(ai-claude-review.yml)
 concurrency:
   group: >-
-    ${{ (github.event_name == 'workflow_dispatch' || contains(github.event.comment.body, 'Review limit reached'))
+    ${{ (github.event_name == 'workflow_dispatch'
+      || (github.event.comment.user.login == 'coderabbitai[bot]'
+        && (contains(github.event.comment.body, 'Review limit reached') || contains(github.event.comment.body, 'Review rate limited'))))
       && format('ai-claude-review-{0}', github.event.issue.number || inputs.number)
       || format('ai-claude-review-run-{0}', github.run_id) }}
 ```
