@@ -281,6 +281,52 @@ class CategoryTree
     }
 
     /**
+     * 木全体を、根から一番深い段まで入れ子で返す。根も子も兄弟の並び順。
+     *
+     * ノードごとに roots・children を呼ぶと段の数だけクエリが増えるので、ノードと親子(閉包表の depth 1 の行)を
+     * まとめて引いて組み立てる。根は roots と同じ定義(rootIds)で決める。
+     * 各ノードの根の役割は rootRole と同じく根の role だけを見て、ノード自身や途中の祖先の role は見ない。
+     *
+     * @return list<CategoryTreeNode>
+     */
+    public function forest(): array
+    {
+        $nodes = Category::query();
+        $this->orderAsSiblings($nodes);
+        $nodes = $nodes->get();
+
+        /** @var array<int, int> $parentIds 子の ID → 親の ID */
+        $parentIds = CategoryClosure::query()->where('depth', 1)->pluck('ancestor_id', 'descendant_id')->all();
+
+        /** @var array<int, list<Category>> $childrenOf 親の ID → 子(兄弟の並び順) */
+        $childrenOf = [];
+        foreach ($nodes as $node) {
+            if (isset($parentIds[$node->id])) {
+                $childrenOf[$parentIds[$node->id]][] = $node;
+            }
+        }
+
+        $build = function (Category $node, ?CategoryRole $rootRole) use (&$build, $childrenOf): CategoryTreeNode {
+            return new CategoryTreeNode(
+                $node,
+                $rootRole,
+                array_map(fn (Category $child): CategoryTreeNode => $build($child, $rootRole), $childrenOf[$node->id] ?? []),
+            );
+        };
+
+        $rootIds = Category::query()
+            ->whereIn((new Category)->qualifyColumn('id'), $this->rootIds())
+            ->pluck('id')
+            ->flip()
+            ->all();
+
+        return array_values($nodes
+            ->filter(fn (Category $node): bool => isset($rootIds[$node->id]))
+            ->map(fn (Category $root): CategoryTreeNode => $build($root, $root->role))
+            ->all());
+    }
+
+    /**
      * $node が閉包表に自分の行(depth 0)を持つか。保存していないノードは持たない。
      */
     private function isInTree(Category $node): bool

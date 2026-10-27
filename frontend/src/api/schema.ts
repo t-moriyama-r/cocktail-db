@@ -38,10 +38,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/search-form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 検索フォームに出すカテゴリの木と技法の一覧を返す。
+         * @description 木は根から一番深い段まで入れ子で返す(docs/schema.md の「検索フォーム(#95)に出す深さ」)。根も子も兄弟の並び順。
+         *     カクテルに使われているかでは絞らず、下書きのカクテルでしか使っていないノードも返す(旧の getKindsForForm も
+         *     すべてのカテゴリ・ミドルを返していた)。技法は ID の順。
+         */
+        get: operations["searchForm"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        /**
+         * CategoryRole
+         * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
+         *     | |
+         *     |---|
+         *     | `soft_drink` <br/> 旧の kind 4 |
+         *     | `other` <br/> 旧の kind 5(ガーニッシュなど) |
+         * @enum {string}
+         */
+        CategoryRole: "soft_drink" | "other";
+        /** SearchFormMethodResource */
+        SearchFormMethodResource: {
+            id: number;
+            name: string;
+        };
+        /** SearchFormNodeResource */
+        SearchFormNodeResource: {
+            id: number;
+            name: string;
+            /** @description 旧の画面の「メジャーでない項目の表示/非表示」に使う */
+            is_major: boolean;
+            root_role: components["schemas"]["CategoryRole"] | null;
+            children: components["schemas"]["SearchFormNodeResource"][];
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -89,6 +136,28 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         message: "Hello World from Laravel";
+                    };
+                };
+            };
+        };
+    };
+    searchForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        categories: components["schemas"]["SearchFormNodeResource"][];
+                        methods: components["schemas"]["SearchFormMethodResource"][];
                     };
                 };
             };
