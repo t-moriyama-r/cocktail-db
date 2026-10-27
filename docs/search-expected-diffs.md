@@ -33,6 +33,45 @@
 - 旧で確かめた結果: すべてのカテゴリ・ミドルを選ぶと 4,786 件。そこから種別「その他」のカテゴリとその子のミドルを外すと 4,455 件に減る(新では減らない)
 - 理由: [#161] の決まったこと 5・6 の 2(オーナーの判断)。文面は「任意の材料と『その他』は持っていなくてよい」で、旧の画面の説明(「"その他"は省略可能なので無視されます」)とも合う
 
+## [#163] で変えたところ
+
+条件の受け方と検証。一致の判定は変えていない。旧の値は、手元で動かした旧(`docs/legacy-local.md`)で `SearchCocktail` の検証と `CocktailFactory::cocktailSearch` を呼んで確かめた(2026-10-28)。
+
+### 方式(`searchMethod` → `mode`)を省く
+
+- 条件: 方式を送らない
+- 旧: `searchMethod` は必須で、検証で 422
+- 新: `mode` を省くと(`null` も)OR 検索になる
+- 理由: [#163] の「やること」2(`mode` の既定値は `or`)
+
+### 方式が `or`・`and`・`having` のどれでもない
+
+- 条件: `searchMethod`(新は `mode`)に、それ以外の値を送る
+- 旧: 値を検証しないので通り、検索の途中で `Undefined variable: ids` の例外になる(500)
+- 新: 検証で 422
+- 理由: `docs/search.md` の「新しい条件との対応」(それ以外の方式は検証で弾く。[#163])
+
+### 方式が `and`・`having`([#164]・[#165] が受けるまで)
+
+- 条件: `mode` に `and`・`having` を送る
+- 旧: AND 検索・あるもの検索をする
+- 新: [#164]・[#165] が受ける形を決めて足すまで、検証で 422(OR 検索として黙って違う結果を返さない)
+- 理由: [#163] の「対象外」(AND は [#164]、あるもの検索は [#165])
+
+### 無いノードの ID・整数でない ID
+
+- 条件: `Category`(新は `category_ids`)に、無い ID か、整数でない値(`"abc"` など)を入れる
+- 旧: 検証を通り、その値は何にも一致しない。ほかの ID があればその結果だけを返す(無いカテゴリ ID だけで 0 件、ラムと無い ID で 835 件、`["abc"]` で 0 件)
+- 新: 1 つでも入っていれば、検証で 422
+- 理由: [#163] の「受け入れ条件」(存在しない ID は 422)
+
+### CSRF のトークン
+
+- 条件: CSRF のトークン無しで検索を呼ぶ
+- 旧: トークンが要り、無いと 419(`docs/legacy-local.md` の「はまりどころ」)
+- 新: 要らない(認証の要らない公開 API で、結果は副作用の無い読み出し)
+- 理由: [#163] の「追記: API の形」
+
 ## [#165] で再現しないもの
 
 旧の不具合の詳しい説明と確かめた件数は `docs/search.md` の「旧の不具合」にある。
@@ -55,6 +94,8 @@
 
 [#28]: https://github.com/t-moriyama-r/cocktail-db/issues/28
 [#161]: https://github.com/t-moriyama-r/cocktail-db/issues/161
+[#163]: https://github.com/t-moriyama-r/cocktail-db/issues/163
+[#164]: https://github.com/t-moriyama-r/cocktail-db/issues/164
 [#165]: https://github.com/t-moriyama-r/cocktail-db/issues/165
 [#169]: https://github.com/t-moriyama-r/cocktail-db/issues/169
 [#175]: https://github.com/t-moriyama-r/cocktail-db/issues/175
