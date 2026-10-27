@@ -84,6 +84,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dictionaries/{dictionary}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語の詳細。用語の種類(技法・グラス・そのほか)と、技法なら技法の ID も返す(docs/decisions/dictionary.md)。
+         * @description 無い用語は 404(旧は 500 だった)。
+         */
+        get: operations["dictionaryDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語辞典の一覧。分類を ID の順に、分類ごとの用語を名前の順で返す(docs/decisions/dictionary.md)。
+         * @description 用語の無い分類も、旧と同じく空の並びで返す(出すかどうかは画面が決める)。
+         */
+        get: operations["dictionaryIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hello": {
         parameters: {
             query?: never;
@@ -290,6 +330,40 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
         };
+        /** DictionaryCategoryResource */
+        DictionaryCategoryResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            dictionaries: components["schemas"]["DictionaryRefResource"][];
+        };
+        /** DictionaryDetailResource */
+        DictionaryDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            category: {
+                id: number;
+                name: string;
+                name_eng: string;
+            };
+            /** @enum {string} */
+            kind: "method" | "glass" | "other";
+            /** @description 技法の用語なら、その技法の ID(技法から探すカクテルの条件に使う)。技法でなければ null */
+            method_id: number | null;
+            description: string;
+            youtube: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+        };
+        /** DictionaryRefResource */
+        DictionaryRefResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+        };
         /** NodeRefResource */
         NodeRefResource: {
             id: number;
@@ -493,6 +567,53 @@ export interface operations {
                     "application/json": {
                         id: number;
                         name: string;
+                    };
+                };
+            };
+        };
+    };
+    dictionaryDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DictionaryDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    dictionaryIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `DictionaryCategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryCategoryResource"][];
                     };
                 };
             };
