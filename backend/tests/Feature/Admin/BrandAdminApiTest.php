@@ -12,6 +12,7 @@ use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 // 管理 API の銘柄の一覧・取得・新規・更新(#314)。旧の DetailEditController@brand・EditBrandValidate と、
@@ -398,6 +399,34 @@ it('TC-314-15: 画像を上げると保存し、差し替えると前のファ�
 
     $put(['remove_image' => '1'])->assertOk()->assertJsonPath('data.image', null);
     Storage::disk('public')->assertMissing((string) $second);
+});
+
+it('TC-314-20: 外側のトランザクションの中で保存し、外側がロールバックされたら、置いた画像を消し、前の画像は残す', function () {
+    Storage::fake('public');
+    ['nodes' => $n, 'bacardi' => $bacardi] = brandAdminTree();
+    Storage::disk('public')->put('old.png', (string) base64_decode(BRAND_ADMIN_PNG, true));
+    $bacardi->forceFill(['image' => 'old.png'])->save();
+    $path = tempnam(sys_get_temp_dir(), 'brand-image-') ?: throw new RuntimeException('一時ファイルを作れない');
+    file_put_contents($path, base64_decode(BRAND_ADMIN_PNG, true));
+    $input = brandAdminInput($n['ホワイトラム'], ['image' => new UploadedFile($path, 'a.png', null, null, true)]);
+
+    $placed = null;
+    try {
+        DB::transaction(function () use ($bacardi, $input, &$placed) {
+            $this->put("/api/admin/brands/{$bacardi->id}", $input, ['Accept' => 'application/json'])->assertOk();
+            $placed = $bacardi->refresh()->image;
+            expect($placed)->not->toBe('old.png');
+            Storage::disk('public')->assertExists((string) $placed);
+
+            throw new RuntimeException('外側を巻き戻す');
+        });
+    } catch (RuntimeException $e) {
+        expect($e->getMessage())->toBe('外側を巻き戻す');
+    }
+
+    expect($placed)->toBeString()
+        ->and($bacardi->refresh()->image)->toBe('old.png')
+        ->and(Storage::disk('public')->allFiles())->toBe(['old.png']);
 });
 
 it('TC-314-16: 所属を変えると、その銘柄を使う材料・アフィリエイトのノードがそろい、材料の数が作り直される', function () {

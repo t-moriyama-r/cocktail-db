@@ -435,6 +435,7 @@ export interface components {
             is_like: boolean;
             /** @description 画像のリンクの文字と URL */
             image_txt?: string | null;
+            /** Format: uri */
             image_url?: string | null;
             /**
              * Format: binary

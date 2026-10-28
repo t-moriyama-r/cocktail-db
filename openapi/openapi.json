@@ -1898,7 +1898,9 @@
                         "type": [
                             "string",
                             "null"
-                        ]
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
                     },
                     "image": {
                         "type": [

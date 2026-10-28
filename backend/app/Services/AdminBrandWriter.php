@@ -36,7 +36,8 @@ class AdminBrandWriter
      */
     public function save(?Brand $brand, SaveBrandRequest $request): Brand
     {
-        return DB::transaction(function () use ($brand, $request): Brand {
+        $uploaded = null;
+        $saved = DB::transaction(function () use ($brand, $request, &$uploaded): Brand {
             if ($brand !== null) {
                 // 同じ銘柄を同時に保存したときに、所属の確かめと材料の書き換えが食い違わないよう、行をロックして読み直す
                 $brand = Brand::query()->lockForUpdate()->findOrFail($brand->id);
@@ -100,6 +101,17 @@ class AdminBrandWriter
 
             return $brand;
         });
+
+        // 外側のトランザクションの中で呼ばれたときは、外側がロールバックされると置いたファイルを指す行も残らないので、
+        // そのときにも消す。外側の記録に付けるため、この関数のトランザクションをコミットしてから登録する
+        // (内側のトランザクションに付けると、外側が入れ子のままロールバックされたときに呼ばれない)。
+        // 外側が無ければ何もしない
+        if ($uploaded !== null) {
+            $stored = $uploaded;
+            DB::afterRollBack(fn () => $this->images->discard($stored));
+        }
+
+        return $saved;
     }
 
     /**
