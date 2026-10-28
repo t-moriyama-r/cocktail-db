@@ -14,6 +14,8 @@
 
 ## 起動
 
+下のコマンドは、このリポジトリ(cocktail-db)の clone の直下で流す(ダンプの確かめに `ops/migrate/check-legacy-dump.sh` を使う)。
+
 Git Bash で動かすときは、先に `export MSYS_NO_PATHCONV=1` をする(コンテナ内のパス `/tmp/views` を Windows のパスに書き換えられるのを防ぐ)。
 
 ```bash
@@ -49,14 +51,15 @@ if test -z "$ready"; then
   exit 1
 fi
 # legacy_data.sql はテーブル定義込み。users はデータ側に無いので、schema から定義だけ入れる
-# 投入に失敗したら止める。データが欠けたまま動かすと、間違った「旧での結果」を採ってしまう
+# 投入に失敗したら・入れた DB が欠けていたら止める。データが欠けたまま動かすと、間違った「旧での結果」を採ってしまう
 # DB は調べられるよう消さずに残す。やり直す前に、下の「片付け」で消す
-load_failed() { echo "ダンプの投入に失敗したため中止します。調べ終えたら下の「片付け」で消してから、最初からやり直してください。" >&2; exit 1; }
+load_failed() { echo "ダンプの投入か、投入した DB の確かめに失敗したため中止します。調べ終えたら下の「片付け」で消してから、最初からやり直してください。" >&2; exit 1; }
 test -f "$LEGACY_DUMP/legacy_data.sql" && test -f "$LEGACY_DUMP/legacy_schema.sql" || load_failed
 docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy < "$LEGACY_DUMP/legacy_data.sql" || load_failed
 awk '/CREATE TABLE `users`/,/;$/' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
 sed -n '/^ALTER TABLE `users`/,/;$/p' "$LEGACY_DUMP/legacy_schema.sql" | docker exec -i cocktail-legacy-db mariadb -uroot -proot legacy || load_failed
-docker exec cocktail-legacy-db mariadb -uroot -proot legacy -e 'SELECT 1 FROM users LIMIT 1' >/dev/null || load_failed  # users が作られたかの確認
+# 入れた DB に、旧アプリが使う表(users を含む)がそろい、主な表に行があるかを確かめる。欠けていれば、無い表・空の表を出して止める
+ops/migrate/check-legacy-dump.sh legacy docker exec cocktail-legacy-db mariadb -uroot -proot || load_failed
 
 # 3. 依存を入れる(初回だけ)。composer.lock が古く package:discover が落ちるので --no-scripts で入れる
 #    (生成済みの bootstrap/cache/packages.php は cocktail-legacy に commit してある)

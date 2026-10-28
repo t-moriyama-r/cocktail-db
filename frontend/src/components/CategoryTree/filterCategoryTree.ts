@@ -1,4 +1,5 @@
 import type { CategoryTreeFilterResult, CategoryTreeNode } from './CategoryTree.types'
+import { toComparableKana } from '../../utils/toComparableKana'
 import { collectCategoryTreeIds } from './collectCategoryTreeIds'
 
 /**
@@ -35,15 +36,8 @@ export function filterCategoryTree(
 
 function matchesCategoryName(node: CategoryTreeNode, query: string): boolean {
   // 旧の Helper.narrow は、日本語名は大文字と小文字をそのまま比べ、英名だけ小文字にそろえて比べる
-  if (toComparable(node.name).startsWith(toComparable(query))) return true
+  if (toComparableKana(node.name).startsWith(toComparableKana(query))) return true
   if (node.name_eng === null) return false
-  return toComparable(node.name_eng).toLowerCase().startsWith(toComparable(query).toLowerCase())
-}
-
-/** 全角の英数字を半角に、カタカナをひらがなにそろえる(旧の Helper.katakanaToHiragana) */
-function toComparable(text: string): string {
-  return text
-    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
-    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
+  return toComparableKana(node.name_eng).toLowerCase().startsWith(toComparableKana(query).toLowerCase())
 }
 
