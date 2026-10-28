@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 
 export default function Top() {
+  usePageTitle('トップページ')
   const [message, setMessage] = useState('loading...')
 
   useEffect(() => {
