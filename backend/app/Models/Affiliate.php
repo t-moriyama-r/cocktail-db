@@ -7,12 +7,17 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * アフィリエイトの商品。ノード 1 つ(brand_id が null)、または銘柄 1 つにつき 1 行。
  *
  * brand_key は DB が brand_id から作る生成列で、一意性の制約にだけ使う。書き込むと DB に拒まれるので
  * Fillable に入れていない。
+ *
+ * @property Carbon|null $amazon_fetched_at
+ * @property Carbon|null $rakuten_fetched_at
+ * @property-read Category $category 外部キー(RESTRICT)で、いつもある
  */
 #[Fillable([
     'category_id', 'brand_id',

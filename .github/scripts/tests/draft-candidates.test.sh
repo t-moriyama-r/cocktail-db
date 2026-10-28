@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# draft-candidates.sh decide のテスト(TC-236-xx)。事実の JSON から、引き継がせるか・なぜ見送るかを確かめる。
-# GitHub には触らない。
+# draft-candidates.sh のテスト(TC-236-xx・TC-469-xx)。decide は、事実の JSON から、引き継がせるか・なぜ見送るかを確かめる。
+# 事実を集めるところ(TC-469-xx)は、gh を決まった値を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/draft-candidates.test.sh
 
@@ -35,6 +35,10 @@ main() {
 	check TC-236-16 '境界: 2 回目の引き継ぎはする' '.round = 2' 'pick'
 	check TC-236-17 '境界: 3 回目の引き継ぎはしない' '.round = 3' 'skip: 引き継ぎが 2 回に達した'
 	check TC-236-18 '人の判断待ちは、CI の途中より先に理由に出る' '.labels = ["needs-human"] | .checksPending = true' 'skip: ラベル needs-human'
+	check TC-456-04 '手元の作業待ち(needs-local)は引き継がない' '.labels = ["needs-local"]' 'skip: ラベル needs-local'
+
+	collect TC-469-02 'コメントの合計が 200KB を超える PR でも落ちずに、事実を集めて選ぶ' \
+		'[{"number":7,"head":"abc","branch":"issue-7-x","round":1}]|0'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -50,6 +54,40 @@ check() {
 		FAILED=$((FAILED + 1))
 		echo "FAIL $id $title: expected '$expected', got '$actual'"
 	fi
+}
+
+# 偽の gh で draft-candidates.sh <owner/repo> を流し、選んだ PR の JSON と終了コードを比べる。
+# #415 はコメントが多く、jq の引数で渡して Argument list too long で落ちた。1 引数の上限(Linux は 128KB)を超える 250KB の本文を返す
+collect() {
+	local id=$1 title=$2 expected=$3 fake actual rc=0
+	fake=$(mktemp -d)
+	mkdir -p "$fake/bin"
+	cat >"$fake/bin/gh" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+	"api repos/o/r --jq .default_branch") echo develop ;;
+	"pr list -R o/r --state open --draft"*) echo 7 ;;
+	"pr view 7 -R o/r --json"*)
+		echo '{"state":"OPEN","isDraft":true,"isCrossRepository":false,"author":{"login":"o"},"baseRefName":"develop","headRefName":"issue-7-x","headRefOid":"abc","labels":[],"statusCheckRollup":[]}' ;;
+	"api repos/o/r/commits/abc --jq .commit.committer.date") echo 2026-10-28T00:00:00Z ;;
+	"api --paginate --slurp repos/o/r/issues/7/comments"*)
+		head -c 250000 /dev/zero | tr '\0' x \
+			| jq -R -s -c '[[{body: ., user: {login: "someone", type: "User"}, created_at: "2026-10-28T00:01:00Z"}]]' ;;
+	*) echo "unexpected: gh $*" >&2; exit 2 ;;
+esac
+SH
+	chmod +x "$fake/bin/gh"
+	# 最後の動き(00:01)から 4 時間後
+	actual=$(PATH="$fake/bin:$PATH" NOW=$(jq -n '"2026-10-28T04:01:00Z" | fromdate') bash "$SCRIPT" o/r 2>"$fake/err" | tr -d '\r') || rc=$?
+	if [ "$actual|$rc" = "$expected" ]; then
+		PASSED=$((PASSED + 1))
+		echo "ok   $id $title"
+	else
+		FAILED=$((FAILED + 1))
+		echo "FAIL $id $title: expected '$expected', got '$actual|$rc'"
+		sed 's/^/     | /' "$fake/err"
+	fi
+	rm -rf "$fake"
 }
 
 main "$@"
