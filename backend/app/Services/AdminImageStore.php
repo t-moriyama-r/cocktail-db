@@ -50,6 +50,14 @@ final class AdminImageStore
     }
 
     /**
+     * update() で置いたばかりのファイルを、保存に失敗したときに消す。
+     */
+    public function discard(string $stored): void
+    {
+        $this->disk()->delete($stored);
+    }
+
+    /**
      * 画像の列の値が public ディスクの直下のファイルを指すときだけ消す。
      *
      * 画像の列には外部の URL も入りうる(legacy:verify-images も数えている)。ディスクのファイルではないので消さない。

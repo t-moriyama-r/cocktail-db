@@ -12,6 +12,7 @@ use App\Support\NameNormalizer;
 use App\Support\YoutubeInput;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 use UnexpectedValueException;
 
 /**
@@ -80,10 +81,21 @@ class AdminBrandWriter
 
             // 画像は最後に置く。ここより前で止まったときに、上げたファイルだけが残らないようにする
             $brand->image = $this->images->update($request->file('image'), $request->boolean('remove_image'), $brand->image);
-            $brand->save();
+            $uploaded = $request->file('image') !== null ? $brand->image : null;
 
-            if ($movedFrom !== null) {
-                $this->followCategory($brand);
+            try {
+                $brand->save();
+
+                if ($movedFrom !== null) {
+                    $this->followCategory($brand);
+                }
+            } catch (Throwable $e) {
+                // ロールバックされるので、置いたファイルを指す行は残らない。孤児にならないよう消す
+                if ($uploaded !== null) {
+                    $this->images->discard($uploaded);
+                }
+
+                throw $e;
             }
 
             return $brand;
