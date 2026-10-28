@@ -67,6 +67,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cocktails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * カクテルを、指定した並べ方で limit 件まで返す。1 件は一覧の表(#298)の 1 行の形。
+         * @description - recent: 更新日時(updated_at)の新しい順。同じ日時なら ID の大きい順
+         *     - recommend: 評価(rate)が 3 以上のカクテルから、ランダムに選ぶ(旧 cocktailRecommend)
+         *     - random: すべてのカクテルから、ランダムに選ぶ
+         *
+         *     limit は 1〜50(省略すると 10)。sort・limit が外れていたら 422。
+         */
+        get: operations["cocktailList.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公開しているカクテルの件数を返す(下書きは数えない)。 */
+        get: operations["cocktailList.count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/latest-video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 動画の公開日時(youtube_created_at)がいちばん新しいカクテルを返す。同じ日時なら ID の大きいもの。
+         * @description 動画(youtube)の無いカクテルは選ばない。動画のある公開のカクテルが 1 件も無ければ 404。
+         */
+        get: operations["cocktailList.latestVideo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/cocktails/{cocktail}/preview": {
         parameters: {
             query?: never;
@@ -505,6 +566,14 @@ export interface components {
                 amazon_search_url: string | null;
             };
         };
+        /** App.Http.Resources.Admin.CocktailListItemResource */
+        "App.Http.Resources.Admin.CocktailListItemResource": {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_draft: boolean;
+            updated_at: string | null;
+        };
         /**
          * CategoryRole
          * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
@@ -598,7 +667,19 @@ export interface components {
             id: number;
             name: string;
             name_eng: string | null;
-            is_draft: boolean;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+                name_eng: string;
+            };
+            recipe_count: number;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            youtube: string | null;
+            /** Format: date-time */
             updated_at: string | null;
         };
         /**
@@ -685,6 +766,27 @@ export interface components {
             id: number;
             name: string;
             name_eng: string;
+        };
+        /** LatestVideoCocktailResource */
+        LatestVideoCocktailResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            base: components["schemas"]["NodeRefResource"];
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
         };
         /** NodeRefResource */
         NodeRefResource: {
@@ -912,14 +1014,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Paginated set of `CocktailListItemResource` */
+            /** @description Paginated set of `App.Http.Resources.Admin.CocktailListItemResource` */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        data: components["schemas"]["CocktailListItemResource"][];
+                        data: components["schemas"]["App.Http.Resources.Admin.CocktailListItemResource"][];
                         links: {
                             first: string | null;
                             last: string | null;
@@ -949,6 +1051,77 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktailList.index": {
+        parameters: {
+            query: {
+                /** @description recent: 更新の新しい順。recommend: 評価が 3 以上からランダム。random: ランダム */
+                sort: "recent" | "recommend" | "random";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailListItemResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktailList.count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count: number;
+                    };
+                };
+            };
+        };
+    };
+    "cocktailList.latestVideo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `LatestVideoCocktailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["LatestVideoCocktailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     "admin.cocktailPreview": {

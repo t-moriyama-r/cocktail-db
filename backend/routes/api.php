@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
 use App\Http\Controllers\CocktailDetailController;
+use App\Http\Controllers\CocktailListController;
 use App\Http\Controllers\CocktailSameNameController;
 use App\Http\Controllers\CocktailSearchController;
 use App\Http\Controllers\DictionaryDetailController;
@@ -22,6 +23,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/hello', HelloController::class);
 
 Route::get('/search-form', SearchFormController::class);
+
+Route::get('/cocktails', [CocktailListController::class, 'index']);
+Route::get('/cocktails/count', [CocktailListController::class, 'count']);
+Route::get('/cocktails/latest-video', [CocktailListController::class, 'latestVideo']);
 
 // 条件検索。選んだノードの ID が数百個になりうるので、GET のクエリではなく JSON の本文で受ける(#163)
 Route::post('/cocktails/search', CocktailSearchController::class);
