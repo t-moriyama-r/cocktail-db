@@ -16,7 +16,8 @@
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
-# - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)
+# - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)。
+#   見るのは CI のチェックだけで、PR の上で動く開発の仕組みのジョブ(label・notify など)は数えない(.github/scripts/ci-check-runs.sh)
 # - いまのコミットに必須のチェックが揃っていない・CI の pull_request の回が成功していない(CI が動いていない。gh pr merge を呼ばずに見送り、
 #   ci-rerun.yml に流し直させる。.github/scripts/ci-rerun-request.sh。#268)
 #
@@ -208,9 +209,9 @@ jobs:
             [ "$waiting" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $waiting 件ある(未解決は $unresolved 件)"
           fi
 
-          # このワークフロー自身のジョブは除く
-          checks=$(gh api --paginate --slurp "repos/$REPO/commits/$head/check-runs?per_page=100" \
-            | jq '[.[].check_runs[] | select(.name != "auto-merge")]')
+          # CI のチェックだけを見る。このワークフロー自身のジョブと、PR の上で動く開発の仕組みのジョブ(pr-status.yml の label など)は、
+          # 終わった後にここを呼び直さないので、実行中を理由に見送ると止まったままになる(#367)
+          checks=$(bash .ai-dev/.github/scripts/ci-check-runs.sh "$REPO" "$head") || skip "${head:0:7} のチェックを読めない"
           # 走らなかったワークフロー(bot の push で承認待ちになった CI など)のチェックは付かないので、必須のチェックが揃っているかも見る(#360)
           missing=$(bash .ai-dev/.github/scripts/required-checks-missing.sh "$REPO" "$base" "$head") || skip "必須のチェックを確かめられない"
           if [ -n "$missing" ]; then
