@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import Top from './Top'
+import type { paths } from '../api/schema'
 import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
+
+type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
 
 describe('Top', () => {
   test('TC-7-01: GET /api/hello の message を見出しに出す', async () => {
@@ -16,32 +20,25 @@ describe('Top', () => {
     )
   })
 
-  test('TC-7-02: 応答が返るまでは loading... を出す', () => {
-    mockApiHandler('get', '/hello', () => new Promise<Response>(() => {}))
+  // 読み込み中・エラーの出し分けは共通の部品(components/ApiView)が受け持ち、そちらのテスト(TC-98-01〜09)で確かめる。
+  // ここではトップがその共通の処理を使っていることだけを確かめる(前の TC-7-02〜04 の「loading...」「error: HTTP …」の見出しは #98 でやめた)
+  test('TC-98-10: API がエラーを返したら共通のエラーの表示を出し、もう一度読み込むとトップを出す', async () => {
+    let failing = true
+    const hello: HelloResponse = { message: 'Hello World from Laravel' }
+    // 500 の本文はスキーマに無いので型を当てず、200 の本文には型を当てる
+    mockApiHandler('get', '/hello', () =>
+      failing ? jsonResponse({ message: 'Server Error' }, 500) : jsonResponse(hello, 200),
+    )
+    render(
+      <MemoryRouter>
+        <Top />
+      </MemoryRouter>,
+    )
 
-    render(<Top />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('データを読み込めませんでした(エラー 500)')
+    failing = false
+    fireEvent.click(screen.getByRole('button', { name: 'もう一度読み込む' }))
 
-    expect(screen.getByRole('heading', { name: 'loading...' })).toBeInTheDocument()
-  })
-
-  test('TC-7-03: API がエラーを返したら HTTP ステータスと本文を出す', async () => {
-    // 500 の本文はスキーマに無いので、型を当てずに返す
-    mockApiHandler('get', '/hello', () => jsonResponse({ message: 'Server Error' }, 500))
-
-    render(<Top />)
-
-    expect(
-      await screen.findByRole('heading', { name: 'error: HTTP 500 {"message":"Server Error"}' }),
-    ).toBeInTheDocument()
-  })
-
-  test('TC-7-04: 通信に失敗したら例外の内容を出す', async () => {
-    mockApiHandler('get', '/hello', () => {
-      throw new TypeError('Failed to fetch')
-    })
-
-    render(<Top />)
-
-    expect(await screen.findByRole('heading', { name: 'error: TypeError: Failed to fetch' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Hello World from Laravel' })).toBeInTheDocument()
   })
 })
