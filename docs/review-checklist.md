@@ -137,3 +137,24 @@ gh api graphql --paginate -F owner="${repo%%/*}" -F name="${repo#*/}" -F number=
     labels=$(gh issue view "$ISSUE" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
     if [[ ",$labels," == *",needs-decision,"* ]]; then echo "open=true" >> "$GITHUB_OUTPUT"; fi
 ```
+
+## RC-08: 画面を変える PR の証跡を、幅の区切りごとにそろえる
+
+追加: 2026-10-28 / 出た PR: [#427](https://github.com/t-moriyama-r/cocktail-db/pull/427)(オーナーの依頼でルールにした。#432)
+
+FE の画面は、幅の区切り(xs 〜599px・sm 600px〜・md 960px〜・lg 1264px〜)で見た目が変わる。証跡を「PC 幅」と「スマホ幅 375px」の 2 つだけで撮ると、その間の幅(sm・md)で崩れていても証跡に出ない。
+
+- FE の画面を変える PR の「## 証跡」は、`docs/design/style.md` の「証跡を撮る幅」の 4 つ(xs 375px・sm 768px・md 1024px・lg 1440px)すべてで、修正前後の静止画をそろえる。比較画像は幅ごとに 1 枚。動画は操作で変わるものがある幅で撮る(少なくとも lg と xs)
+- 区切りの境目(599/600px・959/960px)で出し方を変える CSS を足した・変えたときは、境目の両側の幅もそろえる
+- 幅によって変わらないことが明らかな変更(文言だけなど)でも、4 つの幅を省かない
+- 撮った幅は `<数字>px` で書く(`evidence-gate.sh` が数える)。`<!-- ai-dev:no-viewport-evidence 理由 -->` で検査を飛ばしている PR は、理由のとおり画面に出ない変更か(純関数・型・テストだけか)を差分で確かめる
+
+```markdown
+<!-- 悪い: sm・md の幅が無い -->
+## 証跡
+PC 幅(1440px)とスマホ幅(375px)の修正前・修正後
+
+<!-- 良い: 区切りごとに 1 つずつ撮り、幅を書く -->
+## 証跡
+xs 375px・sm 768px・md 1024px・lg 1440px の修正前・修正後(比較画像は幅ごとに 1 枚)
+```

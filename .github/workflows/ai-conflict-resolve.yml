@@ -6,6 +6,9 @@
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
 #   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(手元の作業待ち)を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
+# - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
+#   test.yml の backend・frontend と同じ準備(PHP 8.4・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
+#   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
 #   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local は Slack に知らせ、状態のラベルを付け替える
@@ -41,6 +44,8 @@ concurrency:
 env:
   GH_TOKEN: ${{ github.token }}
   REPO: ${{ github.repository }}
+  # 決まった手順(CLAUDE.md の「API を変えたら」)で作り直せる生成ファイル。衝突しても人に頼まず、regenerate が作り直す
+  GENERATED_FILES: openapi/openapi.json frontend/src/api/schema.ts
 
 jobs:
   # Claude Code のアクションは push のイベントに対応していない(Unsupported event type: push で落ちる。#396)。
@@ -131,6 +136,25 @@ jobs:
           ref: ${{ matrix.pr.branch }}
           fetch-depth: 0
 
+      # Claude Code は生成ファイルを作り直せない(PHP・npm を使わせていない)ので、衝突した生成ファイルは develop の版を取らせ、
+      # regenerate が作り直す。どれが衝突したかは、取り込む前に作業ツリーを変えずに調べる(git merge-tree)。
+      # 書き出し先は作業ツリーの外にする(Claude Code が git add で拾わないように)
+      - name: 衝突する生成ファイルを調べる
+        if: steps.live.outputs.go
+        run: |
+          rc=0
+          conflicted=$(git merge-tree --write-tree --name-only --no-messages HEAD "$BASE") || rc=$?
+          # 0: 衝突なし、1: 衝突あり。それ以外は調べられなかった(生成ファイルは作り直さず、Claude Code が人に頼む)
+          if [ "$rc" -gt 1 ]; then
+            echo "::warning::#$PR の衝突するファイルを調べられなかった(git merge-tree の終了コード $rc)"
+            exit 0
+          fi
+          : > "$RUNNER_TEMP/ai-conflict-generated"
+          for f in $GENERATED_FILES; do
+            if tail -n +2 <<<"$conflicted" | grep -qxF "$f"; then echo "$f" >> "$RUNNER_TEMP/ai-conflict-generated"; fi
+          done
+          echo "#$PR で衝突する生成ファイル: $(paste -sd' ' "$RUNNER_TEMP/ai-conflict-generated")"
+
       - uses: anthropics/claude-code-action@v1
         if: steps.live.outputs.go
         with:
@@ -156,10 +180,13 @@ jobs:
             3. 次のどれかに当たる衝突は、自分で選ばずに、下の「人に頼む」をする
                - 両方の意図を同時には満たせない(同じ値・同じ挙動を別々に変えている、片方が消したものをもう片方が使っている)
                - データを消す・DB のマイグレーションの順番が変わる
+               生成したファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)は、人に頼まずに develop の版を取る
+               (`git checkout --theirs <ファイル>` してから `git add <ファイル>`。この取り込みでは --theirs が develop の側)。手で混ぜない。
+               このワークフローの後の手順が、取り込んだ後のコードから作り直して push する(CLAUDE.md の「API を変えたら」と同じ手順)
                - ワークフロー(`.github/workflows/`)の permissions・secret の扱い・起動のきっかけ(on)・外部への送信・外部のアクション(uses)・
                  Claude Code に渡す権限やツールのところ
-               生成したファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`・`package-lock.json`)の衝突は、手で混ぜると壊れるが、
-               どちらを取るかの判断ではない(取り込んだ後に作り直せば決まる)。この環境では作り直すコマンドを流せないので、下の「手元に頼む」をする
+               `package-lock.json` の衝突は、手で混ぜると壊れ、この環境では作り直せないが、どちらを取るかの判断ではない(取り込んだ後に作り直せば決まる)ので、
+               下の「手元に頼む」をする
                ワークフローのファイルでも、上に当たらない衝突は解消してよい(develop にもうある変更を取り込むことで、ワークフローを新しく変えることではない)
             4. 解消したら確かめる: `git diff --check`、衝突の印(<<<<<<< ・======= ・>>>>>>> )が残っていないこと(`git grep -nE '^(<<<<<<<|>>>>>>>) '`)、
                触ったファイルの構文(シェルは `bash -n`、PHP は `php -l`。JSON は Read で読んで確かめる)
@@ -168,7 +195,7 @@ jobs:
                force push はしない。push が拒否されたら(その間に誰かが push した)、何もせずに終える
             6. push したら、PR に次をコメントして終える(先頭の目印は一字も変えない)
                「<!-- ai-dev:agent --> <!-- ai-dev:conflict-resolve sha=${{ env.PICKED_HEAD }} base=${{ env.BASE }} -->
-               develop(${{ env.BASE }} の先頭 7 文字)を取り込んで、コンフリクトを解消した(<コミット>)。」と、ファイルごとにどう混ぜたか(1 行ずつ)
+               develop(${{ env.BASE }} の先頭 7 文字)を取り込んで、コンフリクトを解消した(<コミット>)。」と、ファイルごとにどう混ぜたか(1 行ずつ。生成ファイルは「develop の版を取った。後の手順で作り直す」)
 
             人に頼むときは、push せずに `git merge --abort` で取り込みを取り消し、PR にコメントを書いてから
             `gh pr edit ${{ env.PR }} --add-label needs-human` で `needs-human` を付けて終える(Slack に通知が行く)。
@@ -178,7 +205,7 @@ jobs:
             短く答えられる形(「おすすめで」「B で」など)を示す。並びと形は CLAUDE.md の「人に判断を頼むとき」に従う
             (1 行目に何を決めてほしいか、両側の変更と案ごとの混ぜ方の図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、ぶつかった箇所の細かい説明は最後に畳む)。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
 
-            手元に頼むとき(生成したファイルの衝突など、判断は要らないがこの環境では片付けられない)は、push せずに `git merge --abort` で取り込みを取り消し、
+            手元に頼むとき(`package-lock.json` の衝突など、判断は要らないがこの環境では片付けられない)は、push せずに `git merge --abort` で取り込みを取り消し、
             PR にコメントを書いてから `gh pr edit ${{ env.PR }} --add-label needs-local` で `needs-local` を付けて終える(PC を開いたときに手元の見回りが片付ける)。
             コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:conflict-resolve sha=${{ env.PICKED_HEAD }} base=${{ env.BASE }} --> を付け、
             中身は、手元でそのまま流せる手順(develop の取り込み・衝突したファイルごとの混ぜ方・作り直すコマンド(CLAUDE.md の「API を変えたら」など)・流すテスト)。
@@ -198,6 +225,8 @@ jobs:
           if [ "$local_head" != "$PICKED_HEAD" ] && [ "$local_head" = "$remote_head" ]; then
             echo "$local_head" > .ai-conflict/resolved-head
           fi
+          # 衝突した生成ファイル(regenerate が、解消した head から作り直す)
+          if [ -s "$RUNNER_TEMP/ai-conflict-generated" ]; then cp "$RUNNER_TEMP/ai-conflict-generated" .ai-conflict/generated; fi
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.live.outputs.go
@@ -212,12 +241,156 @@ jobs:
         if: always() && steps.live.outputs.go
         run: gh pr edit "$PR" -R "$REPO" --remove-label ai-in-actions || true
 
-  after:
+  # 衝突した生成ファイルを、resolve が push した head のコードから作り直す(test.yml の backend・frontend と同じ準備)。
+  # PR のコード(composer・npm のスクリプト)を動かすので、読むだけの権限にし、トークンを checkout に残さない(RC-04)。
+  # 作り直したファイルはアーティファクトで after に渡し、push は PR のコードを動かさない after が行う。
+  # services は if で止められないので、resolve を試した PR では MariaDB が毎回立つ(数十秒)
+  regenerate:
     needs: [pick, resolve]
     if: always() && needs.pick.outputs.prs != '[]' && needs.pick.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.pick.outputs.prs) }}
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      PR: ${{ matrix.pr.number }}
+      BRANCH: ${{ matrix.pr.branch }}
+      # 依存ライブラリのインストールで動くコードに、トークンを渡さない。使う手順でだけ渡す
+      GH_TOKEN: ''
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    steps:
+      - uses: actions/download-artifact@v4
+        id: tried
+        continue-on-error: true   # resolve が見送った PR には無い
+        with:
+          name: conflict-resolve-tried-${{ env.PR }}
+          path: .ai-conflict
+
+      # resolve が push していて(解消した head がある)、生成ファイルが衝突していて、その後に誰も push していないときだけ作り直す
+      - name: 作り直すか決める
+        id: need
+        if: steps.tried.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          resolved_head=$(cat .ai-conflict/resolved-head 2>/dev/null || true)
+          if [ ! -s .ai-conflict/generated ] || [ -z "$resolved_head" ]; then
+            echo "#$PR 作り直さない(生成ファイルの衝突が無い、またはこの回で解消して push していない)"
+            exit 0
+          fi
+          head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
+          if [ "$head" != "$resolved_head" ]; then
+            echo "#$PR 作り直さない(解消の後に ${head:0:7} が push された)"
+            exit 0
+          fi
+          echo "#$PR ${head:0:7} から作り直す: $(paste -sd' ' .ai-conflict/generated)"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        if: steps.need.outputs.head
+        with:
+          ref: ${{ steps.need.outputs.head }}
+          path: work
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        if: steps.need.outputs.head
+        with:
+          php-version: '8.4'
+          extensions: pdo_mysql, mbstring, intl
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v7
+        if: steps.need.outputs.head
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: work/frontend/package-lock.json
+
+      # CLAUDE.md の「API を変えたら」と同じ手順。Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す
+      - name: openapi.json を作り直す
+        if: steps.need.outputs.head
+        working-directory: work/backend
+        run: |
+          composer install --no-interaction --prefer-dist
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+          php artisan scramble:export --path=../openapi/openapi.json
+
+      - name: FE の型(schema.ts)を作り直す
+        if: steps.need.outputs.head
+        working-directory: work/frontend
+        run: |
+          npm ci
+          npm run gen:api
+
+      # 変わった生成ファイルだけを after に渡す。作り直しても変わらなければ(develop の版のままで合っていた)渡すものは無い
+      - name: 作り直したファイルを集める
+        if: steps.need.outputs.head
+        env:
+          HEAD_SHA: ${{ steps.need.outputs.head }}
+        run: |
+          mkdir -p .ai-regen
+          echo "$HEAD_SHA" > .ai-regen/head
+          for f in $GENERATED_FILES; do
+            if [ -n "$(git -C work status --porcelain -- "$f")" ]; then
+              mkdir -p ".ai-regen/files/$(dirname "$f")"
+              cp "work/$f" ".ai-regen/files/$f"
+              echo "$f" >> .ai-regen/changed
+            fi
+          done
+          echo "#$PR 作り直して変わったファイル: $(paste -sd' ' .ai-regen/changed 2>/dev/null || echo なし)"
+
+      # 作り直せなかったことを after に伝える(after が人に頼む)
+      - name: 作り直せなかった印を残す
+        if: failure() && steps.need.outputs.head
+        env:
+          HEAD_SHA: ${{ steps.need.outputs.head }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p .ai-regen
+          echo "$HEAD_SHA" > .ai-regen/head
+          echo "$RUN_URL" > .ai-regen/failed
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.need.outputs.head
+        with:
+          name: conflict-regenerated-${{ env.PR }}
+          path: .ai-regen
+          include-hidden-files: true
+          retention-days: 1
+
+  after:
+    needs: [pick, resolve, regenerate]
+    if: always() && needs.pick.outputs.prs != '[]' && needs.pick.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      # regenerate が作り直した生成ファイルを、PR のブランチに push する(このジョブは PR のコードを動かさない)
+      contents: write
       pull-requests: write
       issues: write
       actions: write   # CI の承認待ちの回を承認する。代わりのレビュー・通知・状態のラベルのワークフローを gh workflow run で呼ぶ
@@ -246,6 +419,95 @@ jobs:
         with:
           name: conflict-resolve-tried-${{ env.PR }}
           path: .ai-conflict
+
+      - uses: actions/download-artifact@v4
+        id: regen
+        continue-on-error: true   # 生成ファイルを作り直していない PR には無い
+        with:
+          name: conflict-regenerated-${{ env.PR }}
+          path: .ai-regen
+
+      # 作り直せなかったら、CI の「Check OpenAPI is up to date」が落ちたまま止まるので、手元に頼む(判断は要らない。Slack への通知は下の手順)。
+      # 作り直して変わったファイルがあり、その後に誰も push していなければ、push する
+      # .ai-regen は PR のコードを動かした regenerate が書くので、中身を PR のコードが自由に書ける(RC-04)。
+      # changed の各行は生成ファイルの一覧と完全に一致し、files の中身が通常のファイル(リンクでない・リンクのディレクトリの下でない)のときだけ使う。
+      # 作り直した回の URL は、failed の中身をコメントに埋めずに組み立て直す(regenerate は同じ実行のジョブ)
+      - name: 作り直した生成ファイルを push するか決める
+        id: regen_decide
+        if: steps.tried.outcome == 'success' && steps.regen.outcome == 'success'
+        continue-on-error: true
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          regen_head=$(cat .ai-regen/head)
+          head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
+          if [ "$head" != "$regen_head" ]; then
+            echo "#$PR 作り直した後に ${head:0:7} が push されたので、push しない"
+            exit 0
+          fi
+          failed=
+          [ -s .ai-regen/failed ] && failed="作り直すコマンドが失敗した"
+          if [ -z "$failed" ] && [ -s .ai-regen/changed ]; then
+            while IFS= read -r f; do
+              ok=
+              for g in $GENERATED_FILES; do [ "$f" = "$g" ] && ok=1; done
+              src=".ai-regen/files/$f"
+              if [ -z "$ok" ] || [ ! -f "$src" ] || [ -L "$src" ] || [ "$(realpath -- "$src")" != "$(realpath .)/$src" ]; then
+                echo "::warning::#$PR 作り直したファイルの一覧に、生成ファイルではないか通常のファイルでないものがあるので、push しない"
+                failed="作り直したファイルの一覧が正しい形でなかった"
+                break
+              fi
+            done < .ai-regen/changed
+          fi
+          if [ -n "$failed" ]; then
+            gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
+          develop を取り込んだ後の生成ファイル($(paste -sd' ' .ai-conflict/generated))を作り直そうとしたが、${failed}。手元で作り直して push してほしい(CLAUDE.md の「API を変えたら」の手順)。
+
+          作り直した回: $RUN_URL"
+            gh pr edit "$PR" -R "$REPO" --add-label needs-local
+            exit 0
+          fi
+          if [ ! -s .ai-regen/changed ]; then
+            echo "#$PR 作り直しても生成ファイルは変わらなかった(develop の版のままで合っている)"
+            exit 0
+          fi
+          echo "push=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        if: steps.regen_decide.outputs.push
+        with:
+          ref: ${{ matrix.pr.branch }}
+          path: .ai-push
+          persist-credentials: false
+
+      # GITHUB_TOKEN で push する(Claude の App のトークンは claude-code-action の外では使えない)。このコミットは生成ファイルしか変えないので、
+      # ワークフローのファイルへの書き込み権限は要らない。GITHUB_TOKEN の push では CI が起きないが、下の手順の ci-rerun.sh が走らせる。
+      # トークンは checkout に残さず、push のときだけ渡す。push が拒否されても(その間に誰かが push した)、下の手順は続ける
+      - name: 作り直した生成ファイルを push する
+        if: steps.regen_decide.outputs.push
+        continue-on-error: true
+        working-directory: .ai-push
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$(cat ../.ai-regen/head)" ]; then
+            echo "#$PR 作り直した後に push されたので、push しない"
+            exit 0
+          fi
+          mapfile -t files < ../.ai-regen/changed
+          for f in "${files[@]}"; do cp "../.ai-regen/files/$f" "$f"; done
+          git add -- "${files[@]}"
+          # コミットメッセージは CLAUDE.md の形(issue 番号はブランチ名 issue-<番号>-… から。無ければ付けない)
+          n=$(sed -nE 's/^issue-([0-9]+)-.*/\1/p' <<<"$BRANCH")
+          msg=("-m" "${n:+issue-$n: }develop を取り込んだ後の生成ファイルを作り直す(${files[*]})")
+          if [ -n "$n" ]; then msg+=("-m" "Refs #$n"); fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q "${msg[@]}"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" push origin "HEAD:$BRANCH"
+          new_head=$(git rev-parse HEAD)
+          # 下の手順が、この回で解消した head として CI とレビューを続ける
+          echo "$new_head" > ../.ai-conflict/resolved-head
+          gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
+          develop を取り込んだ後の生成ファイルを、決まった手順(CLAUDE.md の「API を変えたら」)で作り直して push した(${new_head:0:7})。
+          $(sed 's/^/- /' ../.ai-regen/changed)"
 
       - name: CI・レビュー・通知を続ける
         if: steps.tried.outcome == 'success'

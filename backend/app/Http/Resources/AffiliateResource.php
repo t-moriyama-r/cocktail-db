@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Affiliate;
 use App\Services\Affiliate\AffiliateFreshness;
 use App\Services\Affiliate\AffiliateSearchUrls;
+use App\Services\Affiliate\AmazonClient;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,6 +17,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * - amazon・rakuten: 提供元ごとの値と、取った時刻(fetched_at)。期限(AffiliateFreshness)を過ぎた値は返さず、
  *   検索結果のリンクだけを名前から組み立てて返す(docs/decisions/affiliate-freshness.md の 2・4)。一度も商品が
  *   見つかっていない提供元は、旧と同じく検索結果のリンクも null
+ * - Amazon の認証情報かパートナータグが設定に無いあいだ(AmazonClient::isConfigured() が偽)は、Creators API を
+ *   使えないので、Amazon の値は期限内でも返さず、名前から組み立てた検索結果のリンクだけを返す(#136)。商品が
+ *   一度も見つかっていなくても返す
  * - human: 手で入れた値。期限なしで返す
  *
  * @property Affiliate $resource
@@ -32,7 +36,8 @@ class AffiliateResource extends JsonResource
         $searchUrls = app(AffiliateSearchUrls::class);
         $now = now();
 
-        $amazonFresh = AffiliateFreshness::isFresh($affiliate->amazon_fetched_at, $now);
+        $amazonConfigured = app(AmazonClient::class)->isConfigured();
+        $amazonFresh = $amazonConfigured && AffiliateFreshness::isFresh($affiliate->amazon_fetched_at, $now);
         $amazonFound = $affiliate->amazon_asin !== null || $affiliate->amazon_detail_url !== null;
         // 画像は、旧の画面と同じく中くらいのものを出す
         $amazon = [
@@ -42,7 +47,7 @@ class AffiliateResource extends JsonResource
             'detail_url' => $amazonFresh ? $affiliate->amazon_detail_url : null,
             'search_url' => $amazonFresh
                 ? $affiliate->amazon_search_url
-                : ($amazonFound ? $searchUrls->amazon($name) : null),
+                : ($amazonFound || ! $amazonConfigured ? $searchUrls->amazon($name) : null),
             'fetched_at' => $amazonFresh ? $affiliate->amazon_fetched_at : null,
         ];
 
