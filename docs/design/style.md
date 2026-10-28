@@ -74,7 +74,7 @@ npm run dev
 
 | トークン | 値 | 使うところ |
 |---|---|---|
-| 動画のある行のリンク `--color-has-movie` | `#ff6600`(旧と同じ) | カクテルの一覧の表で、動画のあるカクテルの行のリンク(#298) |
+| 動画のある行のリンク `--color-has-movie` | `#c24e00`(旧は `#ff6600` だが、白地で 2.94:1 のため 4.5:1 を満たすよう濃くした。#298) | カクテルの一覧の表で、動画のあるカクテルの行のリンク(#298) |
 | YouTube のアイコン `--color-youtube` | `#c4302b`(旧と同じ) | カクテルの一覧の表の、動画の列のアイコン(#298) |
 
 案 A の色は旧の画面から取った(ヘッダーの水色 `#99DDFF`・リンクの青 `#337ab7`・見出しの線 `#4499FF`・区切りの線 `#BBDDFF`)。
@@ -88,7 +88,7 @@ npm run dev
 
 ## 幅の区切り
 
-旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。
+旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。例外は、カクテルの一覧の表のベースの列を 700px 未満で隠す `max-width: 699px` だけ(旧と同じ見た目にするため。#298。テストに許す値として書いてある)。
 
 | 名前 | 幅 | 変わるもの(試作) |
 |---|---|---|

@@ -115,6 +115,13 @@
   }
 }
 
+/* 700px 未満: 旧と同じくベースの列も出さない(幅の区切りの例外。docs/design/style.md の「幅の区切り」) */
+@media (max-width: 699px) {
+  .base {
+    display: none;
+  }
+}
+
 @media (min-width: 960px) {
   .base {
     max-width: 180px;
