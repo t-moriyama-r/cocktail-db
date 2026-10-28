@@ -7,6 +7,7 @@
 - stg 環境(ステージング): https://cocktail-stg.trc-vlackhistory.net/ (`staging`。同上)
 - BE: Laravel 13(PHP 8.4)。`/api/*` が API、それ以外のパスは React の SPA を返す
 - FE: React + Vite(TypeScript)。ビルド結果は `backend/public/spa` に出力し、Laravel の `resources/views/spa.blade.php` がマニフェストを読んで HTML を組み立てる
+- スタイル: CSS Modules + CSS 変数(下の「画面のスタイル」)
 - 型の共有: Laravel のコードから Scramble で `openapi/openapi.json` を出力し、FE は openapi-typescript で型を生成して openapi-fetch で呼ぶ
 - サーバー: mixhost(共用レンタルサーバー、cPanel)。GitHub Actions から SSH(rsync)でデプロイ
 
@@ -20,7 +21,9 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy-dev.yml   develop → dev 環境
 .github/workflows/deploy-stg.yml   staging → stg 環境
 .github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
-.github/workflows/branch-flow.yml  staging・release への PR の元のブランチを確かめる
+.github/workflows/branch-flow.yml  staging・release への PR の元のブランチ(release 向けはタイトルの版も)を確かめる
+.github/workflows/release-tag.yml  release にマージした PR のタイトルの版で、タグと GitHub Release を作る
+.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画。画面を変えた PR は幅の区切りごと)があるかを確かめる
 ```
 
 サーバー上の配置:
@@ -52,6 +55,19 @@ npm run dev                  # http://localhost:5173 。/api は Laravel に流�
 ```
 
 Laravel から本番と同じ形で確かめるときは、`frontend` で `npm run build` してから http://127.0.0.1:8000 を開く。
+
+## 画面のスタイル
+
+CSS Modules(画面ごとの `*.module.css`)と CSS 変数で書く。色・余白・文字の大きさの変数と幅の区切り(600px・960px・1264px。旧と同じ)は `frontend/src/styles/` にある。
+
+選んだ理由(候補の比べ方は #294 と `docs/design/style.md` の「方式の候補」):
+
+- 依存を足さずに始められる。Vite が CSS Modules を標準で扱い、実行時のコードも無い(Tailwind CSS・vanilla-extract は依存を足す)
+- 旧の SCSS(幅の区切りなど)をほぼそのまま CSS に直せる
+- 見た目の違いを変数に寄せられる。#294 の試作では、画面の CSS を変えずに変数だけで 3 案を切り替えられた
+- oxlint は CSS を見ないので、ぶつからない。クラス名に型が付かないのは弱いところで、要るとなったら後から型を出す道具を足す
+
+書き方と見た目の基準(色・余白・文字の大きさ・幅の区切り)は `docs/design/style.md` にある。
 
 ## API を変えたら
 
@@ -89,6 +105,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
+- `staging`・`release` への PR のタイトルは、`staging` 向けが作った日(`【運用】staging 2026-10-26`)、`release` 向けが本番に出す版(`【運用】release v1.2.0`。SemVer)。`release` にマージすると、その版のタグと GitHub Release ができる(`release-tag.yml`)。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9
 - `staging`・`release` への PR は、自動ではマージしない。CI が緑で AI レビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 

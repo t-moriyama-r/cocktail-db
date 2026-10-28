@@ -1,0 +1,84 @@
+{
+  "errors": [
+    {
+      "code": "ItemNotAccessible",
+      "message": "The ItemId B000TEST09 is not accessible through the Creators API."
+    }
+  ],
+  "itemResults": {
+    "items": [
+      {
+        "asin": "B000TEST03",
+        "detailPageURL": "https://www.amazon.co.jp/dp/B000TEST03?tag=example-22&linkCode=ogi&language=ja_JP&th=1&psc=1",
+        "images": {
+          "primary": {
+            "small": {
+              "height": 75,
+              "url": "https://m.media-amazon.com/images/I/EXAMPLE3._SL75_.jpg",
+              "width": 56
+            },
+            "medium": {
+              "height": 160,
+              "url": "https://m.media-amazon.com/images/I/EXAMPLE3._SL160_.jpg",
+              "width": 120
+            },
+            "large": {
+              "height": 500,
+              "url": "https://m.media-amazon.com/images/I/EXAMPLE3._SL500_.jpg",
+              "width": 375
+            }
+          }
+        },
+        "itemInfo": {
+          "title": {
+            "displayValue": "サンプル ウォッカ 750ml",
+            "label": "Title",
+            "locale": "ja_JP"
+          }
+        },
+        "offersV2": {
+          "listings": [
+            {
+              "availability": {
+                "type": "IN_STOCK"
+              },
+              "isBuyBoxWinner": true,
+              "price": {
+                "money": {
+                  "amount": 1280.0,
+                  "currency": "JPY",
+                  "displayAmount": "￥1,280"
+                }
+              },
+              "violatesMAP": false
+            }
+          ]
+        },
+        "parentASIN": "B000PARENT"
+      },
+      {
+        "asin": "B000TEST01",
+        "detailPageURL": "https://www.amazon.co.jp/dp/B000TEST01?tag=example-22&linkCode=ogi&language=ja_JP&th=1&psc=1",
+        "images": {
+          "primary": {
+            "small": {
+              "height": 75,
+              "url": "https://m.media-amazon.com/images/I/EXAMPLE1._SL75_.jpg",
+              "width": 56
+            }
+          }
+        },
+        "itemInfo": {
+          "title": {
+            "displayValue": "サンプル ジン 700ml",
+            "label": "Title",
+            "locale": "ja_JP"
+          }
+        },
+        "offersV2": {
+          "listings": []
+        }
+      }
+    ]
+  }
+}

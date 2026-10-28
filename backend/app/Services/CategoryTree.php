@@ -10,6 +10,7 @@ use App\Models\Category;
 use App\Models\CategoryClosure;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
+use App\Support\NameNormalizer;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -334,6 +335,16 @@ class CategoryTree
     }
 
     /**
+     * 有名な銘柄が要らないノード(isFamousBrandOptional が true になるノード)の ID を、列 id のサブクエリで返す。
+     *
+     * otherNodeIds と同じく、ノード 1 つを受ける判定をクエリの中で使える形でも持つ。
+     */
+    public function famousBrandOptionalNodeIds(): QueryBuilder
+    {
+        return $this->nodeIdsWithRootRoleIn(self::FAMOUS_BRAND_OPTIONAL_ROLES);
+    }
+
+    /**
      * $node のすぐ下の子を、兄弟の並び順で返す。
      *
      * @return Collection<int, Category>
@@ -344,6 +355,32 @@ class CategoryTree
         $this->orderAsSiblings($children);
 
         return $children->get();
+    }
+
+    /**
+     * 名前が $name に一致するノード。名前は name_search の形(NameNormalizer)にそろえて比べる。
+     *
+     * 同じ名前のノードが複数あれば、浅いもの(祖先の少ないもの)、同じ深さなら ID の小さいもの。旧はカテゴリをミドルより
+     * 先に探していたので、浅い方を先にする。$withRoots が false なら根(旧の種別)を除く。$within を渡せば、
+     * その子孫(自分は除く)の中から探す。
+     */
+    public function findByName(string $name, bool $withRoots = true, ?Category $within = null): ?Category
+    {
+        $idColumn = (new Category)->qualifyColumn('id');
+        $depth = CategoryClosure::query()
+            ->selectRaw('count(*)')
+            ->whereColumn('descendant_id', $idColumn);
+
+        return Category::query()
+            ->where('name_search', NameNormalizer::normalize($name))
+            ->when(! $withRoots, fn (EloquentBuilder $query) => $query->has('ancestors'))
+            ->when($within !== null, fn (EloquentBuilder $query) => $query->whereIn(
+                $idColumn,
+                CategoryClosure::query()->select('descendant_id')->where('ancestor_id', $within?->getKey())->where('depth', '>', 0),
+            ))
+            ->orderBy($depth)
+            ->orderBy($idColumn)
+            ->first();
     }
 
     /**

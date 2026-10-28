@@ -23,7 +23,7 @@ main() {
 	setup_fake_gh
 
 	check TC-232-01 'コンフリクトしている ready の PR を選ぶ' "$(pr)" '[]' 1
-	check TC-232-02 'draft も選ぶ' "$(pr '.isDraft = true')" '[]' 1
+	check TC-410-01 'draft は選ばない' "$(pr '.isDraft = true')" '[]' ''
 	check TC-232-03 'needs-approval(人のマージ待ち)も選ぶ' "$(pr '.labels = [{name: "needs-approval"}]')" '[]' 1
 	check TC-232-04 'コンフリクトしていない' "$(pr '.mergeable = "MERGEABLE"')" '[]' ''
 	check_unknown TC-232-05 'UNKNOWN の間は取り直し、CONFLICTING になれば選ぶ'
@@ -41,7 +41,7 @@ main() {
 	check TC-232-17 '人の書いた目印は数えない' "$(pr)" "[$(comment User "<!-- ai-dev:conflict-resolve sha=$HEAD base=$BASE -->")]" 1
 	check TC-232-18 '目印の後に大きなコメントがあっても見落とさない' "$(pr)" \
 		"[$(comment Bot "<!-- ai-dev:conflict-resolve sha=$HEAD base=$BASE -->"), $(jq -nc '{user: {type: "Bot"}, body: ("x" * 300000)}')]" ''
-	check_all TC-232-19 '番号なしなら開いている PR をすべて見て、コンフリクトしているものだけを選ぶ'
+	check_all TC-232-19 '番号なしなら開いている PR をすべて見て、コンフリクトしている ready のものだけを選ぶ'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -115,7 +115,7 @@ check_all() {
 	pr '.mergeable = "MERGEABLE"' >"$FAKE/pr-2.json"
 	pr '.isDraft = true' >"$FAKE/pr-3.json"
 	for n in 1 2 3; do echo '[]' >"$FAKE/comments-$n.json"; done
-	assert "$1" "$2" 1,3 "$(run)"
+	assert "$1" "$2" 1 "$(run)"
 }
 
 assert() {

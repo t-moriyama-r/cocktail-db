@@ -2,8 +2,6 @@
 
 namespace App\Services\LegacyImport;
 
-use App\Models\LegacyIdMap;
-use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -20,28 +18,27 @@ final class MiscImporter implements LegacyImporter
 {
     public function import(): array
     {
-        $legacy = DB::connection('legacy');
         $tables = [];
 
-        DB::transaction(function () use ($legacy, &$tables) {
-            $tables[] = $this->copyKeepingIds($legacy, 'm_method', 'methods', fn (array $row) => [
+        DB::transaction(function () use (&$tables) {
+            $tables[] = $this->copyKeepingIds('m_method', 'methods', fn (array $row) => [
                 'id' => $row['id'],
                 'name' => $row['name'],
                 'name_eng' => $row['name_eng'],
                 'description' => $row['description'],
             ]);
-            $tables[] = $this->copyKeepingIds($legacy, 'm_ice', 'ices', fn (array $row) => [
+            $tables[] = $this->copyKeepingIds('m_ice', 'ices', fn (array $row) => [
                 'id' => $row['id'],
                 'name' => $row['name'],
                 'name_eng' => $row['name_eng'],
             ]);
             // 用語辞典が分類を外部キーで指すので、分類を先に入れる
-            $tables[] = $this->copyKeepingIds($legacy, 'm_dictionary_category', 'dictionary_categories', fn (array $row) => [
+            $tables[] = $this->copyKeepingIds('m_dictionary_category', 'dictionary_categories', fn (array $row) => [
                 'id' => $row['id'],
                 'name' => $row['name'],
                 'name_eng' => $row['name_eng'],
             ]);
-            $tables[] = $this->copyKeepingIds($legacy, 't_dictionary', 'dictionaries', fn (array $row) => [
+            $tables[] = $this->copyKeepingIds('t_dictionary', 'dictionaries', fn (array $row) => [
                 'id' => $row['id'],
                 'dictionary_category_id' => $row['category'],
                 'name' => $row['name'],
@@ -54,18 +51,19 @@ final class MiscImporter implements LegacyImporter
                 'image_txt' => $row['image_txt'],
                 'image_url' => $row['image_url'],
             ]);
-            $tables[] = $this->copyByName($legacy, 'paraphrases', 'paraphrases', fn (array $row) => [
+            $this->linkMethodsToDictionaries();
+            $tables[] = $this->copyByName('paraphrases', 'paraphrases', fn (array $row) => [
                 'name' => $row['name'],
                 'converted' => $row['converted'],
                 'middle' => $row['middle'],
                 'note' => $row['note'],
                 'command' => $row['command'],
             ]);
-            $tables[] = $this->copyByName($legacy, 'skip_db', 'skip_words', fn (array $row) => [
+            $tables[] = $this->copyByName('skip_db', 'skip_words', fn (array $row) => [
                 'name' => $row['name'],
             ]);
             // twitter_id は移さない(X でのログインはやめた。docs/schema.md の「users」)
-            $tables[] = $this->copyKeepingIds($legacy, 'users', 'users', fn (array $row) => [
+            $tables[] = $this->copyKeepingIds('users', 'users', fn (array $row) => [
                 'id' => $row['id'],
                 'name' => $row['name'],
                 'email' => $row['email'],
@@ -88,28 +86,34 @@ final class MiscImporter implements LegacyImporter
      * @param  callable(array<mixed>): array<string, mixed>  $toNewRow
      * @return string 書いた新しい表
      */
-    private function copyKeepingIds(Connection $legacy, string $legacyTable, string $newTable, callable $toNewRow): string
+    private function copyKeepingIds(string $legacyTable, string $newTable, callable $toNewRow): string
     {
-        $rows = $this->legacyRows($legacy, $legacyTable, 'id', $toNewRow);
-        $this->upsert($newTable, $rows, 'id');
-
-        $newIdByLegacyId = [];
-        foreach ($rows as $row) {
-            $id = is_numeric($row['id']) ? (int) $row['id'] : throw new \UnexpectedValueException("{$legacyTable} の id が数でない");
-            $newIdByLegacyId[$id] = $id;
-        }
-        LegacyIdMap::record($legacyTable, $newTable, $newIdByLegacyId);
+        KeptIdCopier::copy($legacyTable, $newTable, $toNewRow);
 
         return $newTable;
+    }
+
+    /**
+     * 技法に、その技法を説明する用語(methods.dictionary_id)を入れる。
+     *
+     * 旧は対応を持たず、技法の ID と用語の ID がたまたま同じ(1〜6)ことに頼って用語へリンクしていた。旧の本番の
+     * データでは技法と同じ名前の用語が 1 つずつあるので、ID ではなく名前の一致で結び付ける。同じ名前の用語が
+     * 無ければ null、2 つ以上あれば ID の小さい方にする。
+     */
+    private function linkMethodsToDictionaries(): void
+    {
+        DB::table('methods')->update([
+            'dictionary_id' => DB::raw('(SELECT MIN(dictionaries.id) FROM dictionaries WHERE dictionaries.name = methods.name)'),
+        ]);
     }
 
     /**
      * @param  callable(array<mixed>): array<string, mixed>  $toNewRow
      * @return string 書いた新しい表
      */
-    private function copyByName(Connection $legacy, string $legacyTable, string $newTable, callable $toNewRow): string
+    private function copyByName(string $legacyTable, string $newTable, callable $toNewRow): string
     {
-        $this->upsert($newTable, $this->legacyRows($legacy, $legacyTable, 'name', $toNewRow), 'name');
+        KeptIdCopier::upsert($newTable, $this->legacyRows($legacyTable, 'name', $toNewRow), 'name');
 
         return $newTable;
     }
@@ -118,30 +122,8 @@ final class MiscImporter implements LegacyImporter
      * @param  callable(array<mixed>): array<string, mixed>  $toNewRow
      * @return list<array<string, mixed>>
      */
-    private function legacyRows(Connection $legacy, string $table, string $orderBy, callable $toNewRow): array
+    private function legacyRows(string $table, string $orderBy, callable $toNewRow): array
     {
-        $rows = [];
-        foreach ($legacy->table($table)->orderBy($orderBy)->get() as $row) {
-            $rows[] = $toNewRow((array) $row);
-        }
-
-        return $rows;
-    }
-
-    /**
-     * 同じキーの行があれば、キー以外の列を旧の値で書き直す。
-     *
-     * @param  list<array<string, mixed>>  $rows
-     * @param  'id'|'name'  $uniqueBy
-     */
-    private function upsert(string $table, array $rows, string $uniqueBy): void
-    {
-        if ($rows === []) {
-            return;
-        }
-
-        // 更新する列を空にすると、upsert は重複を無視せずにただの INSERT になるので、キー自身を書き直す
-        $columns = array_values(array_diff(array_keys($rows[0]), [$uniqueBy]));
-        DB::table($table)->upsert($rows, [$uniqueBy], $columns === [] ? [$uniqueBy] : $columns);
+        return array_map($toNewRow(...), LegacyRows::ordered($table, $orderBy));
     }
 }

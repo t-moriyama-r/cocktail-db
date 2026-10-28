@@ -65,3 +65,96 @@ concurrency:
       && format('ai-claude-review-{0}', github.event.issue.number || inputs.number)
       || format('ai-claude-review-run-{0}', github.run_id) }}
 ```
+
+## RC-04: checkout に資格情報を残さない
+
+追加: 2026-10-27 / 出た PR: [#86](https://github.com/t-moriyama-r/cocktail-db/pull/86)・[#237](https://github.com/t-moriyama-r/cocktail-db/pull/237)
+
+`actions/checkout` は既定で、ジョブのトークンを `.git/config` に書き残す。その後に動くもの(依存のインストールスクリプト・PR 側のスクリプト・Claude Code)がトークンを読めて、ジョブの書き込みの権限を使える。
+
+- checkout には `persist-credentials: false` を付ける。push が要るジョブだけ外し、外す理由をコメントに書く
+- 書き込みの権限を持つジョブ(`pull_request_target`・`pull_request_review` など)で、PR 側のコードを checkout して動かさない。スクリプトは既定のブランチから取る
+
+```yaml
+# 良い: 既定のブランチのスクリプトだけを取り、トークンを残さない(ai-auto-merge.yml)
+- uses: actions/checkout@v6
+  with:
+    ref: ${{ github.event.repository.default_branch }}
+    path: .ai-dev
+    sparse-checkout: .github/scripts
+    persist-credentials: false
+```
+
+## RC-05: 目印・キーワードで判定するときは、書いた人も確かめる
+
+追加: 2026-10-27 / 出た PR: [#146](https://github.com/t-moriyama-r/cocktail-db/pull/146)・[#178](https://github.com/t-moriyama-r/cocktail-db/pull/178)・[#196](https://github.com/t-moriyama-r/cocktail-db/pull/196)
+
+公開リポジトリでは、誰でも PR・issue にコメントを書ける。コメントの目印(`<!-- ai-dev:... -->`)や本文のキーワード(`Review limit reached` など)だけで判定すると、外の人が同じ文字列を書くだけで、見回りから外す・通知に自分の文を載せる・実行を取り消す、ができてしまう。
+
+- 目印・キーワードで判定するときは、書いた人(`author_association` がオーナー・メンバーか、`user.login` が決まった bot か)も条件に入れる。`.user.type == "Bot"` だと、どの GitHub App の bot でも通る。Bot 全般を信頼するなら、その前提を書き、そうでなければ `user.login` の許可リストにする
+- ワークフローの `if`・`concurrency` で本文を見るときも、投稿者を一緒に見る
+
+```jq
+# 良い: 信頼できる人か bot が書いたものから、目印のあるコメントを選ぶ(notify-needs-human.yml)
+# `.user.type == "Bot"` は Bot 全般を信頼する前提。絞るなら `.user.login` の許可リストにする
+["OWNER","MEMBER","COLLABORATOR"] as $trusted
+  | $comments | map(select((.author_association as $a | $trusted | index($a)) or .user.type == "Bot"))
+  | map(select(.body | contains("ai-dev:\($label)"))) | last
+```
+
+## RC-06: GitHub の API は、全部のページを取ってから数える
+
+追加: 2026-10-27 / 出た PR: [#196](https://github.com/t-moriyama-r/cocktail-db/pull/196)・[#202](https://github.com/t-moriyama-r/cocktail-db/pull/202)
+
+GraphQL の `first: 100`、`gh pr view --json commits`(先頭 100 件)などは、それより多いと黙って途中までを返す。「返信待ちが 0 件」「いちばん新しいコミット」を、途中までの結果で判定してしまう。
+
+- 件数が上限を超えうるものは、`--paginate`(GraphQL は `pageInfo { hasNextPage endCursor }` と `$endCursor`)で全部取る。`--paginate` はページごとに結果を出すので、最後に合計する
+- いちばん新しいコミットは `headRefOid` で取る。`.commits[-1]` を使わない
+
+```bash
+# 良い: 全ページを取り、ページごとの数を足す(unanswered-review-threads.sh)
+gh api graphql --paginate -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$number" -f query='
+  query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+    repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $endCursor) { pageInfo { hasNextPage endCursor } nodes { isResolved } } } } }' \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length' | jq -s add
+```
+
+## RC-07: 判断する直前に、今の状態を取り直す
+
+追加: 2026-10-27 / 出た PR: [#146](https://github.com/t-moriyama-r/cocktail-db/pull/146)・[#196](https://github.com/t-moriyama-r/cocktail-db/pull/196)・[#237](https://github.com/t-moriyama-r/cocktail-db/pull/237)
+
+候補を選ぶジョブと、それを処理するジョブ(または同じジョブの後ろのほう)のあいだには、数十分〜数時間空くことがある。そのあいだに人がラベルを付け外しした・push があった・別の実行が先に処理した、という変化を見ずに、選んだときの状態で処理すると、二重の通知・古いコミットでの判断・人が止めたものの続行が起きる。
+
+- Claude Code を動かす・ラベルを付ける・通知する直前に、PR・issue の今の状態(ラベル・head・開いているか)を取り直し、選んだときと違えば見送る
+- 「処理した」という目印は、選んだときのコミット(sha)に結び付けて書く
+
+```yaml
+# 良い: イベントのラベルはコメントした時点のもの。動く前に、今も付いているかを取り直す(ai-decision-loop.yml)
+- name: いまも needs-decision が付いているか
+  id: live
+  run: |
+    labels=$(gh issue view "$ISSUE" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
+    if [[ ",$labels," == *",needs-decision,"* ]]; then echo "open=true" >> "$GITHUB_OUTPUT"; fi
+```
+
+## RC-08: 画面を変える PR の証跡を、幅の区切りごとにそろえる
+
+追加: 2026-10-28 / 出た PR: [#427](https://github.com/t-moriyama-r/cocktail-db/pull/427)(オーナーの依頼でルールにした。#432)
+
+FE の画面は、幅の区切り(xs 〜599px・sm 600px〜・md 960px〜・lg 1264px〜)で見た目が変わる。証跡を「PC 幅」と「スマホ幅 375px」の 2 つだけで撮ると、その間の幅(sm・md)で崩れていても証跡に出ない。
+
+- FE の画面を変える PR の「## 証跡」は、`docs/design/style.md` の「証跡を撮る幅」の 4 つ(xs 375px・sm 768px・md 1024px・lg 1440px)すべてで、修正前後の静止画をそろえる。比較画像は幅ごとに 1 枚。動画は操作で変わるものがある幅で撮る(少なくとも lg と xs)
+- 区切りの境目(599/600px・959/960px)で出し方を変える CSS を足した・変えたときは、境目の両側の幅もそろえる
+- 幅によって変わらないことが明らかな変更(文言だけなど)でも、4 つの幅を省かない
+- 撮った幅は `<数字>px` で書く(`evidence-gate.sh` が数える)。`<!-- ai-dev:no-viewport-evidence 理由 -->` で検査を飛ばしている PR は、理由のとおり画面に出ない変更か(純関数・型・テストだけか)を差分で確かめる
+
+```markdown
+<!-- 悪い: sm・md の幅が無い -->
+## 証跡
+PC 幅(1440px)とスマホ幅(375px)の修正前・修正後
+
+<!-- 良い: 区切りごとに 1 つずつ撮り、幅を書く -->
+## 証跡
+xs 375px・sm 768px・md 1024px・lg 1440px の修正前・修正後(比較画像は幅ごとに 1 枚)
+```
