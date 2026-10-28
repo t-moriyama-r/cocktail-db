@@ -66,6 +66,9 @@ main() {
 	check TC-385-15 'staging 向けで、指摘に返信が済み未解決のスレッドがある' '.baseRefName = "staging" | .unresolvedThreads = 2 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-16 'staging 向けで、返信待ちの指摘があり未解決' '.baseRefName = "staging" | .unansweredThreads = 1 | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-17 'release 向けで、必須のチェックが付いていない' '.baseRefName = "release" | .mergeStateStatus = "BLOCKED"' '状態:CI未実行'
+	check TC-456-01 'needs-local は手元の作業待ち' '.labels = ["needs-local"] | .failedChecks = 1' '状態:手元の作業待ち'
+	check TC-456-02 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-456-03 '下書きは、手元の作業待ちより先' '.isDraft = true | .labels = ["needs-local"]' '状態:作業中'
 
 	# facts: gh をスタブにして、必須のチェックの終了コードごとに数えられるかを確かめる
 	check_checks TC-385-18 '必須のチェックが失敗(gh は終了コード 1 で、JSON を標準出力に出す)' 1 '[{"bucket":"fail"},{"bucket":"pass"}]' '' '1 0'

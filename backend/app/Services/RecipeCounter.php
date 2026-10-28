@@ -47,17 +47,7 @@ class RecipeCounter
         }
 
         DB::transaction(function () use ($ids) {
-            // カクテルの ID → 数えた材料の行の数。数える行の無いカクテルは入らない
-            $counts = [];
-            $rows = $this->countedIngredients()
-                ->whereIn('cocktail_id', $ids)
-                ->groupBy('cocktail_id')
-                ->selectRaw('cocktail_id, COUNT(*) AS counted')
-                ->toBase()
-                ->get();
-            foreach ($rows as $row) {
-                $counts[self::toInt($row->cocktail_id)] = self::toInt($row->counted);
-            }
+            $counts = $this->countsByCocktail($ids);
 
             // 数の種類は材料の行数の上限(旧は 11 行)までしか無いので、同じ数のカクテルをまとめて 1 文で書く
             $idsByCount = [];
@@ -68,6 +58,35 @@ class RecipeCounter
                 Cocktail::query()->whereKey($sameCountIds)->toBase()->update(['recipe_count' => $count]);
             }
         });
+    }
+
+    /**
+     * カクテルの ID → 材料の数。何も書かない。$cocktailIds が null なら、すべてのカクテルを数える。
+     *
+     * 数える材料の行が 1 つも無いカクテルは入らない(材料の数は 0)。カクテルごとに count を呼ぶと
+     * カクテルの数だけクエリが増えるので、まとめて 1 文で数える。
+     *
+     * @param  list<int>|null  $cocktailIds
+     * @return array<int, int>
+     */
+    public function countsByCocktail(?array $cocktailIds = null): array
+    {
+        $query = $this->countedIngredients();
+        if ($cocktailIds !== null) {
+            $query->whereIn('cocktail_id', $cocktailIds);
+        }
+
+        $counts = [];
+        $rows = $query
+            ->groupBy('cocktail_id')
+            ->selectRaw('cocktail_id, COUNT(*) AS counted')
+            ->toBase()
+            ->get();
+        foreach ($rows as $row) {
+            $counts[self::toInt($row->cocktail_id)] = self::toInt($row->counted);
+        }
+
+        return $counts;
     }
 
     /**

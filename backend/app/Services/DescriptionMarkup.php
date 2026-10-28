@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Brand;
 use App\Models\Category;
-use App\Models\CategoryClosure;
 use App\Models\Cocktail;
 use App\Models\Dictionary;
 use App\Support\NameNormalizer;
@@ -20,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  */
 class DescriptionMarkup
 {
+    public function __construct(private readonly CategoryTree $tree) {}
+
     /**
      * 片仮名の並び(旧と同じ。2 文字以上で、先頭は長音・中黒でない)。名前が一致すれば記法に置き換える。
      */
@@ -37,19 +38,29 @@ class DescriptionMarkup
     ];
 
     /**
+     * ID の記法(`@c12@` など)。種類の英字と、0 で始まらない数字。
+     */
+    private const ID_REFERENCE = '@([nNcCbBdD])([1-9][0-9]*)@';
+
+    /**
      * 編集で開くときに名前を添える、ID の記法。
      */
-    private const ID_REFERENCE_PATTERN = '/@([nNcCbBdD])([1-9][0-9]*)@/';
+    private const ID_REFERENCE_PATTERN = '/'.self::ID_REFERENCE.'/';
+
+    /**
+     * ID の記法の外にある @(全角の ＠ も)。ID の記法を飛ばし(`(*SKIP)(*FAIL)`)、残った @ に一致する(#392)。
+     */
+    private const STRAY_AT_PATTERN = '/'.self::ID_REFERENCE.'(*SKIP)(*FAIL)|[@＠]/u';
+
+    /**
+     * 422 のメッセージに入れる、残った @ の前と後ろの文字数。
+     */
+    private const STRAY_AT_CONTEXT = 5;
 
     /**
      * 名前で書いた記法(`@c名前@`)。旧と同じく、@ の後の英字 1 文字と、@ を含まない 1 文字以上。
      */
     private const NAMED_REFERENCE_PATTERN = '/@([a-zA-Z])([^@]+)@/';
-
-    /**
-     * 閉じていない記法(文末の `@c12` など)。旧と同じく、@ と英字の後が数字のときだけ、記法を書くつもりだったとみなす。
-     */
-    private const UNCLOSED_REFERENCE_PATTERN = '/@[a-zA-Z]([^@]*)$/';
 
     /**
      * 編集で開くときに添えた名前(`{!ラム!}`)。
@@ -63,7 +74,7 @@ class DescriptionMarkup
      *
      * @param  string  $attribute  422 のエラーを付ける入力の名前
      *
-     * @throws ValidationException 記法が閉じていない・記法の種類が無い・名前で書いた記法の名前が見つからないとき(422)
+     * @throws ValidationException 記法の種類が無い・名前で書いた記法の名前が見つからない・記法の外に @ が残るとき(422)
      */
     public function toStored(?string $text, string $attribute = 'description'): ?string
     {
@@ -76,6 +87,8 @@ class DescriptionMarkup
         }
 
         $text = $this->resolveNamedReferences($text, $attribute);
+        // 自動リンクが記法を足す前に確かめる。足した後だと、壊れた記法の残りが記法と混ざって見分けられない
+        $this->rejectStrayAtMarks($text, $attribute);
 
         foreach (self::KANJI_PATTERNS as $pattern) {
             $text = (string) preg_replace_callback($pattern, function (array $m): string {
@@ -129,10 +142,6 @@ class DescriptionMarkup
      */
     private function resolveNamedReferences(string $text, string $attribute): string
     {
-        if (preg_match(self::UNCLOSED_REFERENCE_PATTERN, $text, $m) === 1 && ctype_digit(substr($m[1], 0, 1))) {
-            throw ValidationException::withMessages([$attribute => ['記法が閉じられていません: '.$m[0]]]);
-        }
-
         $text = (string) preg_replace(self::NOTE_PATTERN, '', $text);
 
         return (string) preg_replace_callback(self::NAMED_REFERENCE_PATTERN, function (array $m) use ($attribute): string {
@@ -156,6 +165,27 @@ class DescriptionMarkup
     }
 
     /**
+     * 名前で書いた記法を ID に直した後に、ID の記法の外に @(全角の ＠ も)が残っていれば 422 にする(#392)。
+     * 閉じていない記法(`@c12`・`@bバカルディ`)・記法の間や前後の @ の過不足・種類の英字の無い記法(`@12@`)・
+     * メールアドレスなど、保存すると公開画面で @ や英字が本文に混じるものを止める。
+     * メッセージには、最初に残った @ の前後の文字を入れる。
+     *
+     * @throws ValidationException
+     */
+    private function rejectStrayAtMarks(string $text, string $attribute): void
+    {
+        if (preg_match(self::STRAY_AT_PATTERN, $text, $m, PREG_OFFSET_CAPTURE) !== 1) {
+            return;
+        }
+
+        $at = mb_strlen(substr($text, 0, $m[0][1]));
+        $start = max(0, $at - self::STRAY_AT_CONTEXT);
+        $around = mb_substr($text, $start, $at - $start + 1 + self::STRAY_AT_CONTEXT);
+
+        throw ValidationException::withMessages([$attribute => ['記法になっていない @ があります: '.$around]]);
+    }
+
+    /**
      * 種類 $kind で、名前が $name に一致するものの ID。名前は name_search の形にそろえて比べる。
      */
     private function findId(string $kind, string $name): ?int
@@ -170,23 +200,12 @@ class DescriptionMarkup
     }
 
     /**
-     * 名前が一致するノードの ID。同じ名前のノードが複数あれば、浅いもの(祖先の少ないもの)、同じ深さなら ID の小さいもの。
-     * 旧はカテゴリをミドルより先に探していたので、浅い方を先にする。$withRoots が false なら根(旧の種別)を除く。
+     * 名前が一致するノードの ID。同じ名前のノードが複数あるときの選び方は CategoryTree::findByName。
+     * $withRoots が false なら根(旧の種別)を除く。
      */
     private function findNodeId(string $name, bool $withRoots = true): ?int
     {
-        $depth = CategoryClosure::query()
-            ->selectRaw('count(*)')
-            ->whereColumn('descendant_id', (new Category)->qualifyColumn('id'));
-
-        return $this->idOrNull(
-            Category::query()
-                ->where('name_search', NameNormalizer::normalize($name))
-                ->when(! $withRoots, fn (Builder $query) => $query->has('ancestors'))
-                ->orderBy($depth)
-                ->orderBy('id')
-                ->value('id'),
-        );
+        return $this->tree->findByName($name, $withRoots)?->id;
     }
 
     private function idOrNull(mixed $id): ?int

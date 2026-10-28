@@ -27,6 +27,7 @@
 | `settings` | 画面から変える設定 | 無し(新設。#69) | — | #23 |
 | `users` | 管理者 | `users` | 旧 ID のまま | Laravel の雛形にある |
 | `admin_login_links` | 非常用のログイン URL の発行の記録 | 無し(新設) | — | #115 |
+| `passkeys` | 管理画面にログインするパスキー | 無し(新設) | — | #311 |
 
 ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にすると ID がぶつかるので、ノードだけ振り直して `legacy_id_maps` に残す。カクテル・銘柄は URL(`/detail/cocktail/{id}`・`/detail/brand/{id}`)を変えないため旧 ID のまま入れ、カクテルが指す技法・氷・用語辞典(`method_id`・`ice_id`・`glass_dictionary_id`)も旧 ID のまま入れる。旧 ID のまま入れた表も、`legacy_id_maps` に同じ値の対応を入れる(技法・氷・辞典の分類・用語辞典・ユーザーは #33、カクテル・銘柄は #30・#31)。旧に作成・更新日時の列が無い表(用語辞典・言い換え・スキップ語など)は、取り込みで `created_at`・`updated_at` を null にする。旧 ID のまま入れた表は、移行の後の自動採番が旧の最大値の次から始まる。
 
@@ -56,7 +57,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `is_major` | `boolean` | | メジャーか(既定 false) | `is_major`(根は false) |
 | `is_like` | `boolean` | | 管理者のおすすめか(既定 false) | `is_like`(根は false) |
 | `is_powder` | `boolean` | | 粉末か(既定 false) | `is_powder`(根は false) |
-| `famous_brand_id` | `foreignId` → `brands` | ○ | 有名な銘柄(度数の計算に使う。#158) | `famous_brand_id`。0 は null にする(ミドルに 119 件)。カテゴリ木を移す #29 では null で入れ、銘柄を移す #30 で付ける |
+| `famous_brand_id` | `foreignId` → `brands` | ○ | 有名な銘柄(度数の計算に使う。#158) | `famous_brand_id`。0 は null にする(ミドルに 119 件)。カテゴリ木を移す #29 では null で入れ、銘柄を移す #30(`legacy:import --only=brands`)で旧の値を付ける。部分木の外の銘柄を指すもの(ミドル 58。[strength.md](decisions/strength.md) の「決まったことに書かれていないこと」)も旧のまま付ける |
 | `youtube` | `string(255)` | ○ | YouTube の動画 | `youtube` |
 | `youtube_created_at` | `dateTime` | ○ | 動画の公開日時 | `youtube_created_at` |
 | `youtube_start_seconds` | `unsignedInteger` | ○ | 動画の開始位置(秒) | `y_hour`・`y_minute`・`y_second`(下の「YouTube の開始位置」) |
@@ -83,7 +84,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 - 検索フォーム(`laravel6/resources/js/components/Forms/Search/Cocktail/form.vue` の `kind_and_categories_aiu`)は、種別ごとにカテゴリを名前の五十音順(カタカナをひらがなにそろえて比べる)に並べ直す。種別は ID の順。ミドルは並べ直さず、BE から来た順
 - 結果の一覧のカテゴリ・ミドル(`components/Results/children/CategoryMiddle.vue`)は、既定で ID の順
 
-移行の並び順は ID の順なので、検索フォームのカテゴリは旧(五十音順)と違う順に出る。検索フォームでどちらに合わせるかは #400 で決める。
+移行の並び順は ID の順のままにし、検索フォームのカテゴリだけを FE で旧と同じ五十音順に並べ直す(#400 で決めた)。並べ直しは `frontend/src/features/search/sortSearchFormTree.ts` で、根(旧の種別)と、根の子より深い段(旧のミドルとその下)は API の順(`sort_order`)のまま。API(`GET /api/search-form`)は `sort_order` の順で返し、結果の一覧などほかの画面も `sort_order`(旧の ID の順)で並べる。
 
 ### `category_closures`
 
@@ -119,11 +120,11 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | 列 | 型 | null | 中身 | 旧 DB(`m_brand`) |
 |---|---|---|---|---|
 | `id` | `id()` | | 旧 ID のまま | `id` |
-| `category_id` | `foreignId` → `categories` | | 所属するノード(どの深さでもよい) | ミドルがあれば `middle_category`、無ければ `category` の新ノード(#30)。親が合わない 1 件は [migration-anomalies.md](migration-anomalies.md) の 4 |
+| `category_id` | `foreignId` → `categories` | | 所属するノード(どの深さでもよい) | ミドルがあれば `middle_category`、無ければ `category` の新ノード(#30。`middle_category` の 0 は無しと読む)。親が合わない 1 件は [migration-anomalies.md](migration-anomalies.md) の 4 |
 | `name` | `string(255)` | | 名前 | `name` |
 | `name_search` | `string(255)` | | 検索用に正規化した名前 | `name_search` |
 | `name_eng` | `string(255)` | | 英名 | `name_eng` |
-| `volume` | `decimal(4,1)` | | 度数(%) | `volume`(`float`。0〜96 で、どれも小数 1 桁に収まる) |
+| `volume` | `decimal(4,1)` | | 度数(%) | `volume`(`float`。0〜96 で、どれも小数 1 桁に収まる。移行では小数 1 桁に丸め、丸めで値が変わる行があれば止める。#30) |
 | `description` | `text` | ○ | 説明 | `description` |
 | `is_major` | `boolean` | | | `is_major` |
 | `is_like` | `boolean` | | | `is_like` |
@@ -177,7 +178,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 [recipe-count.md](decisions/recipe-count.md)(#154)のとおり。
 
 - **定義**: カクテルの材料のうち、任意でなく(`is_optional = false`)、役割が `other` の根の部分木に入っていないものの数。かんたん検索は `recipe_count <= 3`
-- **持ち方**: 列に持ち、**`RecipeCounter`(#156)だけが更新する**。更新のきっかけは、材料の保存(#130)・部分木を根をまたいで移したとき(`CategoryTree::moveSubtree` が数え直す。#156・#122)・銘柄の所属を変えたとき(#64)・移行(#31)・数え直しのコマンド(#74)
+- **持ち方**: 列に持ち、**`RecipeCounter`(#156)だけが更新する**。更新のきっかけは、材料の保存(#130)・部分木を根をまたいで移したとき(`CategoryTree::moveSubtree` が数え直す。#156・#122)・銘柄の所属を変えたとき(#64)・移行(#31)・数え直しのコマンド(`cocktails:recount`。#74)
 - 旧の値は使わない(旧は 2 つの数え方が混ざっている)。移行の後に数え直す
 
 ### `cocktail_ingredients`
@@ -286,6 +287,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 旧と同じ列に `id` を足す。`converted`・`middle` は**名前のまま**持つ(ノードの ID にしない)。自動取り込み(#68)が名前で引くため(#33)。
 
+名前をノード・銘柄に解決する決まり(管理 API の保存の検証と、一覧で返す解決した先)は [paraphrase-target.md](decisions/paraphrase-target.md)(#316)。
+
 ### `skip_words`(旧 `skip_db`。5 件)
 
 `id`・`name` `string(256)` unique・`timestamps()`。旧と同じ列に `id` を足す。
@@ -304,7 +307,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 ### `users`
 
-Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_table.php`)のまま使う。旧の `twitter_id` は移さない(X でのログインはやめた。#61)。パスキーと非常用のログイン URL に要る表は、選んだライブラリに合わせて #115・#116 で作る。
+Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_table.php`)のまま使う。旧の `twitter_id` は移さない(X でのログインはやめた。#61)。パスキーと非常用のログイン URL に要る表は、別の表(下の `passkeys`(#311)・`admin_login_links`(#115))に置き、`users` には列を足さない。
 
 手元のダンプには `users` の行が入っていなかったので、件数は確かめていない(未確認。#33 は管理者 1 件を移す)。
 
@@ -320,6 +323,20 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `expires_at` | `timestamp` | | 発行から 10 分後。URL の署名の期限と同じ秒 |
 | `used_at` | `timestamp` | ○ | 使った時刻。入っていれば使えない |
 | `created_at`・`updated_at` | `timestamps()` | ○ | |
+
+### `passkeys`(新設。#311)
+
+管理画面にログインするパスキー。列は、使うライブラリ laravel/passkeys のモデルが読み書きする形に合わせる(ライブラリの選び方は [passkey.md](decisions/passkey.md))。秘密の鍵は端末の外に出ないので持たない。
+
+| 列 | 型 | null | 中身 |
+|---|---|---|---|
+| `id` | `id()` | | |
+| `user_id` | `foreignId` → `users` | | パスキーの持ち主 |
+| `name` | `string(255)` | | 一覧に出す名前(登録のときに付ける) |
+| `credential_id` | `string(255)` | | 資格情報の ID(base64url)。unique。ログインのときに、ブラウザが返した ID からパスキーを引く |
+| `credential` | `json` | | 公開鍵・署名の回数・AAGUID など(webauthn-lib の `CredentialRecord` の JSON)。MariaDB では `longtext` になる |
+| `last_used_at` | `timestamp` | ○ | 最後にログインに使った時刻。登録しただけなら null |
+| `created_at`・`updated_at` | `timestamps()` | ○ | `created_at` が登録した日時 |
 
 ## YouTube の開始位置
 
@@ -349,6 +366,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `methods.dictionary_id` → `dictionaries` | RESTRICT |
 | `settings.updated_by` → `users` | SET NULL |
 | `admin_login_links.user_id` → `users` | CASCADE(ユーザーを消すと、そのユーザーの URL も使えなくなる) |
+| `passkeys.user_id` → `users` | CASCADE(ユーザーを消すと、そのユーザーのパスキーでは入れなくなる) |
 
 - `categories.famous_brand_id` → `brands` と `brands.category_id` → `categories` は互いを指す。`categories` を作る #21 の時点では `brands` が無いので、`famous_brand_id` の外部キーは `brands` を作る #22 のマイグレーションで足す
 - `cocktails.method_id`・`glass_dictionary_id`・`ice_id` と `affiliates.brand_id` は、#22(`brands`・`cocktails`)と #23(`methods`・`dictionaries`・`ices`・`affiliates`)を並行で作ったため、どちらのマイグレーションでも相手の表が無く、両方の後のマイグレーション(#325)で足す
@@ -401,6 +419,7 @@ LIMIT 1;
 | `isFamousBrandOptional(Category)` | 根の役割が `soft_drink` か `other` か(有名な銘柄が要らない) | `KindFactory::is_kind5_fromKindId`(kind 4・5) |
 | `isNonLiquor(Category)` | 根の役割が `soft_drink` か `other` か(洋酒ではない) | `kind >= 4`(`AffiliateFactory`) |
 | `otherNodeIds()` | `isOther` が真になるノードの ID のサブクエリ(クエリの中で判定するとき。あるもの検索・材料の数) | — |
+| `famousBrandOptionalNodeIds()` | `isFamousBrandOptional` が真になるノードの ID のサブクエリ(クエリの中で判定するとき。`data:verify`) | — |
 
 材料とベースに根を使わせない検証(下の「材料とベースに使ってよいノード」)は、検証の規則 `App\Rules\NotRootCategory` で行う。
 

@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\PendingCommand;
 use Tests\Support\LegacyFixture;
+use Tests\Support\LegacyImportCommand;
 use Tests\TestCase;
 
 // legacy:import --only=categories(種別・カテゴリ・ミドルをカテゴリ木に移す。#29)。旧 DB を使うので db グループ
@@ -17,17 +18,13 @@ use Tests\TestCase;
 uses(RefreshDatabase::class)->group('db');
 
 /**
- * legacy:import を、出力と終了コードを確かめられる形で呼ぶ。
+ * legacy:import を呼ぶ。オプションを渡さなければ --only=categories にする。
  *
  * @param  array<string, string>  $options
  */
 function importLegacyCategories(TestCase $test, array $options = ['--only' => 'categories']): PendingCommand
 {
-    $command = $test->artisan('legacy:import', $options);
-
-    return $command instanceof PendingCommand
-        ? $command
-        : throw new RuntimeException('コンソールの出力を差し替えずにコマンドが動いた');
+    return LegacyImportCommand::run($test, $options);
 }
 
 /**

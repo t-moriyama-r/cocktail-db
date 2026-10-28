@@ -61,15 +61,19 @@ issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(�
 
 ## PR のマージ(ai-auto-merge.yml が読む)
 
-CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑で、コンフリクトの無い PR を、`ai-auto-merge.yml` がマージできる状態とみなし、自動でマージする。
+CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑(付いたチェックに失敗が無く、ブランチの保護で必須にしたチェックがすべて成功している。CI が承認待ちで走っていないコミットは緑とみなさない)で、コンフリクトの無い PR を、`ai-auto-merge.yml` がマージできる状態とみなし、自動でマージする。
+
+いまのコミットで CI が動いていない(必須のチェックが揃っていない・CI の `pull_request` の回が成功していない)PR は、`gh pr merge` を呼ばずに見送り、`ci-rerun.yml` にその PR の CI を流し直させる(`.github/scripts/ci-rerun-request.sh`。#268)。流し直した CI が緑で終わると、`ai-auto-merge.yml` が呼び直されてマージに進む。
 
 ほかの条件がそろい、止めているのがエージェントの返信済みで未解決のスレッドだけのとき(Actions の Claude Code が直さない理由を返したスレッドは解決にしない。人が立てたスレッドも含む)は、人が解決するまで止まるので、`ai-auto-merge.yml` が残っているスレッドへのリンクと決めてほしいこと(返信で良ければ解決する・直してほしければそのスレッドに返信する)をコメントし、`needs-human` を付けて Slack に知らせる(`.github/scripts/thread-handoff.sh`。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、人がすべて解決したら、`ai-review-sweep.yml` の見回りがこの理由で付けた `needs-human` を外し、`ai-auto-merge.yml` を呼び直す。
 
 人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、同じ条件がそろったところで、マージせずに `needs-approval` を付けて Slack に知らせる(下の「人に頼む」)。直さない理由を返して未解決のまま残るスレッドもあるので、こちらは未解決ではなく返信待ちのスレッドが 0 件かで見る。自動のレビューと CI が終わる前には人を呼ばない。
 
+自動でマージする PR でも、条件を満たして `gh pr merge` まで進んだのに GitHub に断られることがある(ワークフローを書き換える PR で `workflows` の権限が無い・base branch policy で断られる、など)。そのときは、断られた理由(エラーの 1 行)を PR にコメントし(目印 `<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->`)、`needs-approval` を付けて Slack に知らせ、状態のラベルを付け直す(#218)。もう `needs-approval` が付いていれば知らせない。`needs-approval` の付いた PR は見回り(`ai-review-sweep.yml`)も見送るので、同じ失敗を繰り返さない。
+
 向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。AI レビューは流すが、指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを AI がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
 
-`ai-in-actions`・`needs-human`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
+`ai-in-actions`・`needs-human`・`needs-local`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
@@ -79,7 +83,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 ## 人に頼む(Slack に知らせる)
 
-次のラベルが付くと、`notify-needs-human.yml` が Slack に知らせる(送り方は下の「Slack の設定」)。通知には、PR・issue と、PR が閉じる issue へのリンク、頼むコメント(目印 `<!-- ai-dev:<ラベル> -->` の付いたいちばん新しいもの)の抜粋が入る。そのため、ラベルより先に頼むコメントを書く。頼む中身(目印の付いたコメント、`needs-decision` なら本文の「判断が要ること」、ほかは人のいちばん新しいコメント)が見つからないときは、開いても答えることが無いので送らない(毎朝のまとめには載る)。
+次のラベルが付くと、`notify-needs-human.yml` が Slack に知らせる(送り方は下の「Slack の設定」)。通知には、PR・issue と、PR が閉じる issue へのリンク、頼むコメント(目印 `<!-- ai-dev:<ラベル> -->` の付いたいちばん新しいもの)の抜粋が入る(図のコードブロックは「(図は GitHub で見る)」に置き換える。頼むコメントの形は `CLAUDE.md` の「人に判断を頼むとき」)。そのため、ラベルより先に頼むコメントを書く。頼む中身(目印の付いたコメント、`needs-decision` なら本文の「判断が要ること」、ほかは人のいちばん新しいコメント)が見つからないときは、開いても答えることが無いので送らない(毎朝のまとめには載る)。
 
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
@@ -96,9 +100,10 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
-| `needs-human` | 人の判断が要る PR・issue | エージェント(手元・Actions)が、レビューの指摘で判断に迷うとき・指摘が堂々めぐりになったとき・`develop` とのコンフリクトで両方の意図を残せないとき・再レビューの回数(`review_rounds`)を超えたとき・返信済みで未解決のスレッドだけが自動マージを止めているとき(`ai-auto-merge.yml`。上の「PR のマージ」)・見た目の案を人に選んでもらう PR で見た目が決まった・変わったのに Actions では最終の証跡を撮れないとき・FE・BE のコードを変えた PR で修正前後の証跡を撮れない環境のとき(draft のまま付ける。CLAUDE.md の手順 5)に付ける。人が付けてもよい | Slack に知らせる。自動でマージしない。PR なら、オーナーがコメントすると `ai-review-loop.yml` の Claude Code がこのラベルを外して `ai-in-actions` を付け、判断どおりに直して再レビューを頼む。返信済みで未解決のスレッドの理由で付けたものは、人がスレッドをすべて解決すると `ai-review-sweep.yml` が外す。issue に付けたときは通知だけで、引き継ぐワークフローは無い |
+| `needs-human` | 人の判断が要る PR・issue | エージェント(手元・Actions)が、レビューの指摘で判断に迷うとき・指摘が堂々めぐりになったとき・`develop` とのコンフリクトで両方の意図を残せないとき・再レビューの回数(`review_rounds`)を超えたとき・返信済みで未解決のスレッドだけが自動マージを止めているとき(`ai-auto-merge.yml`。上の「PR のマージ」)に付ける。証跡の撮影など、手元でしかできないが判断は要らない作業は、これではなく `needs-local` で頼む(判断も一緒に頼むときは、これに撮ってほしいものも書く)。人が付けてもよい | Slack に知らせる。自動でマージしない。PR なら、オーナーがコメントすると `ai-review-loop.yml` の Claude Code がこのラベルを外して `ai-in-actions` を付け、判断どおりに直して再レビューを頼む。返信済みで未解決のスレッドの理由で付けたものは、人がスレッドをすべて解決すると `ai-review-sweep.yml` が外す。issue に付けたときは通知だけで、引き継ぐワークフローは無い |
+| `needs-local` | 手元のエージェントの作業を待っている PR(人の判断は要らない) | Actions の Claude Code が、FE・BE のコードを変えた PR で修正前後の証跡を撮れないとき(draft のまま付ける。CLAUDE.md の手順 5)・見た目の案を人に選んでもらう PR で見た目が決まった・変わったのに最終の証跡を撮れないとき・ワークフローを変えたコミットを push できないとき・この環境では流せないコマンドが要る作業(依存のインストール・生成ファイルの作り直し。`develop` との衝突で `package-lock.json` を作り直す・生成ファイルを作り直せなかったときを含む)があるときに付ける。頼むコメントの先頭に `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=<evidence\|push\|other> -->` を書く | Slack に「手元の作業を待っています」と知らせる(判断の依頼とは見出しを分ける)。自動でマージしない・レビューの指摘に対応しない・draft を引き継がない。PC を開いたときに手元の見回り(`pr-patrol`・`daily-start` のスキル)が拾って片付け、外す。急ぐときは手元で対応して外す |
 | `needs-decision` | 着手する前に決めることがある issue | 上の「着手の順番」 | Slack に知らせる(本文の「判断が要ること」を添える) |
-| `needs-approval` | マージできる状態になり、人の承認(マージ)を待っている PR | `ai-auto-merge.yml` が、人の手でマージする PR(上の「PR のマージ」)で、レビューの指摘への対応が終わり、CI が緑でコンフリクトが無くなったときに付ける。付ける前に、マージできる状態になったことを PR にコメントする(閉じる issue に `needs-review` があれば、Claude Code が書いた見てほしいところへのリンクを添える) | Slack に知らせる。自動でマージしない。人は証跡を見て、よければマージする(マージが承認)。オーナーが PR にコメントすると、`ai-review-loop.yml` の Claude Code が、直してほしいことがあればこのラベルを外して直し、再レビューを頼む。マージできる状態に戻れば、`ai-auto-merge.yml` がまた付ける。「OK」だけなら、マージで承認するよう返す |
+| `needs-approval` | マージできる状態になり、人の承認(マージ)を待っている PR | `ai-auto-merge.yml` が、人の手でマージする PR(上の「PR のマージ」)で、レビューの指摘への対応が終わり、CI が緑でコンフリクトが無くなったときに付ける。付ける前に、マージできる状態になったことを PR にコメントする(閉じる issue に `needs-review` があれば、Claude Code が書いた見てほしいところへのリンクを添える)。自動でマージする PR でも、`gh pr merge` が GitHub に断られたときは、断られた理由(エラーの 1 行)を PR にコメントしてから付ける(#218) | Slack に知らせる。自動でマージしない。人は証跡を見て、よければマージする(マージが承認)。オーナーが PR にコメントすると、`ai-review-loop.yml` の Claude Code が、直してほしいことがあればこのラベルを外して直し、再レビューを頼む。マージできる状態に戻れば、`ai-auto-merge.yml` がまた付ける。「OK」だけなら、マージで承認するよう返す |
 
 ## PR の状態(表示用)
 
@@ -108,7 +113,8 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 |---|---|---|
 | `状態:作業中` | 下書き | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
 | `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
-| `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(1 時間ごと。draft は選ばない)。直せない衝突は `needs-human` で人に頼む |
+| `状態:手元の作業待ち` | `needs-local` が付いている(下書きは `状態:作業中` のまま) | 手元のエージェント(`pr-patrol`・`daily-start`)が証跡を撮る・push する |
+| `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(1 時間ごと。draft は選ばない)。生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の衝突は、人に頼まずに同じワークフローが作り直して push する。直せない衝突は `needs-human` で人に頼む。`package-lock.json` の衝突や作り直せなかった生成ファイルなど、判断は要らないがこの環境では片付けられないものは `needs-local` で手元に頼む |
 | `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
 | `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある(向き先が `staging`・`release` の PR と、`needs-approval` の PR は除く) | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
 | `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない(`needs-approval` の PR は除く) | CodeRabbit(上限なら `ai-claude-review.yml`)。push されたコミットは、CI の終わりに `review-on-push.yml` が依頼を出す(取りこぼしは `ai-review-sweep.yml` が拾う) |

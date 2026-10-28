@@ -161,6 +161,32 @@ it('TC-155-06: otherNodeIds が返すノードは、すべてのノードを isO
         ->and(rootRoleOtherNodeNames())->toHaveCount(7);
 });
 
+it('TC-157-14: famousBrandOptionalNodeIds が返すノードは、すべてのノードを isFamousBrandOptional で 1 つずつ判定した結果と一致する(移す前・移した後)', function () {
+    $chains = rootRoleTree();
+    $tree = app(CategoryTree::class);
+    $bySubquery = fn (): array => array_values(Category::query()
+        ->whereIn('id', $tree->famousBrandOptionalNodeIds())
+        ->orderBy('name')
+        ->pluck('name')
+        ->all());
+    $oneByOne = fn (): array => array_values(Category::query()
+        ->orderBy('name')
+        ->get()
+        ->filter(fn (Category $node): bool => $tree->isFamousBrandOptional($node))
+        ->map(fn (Category $node): string => $node->name)
+        ->all());
+
+    expect($bySubquery())->toBe($oneByOne())
+        ->and($bySubquery())->toHaveCount(12);
+
+    $tree->moveSubtree($chains['蒸留酒'][3], $chains['その他'][0]);
+    $tree->moveSubtree($chains['ソフトドリンク'][4], $chains['蒸留酒'][2]);
+
+    // ソフトドリンク・その他の 12 個 - 移した 2 個(ソフトドリンクの d4・d5) + 移してきた 3 個(蒸留酒の d3〜d5) = 13 個
+    expect($bySubquery())->toBe($oneByOne())
+        ->and($bySubquery())->toHaveCount(13);
+});
+
 it('TC-155-07: isRoot は根だけで true になり、根の直下・深さ 5 では false になる。根の部分木を別のノードの下へ移すと根でなくなる', function () {
     $chains = rootRoleTree();
     $tree = app(CategoryTree::class);
