@@ -167,6 +167,26 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 
+## URL の直後は必ず空白か改行にする
+
+URL を地の文に書くときは、**直後を必ず半角スペースか改行にする**。括弧・句読点・日本語・バッククォートを URL に続けて書いてはいけない。地の文の URL に例外は無い(下の Markdown リンクと Slack 形式は、URL の範囲が記号で閉じているので対象外)。下のコードブロックの「悪い」「良い」の例と、`https://…` のように URL の形だけを示したものは例示で、この決まりの対象外。
+
+GitHub・Slack・ターミナルの自動リンクは、空白までを URL として拾う。`https://…/pull/449#discussion_r4398741625(` のように 1 文字でも続くと、その文字まで含んだ 404 のリンクになる(#449 で起きた)。
+
+- 対象は、エージェントが書くもの(issue・PR の本文・コメント・レビューの返信・コミットメッセージ・ユーザーへの返答)と、スクリプト・ワークフローが組み立てる本文(`gh pr comment` の `--body`・Slack の文面など)のすべて
+- URL は行末に置くのを基本にする。補足は URL の前に書くか、空白を挟んで後ろに書く
+- URL を括弧で囲まない。補足を括弧で書くなら、URL との間に空白を入れる
+- スクリプトで URL に文字をつなげて組み立てるときも同じ。`"\(.url)(…)"` ではなく `"\(.url) (…)"` にする
+- Markdown のリンク(`[テキスト](URL)`)と Slack の `<URL|テキスト>` は、URL の範囲が記号で閉じているので、この決まりの対象外
+
+```text
+悪い: - https://github.com/o/r/pull/1#discussion_r1(`a.yml`)
+悪い: 詳しくは https://github.com/o/r/pull/1を見る
+悪い: PR(https://github.com/o/r/pull/1)を見る
+良い: - https://github.com/o/r/pull/1#discussion_r1 (`a.yml`)
+良い: - `a.yml` のスレッド: https://github.com/o/r/pull/1#discussion_r1
+```
+
 ## 人に判断を頼むとき
 
 人に決めてもらうこと(`needs-human`・`needs-decision` の頼むコメント、issue の「判断が要ること」、手元のエージェントがターミナルで聞くとき)は、文章を読み込まなくても、何を決めるのか・案ごとに何が変わるのかがつかめる形で頼む。文章だけの説明は、理解するまでに時間がかかるため。
