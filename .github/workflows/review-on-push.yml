@@ -4,7 +4,7 @@
 # GitHub が schedule を遅らせる・落とすと、誰も依頼しないまま「レビュー待ち」で止まった(#353 で約 2 時間。#366)。
 # push の後に必ず起きる CI の終わりで、そのコミットを head にした開いている PR に request-review.sh で頼む
 # (まず CodeRabbit、上限・返事なし・依頼を書けないときだけ代わりの Claude。順番は変えない)。
-# - draft・needs-human・needs-approval の PR は request-review.sh が見送る(ai-review-sweep.yml と同じ)
+# - draft・needs-human・needs-local・needs-approval の PR は request-review.sh が見送る(ai-review-sweep.yml と同じ)
 # - いまのコミットの後にオーナーの依頼がもうあれば(Actions の Claude が直して push した後に ai-review-loop.yml が出したものなど)、
 #   review-request-state.sh が waiting を返すので、同じコミットに 2 回依頼しない。代わりの Claude も、ai-claude-review.yml が
 #   PR ごとに順番待ちさせ、レビュー済みのコミットは見送る

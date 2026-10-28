@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 人に頼んだ Slack の通知(needs-human・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足す。
+# 人に頼んだ Slack の通知(needs-human・needs-local・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足す。
 #
 # 頼んだ通知は、notify-needs-human.yml が bot で送るときに、どの PR・issue のどのラベルかをメッセージのメタデータ
 # (event_type ai_dev_ask)に持たせている。GitHub 側に記録を残さないので、bot と人の DM の履歴を読んで頼んだ通知を探す。

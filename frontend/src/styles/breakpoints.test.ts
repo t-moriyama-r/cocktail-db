@@ -12,6 +12,11 @@ const cssFiles = Object.fromEntries(
 const allowedMinWidths = Object.values(breakpoints).map((px) => `${px}px`)
 const allowedMaxWidths = Object.values(breakpoints).map((px) => `${px - 1}px`)
 
+// 旧が 700px で切っていた、ベースの列だけの例外(docs/design/style.md の「幅の区切り」)
+const extraMaxWidths: Record<string, string[]> = {
+  '../components/CocktailTable/CocktailTable.module.css': ['699px'],
+}
+
 /** CSS のメディアクエリに出てくる min-width・max-width の値を、ファイルごとに抜き出す */
 const mediaWidths = (css: string) =>
   [...css.matchAll(/@media[^{]*/g)].flatMap(([query]) =>
@@ -38,9 +43,9 @@ describe('幅の区切り', () => {
 
   test.each(Object.entries(cssFiles))(
     'TC-295-04: %s のメディアクエリの幅は、区切りの値(以上は 600・960・1264px、未満は 599・959・1263px)だけを使う',
-    (_path, css) => {
+    (path, css) => {
       for (const { kind, value } of mediaWidths(css)) {
-        expect(kind === 'min' ? allowedMinWidths : allowedMaxWidths).toContain(value)
+        expect(kind === 'min' ? allowedMinWidths : [...allowedMaxWidths, ...(extraMaxWidths[path] ?? [])]).toContain(value)
       }
     },
   )
