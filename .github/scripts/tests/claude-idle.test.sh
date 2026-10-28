@@ -216,6 +216,12 @@ main() {
 	expect TC-240-31 'mark-retry は、起こし直しの目印を書く(ai-dev:agent は付けない)' \
 		"$(commented | grep -c '^<!-- ai-dev:claude-idle-retry sha=sha7 -->')|$(commented | grep -c 'ai-dev:agent')|$RC" '1|0|0'
 
+	reset
+	touch "$FAKE/comment-fails-once"
+	MARK_RETRY_SLEEP=0 run mark-retry sha7
+	expect TC-240-32 'mark-retry は、コメントの書き込みが一時的に失敗しても、やり直して目印を書く' \
+		"$(commented | grep -c '^<!-- ai-dev:claude-idle-retry sha=sha7 -->')|$RC" '1|0'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -245,6 +251,7 @@ case "$*" in
 		if [ -f "$FAKE/edit-fails" ]; then echo "HTTP 502: edit failed" >&2; exit 1; fi
 		shift 2; echo "$*" >>"$FAKE/edited" ;;
 	"pr comment"*)
+		if [ -f "$FAKE/comment-fails-once" ]; then rm -f "$FAKE/comment-fails-once"; echo "HTTP 502" >&2; exit 1; fi
 		# --body の中身だけを残す
 		while [ $# -gt 0 ]; do
 			if [ "$1" = --body ]; then printf '%s\n' "$2" >>"$FAKE/commented"; fi
@@ -258,7 +265,7 @@ SH
 
 reset() {
 	rm -f "$FAKE"/pr.json "$FAKE"/calls "$FAKE"/commented "$FAKE"/edited "$FAKE"/out "$FAKE"/err \
-		"$FAKE"/graphql-fails "$FAKE"/comments-fail "$FAKE"/edit-fails
+		"$FAKE"/graphql-fails "$FAKE"/comment-fails-once "$FAKE"/comments-fail "$FAKE"/edit-fails
 	: >"$FAKE/calls"
 	threads
 	comments

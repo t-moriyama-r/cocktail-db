@@ -150,9 +150,17 @@ Actions の Claude Code が、起こし直してもレビューの指摘に対�
 }
 
 mark_retry() {
-  local repo=$1 n=$2 sha=$3
-  gh pr comment "$n" -R "$repo" --body "<!-- $RETRY sha=$sha -->
-Actions の Claude Code が、レビューの指摘に対応しないまま終わった(${RUN_URL:-実行の記録は Actions の画面})。対応中の印(\`$LABEL\`)を外し、既定のブランチのワークフローで 1 回だけ起こし直す。" >/dev/null
+  local repo=$1 n=$2 sha=$3 i body
+  body="<!-- $RETRY sha=$sha -->
+Actions の Claude Code が、レビューの指摘に対応しないまま終わった(${RUN_URL:-実行の記録は Actions の画面})。対応中の印(\`$LABEL\`)を外し、既定のブランチのワークフローで 1 回だけ起こし直す。"
+  # API の一時エラーで目印が残らないと、起こし直した回でも仕事をしないとき、もう一度起こし直して上限が破れる。数回やり直す
+  for i in 1 2 3; do
+    if gh pr comment "$n" -R "$repo" --body "$body" >/dev/null; then
+      return 0
+    fi
+    [ "$i" = 3 ] || sleep "${MARK_RETRY_SLEEP:-3}"
+  done
+  return 1
 }
 
 resume() {
