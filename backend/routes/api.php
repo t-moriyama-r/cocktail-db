@@ -12,6 +12,8 @@ use App\Http\Controllers\Auth\PasskeyLoginController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailSameNameController;
 use App\Http\Controllers\CocktailSearchController;
+use App\Http\Controllers\DictionaryDetailController;
+use App\Http\Controllers\DictionaryIndexController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
 use App\Http\Controllers\SearchFormController;
@@ -32,6 +34,9 @@ Route::post('/legacy/search-condition', LegacySearchConditionController::class);
 // ID は int に収まる桁数に縛る(超える数字は経路に合わず 404。TypeError の 500 にしない)
 Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
 Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
+
+Route::get('/dictionaries', DictionaryIndexController::class);
+Route::get('/dictionaries/{dictionary}', DictionaryDetailController::class)->where('dictionary', '[0-9]{1,18}');
 
 // パスキーでのログイン(#311)。ログインの前に呼ぶので管理 API の外に置くが、チャレンジをセッションに持つので
 // セッションと CSRF の確かめ(web)は通す。署名を何度も試されないよう、IP ごとに 1 分 10 回まで
