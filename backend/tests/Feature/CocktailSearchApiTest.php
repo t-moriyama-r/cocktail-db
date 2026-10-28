@@ -82,12 +82,14 @@ function cocktailSearchCocktail(string $name, array $ingredients, array $attrs =
 /**
  * 検索の API を呼ぶ。
  *
+ * json_encode は既定で 1.0 を `1` に書くので、小数を小数のまま本文に載せるよう JSON_PRESERVE_ZERO_FRACTION を付ける。
+ *
  * @param  array<string, mixed>  $body
  * @return TestResponse<JsonResponse>
  */
 function cocktailSearchPost(TestCase $test, array $body): TestResponse
 {
-    return $test->postJson('/api/cocktails/search', $body);
+    return $test->postJson('/api/cocktails/search', $body, [], JSON_PRESERVE_ZERO_FRACTION);
 }
 
 /**
