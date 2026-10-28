@@ -32,6 +32,7 @@ workflow ai-claude-review.yml reason=request-failed'
 	check TC-227-19 '返事を待っているあいだは何もしない' waiting pat '{}' ''
 	check TC-227-20 'draft は見送る' request pat '{"isDraft": true}' ''
 	check TC-227-21 '人の番(needs-human)は見送る' request pat '{"labels": [{"name": "needs-human"}]}' ''
+	check TC-456-06 '手元の番(needs-local)は見送る' request pat '{"labels": [{"name": "needs-local"}]}' ''
 	check TC-227-22 '閉じた PR は見送る' request pat '{"state": "CLOSED"}' ''
 
 	echo "passed: $PASSED, failed: $FAILED"

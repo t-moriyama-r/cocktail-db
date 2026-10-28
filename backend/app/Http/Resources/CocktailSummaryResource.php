@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * カクテルの一覧の表(#298)の 1 行に出すカクテル(GET /api/cocktails/{id}/same-name。#40)。
+ * カクテルの一覧の表(#298)の 1 行に出すカクテル(GET /api/cocktails/{id}/same-name。#40。POST /api/cocktails/search。#163)。
  *
  * 旧の一覧の API(CocktailSearch\CocktailResource)が返していた項目のうち、表が使うもの。
  *

@@ -62,6 +62,13 @@ main() {
 
 	reset
 	pr 7
+	threads "$AGENT"
+	run ask
+	expect TC-453-01 'スレッドの URL の直後は空白にし、ファイル名の括弧を続けない(自動リンクが括弧まで拾って壊れる)' \
+		"$(commented | grep -E '^- https://example\.test/t' | sed -E 's/t[0-9]+/tN/')" '- https://example.test/tN (`a.php`)'
+
+	reset
+	pr 7
 	threads "$AGENT" "$AGENT"
 	comments "$ASKED"
 	run ask

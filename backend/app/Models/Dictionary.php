@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 /**
  * 用語辞典の項目。カクテルのグラスも、分類「グラス」の項目としてここに入る。
@@ -26,6 +27,14 @@ class Dictionary extends Model
     public function dictionaryCategory(): BelongsTo
     {
         return $this->belongsTo(DictionaryCategory::class);
+    }
+
+    /**
+     * 分類。外部キー(NOT NULL・RESTRICT)で必ずあるので、無ければデータの壊れとして例外にする。
+     */
+    public function requiredCategory(): DictionaryCategory
+    {
+        return $this->dictionaryCategory ?? throw new LogicException("用語 {$this->id} の分類が無い");
     }
 
     /**
