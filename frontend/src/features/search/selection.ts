@@ -20,6 +20,8 @@ export type SelectionTree = {
   readonly roots: readonly SelectionTreeNode[]
   /** ノードの ID → 配下の葉の ID(葉なら自分だけ) */
   readonly leavesOf: ReadonlyMap<number, readonly number[]>
+  /** ノードの ID → AND のまとまりの単位になるノードの ID(根の直下のノード。根は自分) */
+  readonly groupOf: ReadonlyMap<number, number>
 }
 
 /** 選択の状態。選ばれた葉の ID の集合 */
@@ -31,18 +33,25 @@ export type TreeSelection = ReadonlySet<number>
  */
 export function buildSelectionTree(roots: readonly SelectionTreeNode[]): SelectionTree {
   const leavesOf = new Map<number, readonly number[]>()
-  // 行きがけに積み、帰りがけ(子をすべて済ませた後)に子の葉を集める
-  const stack = roots.map((node) => ({ node, visited: false })).reverse()
+  const groupOf = new Map<number, number>()
+  // 行きがけに積み、帰りがけ(子をすべて済ませた後)に子の葉を集める。まとまりは行きがけに決める
+  const stack = roots.map((node) => ({ node, group: node.id, isRoot: true, visited: false })).reverse()
   for (let entry = stack.pop(); entry !== undefined; entry = stack.pop()) {
-    const { node, visited } = entry
+    const { node, group, isRoot, visited } = entry
     if (!visited) {
-      stack.push({ node, visited: true }, ...node.children.map((child) => ({ node: child, visited: false })).reverse())
+      groupOf.set(node.id, group)
+      stack.push(
+        { node, group, isRoot, visited: true },
+        ...node.children
+          .map((child) => ({ node: child, group: isRoot ? child.id : group, isRoot: false, visited: false }))
+          .reverse(),
+      )
       continue
     }
     const leaves = node.children.flatMap((child) => leavesOf.get(child.id) ?? [])
     leavesOf.set(node.id, leaves.length === 0 ? [node.id] : leaves)
   }
-  return { roots, leavesOf }
+  return { roots, leavesOf, groupOf }
 }
 
 /** 何も選んでいない状態 */
@@ -88,6 +97,24 @@ export function toSendIds(tree: SelectionTree, selection: TreeSelection): number
     else if (state === 'partial') stack.push(...[...node.children].reverse())
   }
   return ids
+}
+
+/**
+ * AND 検索で送る、ID のまとまりの並び(#282 の決まったこと 1。深い木での単位は、根の直下のノードごとに 1 つ)。
+ * 送る ID(toSendIds)を、根の直下のノードごとに分ける。API(#164)は、まとまりごとに「どれか 1 つを使う」で探す。
+ * 例: 「ウイスキー」を選んで「ブレンデッド」だけ外すと、シングルモルトとバーボンは 1 つのまとまりになる。
+ * 「ホワイトラム」と「ドライジン」のように根の直下のノードが違えば、別のまとまりになる。
+ * 根そのものを送るとき(木がすべて選ばれたとき)は、その根 1 つで 1 つのまとまり。並びは木の順
+ */
+export function toSendGroups(tree: SelectionTree, selection: TreeSelection): number[][] {
+  const groups = new Map<number, number[]>()
+  for (const id of toSendIds(tree, selection)) {
+    const group = tree.groupOf.get(id) ?? id
+    const members = groups.get(group)
+    if (members === undefined) groups.set(group, [id])
+    else members.push(id)
+  }
+  return [...groups.values()]
 }
 
 /**

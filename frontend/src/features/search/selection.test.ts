@@ -6,6 +6,7 @@ import {
   emptySelection,
   selectionFromIds,
   toggleNode,
+  toSendGroups,
   toSendIds,
   type SelectionTreeNode,
   type TreeSelection,
@@ -182,5 +183,49 @@ describe('selection', () => {
 
     expect(toSendIds(tree, selection)).toEqual([10])
     expect([10, 100, 1000].map((id) => checkStates(tree, selection).get(id))).toEqual(['checked', 'checked', 'checked'])
+  })
+
+  test('TC-304-13: 深い木で親を選んで子を外すと、残った兄弟は根の直下のノードごとの 1 つのまとまりになる', () => {
+    // 洋酒(1) > ウイスキー(10) > スコッチ(100) > シングルモルト(1000)・ブレンデッド(1001)、ウイスキー > バーボン(101)
+    const tree = buildSelectionTree([node(1, [node(10, [node(100, [node(1000), node(1001)]), node(101)])])])
+    const withoutBlended = toggleNode(tree, toggleNode(tree, emptySelection, 10, true), 1001, false)
+
+    expect(toSendIds(tree, withoutBlended)).toEqual([1000, 101])
+    expect(toSendGroups(tree, withoutBlended)).toEqual([[1000, 101]])
+  })
+
+  test('TC-304-14: 根の直下のノードが同じなら 1 つ、違えば別のまとまり。根を送るときは根 1 つ', () => {
+    // 洋酒(1) > スピリッツ(10) > ラム(100) > ホワイトラム(1000)・ダークラム(1001)、スピリッツ > ジン(101) > ドライジン(1010)・トニック用(1011)
+    // 洋酒 > リキュール(11) > 杏(110)・桃(111)。もう 1 つの根 2 > 20・21
+    const tree = buildSelectionTree([
+      node(1, [node(10, [node(100, [node(1000), node(1001)]), node(101, [node(1010), node(1011)])]), node(11, [node(110), node(111)])]),
+      node(2, [node(20), node(21)]),
+    ])
+    const pick = (...ids: number[]) => selectionFromIds(tree, ids)
+
+    // ホワイトラムとドライジンは、根の直下のノード(スピリッツ)が同じなので 1 つのまとまり
+    expect(toSendGroups(tree, pick(1000, 1010))).toEqual([[1000, 1010]])
+    // スピリッツの配下とリキュールの配下は別のまとまり
+    expect(toSendGroups(tree, pick(1000, 110))).toEqual([[1000], [110]])
+    // 根の直下のノードごとに別のまとまりになる(根が違っても)
+    expect(toSendGroups(tree, pick(1000, 110, 20))).toEqual([[1000], [110], [20]])
+    // 根の直下のノードを丸ごと選べば、そのノード 1 つ
+    expect(toSendGroups(tree, pick(1000, 1001, 1010, 1011))).toEqual([[10]])
+    // 木をすべて選ぶと根 1 つずつ
+    expect(toSendGroups(tree, selectionFromIds(tree, tree.leavesOf.keys()))).toEqual([[1], [2]])
+    expect(toSendGroups(tree, emptySelection)).toEqual([])
+  })
+
+  test('TC-304-15: まとまりを平らにすると送る ID と同じ集合で、約 600 ノードの木でも根の直下のノードごとに分かれる', () => {
+    const roots = buildLargeSearchTree()
+    const tree = buildSelectionTree(roots)
+    const middles = roots.flatMap((root) => root.children).flatMap((category) => category.children.slice(0, 1))
+    const selection = selectionFromIds(tree, middles.map((middle) => middle.id))
+
+    const groups = toSendGroups(tree, selection)
+
+    expect(sorted(groups.flat())).toEqual(sorted(toSendIds(tree, selection)))
+    expect(groups).toHaveLength(middles.length)
+    for (const group of groups) expect(new Set(group.map((id) => tree.groupOf.get(id))).size).toBe(1)
   })
 })
