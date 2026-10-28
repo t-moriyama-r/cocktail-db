@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
 use App\Http\Controllers\Admin\LogoutController;
@@ -42,6 +43,7 @@ Route::prefix('auth/passkey')->middleware(['web', 'throttle:10,1'])->group(funct
 // 管理 API。ミドルウェアの中身は bootstrap/app.php の admin のグループ
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/me', CurrentAdminController::class);
+    Route::get('/cocktails', CocktailIndexController::class);
     Route::post('/logout', LogoutController::class);
     Route::get('/passkeys', [PasskeyController::class, 'index']);
     Route::post('/passkeys/registration-options', [PasskeyController::class, 'registrationOptions']);

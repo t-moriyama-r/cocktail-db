@@ -108,6 +108,210 @@
                 }
             }
         },
+        "/admin/cocktails": {
+            "get": {
+                "operationId": "admin.cocktailIndex",
+                "description": "\u540d\u524d\u306f\u30ab\u30bf\u30ab\u30ca\u3092\u3072\u3089\u304c\u306a\u306b\u3001\u5168\u89d2\u306e\u82f1\u6570\u5b57\u3092\u534a\u89d2\u306b\u3001\u5927\u6587\u5b57\u3092\u5c0f\u6587\u5b57\u306b\u305d\u308d\u3048\u3066\u6bd4\u3079\u3001\u540c\u3058\u306a\u3089 ID \u306e\u9806(\u65e7\u306e\u7ba1\u7406\u753b\u9762\u306e\n\u4e00\u89a7\u3068\u540c\u3058\u4e26\u3073)\u3002q \u306f\u540d\u524d\u304b\u82f1\u540d\u306e\u3069\u3053\u304b\u306b\u542b\u3080\u3082\u306e\u306b\u7d5e\u308b(\u82f1\u540d\u306f\u5927\u6587\u5b57\u30fb\u5c0f\u6587\u5b57\u3092\u533a\u5225\u3057\u306a\u3044)\u3002",
+                "summary": "\u7ba1\u7406\u753b\u9762\u306e\u30ab\u30af\u30c6\u30eb\u306e\u4e00\u89a7\u3002\u516c\u958b\u6e08\u307f\u304b\u4e0b\u66f8\u304d\u306e\u3069\u3061\u3089\u304b\u3092\u3001\u540d\u524d\u306e\u6607\u9806\u3067 1 \u30da\u30fc\u30b8\u305a\u3064\u8fd4\u3059\u3002",
+                "tags": [
+                    "CocktailIndex"
+                ],
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": true,
+                        "description": "published: \u516c\u958b\u6e08\u307f / draft: \u4e0b\u66f8\u304d",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "published",
+                                "draft"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "\u540d\u524d\u304b\u82f1\u540d\u306e\u3069\u3053\u304b\u306b\u542b\u3080\u8a9e(#284 \u306e 6\u3002\u90e8\u5206\u4e00\u81f4)",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 50
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `CocktailListItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CocktailListItemResource"
+                                            }
+                                        },
+                                        "links": {
+                                            "type": "object",
+                                            "properties": {
+                                                "first": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "last": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "prev": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "next": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "from": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "minimum": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "links": {
+                                                    "type": "array",
+                                                    "description": "Generated paginator links.",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "url": {
+                                                                "type": [
+                                                                    "string",
+                                                                    "null"
+                                                                ]
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            },
+                                                            "active": {
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "url",
+                                                            "label",
+                                                            "active"
+                                                        ]
+                                                    }
+                                                },
+                                                "path": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "description": "Base path for paginator generated URLs."
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0
+                                                },
+                                                "to": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "description": "Number of the last item in the slice.",
+                                                    "minimum": 1
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "description": "Total number of items being paginated.",
+                                                    "minimum": 0
+                                                }
+                                            },
+                                            "required": [
+                                                "current_page",
+                                                "from",
+                                                "last_page",
+                                                "links",
+                                                "path",
+                                                "per_page",
+                                                "to",
+                                                "total"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "links",
+                                        "meta"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/cocktails/{cocktail}/preview": {
             "get": {
                 "operationId": "admin.cocktailPreview",
@@ -1814,6 +2018,40 @@
                     "brand"
                 ],
                 "title": "CocktailIngredientResource"
+            },
+            "CocktailListItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_draft": {
+                        "type": "boolean"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "is_draft",
+                    "updated_at"
+                ],
+                "title": "CocktailListItemResource"
             },
             "CocktailSearchRequest": {
                 "type": "object",
