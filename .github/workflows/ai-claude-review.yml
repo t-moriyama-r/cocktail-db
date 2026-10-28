@@ -133,6 +133,11 @@ jobs:
               (issue の本文はここでは読めないので、引用が無ければ根拠を確かめられないものとして指摘する)。根拠が文書なら、
               引用がその文書の「旧との差分」の節(`docs/search-expected-diffs.md` なら、その issue の節)にあるかも確かめる
             - 変更されたコード(backend/・frontend/・e2e/)から旧と挙動が変わっていそうなのに、表に `差分あり` として書かれていない
+            画面の証跡の幅も見る(`docs/review-checklist.md` の RC-08、`docs/design/style.md` の「証跡を撮る幅」)。向き先が develop の PR で、
+            `frontend/src/` の `.tsx`・`.css`(テストのファイルを除く)を変えているときに、次に当てはまれば指摘する。
+            - PR 本文の「## 証跡」に、幅の区切りの 4 つ(xs 375px・sm 768px・md 1024px・lg 1440px)すべての修正前・修正後の静止画が無い
+            - 区切りの境目(599/600px・959/960px)の `@media` を足した・変えたのに、境目の両側の幅の証跡が無い
+            - `<!-- ai-dev:no-viewport-evidence 理由 -->` で幅の証跡を飛ばしているのに、差分が画面に出る変更に見える
             PR 本文についての指摘は、行に付けられないので、comments ではなく summary に書く。
             指摘は、その場所と、どういう入力・状態でどう壊れるかと、直し方を、日本語で短く書く。
 
@@ -201,9 +206,9 @@ jobs:
 
       - name: 自動マージと、指摘への対応を呼ぶ
         run: |
-          # ai-review-loop.yml が CodeRabbit のレビューで動くときと同じく、人の判断・承認を待っている PR では呼ばない
+          # ai-review-loop.yml が CodeRabbit のレビューで動くときと同じく、人の判断・承認や手元の作業を待っている PR では呼ばない
           labels=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          if [[ ",$labels," != *",needs-human,"* && ",$labels," != *",needs-approval,"* ]]; then
+          if [[ ",$labels," != *",needs-human,"* && ",$labels," != *",needs-local,"* && ",$labels," != *",needs-approval,"* ]]; then
             gh workflow run ai-review-loop.yml -R "$REPO" -f number="$PR"
           fi
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
