@@ -107,13 +107,13 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 ## PR の状態(表示用)
 
-開いている PR には、いま誰の番かを表す `状態:…` のラベルが 1 つだけ付く。`.github/scripts/pr-status.sh` が、下書きか・上のラベル・コンフリクト・必須のチェック・レビュー・返信待ちと未解決の指摘・GitHub がマージを許すか(`mergeStateStatus`)から毎回出し直して付け替える。上から見て最初に当てはまったものになる。`状態:マージ待ち`・`状態:人のマージ待ち`・`状態:ベースブランチ待ち` は、GitHub が実際にマージを許す PR(`mergeStateStatus` が `CLEAN`・`HAS_HOOKS`・`UNSTABLE`)にだけ付き、マージを止めている理由はそれぞれ別のラベルになる。
+開いている PR には、いま誰の番かを表す `状態:…` のラベルが 1 つだけ付く。`.github/scripts/pr-status.sh` が、下書きか・上のラベル・コンフリクト・必須のチェック・レビュー・返信待ちと未解決の指摘・GitHub がマージを許すか(`mergeStateStatus`)から毎回出し直して付け替える。上から見て最初に当てはまったものになる。`状態:マージ待ち`・`状態:人のマージ待ち`・`状態:ベースブランチ待ち` は、GitHub が実際にマージを許す PR(`mergeStateStatus` が `CLEAN`・`HAS_HOOKS`・`UNSTABLE`)にだけ付き、マージを止めている理由はそれぞれ別のラベルになる。人の判断待ち・手元の作業待ちは、下書きより先に見る(クラウドのルーチンや Actions は、判断や証跡を待つ PR を下書きのまま止めるため。#471)。ただし、下書きの PR へのラベルの付け外しでは `pr-status.yml` が動かないので、下書きに `needs-*` を付けた・外したことは、見回り(`ai-review-sweep.yml`)か、ラベルを付けたワークフローが呼ぶ出し直しのときに反映される。
 
 | ラベル | いつ | 次に動くもの |
 |---|---|---|
-| `状態:作業中` | 下書き | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
-| `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
-| `状態:手元の作業待ち` | `needs-local` が付いている(下書きは `状態:作業中` のまま) | 手元のエージェント(`pr-patrol`・`daily-start`)が証跡を撮る・push する |
+| `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている(下書きでも) | 人が PR にコメントで答える |
+| `状態:手元の作業待ち` | `needs-local` が付いている(下書きでも) | 手元のエージェント(`pr-patrol`・`daily-start`)が証跡を撮る・push する |
+| `状態:作業中` | 下書きで、`needs-human`・`needs-decision`・`needs-local` のどれも付いていない | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
 | `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(1 時間ごと。draft は選ばない)。生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の衝突は、人に頼まずに同じワークフローが作り直して push する。直せない衝突は `needs-human` で人に頼む。`package-lock.json` の衝突や作り直せなかった生成ファイルなど、判断は要らないがこの環境では片付けられないものは `needs-local` で手元に頼む |
 | `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
 | `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある(向き先が `staging`・`release` の PR と、`needs-approval` の PR は除く) | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
