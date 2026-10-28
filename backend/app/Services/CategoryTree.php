@@ -2,9 +2,15 @@
 
 namespace App\Services;
 
+use App\Enums\CategoryDeleteBlocker;
 use App\Enums\CategoryRole;
+use App\Models\Affiliate;
+use App\Models\Brand;
 use App\Models\Category;
 use App\Models\CategoryClosure;
+use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
+use App\Support\NameNormalizer;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -90,6 +96,9 @@ class CategoryTree
      * 役割を持つ根を別のノードの下へ移すと、根でないノードが役割を持つことになる(役割は根だけが持つ)ので、これも止める。
      * 役割の無い部分木を別の根の下へ移すのは許し、移した先の根の役割になる(#153 の決まったこと)。
      *
+     * 移して部分木の根の役割が変わったときは、部分木のノード(とそこにぶら下がる銘柄)を材料に使うカクテルの
+     * 材料の数を、同じトランザクションで数え直す(「その他」の根に出入りすると数が変わる。#156)。
+     *
      * @throws InvalidArgumentException 移すノード・親が木に入っていないとき、親が自分か自分の子孫のとき、役割を持つ根を親の下へ移すとき
      */
     public function moveSubtree(Category $node, ?Category $newParent): void
@@ -99,6 +108,7 @@ class CategoryTree
                 throw new InvalidArgumentException('移すノードがカテゴリ木に入っていない(保存されていない、または閉包表に自分の行が無い)');
             }
             $subtreeIds = $this->subtreeIds($node);
+            $roleBefore = $this->rootRole($node);
 
             if ($newParent !== null) {
                 if (Category::query()->whereKey($node->getKey())->whereNotNull('role')->exists()) {
@@ -127,7 +137,74 @@ class CategoryTree
                         ->selectRaw('p.ancestor_id, s.descendant_id, p.depth + s.depth + 1'),
                 );
             }
+
+            if ($this->rootRole($node) !== $roleBefore) {
+                // RecipeCounter は判定(otherNodeIds)にこのクラスを使うので、コンストラクタで受けると互いを要して作れない。
+                // ここで作って渡す
+                (new RecipeCounter($this))->recountSubtree($node);
+            }
         });
+    }
+
+    /**
+     * 葉の $node を、閉包表の行(自分の行と、祖先からの行)ごと消す。
+     *
+     * 子があるノードを消すと、子は祖先とのつながりを失って根に化けるので、消せるのは葉だけにする。部分木をまとめて
+     * 消す操作は作らない(docs/schema.md の「カテゴリを消すとき」)。銘柄・材料・ベース・アフィリエイトから
+     * 指されているノードは外部キーの RESTRICT でも消えないが、それではどれが邪魔をしているのかが分からないので、
+     * 先に調べて理由をすべて例外に載せる(管理画面に出す。#121)。
+     *
+     * 調べてから消すまでのあいだに子や銘柄を足されると、調べた結果が古くなる。ノードの行と、閉包表の自分を
+     * 子孫とする行をロックしてから調べる(子を足す addNode は親のそれらの行を読み、銘柄などを足すときは
+     * 外部キーの確かめでノードの行を読むので、ロックが外れるまで待つ)。
+     *
+     * @throws InvalidArgumentException $node が木に入っていないとき
+     * @throws CategoryNotDeletableException 消せない理由があるとき
+     */
+    public function deleteLeaf(Category $node): void
+    {
+        DB::transaction(function () use ($node) {
+            $this->assertInTree($node);
+            Category::query()->whereKey($node->getKey())->lockForUpdate()->get();
+            CategoryClosure::query()->where('descendant_id', $node->getKey())->lockForUpdate()->get();
+
+            $blockers = $this->deleteBlockers($node);
+            if ($blockers !== []) {
+                throw new CategoryNotDeletableException($blockers);
+            }
+
+            // 閉包表の行は外部キーの CASCADE で一緒に消える
+            Category::query()->whereKey($node->getKey())->delete();
+        });
+    }
+
+    /**
+     * $node を deleteLeaf で消せない理由。消せるなら空。理由は CategoryDeleteBlocker の定義の順。
+     *
+     * 見るのは $node を直接指すものだけ。子孫を指すものは、子がある(Children)ことで止まる。
+     *
+     * @return list<CategoryDeleteBlocker>
+     *
+     * @throws InvalidArgumentException $node が木に入っていないとき
+     */
+    public function deleteBlockers(Category $node): array
+    {
+        $this->assertInTree($node);
+        $id = $node->getKey();
+
+        $found = [
+            CategoryDeleteBlocker::Children->value => CategoryClosure::query()
+                ->where('ancestor_id', $id)->where('depth', '>', 0)->exists(),
+            CategoryDeleteBlocker::Brands->value => Brand::query()->where('category_id', $id)->exists(),
+            CategoryDeleteBlocker::Ingredients->value => CocktailIngredient::query()->where('category_id', $id)->exists(),
+            CategoryDeleteBlocker::BaseCocktails->value => Cocktail::query()->where('base_category_id', $id)->exists(),
+            CategoryDeleteBlocker::Affiliates->value => Affiliate::query()->where('category_id', $id)->exists(),
+        ];
+
+        return array_values(array_filter(
+            CategoryDeleteBlocker::cases(),
+            fn (CategoryDeleteBlocker $blocker): bool => $found[$blocker->value],
+        ));
     }
 
     /**
@@ -258,6 +335,16 @@ class CategoryTree
     }
 
     /**
+     * 有名な銘柄が要らないノード(isFamousBrandOptional が true になるノード)の ID を、列 id のサブクエリで返す。
+     *
+     * otherNodeIds と同じく、ノード 1 つを受ける判定をクエリの中で使える形でも持つ。
+     */
+    public function famousBrandOptionalNodeIds(): QueryBuilder
+    {
+        return $this->nodeIdsWithRootRoleIn(self::FAMOUS_BRAND_OPTIONAL_ROLES);
+    }
+
+    /**
      * $node のすぐ下の子を、兄弟の並び順で返す。
      *
      * @return Collection<int, Category>
@@ -268,6 +355,78 @@ class CategoryTree
         $this->orderAsSiblings($children);
 
         return $children->get();
+    }
+
+    /**
+     * 名前が $name に一致するノード。名前は name_search の形(NameNormalizer)にそろえて比べる。
+     *
+     * 同じ名前のノードが複数あれば、浅いもの(祖先の少ないもの)、同じ深さなら ID の小さいもの。旧はカテゴリをミドルより
+     * 先に探していたので、浅い方を先にする。$withRoots が false なら根(旧の種別)を除く。$within を渡せば、
+     * その子孫(自分は除く)の中から探す。
+     */
+    public function findByName(string $name, bool $withRoots = true, ?Category $within = null): ?Category
+    {
+        $idColumn = (new Category)->qualifyColumn('id');
+        $depth = CategoryClosure::query()
+            ->selectRaw('count(*)')
+            ->whereColumn('descendant_id', $idColumn);
+
+        return Category::query()
+            ->where('name_search', NameNormalizer::normalize($name))
+            ->when(! $withRoots, fn (EloquentBuilder $query) => $query->has('ancestors'))
+            ->when($within !== null, fn (EloquentBuilder $query) => $query->whereIn(
+                $idColumn,
+                CategoryClosure::query()->select('descendant_id')->where('ancestor_id', $within?->getKey())->where('depth', '>', 0),
+            ))
+            ->orderBy($depth)
+            ->orderBy($idColumn)
+            ->first();
+    }
+
+    /**
+     * 木全体を、根から一番深い段まで入れ子で返す。根も子も兄弟の並び順。
+     *
+     * ノードごとに roots・children を呼ぶと段の数だけクエリが増えるので、ノードと親子(閉包表の depth 1 の行)を
+     * まとめて引いて組み立てる。根は roots と同じ定義(rootIds)で決める。
+     * 各ノードの根の役割は rootRole と同じく根の role だけを見て、ノード自身や途中の祖先の role は見ない。
+     *
+     * @return list<CategoryTreeNode>
+     */
+    public function forest(): array
+    {
+        $nodes = Category::query();
+        $this->orderAsSiblings($nodes);
+        $nodes = $nodes->get();
+
+        /** @var array<int, int> $parentIds 子の ID → 親の ID */
+        $parentIds = CategoryClosure::query()->where('depth', 1)->pluck('ancestor_id', 'descendant_id')->all();
+
+        /** @var array<int, list<Category>> $childrenOf 親の ID → 子(兄弟の並び順) */
+        $childrenOf = [];
+        foreach ($nodes as $node) {
+            if (isset($parentIds[$node->id])) {
+                $childrenOf[$parentIds[$node->id]][] = $node;
+            }
+        }
+
+        $build = function (Category $node, ?CategoryRole $rootRole) use (&$build, $childrenOf): CategoryTreeNode {
+            return new CategoryTreeNode(
+                $node,
+                $rootRole,
+                array_map(fn (Category $child): CategoryTreeNode => $build($child, $rootRole), $childrenOf[$node->id] ?? []),
+            );
+        };
+
+        $rootIds = Category::query()
+            ->whereIn((new Category)->qualifyColumn('id'), $this->rootIds())
+            ->pluck('id')
+            ->flip()
+            ->all();
+
+        return array_values($nodes
+            ->filter(fn (Category $node): bool => isset($rootIds[$node->id]))
+            ->map(fn (Category $root): CategoryTreeNode => $build($root, $root->role))
+            ->all());
     }
 
     /**

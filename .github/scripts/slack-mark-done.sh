@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 人に頼んだ Slack の通知(needs-human・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足す。
+# 人に頼んだ Slack の通知(needs-human・needs-local・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足す。
 #
 # 頼んだ通知は、notify-needs-human.yml が bot で送るときに、どの PR・issue のどのラベルかをメッセージのメタデータ
 # (event_type ai_dev_ask)に持たせている。GitHub 側に記録を残さないので、bot と人の DM の履歴を読んで頼んだ通知を探す。
@@ -68,7 +68,9 @@ read_asks() {
 	while :; do
 		page=$(slack_form conversations.history --data-urlencode "channel=$channel" --data-urlencode "oldest=$oldest" \
 			--data-urlencode "limit=200" --data-urlencode "include_all_metadata=true" --data-urlencode "cursor=$cursor") || return 1
-		messages=$(jq -c --argjson page "$page" '. + ($page.messages // [])' <<<"$messages")
+		# 1 ページの応答は 1 引数の上限(Linux で 128KB)を超えうるので、引数ではなく標準入力で渡す。
+		# この関数は if ! の中で呼ばれて set -e が効かないので、失敗は自分で返す
+		messages=$(printf '%s\n%s\n' "$messages" "$page" | jq -cs '.[0] + (.[1].messages // [])') || return 1
 		cursor=$(jq -r '.response_metadata.next_cursor // ""' <<<"$page")
 		[ -n "$cursor" ] || break
 	done

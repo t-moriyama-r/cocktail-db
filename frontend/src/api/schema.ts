@@ -4,6 +4,192 @@
  */
 
 export interface paths {
+    "/affiliates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ノード・銘柄の詳細の、商品の欄に出すアフィリエイトの 1 件を返す。
+         * @description 選び方は旧(AffiliateController@getAffiliateData)と同じ。銘柄を指定したらその銘柄の行。指定しなければ、ノードに
+         *     有名な銘柄があればその銘柄の行、無ければノードの行。行の無いノード・銘柄、無い ID は 404(旧は 500 だった)。
+         */
+        get: operations["affiliate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/{cocktail}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * カクテルの詳細を返す。基本情報・技法(と、それを説明する用語の ID)・グラス・氷と、材料を並び順(position)で返す。
+         *     材料ごとに、ノードの根からのパンくずと銘柄を返す。
+         * @description 下書き・無いカクテルは 404(旧は下書きも返し、無い ID は 500 だった。docs/decisions/cocktail-detail.md)。
+         */
+        get: operations["cocktailDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/cocktails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 管理画面のカクテルの一覧。公開済みか下書きのどちらかを、名前の昇順で 1 ページずつ返す。
+         * @description 名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順(旧の管理画面の
+         *     一覧と同じ並び)。q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         */
+        get: operations["admin.cocktailIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * カクテルを、指定した並べ方で limit 件まで返す。1 件は一覧の表(#298)の 1 行の形。
+         * @description - recent: 更新日時(updated_at)の新しい順。同じ日時なら ID の大きい順
+         *     - recommend: 評価(rate)が 3 以上のカクテルから、ランダムに選ぶ(旧 cocktailRecommend)
+         *     - random: すべてのカクテルから、ランダムに選ぶ
+         *
+         *     limit は 1〜50(省略すると 10)。sort・limit が外れていたら 422。
+         */
+        get: operations["cocktailList.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公開しているカクテルの件数を返す(下書きは数えない)。 */
+        get: operations["cocktailList.count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/latest-video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 動画の公開日時(youtube_created_at)がいちばん新しいカクテルを返す。同じ日時なら ID の大きいもの。
+         * @description 動画(youtube)の無いカクテルは選ばない。動画のある公開のカクテルが 1 件も無ければ 404。
+         */
+        get: operations["cocktailList.latestVideo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/cocktails/{cocktail}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 公開の詳細(GET /api/cocktails/{id})と同じ形で、下書きも含めてカクテルの詳細を返す。
+         * @description 公開の API はセッションを使わないので、ログインしているかで返すものを変えられない。管理者が下書きを
+         *     公開の詳細と同じ形で確かめられるよう、管理 API に置く。
+         */
+        get: operations["admin.cocktailPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/{cocktail}/same-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 同じ名前の別のカクテルを、ID の順で返す。
+         * @description 「同じ名前」は英名(name_eng)が同じもの(旧 CocktailFactory::sameName)。下書きは返さず、下書き・無いカクテルを
+         *     指定したら 404。英名の無い(null・空の)カクテルは比べる名前が無いので 0 件(docs/decisions/cocktail-detail.md)。
+         */
+        get: operations["cocktailSameName"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 条件に当たるカクテルを、一覧の表の行の形で ID の昇順にすべて返す。当たらなければ空の配列。
+         * @description ページングと並べ替えは #167 で足す。旧も条件に合うものを全件返していた(docs/search.md の「返すもの」)。
+         */
+        post: operations["cocktailSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/me": {
         parameters: {
             query?: never;
@@ -13,6 +199,46 @@ export interface paths {
         };
         /** ログインしている管理者を返す。 */
         get: operations["admin.currentAdmin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dictionaries/{dictionary}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語の詳細。用語の種類(技法・グラス・そのほか)と、技法なら技法の ID も返す(docs/decisions/dictionary.md)。
+         * @description 無い用語は 404(旧は 500 だった)。
+         */
+        get: operations["dictionaryDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語辞典の一覧。分類を ID の順に、分類ごとの用語を名前の順で返す(docs/decisions/dictionary.md)。
+         * @description 用語の無い分類も、旧と同じく空の並びで返す(出すかどうかは画面が決める)。
+         */
+        get: operations["dictionaryIndex"];
         put?: never;
         post?: never;
         delete?: never;
@@ -38,11 +264,682 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/legacy/search-condition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 旧サイトが保存した検索条件(旧のカテゴリ・ミドル・技法の ID)を、新しいノード・技法の ID に直して返す。
+         * @description 直し方は App\Services\LegacySearchCondition。対応の無い ID などは捨て、捨てた数を dropped_count に入れる
+         *     (画面が「戻せなかった条件がある」と出すため。#175)。検索方法・かんたん検索は画面がそのまま移すので受けない。
+         */
+        post: operations["legacySearchCondition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理画面からログアウトする(#311)。
+         * @description セッションを捨てて CSRF のトークンも作り直すので、ログアウトの前のセッションのクッキーではもう管理 API を呼べない。
+         */
+        post: operations["admin.logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/paraphrases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 言い換え辞書の一覧を、ID の順(足した順)で 1 ページずつ返す。
+         * @description q は、変換前・変換後・ミドルの名前のどこかに含む語(部分一致)。
+         */
+        get: operations["paraphrases.index"];
+        put?: never;
+        /** 言い換え辞書に 1 語を足す。 */
+        post: operations["paraphrases.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/paraphrases/{paraphrase}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 言い換え辞書の 1 語を返す。 */
+        get: operations["paraphrases.show"];
+        /** 言い換え辞書の 1 語を書き換える。 */
+        put: operations["paraphrases.update"];
+        post?: never;
+        /** 言い換え辞書の 1 語を消す。 */
+        delete: operations["paraphrases.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 自分のパスキーを、登録した順で返す。 */
+        get: operations["passkey.index"];
+        put?: never;
+        /**
+         * 登録を終える。navigator.credentials.create() の結果を確かめて、名前を付けて保存する。
+         * @description 登録を始めていない・チャレンジやオリジンの合わない応答、登録済みの資格情報は 422(credential のエラー)。
+         */
+        post: operations["passkey.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/passkeys/registration-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 登録を始める。ブラウザの navigator.credentials.create() に渡す options を返す。
+         * @description 登録済みのパスキーは options の excludeCredentials に載せ、同じ端末を 2 回登録させない。
+         */
+        post: operations["passkey.registrationOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/passkeys/{passkey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 自分のパスキーを 1 つ消す。ほかの人のパスキーは、無いものと同じく 404。
+         * @description 最後の 1 つも消せる(docs/decisions/passkey.md)。消すと、非常用のログイン URL(#115)でしか入れなくなる。
+         */
+        delete: operations["passkey.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/login-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * ログインを始める。ブラウザの navigator.credentials.get() に渡す options を返す。
+         * @description ユーザー名を入れずにログインする(端末が覚えているパスキーから選ぶ)ので、options にパスキーの一覧は載せない。
+         */
+        post: operations["passkeyLogin.options"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * ログインを終える。navigator.credentials.get() の結果を確かめ、そのパスキーの持ち主でログインする。
+         * @description 登録されていない・消したパスキー、チャレンジやオリジンの合わない応答は 422(credential のエラー)。
+         */
+        post: operations["passkeyLogin.login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search-form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 検索フォームに出すカテゴリの木と技法の一覧を返す。
+         * @description 木は根から一番深い段まで入れ子で返す(docs/schema.md の「検索フォーム(#95)に出す深さ」)。根も子も兄弟の並び順。
+         *     カクテルに使われているかでは絞らず、下書きのカクテルでしか使っていないノードも返す(旧の getKindsForForm も
+         *     すべてのカテゴリ・ミドルを返していた)。技法は ID の順。
+         */
+        get: operations["searchForm"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/skip-words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** スキップ語をすべて、ID の順で返す(旧で 5 件。ページに分けない)。 */
+        get: operations["skip-words.index"];
+        put?: never;
+        /** スキップ語を 1 語足す。 */
+        post: operations["skip-words.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/skip-words/{skipWord}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** スキップ語を 1 語書き換える。 */
+        put: operations["skip-words.update"];
+        post?: never;
+        /** スキップ語を 1 語消す。 */
+        delete: operations["skip-words.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
-    responses: never;
+    schemas: {
+        /** AffiliateResource */
+        AffiliateResource: {
+            category_id: number;
+            brand_id: number | null;
+            name: string;
+            display: {
+                /** @constant */
+                source: "human";
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                fetched_at: null;
+            } | {
+                /** @constant */
+                source: "amazon";
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            } | {
+                /** @constant */
+                source: "rakuten";
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            } | null;
+            amazon: {
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                search_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            };
+            rakuten: {
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                search_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            };
+            human: {
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                amazon_detail_url: string | null;
+                amazon_search_url: string | null;
+            };
+        };
+        /** App.Http.Resources.Admin.CocktailListItemResource */
+        "App.Http.Resources.Admin.CocktailListItemResource": {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_draft: boolean;
+            updated_at: string | null;
+        };
+        /**
+         * CategoryRole
+         * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
+         *     | |
+         *     |---|
+         *     | `soft_drink` <br/> 旧の kind 4 |
+         *     | `other` <br/> 旧の kind 5(ガーニッシュなど) |
+         * @enum {string}
+         */
+        CategoryRole: "soft_drink" | "other";
+        /** CocktailDetailResource */
+        CocktailDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_draft: boolean;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+                name_eng: string;
+                /** @description 技法を説明する用語の ID(用語の詳細へのリンク先)。用語の無い技法では null */
+                dictionary_id: number | null;
+            };
+            /** @description グラスは用語辞典の項目なので、ID は用語の詳細へのリンク先になる */
+            glass: {
+                id: number;
+                name: string;
+                name_eng: string;
+            } | null;
+            ice: {
+                id: number;
+                name: string;
+                name_eng: string | null;
+            } | null;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            note: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            youtube_start_seconds: number | null;
+            instagram: string | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            ingredients: components["schemas"]["CocktailIngredientResource"][];
+        };
+        /** CocktailIngredientResource */
+        CocktailIngredientResource: {
+            position: number;
+            amount: string;
+            is_optional: boolean;
+            /** @description 根が先頭で、材料のノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+            brand: {
+                id: number;
+                name: string;
+                name_eng: string;
+            } | null;
+        };
+        /** CocktailListItemResource */
+        CocktailListItemResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+                name_eng: string;
+            };
+            recipe_count: number;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            youtube: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        /**
+         * CocktailSearchRequest
+         * @description 条件検索(POST /api/cocktails/search)の条件(docs/search.md の「新しい条件との対応」)。
+         *
+         *     選んだノードの ID は、画面が部分木を親に畳めないと数百個になりうる(docs/decisions/search-screen.md の 3)ので、
+         *     GET のクエリではなく JSON の本文で受ける(#163 の「追記: API の形」)。
+         */
+        CocktailSearchRequest: {
+            /**
+             * @description 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
+             *     OR 検索の結果を黙って返してしまう
+             * @enum {string|null}
+             */
+            mode?: "or" | null;
+            /**
+             * @description 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+             *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
+             */
+            category_ids: number[];
+        };
+        /** CocktailSummaryResource */
+        CocktailSummaryResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+            };
+            recipe_count: number;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            youtube: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        /**
+         * ConvertLegacySearchConditionRequest
+         * @description 旧サイトが保存した検索条件を直す(POST /api/legacy/search-condition。#290)。
+         *
+         *     旧の localStorage(キー searchInstant・searchUser)の categories・middles・methods をそのまま受ける。省いたキーは
+         *     空の配列と同じに扱う。旧の画面は「全てチェック」で数百の ID を保存しうるので、本文で受ける(#163 と同じ理由)。
+         */
+        ConvertLegacySearchConditionRequest: {
+            categories?: number[];
+            middles?: number[];
+            methods?: number[];
+        };
+        /** DictionaryCategoryResource */
+        DictionaryCategoryResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            dictionaries: components["schemas"]["DictionaryRefResource"][];
+        };
+        /** DictionaryDetailResource */
+        DictionaryDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            category: {
+                id: number;
+                name: string;
+                name_eng: string;
+            };
+            /** @enum {string} */
+            kind: "method" | "glass" | "other";
+            /** @description 技法の用語なら、その技法の ID(技法から探すカクテルの条件に使う)。技法でなければ null */
+            method_id: number | null;
+            description: string;
+            youtube: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+        };
+        /** DictionaryRefResource */
+        DictionaryRefResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+        };
+        /** LatestVideoCocktailResource */
+        LatestVideoCocktailResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            base: components["schemas"]["NodeRefResource"];
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+        };
+        /** NodeRefResource */
+        NodeRefResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+        };
+        /** ParaphraseResource */
+        ParaphraseResource: {
+            id: number;
+            /** @description 変換前の名前 */
+            name: string;
+            /** @description 変換後の名前(ノードか銘柄) */
+            converted: string;
+            middle: string | null;
+            /** @description null: 指定なし / hot: 強制ホット */
+            command: string | null;
+            note: string | null;
+            resolved: {
+                path: {
+                    id: number;
+                    name: string;
+                    name_eng: string;
+                }[];
+                brand: {
+                    id: number;
+                    name: string;
+                    name_eng: string;
+                } | null;
+            } | null;
+        };
+        /** PasskeyRegistrationRequest */
+        PasskeyRegistrationRequest: {
+            name: string;
+            credential: {
+                id: string;
+                rawId: string;
+                /** @enum {string} */
+                type: "public-key";
+                response: string[];
+            };
+        };
+        /** PasskeyResource */
+        PasskeyResource: {
+            id: number;
+            name: string;
+            /** @description 登録した日時。一度も使っていなければ last_used_at は null */
+            created_at: string | null;
+            last_used_at: string | null;
+        };
+        /** PasskeyVerificationRequest */
+        PasskeyVerificationRequest: {
+            credential: {
+                id: string;
+                rawId: string;
+                /** @enum {string} */
+                type: "public-key";
+                response: string[];
+            };
+            remember?: boolean;
+        };
+        /**
+         * SaveParaphraseRequest
+         * @description 言い換え辞書の 1 語の追加・更新(POST /api/admin/paraphrases・PUT /api/admin/paraphrases/{id}。#316)。
+         */
+        SaveParaphraseRequest: {
+            /** @description 変換前の名前(取り込んだ材料の名前)。ほかの語と重ならない */
+            name: string;
+            /** @description 変換後の名前。ノードか銘柄の名前で、解決できないと 422 */
+            converted: string;
+            /** @description converted のノードの配下のノードの名前 */
+            middle?: string | null;
+            /**
+             * @description null: 指定なし / hot: 強制ホット(旧の画面の選択肢)
+             * @enum {string|null}
+             */
+            command?: "hot" | null;
+            note?: string | null;
+        };
+        /**
+         * SaveSkipWordRequest
+         * @description スキップ語の 1 語の追加・更新(POST /api/admin/skip-words・PUT /api/admin/skip-words/{id}。#316)。
+         */
+        SaveSkipWordRequest: {
+            /** @description 列の長さ(docs/schema.md の「skip_words」。旧 skip_db と同じ 256)まで。ほかの語と重ならない */
+            name: string;
+        };
+        /** SearchFormMethodResource */
+        SearchFormMethodResource: {
+            id: number;
+            name: string;
+        };
+        /** SearchFormNodeResource */
+        SearchFormNodeResource: {
+            id: number;
+            name: string;
+            /** @description 旧の画面の「メジャーでない項目の表示/非表示」に使う */
+            is_major: boolean;
+            root_role: components["schemas"]["CategoryRole"] | null;
+            children: components["schemas"]["SearchFormNodeResource"][];
+        };
+        /** SkipWordResource */
+        SkipWordResource: {
+            id: number;
+            name: string;
+        };
+    };
+    responses: {
+        /** @description Validation error */
+        ValidationException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Errors overview. */
+                    message: string;
+                    /** @description A detailed description of each field that failed validation. */
+                    errors: {
+                        [key: string]: string[];
+                    };
+                };
+            };
+        };
+        /** @description Not found */
+        ModelNotFoundException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Error overview. */
+                    message: string;
+                };
+            };
+        };
+        /** @description Validation error */
+        InvalidPasskeyException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Errors overview. */
+                    message: string;
+                    /** @description A detailed description of each field that failed validation. */
+                    errors: {
+                        [key: string]: string[];
+                    };
+                };
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -50,6 +947,259 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    affiliate: {
+        parameters: {
+            query: {
+                category_id: number;
+                brand_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `AffiliateResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AffiliateResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    cocktailDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CocktailDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailDetailResource"];
+                    };
+                };
+            };
+        };
+    };
+    "admin.cocktailIndex": {
+        parameters: {
+            query: {
+                /** @description published: 公開済み / draft: 下書き */
+                status: "published" | "draft";
+                /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
+                q?: string | null;
+                page?: number | null;
+                per_page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `App.Http.Resources.Admin.CocktailListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["App.Http.Resources.Admin.CocktailListItemResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktailList.index": {
+        parameters: {
+            query: {
+                /** @description recent: 更新の新しい順。recommend: 評価が 3 以上からランダム。random: ランダム */
+                sort: "recent" | "recommend" | "random";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailListItemResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktailList.count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count: number;
+                    };
+                };
+            };
+        };
+    };
+    "cocktailList.latestVideo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `LatestVideoCocktailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["LatestVideoCocktailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "admin.cocktailPreview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CocktailDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    cocktailSameName: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+        };
+    };
+    cocktailSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CocktailSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
     "admin.currentAdmin": {
         parameters: {
             query?: never;
@@ -67,6 +1217,53 @@ export interface operations {
                     "application/json": {
                         id: number;
                         name: string;
+                    };
+                };
+            };
+        };
+    };
+    dictionaryDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DictionaryDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    dictionaryIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `DictionaryCategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryCategoryResource"][];
                     };
                 };
             };
@@ -92,6 +1289,477 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    legacySearchCondition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConvertLegacySearchConditionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        category_ids: number[];
+                        method_ids: number[];
+                        dropped_count: number;
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "admin.logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "paraphrases.index": {
+        parameters: {
+            query?: {
+                q?: string | null;
+                page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "paraphrases.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveParaphraseRequest"];
+            };
+        };
+        responses: {
+            /** @description `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "paraphrases.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paraphrase ID */
+                paraphrase: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "paraphrases.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paraphrase ID */
+                paraphrase: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveParaphraseRequest"];
+            };
+        };
+        responses: {
+            /** @description `ParaphraseResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ParaphraseResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "paraphrases.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paraphrase ID */
+                paraphrase: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "passkey.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `PasskeyResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PasskeyResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "passkey.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description `PasskeyResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PasskeyResource"];
+                    };
+                };
+            };
+            422: components["responses"]["InvalidPasskeyException"];
+        };
+    };
+    "passkey.registrationOptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        options: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "passkey.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The passkey ID */
+                passkey: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "passkeyLogin.options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        options: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "passkeyLogin.login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyVerificationRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: number;
+                        name: string;
+                    };
+                };
+            };
+            422: components["responses"]["InvalidPasskeyException"];
+        };
+    };
+    searchForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        categories: components["schemas"]["SearchFormNodeResource"][];
+                        methods: components["schemas"]["SearchFormMethodResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "skip-words.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `SkipWordResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SkipWordResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "skip-words.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSkipWordRequest"];
+            };
+        };
+        responses: {
+            /** @description `SkipWordResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SkipWordResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "skip-words.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The skip word ID */
+                skipWord: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSkipWordRequest"];
+            };
+        };
+        responses: {
+            /** @description `SkipWordResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SkipWordResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "skip-words.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The skip word ID */
+                skipWord: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
 }

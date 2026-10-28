@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('affiliates', function (Blueprint $table) {
             $table->id();
             $table->foreignId('category_id')->constrained()->restrictOnDelete();
-            // brands を指すが、brands はまだ無い(#22)。外部キー(CASCADE)は brands と両方がそろってから足す
+            // brands を指すが、この時点では brands が無い(#22)。外部キー(CASCADE)は両方の後のマイグレーション(#325)で足す
             $table->foreignId('brand_id')->nullable()->index();
             // MariaDB の unique は null 同士を重複と見なさないため、(category_id, brand_id) の unique では
             // 同じノードの「ノードの行」(brand_id が null)が 2 行入ってしまう。null を 0 に置き換えた列で一意にする

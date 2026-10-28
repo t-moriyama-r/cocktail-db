@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\PendingCommand;
 use Tests\Support\LegacyFixture;
+use Tests\Support\LegacyImportCommand;
 use Tests\TestCase;
 
 // legacy:import --only=misc(技法・氷・用語辞典・言い換え・スキップ語・ユーザー)。旧 DB を使うので db グループ
@@ -13,17 +14,13 @@ use Tests\TestCase;
 uses(RefreshDatabase::class)->group('db');
 
 /**
- * legacy:import を、出力と終了コードを確かめられる形で呼ぶ。
+ * legacy:import を呼ぶ。オプションを渡さなければ --only=misc にする。
  *
  * @param  array<string, string>  $options
  */
 function importLegacyMisc(TestCase $test, array $options = ['--only' => 'misc']): PendingCommand
 {
-    $command = $test->artisan('legacy:import', $options);
-
-    return $command instanceof PendingCommand
-        ? $command
-        : throw new RuntimeException('コンソールの出力を差し替えずにコマンドが動いた');
+    return LegacyImportCommand::run($test, $options);
 }
 
 /**
@@ -246,14 +243,16 @@ it('TC-33-13: 移している途中で失敗したら、例外で止まり、ど
 });
 
 it('TC-33-14: 移した後に足した行は、旧の最大の ID の次から番号が振られる', function () {
+    // 自動採番の値はトランザクションを戻しても戻らないので、先に流れたテストが技法を作っていると、その数だけ進んでいる。
+    // それより十分大きい ID にして、旧の最大の ID の次になることを確かめる
     DB::connection('legacy')->table('m_method')->insert([
-        'id' => 20, 'name' => '番号の飛んだ技法', 'name_eng' => 'Gap', 'description' => '',
+        'id' => 100000, 'name' => '番号の飛んだ技法', 'name_eng' => 'Gap', 'description' => '',
     ]);
 
     importLegacyMisc($this)->assertExitCode(0);
 
     expect(DB::table('methods')->insertGetId(['name' => '新しい技法', 'name_eng' => 'New', 'description' => '']))
-        ->toBe(21);
+        ->toBe(100001);
 });
 
 it('TC-33-15: --only に知らない名前を渡すと、何も入れずに 1 で終わる', function () {
@@ -268,4 +267,25 @@ it('TC-33-16: --only を付けないと、misc も流す', function () {
     importLegacyMisc($this, [])->assertExitCode(0);
 
     expect(miscCounts()['methods'])->toBe(3);
+});
+
+it('TC-40-19: 技法に、同じ名前の用語の ID を入れる(ID の一致には頼らない)', function () {
+    // 用語の ID(10)を技法の ID(2)と違えて、名前で結び付けることを確かめる
+    DB::connection('legacy')->table('t_dictionary')->insert([
+        'id' => 10, 'name' => 'ステア', 'name_eng' => 'Stir', 'name_search' => 'ステア', 'description' => '', 'category' => 1,
+    ]);
+
+    importLegacyMisc($this)->assertExitCode(0);
+
+    expect(DB::table('methods')->orderBy('id')->pluck('dictionary_id', 'id')->all())
+        ->toBe([1 => 1, 2 => 10, 3 => null]);
+});
+
+it('TC-40-20: 2 回目の前に技法の名前が変わっていたら、用語との結び付きも作り直す', function () {
+    importLegacyMisc($this)->assertExitCode(0);
+    DB::connection('legacy')->table('m_method')->where('id', 1)->update(['name' => 'ビルド(変更)']);
+
+    importLegacyMisc($this)->assertExitCode(0);
+
+    expect(DB::table('methods')->where('id', 1)->value('dictionary_id'))->toBeNull();
 });

@@ -28,6 +28,21 @@ reviews:
 
           `旧に無い` は、旧に無い機能・CI・ドキュメントだけの変更などで使ってよい。
           当てはまらなければ通す。
+      # 画面を変える PR の証跡を幅の区切りごとに撮る決まり(CLAUDE.md の「ブランチ・コミット・PR」の 5・docs/design/style.md の
+      # 「証跡を撮る幅」・docs/review-checklist.md の RC-08。#432)。証跡は PR 本文にあるので、pre-merge check で確かめる
+      - name: "画面の証跡が幅の区切りごとにそろっているか"
+        mode: warning
+        instructions: |
+          develop 以外に向いた PR、frontend/src/ の .tsx・.css(テストのファイルを除く)を変えていない PR は、このチェックを通す(対象外)。
+
+          PR 本文の「## 証跡」の節を見て、次のどれかに当てはまれば失敗にし、当てはまったものを具体的に書く。
+          1. 幅の区切りの 4 つ(xs 〜599px・sm 600〜959px・md 960〜1263px・lg 1264px〜)のどれかで、撮った幅(撮る幅は
+             xs 375px・sm 768px・md 1024px・lg 1440px)の修正前・修正後の静止画が無い。足りない区切りの名前を書く
+          2. 差分で、区切りの境目(599/600px・959/960px)で出し方を変える CSS(`@media`)を足した・変えたのに、境目の両側の幅の証跡が無い
+          3. 本文に `<!-- ai-dev:no-viewport-evidence 理由 -->` があるのに、差分が画面に出る変更(コンポーネントの見た目・CSS)に見える、
+             または理由が書かれていない
+
+          当てはまらなければ通す。
 
   path_instructions:
     - path: "backend/**"
@@ -42,7 +57,39 @@ reviews:
       instructions: *legacy-diff
     - path: "e2e/**"
       instructions: *legacy-diff
+    # テストの書き方(CLAUDE.md の「テストの書き方」の「モックの範囲と確かめる対象」)。
+    # 上の backend/**・frontend/**・e2e/** の指示と重ねて効く
+    - path: "backend/tests/**"
+      instructions: &test-rules |
+        テストは振る舞いを変えないリファクタで落ちないように書く(CLAUDE.md の「モックの範囲と確かめる対象」)。次に当てはまれば指摘する。
+        - 自前のクラス・モジュール・フックをモックしている(`vi.mock` で自分たちのモジュールを差し替える、Mockery・`shouldReceive`・
+          `$this->mock()` で自分たちのクラスを差し替える、など)。差し替えてよいのは、プロセスの外にあって自分たちが持っていないもの
+          (外部 API・時刻・乱数・メール送信など)だけ。DB をモックしている・SQLite で代用している
+        - 呼び出しの回数・引数を確かめている(`toHaveBeenCalledTimes`・`toHaveBeenCalledWith`・`shouldReceive(...)->once()` など)のに、
+          その送信そのもの(ログに残す・メールを送る・外部 API に送る中身など)が仕様ではない
+        - 外から見える結果(返り値・HTTP の応答・DB に残った行・画面に出た文字や役割)ではなく、内部の state・private なメソッド・
+          コンポーネントの中の値に依存して確かめている
+        - FE の API の差し替えが `fetch` の層でない、スキーマで定義された応答に `src/api/schema.ts` の型を当てていない(手で型を書いている。
+          スキーマにないエラー応答は対象外)、`baseUrl` が相対の `/api` の client に `fetch` だけを差し替えている
+          (`http://localhost/api` のような絶対 URL にしたスキーマ型の client を使う)、
+          差し替えの仕組みをテストのファイルごとに作っている(テストのセットアップの 1 か所に置く)
+        - 振る舞いを変えないリファクタの PR なのに、既存のテストを書き換えている
+    - path: "frontend/src/**/*.test.{ts,tsx}"
+      instructions: *test-rules
+    - path: "e2e/tests/**"
+      instructions: |
+        E2E は実サーバーを相手にするので、モックの話は当てはまらない(CLAUDE.md の「モックの範囲と確かめる対象」)。次に当てはまれば指摘する。
+        - 画面に出た文字や役割ではなく、内部の state・DOM の作り(クラス名・要素の順番など)に依存して確かめている
+        - API や自前のモジュールを差し替えている(外部サービス・時刻など、プロセスの外のものだけ差し替えてよい)
     - path: "docs/decisions/**"
       instructions: |
         旧と挙動を変える決定には、「旧との差分」の節があり、差分ごとに「旧で何が起きていて、新で何に変えるか」が
         1 行で書かれているかを確かめる(CLAUDE.md の「テストの書き方」の「旧との差分」)。無ければ指摘する。
+
+# レビューで繰り返し出た指摘のルール(CLAUDE.md の「レビューで繰り返し出た指摘」)。CLAUDE.md は既定で読まれるので、足すのはこのファイルだけ
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/CLAUDE.md"
+      - "docs/review-checklist.md"

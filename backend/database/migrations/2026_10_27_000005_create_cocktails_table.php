@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('name_search', 255)->index();
             $table->string('name_eng', 255)->nullable()->index();
             $table->foreignId('base_category_id')->index()->constrained('categories')->restrictOnDelete();
-            // methods・dictionaries・ices を指すが、どれもまだ無い(#23 で作る)。外部キーは表ができてから足す
+            // methods・dictionaries・ices を指すが、この時点ではどれも無い(#23 で作る)。外部キーは両方の後のマイグレーション(#325)で足す
             $table->foreignId('method_id')->index();
             $table->foreignId('glass_dictionary_id')->nullable()->index();
             $table->foreignId('ice_id')->nullable();

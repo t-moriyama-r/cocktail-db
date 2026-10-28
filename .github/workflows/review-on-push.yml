@@ -1,0 +1,57 @@
+# PR に push されたコミットのレビューを、CI(test.yml)の終わりに頼む。決め方は .github/scripts/review-on-push.sh
+#
+# 人・手元のエージェントが開いた PR に push したコミットは、依頼を出すのが 2 時間ごとの ai-review-sweep.yml だけで、
+# GitHub が schedule を遅らせる・落とすと、誰も依頼しないまま「レビュー待ち」で止まった(#353 で約 2 時間。#366)。
+# push の後に必ず起きる CI の終わりで、そのコミットを head にした開いている PR に request-review.sh で頼む
+# (まず CodeRabbit、上限・返事なし・依頼を書けないときだけ代わりの Claude。順番は変えない)。
+# - draft・needs-human・needs-local・needs-approval の PR は request-review.sh が見送る(ai-review-sweep.yml と同じ)
+# - いまのコミットの後にオーナーの依頼がもうあれば(Actions の Claude が直して push した後に ai-review-loop.yml が出したものなど)、
+#   review-request-state.sh が waiting を返すので、同じコミットに 2 回依頼しない。代わりの Claude も、ai-claude-review.yml が
+#   PR ごとに順番待ちさせ、レビュー済みのコミットは見送る
+# - CI の回が承認待ち(claude[bot] の push。#365)のときは頼まない。ai-review-loop.yml がその場で頼んでいる
+# ai-review-sweep.yml は、ここが動かなかった・失敗したときに拾う見回りとして残す。
+#
+# workflow_run は既定のブランチのファイルで動き、PR のコードは checkout しない。ワークフローを呼ぶので actions: write が要る。
+# Claude Code は動かさない。
+# 必要な secret: CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)
+name: push されたコミットのレビューを頼む
+
+on:
+  workflow_run:
+    workflows: [test]   # CI のワークフロー名に合わせる
+    types: [completed]
+
+permissions: {}
+
+# 同じコミットの CI の終わりが続けて来ても(pull_request の回と手で流した回など)、1 回ずつ順に見る(後の回は waiting で見送る)。
+# 頼まない承認待ちの回は、頼む回を取り消さないよう実行ごとのグループに逃がす(docs/review-checklist.md の RC-03)
+concurrency:
+  group: >-
+    ${{ github.event.workflow_run.conclusion != 'action_required'
+      && format('review-on-push-{0}', github.event.workflow_run.head_sha)
+      || format('review-on-push-run-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # PR とレビューを読む
+      issues: read          # 依頼・CodeRabbit の返事のコメントを読む(review-request-state.sh)
+      actions: write        # 代わりの Claude(ai-claude-review.yml)を workflow_dispatch する
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: CI が終わったコミットを head にした PR のレビューを頼む
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+        run: bash .github/scripts/review-on-push.sh "$REPO" "$HEAD_SHA" "$CONCLUSION"

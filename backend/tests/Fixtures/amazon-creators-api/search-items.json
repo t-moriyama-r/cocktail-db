@@ -1,0 +1,103 @@
+{
+ "searchResult": {
+  "items": [
+   {
+    "asin": "B000TEST01",
+    "detailPageURL": "https://www.amazon.co.jp/dp/B000TEST01?tag=example-22&linkCode=osi",
+    "images": {
+     "primary": {
+      "small": {
+       "height": 75,
+       "url": "https://m.media-amazon.com/images/I/EXAMPLE1._SL75_.jpg",
+       "width": 56
+      },
+      "medium": {
+       "height": 160,
+       "url": "https://m.media-amazon.com/images/I/EXAMPLE1._SL160_.jpg",
+       "width": 120
+      },
+      "large": {
+       "height": 500,
+       "url": "https://m.media-amazon.com/images/I/EXAMPLE1._SL500_.jpg",
+       "width": 375
+      }
+     }
+    },
+    "itemInfo": {
+     "title": {
+      "displayValue": "サンプル ジン 700ml",
+      "label": "Title",
+      "locale": "ja_JP"
+     }
+    },
+    "offersV2": {
+     "listings": [
+      {
+       "availability": {
+        "maxOrderQuantity": 1,
+        "minOrderQuantity": 1,
+        "type": "IN_STOCK"
+       },
+       "condition": {
+        "conditionNote": "",
+        "subCondition": "Unknown",
+        "value": "New"
+       },
+       "isBuyBoxWinner": true,
+       "merchantInfo": {
+        "name": "Amazon.co.jp"
+       },
+       "price": {
+        "money": {
+         "amount": 1980,
+         "currency": "JPY",
+         "displayAmount": "￥1,980"
+        },
+        "savingBasis": {
+         "money": {
+          "amount": 2200,
+          "currency": "JPY",
+          "displayAmount": "￥2,200"
+         },
+         "savingBasisType": "LIST_PRICE",
+         "savingBasisTypeLabel": "List Price"
+        },
+        "savings": {
+         "money": {
+          "amount": 220,
+          "currency": "JPY",
+          "displayAmount": "￥220"
+         },
+         "percentage": 10
+        }
+       },
+       "violatesMAP": false
+      }
+     ]
+    }
+   },
+   {
+    "asin": "B000TEST02",
+    "detailPageURL": "https://www.amazon.co.jp/dp/B000TEST02?tag=example-22&linkCode=osi",
+    "images": {
+     "primary": {
+      "medium": {
+       "height": 160,
+       "url": "https://m.media-amazon.com/images/I/EXAMPLE2._SL160_.jpg",
+       "width": 120
+      }
+     }
+    },
+    "itemInfo": {
+     "title": {
+      "displayValue": "サンプル ジン 200ml(在庫切れ)",
+      "label": "Title",
+      "locale": "ja_JP"
+     }
+    }
+   }
+  ],
+  "searchURL": "https://www.amazon.co.jp/s/?field-keywords=%E3%82%B8%E3%83%B3&search-alias=grocery&tag=example-22&linkCode=osi",
+  "totalResultCount": 146
+ }
+}

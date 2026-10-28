@@ -1,67 +1,44 @@
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
+import { describe, expect, test } from 'vitest'
 import Top from './Top'
 import type { paths } from '../api/schema'
+import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
 
 type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
 
-// 本物の client は相対 URL(/api)で作られていて Node の fetch では解決できないため、
-// 同じ型付きのクライアントを、絶対 URL と差し替えた fetch で作り直したものに置き換える
-const fetchMock = vi.hoisted(() => vi.fn<(request: Request) => Promise<Response>>())
-
-vi.mock('../api/client', async () => {
-  const { default: createClient } = await import('openapi-fetch')
-  return {
-    api: createClient<paths>({ baseUrl: 'http://localhost/api', fetch: (request) => fetchMock(request) }),
-  }
-})
-
-const jsonResponse = (body: unknown, status: number) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-
 describe('Top', () => {
-  beforeEach(() => {
-    fetchMock.mockReset()
-  })
-
   test('TC-7-01: GET /api/hello の message を見出しに出す', async () => {
-    const body: HelloResponse = { message: 'Hello World from Laravel' }
-    fetchMock.mockImplementation(async () => jsonResponse(body, 200))
+    mockApi('get', '/hello', 200, { message: 'Hello World from Laravel' })
 
     render(<Top />)
 
     expect(await screen.findByRole('heading', { name: 'Hello World from Laravel' })).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const request = fetchMock.mock.calls[0][0]
-    expect(request.method).toBe('GET')
-    expect(new URL(request.url).pathname).toBe('/api/hello')
+    // GET /api/hello を呼ぶこと(メソッドとパス)は API との約束なので確かめる。何回呼ぶかはデータの取り方の作りなので見ない
+    expect(apiRequests().map((request) => `${request.method} ${new URL(request.url).pathname}`)).toContain(
+      'GET /api/hello',
+    )
   })
 
-  test('TC-7-02: 応答が返るまでは loading... を出す', () => {
-    fetchMock.mockImplementation(() => new Promise<Response>(() => {}))
+  // 読み込み中・エラーの出し分けは共通の部品(components/ApiView)が受け持ち、そちらのテスト(TC-98-01〜09)で確かめる。
+  // ここではトップがその共通の処理を使っていることだけを確かめる(前の TC-7-02〜04 の「loading...」「error: HTTP …」の見出しは #98 でやめた)
+  test('TC-98-10: API がエラーを返したら共通のエラーの表示を出し、もう一度読み込むとトップを出す', async () => {
+    let failing = true
+    const hello: HelloResponse = { message: 'Hello World from Laravel' }
+    // 500 の本文はスキーマに無いので型を当てず、200 の本文には型を当てる
+    mockApiHandler('get', '/hello', () =>
+      failing ? jsonResponse({ message: 'Server Error' }, 500) : jsonResponse(hello, 200),
+    )
+    render(
+      <MemoryRouter>
+        <Top />
+      </MemoryRouter>,
+    )
 
-    render(<Top />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('データを読み込めませんでした(エラー 500)')
+    failing = false
+    fireEvent.click(screen.getByRole('button', { name: 'もう一度読み込む' }))
 
-    expect(screen.getByRole('heading', { name: 'loading...' })).toBeInTheDocument()
-  })
-
-  test('TC-7-03: API がエラーを返したら HTTP ステータスと本文を出す', async () => {
-    fetchMock.mockImplementation(async () => jsonResponse({ message: 'Server Error' }, 500))
-
-    render(<Top />)
-
-    expect(
-      await screen.findByRole('heading', { name: 'error: HTTP 500 {"message":"Server Error"}' }),
-    ).toBeInTheDocument()
-  })
-
-  test('TC-7-04: 通信に失敗したら例外の内容を出す', async () => {
-    fetchMock.mockImplementation(async () => {
-      throw new TypeError('Failed to fetch')
-    })
-
-    render(<Top />)
-
-    expect(await screen.findByRole('heading', { name: 'error: TypeError: Failed to fetch' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Hello World from Laravel' })).toBeInTheDocument()
   })
 })

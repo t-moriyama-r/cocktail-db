@@ -1,0 +1,62 @@
+/*
+ * 画面で使うデザイントークン(色・余白・文字の大きさ)。値は docs/design/style.md の案 A(旧に寄せる)。
+ * 画面の CSS Modules は色・余白・文字の大きさを数値で書かず、この変数を参照する。
+ * 見た目の案を変えるときは、画面の CSS ではなくここを変える。
+ *
+ * 幅の区切り(600px・960px・1264px)は、CSS の変数をメディアクエリに使えないため、ここには置かない。
+ * 値は breakpoints.ts にまとめ、CSS Modules には数値で書く(breakpoints.test.ts が値を確かめる)。
+ */
+:root {
+  /* 色 */
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-text: #212121;
+  --color-text-muted: #616161;
+  --color-link: #337ab7;
+  --color-link-hover: #23527c;
+  --color-accent: #e91e63;
+  --color-on-accent: #ffffff;
+  --color-header-bg: #99ddff;
+  --color-header-text: #1a4f7a;
+  --color-border: #bbddff;
+  --color-row-alt: #f5faff;
+  --color-heading-line: #4499ff;
+  /* 旧は #f9a825 だが、白地でコントラストが足りないので濃くした(#294) */
+  --color-rate: #a15c00;
+  --color-footer-bg: #f5f5f5;
+  /* 動画のあるカクテルの行のリンクの色と、YouTube のアイコンの色(旧 Results/Tables/table.scss の hasMovie と同じ値) */
+  --color-has-movie: #c24e00; /* 旧は #ff6600 だが、白地で 2.94:1 のため 4.5:1 を満たすよう濃くした */
+  --color-youtube: #c4302b;
+
+  /* 余白。段階は共通にし、案ごとには倍率だけを変える */
+  --space-scale: 1;
+  --space-1: calc(4px * var(--space-scale));
+  --space-2: calc(8px * var(--space-scale));
+  --space-3: calc(12px * var(--space-scale));
+  --space-4: calc(16px * var(--space-scale));
+  --space-5: calc(24px * var(--space-scale));
+  --space-6: calc(32px * var(--space-scale));
+
+  /* 文字。Web フォントは読み込まず、システムの日本語のフォントを使う */
+  --font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
+  --font-size-base: 15px;
+  --font-size-sm: calc(var(--font-size-base) * 0.875);
+  --font-size-lg: calc(var(--font-size-base) * 1.25);
+  --font-size-xl: calc(var(--font-size-base) * 1.5);
+  /* ページの題。960px 未満では --font-size-xl を使う */
+  --font-size-title: calc(var(--font-size-base) * 2.25);
+  --line-height: 1.6;
+
+  /* 形 */
+  --radius: 2px;
+  --header-height: 40px;
+  --header-shadow: 0 10px 3px rgb(0 0 0 / 10%);
+  --content-max-width: 1200px;
+
+  /* 見出し(案 A は左 5px・下 2px の線) */
+  --heading-border-left: 5px solid var(--color-heading-line);
+  --heading-border-bottom: 2px solid var(--color-heading-line);
+  --heading-bg: transparent;
+  --heading-color: var(--color-text);
+  --heading-weight: 400;
+}

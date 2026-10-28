@@ -1,0 +1,55 @@
+/* 3 つの画面で共通に使う見出し・枠。線の有無は案ごとのトークンで切り替える */
+
+.pageTitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+}
+
+.heading {
+  margin: var(--space-5) 0 var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-left: var(--heading-border-left);
+  border-bottom: var(--heading-border-bottom);
+  background: var(--heading-bg);
+  color: var(--heading-color);
+  font-size: var(--font-size-lg);
+  font-weight: var(--heading-weight);
+  line-height: 1.4;
+}
+
+.card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.rate {
+  color: var(--color-rate);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* 動画の埋め込みの場所取り。試作では動画を読み込まない */
+.moviePlaceholder {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  background: #000;
+  color: #fff;
+  font-size: var(--font-size-sm);
+}
+
+@media (min-width: 960px) {
+  .pageTitle {
+    font-size: var(--font-size-title);
+  }
+}

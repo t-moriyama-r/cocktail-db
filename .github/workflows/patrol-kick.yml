@@ -1,0 +1,47 @@
+# 見回りのワークフローを、GitHub の schedule だけに頼らずに起こす。決め方は .github/scripts/patrol-kick.sh
+#
+# schedule は、GitHub が混んでいると遅れたり落とされたりする。2026-10-26 には ai-review-sweep.yml が 5 時間以上動かず、
+# 残った ai-in-actions を誰も拾わなかった(#269)。そのため、PR に動きがあればよく動く CI(test.yml)の終わりにここを動かし、
+# 見回りごとに前の回からの時間を見て、間隔を過ぎていれば workflow_dispatch で起こす。過ぎていなければ何もせず、ログにそう出す。
+#   - ai-review-sweep.yml・ci-rerun.yml・ai-conflict-resolve.yml: 前の回から 1 時間
+#   - ai-draft-sweep.yml: 前の回から 24 時間(毎日の見回りが遅れた・落とされたときの代わり)
+# schedule が動いていれば、それが前の回になるので、ここは何も起こさない。PR に動きの無い日は CI も動かないので、schedule だけになる。
+# 外(夜間のクラウドのルーチンなど)から起こす形にしないのは、その仕組みが止まったときに同じことが起きるため。
+#
+# 見回りはどれも何度動いても同じ結果になるので、schedule の回と重なっても害は無い。
+# Claude Code は動かさず、PR のコードも checkout しない(workflow_run は既定のブランチのファイルで動く)。ワークフローを呼ぶので actions: write が要る
+name: 見回りを起こす
+
+on:
+  workflow_run:
+    workflows: [test]   # CI のワークフロー名に合わせる
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+# CI の終わりが続けて来ても、1 回ずつ順に見る(前の回が起こした見回りを、次の回は「前の回」として数えて見送る)。
+# 待てるのは 1 つだけなので、あふれた回は取り消されるが、待っている回が同じことをする
+concurrency:
+  group: patrol-kick
+  cancel-in-progress: false
+
+jobs:
+  kick:
+    # draft の PR の CI は全ジョブを飛ばす(test.yml)。draft の動きでは見回りを起こさない
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write   # 見回りのワークフローの実行の一覧を読み、workflow_dispatch する
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: 間隔を過ぎた見回りを起こす
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: bash .github/scripts/patrol-kick.sh "$REPO"

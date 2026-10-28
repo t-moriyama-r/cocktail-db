@@ -12,17 +12,28 @@
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
 # - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
-# - ラベル needs-human / needs-decision / needs-approval / ai-in-actions が付いている(人の番か、Actions が対応している途中)
+# - ラベル needs-human / needs-local / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
 # - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)。
 #   見るのは CI のチェックだけで、PR の上で動く開発の仕組みのジョブ(label・notify など)は数えない(.github/scripts/ci-check-runs.sh)
+# - いまのコミットに必須のチェックが揃っていない・CI の pull_request の回が成功していない(CI が動いていない。gh pr merge を呼ばずに見送り、
+#   ci-rerun.yml に流し直させる。.github/scripts/ci-rerun-request.sh。#268)
+#
+# 自動でマージする PR で、ほかの条件がそろい、止めているのがエージェントの返信済みで未解決のスレッドだけのときは、
+# 人が解決するまで誰の番でもないまま止まるので、残っているスレッドへのリンクと決めてほしいことをコメントし、needs-human を付けて
+# Slack に知らせる(.github/scripts/thread-handoff.sh。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、
+# 人がすべて解決したら、見回り(ai-review-sweep.yml)がその needs-human を外して、ここを呼び直す(#388)
 #
 # マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
 # 同じ理由で、ワークフローを変えた PR をマージしたら notify-workflow-merged.yml を、develop にマージしたら deploy-dev.yml を直接呼ぶ
+#
+# 条件を満たしても、gh pr merge が GitHub に断られることがある(#191 はワークフローを書き換える PR で workflows の権限が無いと、
+# #217 は base branch policy で断られた)。そのときは、エラーの 1 行を PR にコメントして needs-approval を付け、人の手でマージする PR と
+# 同じように知らせる(#218)。needs-approval の付いた PR は見回り(ai-review-sweep.yml)も見送るので、同じ失敗を繰り返さない
 name: マージできるかの判定と自動マージ
 
 on:
@@ -32,7 +43,7 @@ on:
     # CodeRabbit は依頼への返信を「Review triggered」で作ってから「Review finished」に書き換えるので、書き換えでも起動する
     types: [created, edited]
   workflow_run:
-    workflows: [test]   # CI のワークフロー名に合わせる
+    workflows: [test, evidence-gate]   # CI のワークフロー名に合わせる
     types: [completed]
   pull_request_target:
     types: [unlabeled, ready_for_review]
@@ -63,7 +74,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
-        || contains(fromJSON('["needs-human","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
+        || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
       || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
         && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
@@ -90,8 +101,33 @@ jobs:
           persist-credentials: false
 
       - name: 条件を確かめて、マージするか人に知らせる
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          # needs-local が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           skip() { echo "見送り: $*"; exit 0; }
+          # いまのコミットで CI が動いていないので見送るときは、CI の流し直し(ci-rerun.yml。#228)にこの PR を見させる(#268)。
+          # 見送るだけでは、Actions が push したコミット(CI が承認待ち・回が無い)は誰も流し直さず止まる。流し直すか(承認・開き直し・
+          # 走っている途中なら何もしない)は ci-rerun.sh が決める。流した CI が緑で終わると、workflow_run でここが呼び直されてマージに進む。
+          # 頼めなくても見送りは変わらず、1 時間ごとの ci-rerun.yml が拾う
+          rerun_ci() {
+            bash .ai-dev/.github/scripts/ci-rerun-request.sh "$REPO" "$NUMBER" "$base" "$DEFAULT_BRANCH" \
+              || echo "::warning::CI の流し直し(ci-rerun.yml)を頼めなかった(1 時間ごとの見回りで拾う)"
+          }
+
+          # needs-approval を付けて人に知らせる。$1 は PR に書くコメントの本文(Slack の通知とまとめは、この目印のコメントを引用する。まとめは最初の 1 行だけ)
+          ask_approval() {
+            # 待っている間に、ほかのきっかけの回が先に付けていれば、もう知らせてある
+            gh pr view "$NUMBER" -R "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-approval \
+              && skip "#$NUMBER にはもう needs-approval が付いている"
+            gh label create needs-approval -R "$REPO" --color fbca04 --description "人の承認(マージ)を待っている PR" 2>/dev/null || true
+            gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->
+          $1"
+            gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
+            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
+            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
+          }
 
           # 人の手でマージする理由。空なら自動でマージする
           human=""
@@ -106,7 +142,7 @@ jobs:
           fi
           [ -n "$NUMBER" ] || skip "PR が見つからない"
 
-          pr=$(gh pr view "$NUMBER" -R "$REPO" --json state,isDraft,baseRefName,headRefOid,author,labels,mergeable,isCrossRepository,commits,closingIssuesReferences)
+          pr=$(gh pr view "$NUMBER" -R "$REPO" --json state,isDraft,baseRefName,headRefOid,author,labels,mergeable,isCrossRepository,closingIssuesReferences)
           head=$(jq -r .headRefOid <<<"$pr")
           [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "#$NUMBER は開いていない"
           [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "#$NUMBER は下書き"
@@ -120,7 +156,7 @@ jobs:
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$NUMBER はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$NUMBER を作ったのがオーナーではない"
 
-          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
+          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
           [ -z "$held" ] || skip "#$NUMBER にラベル $held が付いている"
           if jq -e '.labels | any(.name == "no-auto-merge")' <<<"$pr" >/dev/null; then human="ラベル no-auto-merge が付いている"; fi
 
@@ -140,14 +176,22 @@ jobs:
           # 無ければ「Review finished」「No actionable comments」のコメントだけが付く(どちらか片方のこともあり、後から別のコメントが続くこともある)。
           # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける。
           # CodeRabbit はスレッドへの返信のたびに本文が空のレビューを最新のコミットに付けるので、本文の無いレビューは数えない
-          pushed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+          # --json commits は先頭 100 件までなので(RC-06)、いまのコミットの日時を直接取る
+          pushed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date) || skip "いまのコミット ${head:0:7} の日時を読めない"
           reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/reviews?per_page=100" \
             | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
                 or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
           finished=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
             | jq --arg since "$pushed" 'add // [] | map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
                 | any(.body // "" | test("Review finished|No actionable comments|LGTM"))')
-          [ "$reviewed" = true ] || [ "$finished" = true ] || skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
+          if [ "$reviewed" != true ] && [ "$finished" != true ]; then
+            # needs-local の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
+            # (出さないと次の ai-review-sweep.yml まで最大 2 時間待つ)。依頼済みなら request-review.sh が見送る
+            if [ "$EVENT_ACTION" = unlabeled ]; then
+              bash .ai-dev/.github/scripts/request-review.sh "$REPO" "$NUMBER"                 || echo "::warning::レビューの依頼を出せなかった(ai-review-sweep.yml が拾う)"
+            fi
+            skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
+          fi
 
           # 昇格の PR は、残っている指摘でマージを止めない(件数を人に知らせるだけ)
           unanswered=0
@@ -157,15 +201,12 @@ jobs:
             unanswered=$(bash .ai-dev/.github/scripts/unanswered-review-threads.sh "$REPO" "$NUMBER")
             [ "$unanswered" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $unanswered 件ある"
           else
-            unresolved=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
-              query($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                  pullRequest(number: $number) {
-                    reviewThreads(first: 100) { nodes { isResolved comments(first: 1) { nodes { author { login } } } } }
-                  }
-                }
-              }' | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length')
-            [ "$unresolved" = 0 ] || skip "#$NUMBER に未解決の指摘が $unresolved 件ある"
+            # 返信待ちのスレッド(AI レビュアーの指摘で、エージェントがまだ返していないもの)は ai-review-loop.yml が対応するので見送る。
+            # それ以外の未解決のスレッド(エージェントが返したもの・人が立てたもの)だけなら、
+            # 人が解決するまで止まるので、ほかの条件(チェック・コンフリクト)を見たうえで、最後に人に頼む(#388)
+            threads=$(bash .ai-dev/.github/scripts/thread-handoff.sh check "$REPO" "$NUMBER")
+            read -r unresolved waiting <<<"$threads"
+            [ "$waiting" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $waiting 件ある(未解決は $unresolved 件)"
           fi
 
           # CI のチェックだけを見る。このワークフロー自身のジョブと、PR の上で動く開発の仕組みのジョブ(pr-status.yml の label など)は、
@@ -173,15 +214,30 @@ jobs:
           checks=$(bash .ai-dev/.github/scripts/ci-check-runs.sh "$REPO" "$head") || skip "${head:0:7} のチェックを読めない"
           # 走らなかったワークフロー(bot の push で承認待ちになった CI など)のチェックは付かないので、必須のチェックが揃っているかも見る(#360)
           missing=$(bash .ai-dev/.github/scripts/required-checks-missing.sh "$REPO" "$base" "$head") || skip "必須のチェックを確かめられない"
-          [ -z "$missing" ] || skip "必須のチェックが ${head:0:7} に揃っていない: $missing"
+          if [ -n "$missing" ]; then
+            rerun_ci
+            skip "いまのコミット ${head:0:7} で CI が動いていない(必須のチェックが揃っていない): $missing"
+          fi
           [ "$(jq length <<<"$checks")" -gt 0 ] || skip "${head:0:7} にチェックが 1 つも無い"
+          # draft の間は CI(test.yml)・evidence-gate のジョブを飛ばす(#410)。飛ばしたジョブのチェックは成功に数えられるので、
+          # GITHUB_TOKEN で ready にした(ready_for_review の回が起きない)PR が、CI を流さないまま通らないよう、
+          # いまのコミットで CI の pull_request の回が成功していること、evidence-gate を飛ばさずに確かめたことを求める
+          ci=$(gh api "repos/$REPO/actions/runs?head_sha=$head&event=pull_request&per_page=100"             --jq '[.workflow_runs[] | select((.path | endswith("/test.yml")) and .conclusion == "success")] | length')
+          if [ "$ci" = 0 ]; then
+            rerun_ci
+            skip "${head:0:7} で CI(test.yml)の pull_request の回がまだ成功していない(draft のときに飛ばした回だけ・走っている途中)"
+          fi
+          # develop 向けの PR は、evidence-gate のチェックが無い間(ready 直後でまだ走っていない・走らなかった)もマージしない
+          if [ "$base" = develop ]; then
+            [ "$(jq '[.[] | select(.name == "evidence-gate" and .conclusion != "skipped")] | length' <<<"$checks")" -gt 0 ]               || skip "${head:0:7} に evidence-gate のチェックがまだ無い(draft のときに飛ばしたものだけ)"
+          fi
           pending=$(jq -r '[.[] | select(.status != "completed") | .name] | join(",")' <<<"$checks")
           [ -z "$pending" ] || skip "チェックが終わっていない: $pending"
           failed=$(jq -r '[.[] | select(.conclusion | IN("success","skipped","neutral") | not) | .name] | join(",")' <<<"$checks")
           [ -z "$failed" ] || skip "チェックが失敗している: $failed"
 
           # GitHub はマージできるかを後から計算するので、UNKNOWN の間は少し待って取り直す
-          for i in 1 2 3 4 5 6; do
+          for _ in 1 2 3 4 5 6; do
             mergeable=$(gh pr view "$NUMBER" -R "$REPO" --json mergeable --jq .mergeable)
             [ "$mergeable" != UNKNOWN ] && break
             sleep 5
@@ -193,14 +249,9 @@ jobs:
           [ "$mergeable" = MERGEABLE ] || skip "#$NUMBER はマージできない状態($mergeable)"
 
           if [ -n "$human" ]; then
-            # 待っている間に、ほかのきっかけの回が先に付けていれば、もう知らせてある
-            gh pr view "$NUMBER" -R "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-approval \
-              && skip "#$NUMBER にはもう needs-approval が付いている"
-            gh label create needs-approval -R "$REPO" --color fbca04 --description "人の承認(マージ)を待っている PR" 2>/dev/null || true
             # エージェントが、いまのコミットの後に見てほしいところをまとめていれば、そこへのリンクを添える
             summary=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
               | jq -r --arg since "$pushed" 'add // [] | map(select(.created_at > $since and (.body | contains("ai-dev:approval-summary")))) | last | .html_url // empty')
-            # Slack の通知とまとめは、この目印のコメントを引用する(まとめは最初の 1 行だけ)
             if [ "$promotion" = true ]; then
               ready="マージできる状態になった(AI レビュー済み・CI 緑・コンフリクトなし)。人の手でマージする PR なので、確かめてマージしてほしい。"
               remaining="- AI レビューの指摘: ${unanswered} 件が返信待ちで残っている(中身は develop に入る前にレビュー済みなので、マージは止めていない。見て、マージするか決める)
@@ -211,22 +262,41 @@ jobs:
               remaining=""
               ask="- 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
             fi
-            gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->
-          $ready
+            ask_approval "$ready
 
           - 人の手でマージする理由: $human
           ${remaining}${summary:+- 見てほしいところ: $summary
           }$ask"
-            gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
-            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
-            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
             echo "#$NUMBER はマージできる状態。人の手でマージするので needs-approval を付けて知らせた($human)"
+            exit 0
+          fi
+
+          # ほかの条件はそろい、止めているのは返信済みで未解決のスレッドだけ。人が解決するか、直してほしいと返すまで進まないので、
+          # needs-human で頼む(同じコミットでは 1 回だけ)。人がすべて解決すると、見回り(ai-review-sweep.yml)が外してここへ戻す
+          if [ "${unresolved:-0}" != 0 ]; then
+            bash .ai-dev/.github/scripts/thread-handoff.sh ask "$REPO" "$NUMBER"
+            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER" || echo "::warning::状態のラベルを付け替えられなかった"
             exit 0
           fi
 
           # 昇格の PR は上で人の手でマージするものにしてあるので、ここへは来ない。それでも、デプロイになるマージは絶対にしない
           [ "$base" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH ではないので、自動ではマージしない"
-          gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head"
+          if ! merged=$(gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head" 2>&1); then
+            echo "$merged"
+            # 断られている間に、人がマージした・閉じた・push した(新しいコミットで呼び直される)なら、知らせない(RC-07)
+            now=$(gh pr view "$NUMBER" -R "$REPO" --json state,headRefOid --jq '.state + " " + .headRefOid') || skip "#$NUMBER のマージに失敗し、いまの状態も読めない"
+            [ "$now" = "OPEN $head" ] || skip "#$NUMBER のマージに失敗したが、いまは $now"
+            # gh のエラーは 1 行のことが多い。複数行なら最後の行(GitHub の返した理由)を使う
+            reason=$(grep -v '^[[:space:]]*$' <<<"$merged" | tail -n 1 | cut -c 1-500)
+            ask_approval "自動マージを GitHub に断られた。人の手でマージしてほしい。
+
+          - 断られた理由(\`gh pr merge\` のエラー):
+            > ${reason:-(エラーの出力なし)}
+          - マージできる状態(AI レビューの指摘への対応済み・CI 緑・コンフリクトなし)までは確かめてある
+          - 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
+            echo "::warning::#$NUMBER のマージを GitHub に断られたので、needs-approval を付けて知らせた: $reason"
+            exit 0
+          fi
           echo "#$NUMBER をマージした"
 
           # ワークフローを変えた PR なら、オーナーに知らせる(GITHUB_TOKEN のマージは notify-workflow-merged.yml を起こさないので直接呼ぶ)
