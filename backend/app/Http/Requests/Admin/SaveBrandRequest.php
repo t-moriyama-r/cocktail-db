@@ -40,7 +40,7 @@ class SaveBrandRequest extends FormRequest
             'is_like' => ['required', 'boolean'],
             // 画像のリンクの文字と URL
             'image_txt' => ['nullable', 'string', 'max:255'],
-            'image_url' => ['nullable', 'string'],
+            'image_url' => ['nullable', 'url:http,https', 'max:2048'],
             ...AdminImageStore::rules(),
         ];
     }

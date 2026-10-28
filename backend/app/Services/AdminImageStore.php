@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
@@ -61,7 +62,9 @@ final class AdminImageStore
             return;
         }
 
-        $this->disk()->delete($current);
+        // トランザクションの中なら、コミットしてから消す。後の処理が落ちてロールバックされたときに、
+        // 元の行が指すファイルを先に消してしまわないため(トランザクションの外なら、すぐ消える)
+        DB::afterCommit(fn () => $this->disk()->delete($current));
     }
 
     private function disk(): Filesystem
