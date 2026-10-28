@@ -265,6 +265,19 @@ it('TC-314-07: 新規は 201 で保存し、名前の検索用の形と、説明
         ->and((float) $brand->volume)->toBe(37.5);
 });
 
+it('TC-314-21: 画像つき(multipart)で is_major・is_like が "true"・"false" の文字列で届いても受ける', function () {
+    ['nodes' => $n] = brandAdminTree();
+
+    $response = $this->post('/api/admin/brands', brandAdminInput($n['ダークラム'], [
+        'is_major' => 'true',
+        'is_like' => 'false',
+    ]), ['Accept' => 'application/json'])->assertCreated();
+
+    $brand = Brand::query()->whereKey($response->json('data.id'))->sole();
+    expect($brand->is_major)->toBeTrue()
+        ->and($brand->is_like)->toBeFalse();
+});
+
 it('TC-314-08: 必須の項目が無いと 422', function (string $field) {
     ['nodes' => $n] = brandAdminTree();
 

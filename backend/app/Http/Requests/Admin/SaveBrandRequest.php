@@ -18,6 +18,21 @@ use InvalidArgumentException;
 class SaveBrandRequest extends FormRequest
 {
     /**
+     * multipart(画像つき)では真偽値が文字列の "true"・"false" で届くので、boolean の規則が読める 1・0 に直す。
+     */
+    protected function prepareForValidation(): void
+    {
+        $normalized = [];
+        foreach (['is_major', 'is_like'] as $key) {
+            $value = $this->input($key);
+            if (is_string($value) && in_array(strtolower($value), ['true', 'false'], true)) {
+                $normalized[$key] = strtolower($value) === 'true' ? 1 : 0;
+            }
+        }
+        $this->merge($normalized);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array
