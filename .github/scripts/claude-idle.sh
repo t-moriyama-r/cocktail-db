@@ -6,6 +6,11 @@
 #   claude-idle.sh review <owner/repo> <PR の番号> <ran>
 #   claude-idle.sh resume <owner/repo> <PR の番号> <ran> <動く前のコミット> <動き始めた時刻(ISO 8601、UTC)>
 #
+#   claude-idle.sh mark-retry <owner/repo> <PR の番号> <コミット>   … 起こし直しの目印を書く(dispatch が成功した後に呼ぶ)
+#
+#   環境変数 DEFER_RETRY_MARK=1 のとき、review は目印を書かずに retry を返す。呼び出し側が、起こし直しに成功した後に
+#   mark-retry で書く(dispatch に失敗したのに目印だけ残ると、全体を再実行しても起こし直さず needs-human になるため)
+#
 #   <ran> は、Claude Code が実際に動いたか(true / false)。claude-code-action の出力 execution_file が空なら false
 #   (ワークフローのファイルの検査で飛ばされた回は、Claude を動かさずに成功で終わり、execution_file を出さない)。
 #
@@ -45,6 +50,14 @@ USAGE="使い方: claude-idle.sh review <owner/repo> <PR の番号> <ran> | resu
 
 claude_idle() {
   local mode=${1:-} repo=${2:-} n=${3:-} ran=${4:-}
+  if [ "$mode" = mark-retry ]; then
+    if [ -z "$repo" ] || [ -z "$n" ] || [ -z "$ran" ]; then
+      echo "$USAGE" >&2
+      return 2
+    fi
+    mark_retry "$repo" "$n" "$ran"
+    return
+  fi
   if [ -z "$repo" ] || [ -z "$n" ] || [[ "$ran" != true && "$ran" != false ]]; then
     echo "$USAGE" >&2
     return 2
@@ -102,9 +115,9 @@ review() {
   remove_label "$repo" "$n"
   comments=$(trusted_comments "$repo" "$n")
   if ! has_marker "$comments" "$RETRY sha=$sha"; then
-    # 目印は、印を外せた後に書く(外せずに失敗したら、次の回でもう一度起こし直せるように)
-    gh pr comment "$n" -R "$repo" --body "<!-- $RETRY sha=$sha -->
-Actions の Claude Code が、レビューの指摘に対応しないまま終わった(${RUN_URL:-実行の記録は Actions の画面})。対応中の印(\`$LABEL\`)を外し、既定のブランチのワークフローで 1 回だけ起こし直す。" >/dev/null
+    # 目印は、印を外せた後に書く(外せずに失敗したら、次の回でもう一度起こし直せるように)。
+    # DEFER_RETRY_MARK=1 なら、呼び出し側が起こし直しに成功した後に mark_retry で書く
+    if [ "${DEFER_RETRY_MARK:-}" != 1 ]; then mark_retry "$repo" "$n" "$sha"; fi
     log "#$n ${sha:0:7} で起こし直す"
     echo retry
     return
@@ -134,6 +147,12 @@ Actions の Claude Code が、起こし直してもレビューの指摘に対�
   fi
   add_needs_human "$repo" "$n" "$pr"
   echo asked
+}
+
+mark_retry() {
+  local repo=$1 n=$2 sha=$3
+  gh pr comment "$n" -R "$repo" --body "<!-- $RETRY sha=$sha -->
+Actions の Claude Code が、レビューの指摘に対応しないまま終わった(${RUN_URL:-実行の記録は Actions の画面})。対応中の印(\`$LABEL\`)を外し、既定のブランチのワークフローで 1 回だけ起こし直す。" >/dev/null
 }
 
 resume() {

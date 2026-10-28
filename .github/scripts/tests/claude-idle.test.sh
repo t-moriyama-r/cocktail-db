@@ -205,6 +205,17 @@ main() {
 	run review maybe
 	expect TC-240-26 'ran が true・false でなければ失敗で終わる' "$RC" 2
 
+	reset
+	pr 7 ai-in-actions
+	DEFER_RETRY_MARK=1 run review false
+	expect TC-240-30 'DEFER_RETRY_MARK=1 なら、印は外して retry を返すが、目印は書かない(dispatch に成功した後に書くため)' \
+		"$(out)|$(edited)|$(commented)" 'retry|7 -R o/r --remove-label ai-in-actions|'
+
+	reset
+	run mark-retry sha7
+	expect TC-240-31 'mark-retry は、起こし直しの目印を書く(ai-dev:agent は付けない)' \
+		"$(commented | grep -c '^<!-- ai-dev:claude-idle-retry sha=sha7 -->')|$(commented | grep -c 'ai-dev:agent')|$RC" '1|0|0'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
