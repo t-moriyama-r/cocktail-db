@@ -12,9 +12,10 @@ set -euo pipefail
 repo=$1
 number=$2
 
-pr=$(gh pr view "$number" -R "$repo" --json headRefOid,commits)
+pr=$(gh pr view "$number" -R "$repo" --json headRefOid)
 head=$(jq -r .headRefOid <<<"$pr")
-pushed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+# --json commits は先頭 100 件までなので、101 件目からの PR では最後の要素がいまのコミットにならない(RC-06)。いまのコミットの日時を直接取る
+pushed=$(gh api "repos/$repo/commits/$head" --jq .commit.committer.date)
 
 reviewed=$(gh api --paginate --slurp "repos/$repo/pulls/$number/reviews?per_page=100" \
   | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)

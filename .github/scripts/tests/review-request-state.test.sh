@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# review-request-state.sh のテスト(TC-227-01〜)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# review-request-state.sh のテスト(TC-227-01〜・TC-355-03〜04)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/review-request-state.test.sh
 
@@ -24,6 +24,9 @@ LONG_AGO=$(ago 40)
 JUST_NOW=$(ago 5)
 REPLY_LONG_AGO=$(ago 39)
 REPLY_JUST_NOW=$(ago 4)
+# 101 コミット以上の PR の 100 件目のコミットの時刻と、それより後・いまのコミットより前の時刻
+COMMIT_100=$(ago 240)
+BETWEEN=$(ago 200)
 
 main() {
 	setup_fake_gh
@@ -52,6 +55,12 @@ main() {
 	check TC-227-12 '依頼の後に「Review finished」が付いた' \
 		'[]' "[$(comment $OWNER "$LONG_AGO" '@coderabbitai review'),$(comment coderabbitai[bot] "$REPLY_LONG_AGO" 'Review finished.')]" reviewed
 
+	set_pr_over_100_commits "$COMMIT_100"
+	check TC-355-03 '101 コミット以上の PR: 100 件目より後・いまのコミットより前のオーナーの依頼は数えない' \
+		'[]' "[$(comment $OWNER "$BETWEEN" '@coderabbitai review')]" request
+	check TC-355-04 '101 コミット以上の PR: いまのコミットより後のオーナーの依頼から 30 分たっていない' \
+		'[]' "[$(comment $OWNER "$JUST_NOW" '@coderabbitai review')]" waiting
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }
@@ -62,6 +71,8 @@ setup_fake_gh() {
 		#!/usr/bin/env bash
 		case "$*" in
 		  "pr view"*) cat "$FAKE_DIR/pr.json" ;;
+		  # いまのコミットの日時(gh api repos/o/r/commits/<sha> --jq .commit.committer.date)。置いていないコミットを聞かれたら失敗する
+		  *"/commits/"*) sha=${2##*/}; jq -r .commit.committer.date "$FAKE_DIR/commit-$sha.json" ;;
 		  *"/reviews"*) echo "[$(cat "$FAKE_DIR/reviews.json")]" ;;
 		  *"/comments"*) echo "[$(cat "$FAKE_DIR/comments.json")]" ;;
 		  *) echo "unexpected gh $*" >&2; exit 1 ;;
@@ -69,6 +80,12 @@ setup_fake_gh() {
 	EOF
 	chmod +x "$FAKE/gh"
 	jq -n --arg head "$HEAD" --arg pushed "$PUSHED" '{headRefOid: $head, commits: [{committedDate: $pushed}]}' >"$FAKE/pr.json"
+	jq -n --arg pushed "$PUSHED" '{commit: {committer: {date: $pushed}}}' >"$FAKE/commit-$HEAD.json"
+}
+
+# 101 コミット以上の PR。--json commits は先頭 100 件までしか返さないので、その最後(100 件目)は、いまのコミットより前の時刻になる
+set_pr_over_100_commits() {
+	jq -n --arg head "$HEAD" --arg c100 "$1" '{headRefOid: $head, commits: (([range(99)] | map({committedDate: "2026-01-01T00:00:00Z"})) + [{committedDate: $c100}])}' >"$FAKE/pr.json"
 }
 
 review() { jq -nc --arg u "$1" --arg c "$2" --arg b "$3" '{user: {login: $u}, commit_id: $c, body: $b}'; }

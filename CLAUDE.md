@@ -43,7 +43,7 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` のシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` のシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 
@@ -86,6 +86,16 @@ npm test                              # php artisan serve を起こして Playwr
 - PR 本文の表の下に「旧との差分の根拠」の節を置き、`差分あり` の行ごとに、指した節の 1 行をそのまま引く(例: `TC-247-03 → #247: 旧は… → 新は…`)。レビュアーは issue の本文を読めないことがある(CodeRabbit で確かめた。#273)ので、PR 本文だけで根拠を確かめられるようにする
 - 実装中に、どの節にも無い差分を見つけたら、旧に合わせるか、issue で相談する(意図の書けない差分と同じ扱い)
 - レビュー(CodeRabbit の `.coderabbit.yaml`・代わりの Claude の `ai-claude-review.yml`)も、表に「旧での結果」の列があるか、`差分あり` に根拠と引用があるか、表に無い差分がコードに入っていないかを確かめる
+
+#### モックの範囲と確かめる対象
+
+テストは、振る舞いを変えないリファクタでは落ちないように書く。自分たちのモジュールをモックしたり、呼び出しの回数を確かめたりするテストは、中の作りを変えただけで落ちてテストごと直すことになり、リファクタの担保にならないため。
+
+- **モックは境界だけにする**。差し替えてよいのは、プロセスの外にあって自分たちが持っていないもの(外部 API・時刻・乱数・メール送信など。Laravel なら `Http::fake`・`Mail::fake`・`travelTo` など)。自分たちのクラス・モジュール・フックはモックしない。DB は本物の MariaDB を使う(上の「BE のテスト」)
+- **確かめるのは外から見える結果**(返り値・HTTP の応答・DB に残った行・画面に出た文字や役割)。内部の state・private なメソッドの結果には頼らない。呼び出しの回数・引数を確かめるのは、外への送信そのものが仕様のとき(ログに残す、メールを送る、外部 API に送る中身、など)だけ
+- **FE の API は `fetch` の層で差し替え**、スキーマで定義された応答には `src/api/schema.ts` の型を当てる(手で型を書かない。スキーマにないエラー応答は型指定の対象外)。差し替える client は、`baseUrl` を `http://localhost/api` のような絶対 URL にしたスキーマ型の client にする(相対の `/api` の client に `fetch` だけを差し替えても届かない)。差し替えの仕組みはテストのセットアップの 1 か所に置き、テストのファイルごとに作らない
+- **振る舞いを変えないリファクタの PR では、既存のテストを変えずに通る**ことを確かめる。テストを直さないと通らないなら、振る舞いが変わっているか、テストが中の作りに依存している
+- レビュー(CodeRabbit の `.coderabbit.yaml` のテストのパスへの指示・代わりの Claude の `ai-claude-review.yml`)も、自前のモジュールのモック・呼び出し回数の検証・内部の state への依存が無いかを確かめる
 
 ## ワークフローを変えたら
 
@@ -140,8 +150,8 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
    - **見た目の案を人に選んでもらう PR**(閉じる issue に `needs-review` が付き、PR 本文で色・余白・レイアウト・スタイルの方式などの案を並べて選んでもらうもの。例: #348)は、決着したら、本文に「最終的にどうなったか(証跡)」の節を置き、同じ中身を PR の最後のコメントにも貼る。選ぶ前の案の画像だけでは、何に決まって最終的にどう見えるのかが PR から分からないため
    - 節に書くのは、決まったこと(どのコメントで誰が決めたか)、まだ決まっていないこと、決まった後に変えたところ(レビュー対応で色を変えた、など)、最終の見た目の証跡(決める前 → 最終の比較画像と、最終の見た目の動画)。見た目が変わるたびに(人の判断を反映した・レビュー対応で直した)撮り直して差し替える
    - Actions の Claude Code は画面を撮れない。この種の PR で見た目を変えたら、節を文字で書いたうえで、何を撮ればよいかをコメントして `needs-human` を付ける(`ai-review-loop.yml`)。撮って貼るのは手元のエージェントで、貼ったら `needs-human` を外す(外すと `ai-auto-merge.yml` がマージできる状態かを見直す)。貼るコメントの先頭には `<!-- ai-dev:agent -->` を付ける(オーナーのアカウントで書いた印の無いコメントは、Actions に人の返信として拾われる)
-6. CI が通り、証跡を貼ったら ready にし(ready の前に手元で `.github/scripts/evidence-gate.sh <owner/repo> <番号>` が通ることを確かめる)、レビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て(GitHub の `schedule` が遅れた・落とされたときは、PR に動きがあれば `patrol-kick.yml` が起こす)、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や証跡が要るものは、ready にせず `needs-human` を付ける)
-7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごと(PR に動きのある日は、CI の終わりに `patrol-kick.yml` が前の回から 1 時間たったところで起こすので 1 時間ごと)に見つけて対応させる。`develop` とコンフリクトした PR(draft も)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
+6. 実装が終わって手元のテストが通り、証跡を貼ったら ready にし(ready の前に手元で `.github/scripts/evidence-gate.sh <owner/repo> <番号>` が通ることを確かめる)、CI を待つ。CI(`test.yml`)は draft では全ジョブを飛ばし、ready にしたときから流れる(#410)。落ちたら直して push し、緑になったらレビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て(GitHub の `schedule` が遅れた・落とされたときは、PR に動きがあれば `patrol-kick.yml` が起こす)、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や証跡が要るものは、ready にせず `needs-human` を付ける)
+7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごと(PR に動きのある日は、CI の終わりに `patrol-kick.yml` が前の回から 1 時間たったところで起こすので 1 時間ごと)に見つけて対応させる。`develop` とコンフリクトした ready の PR(draft は選ばない)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
 8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
 9. `develop`(dev 環境に出る)→ `staging`(stg 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、必ず人が行う(自動ではマージしない)。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)。
    - 昇格の PR のタイトル(一覧で、いつの分か・本番のどの版かを分かるようにするため。#334)
@@ -156,6 +166,23 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
    - CI が緑で、いまのコミットを AI がレビューし終えると、`ai-auto-merge.yml` が `needs-approval` を付けて Slack に知らせる。残っている指摘の件数も PR にコメントされる。人は差分と指摘を見て、マージするか決める
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
+
+## 人に判断を頼むとき
+
+人に決めてもらうこと(`needs-human`・`needs-decision` の頼むコメント、issue の「判断が要ること」、手元のエージェントがターミナルで聞くとき)は、文章を読み込まなくても、何を決めるのか・案ごとに何が変わるのかがつかめる形で頼む。文章だけの説明は、理解するまでに時間がかかるため。
+
+頼むコメントは、上から次の順に書く。
+
+1. **1 行目に、何を決めてほしいかを 1 文で**。Slack の通知(先頭の 600 文字)と毎朝のまとめ(1 行目)に出る。目印のコメント(`<!-- ai-dev:… -->`)はこの前に置いてよい
+2. **図**。案ごとに何がどう変わるかを、Mermaid のコードブロック(` ```mermaid `。GitHub が図にする)で描く。処理の流れ・ラベルや状態の移り変わり・どのワークフローがどれを呼ぶかはフローチャートかシーケンス図、案の違いは案ごとに並べた図にする。図にしても分かりやすくならない判断(はい・いいえで答えられる 1 点だけ、など)は省いてよい
+3. **案を並べた比較表**。列に案(A・B・…)、行に「こう選ぶと、こうなる」「その代わり、ここが困る」、最後の行におすすめと理由
+4. **画面の見た目・操作が変わる判断は、案ごとのスクリーンショット・動画・比較画像**。Actions の Claude Code は画面を撮れないので、撮ってほしいもの(画面・幅・比べるコミット)を書いて手元に頼む(上の手順 5 と同じ)
+5. **短く答えられる形**(「おすすめで」「B で」「2 だけ B で」など)
+6. 経緯や細かい理由など、文章での説明は最後に置き、`<details><summary>詳しく</summary>…</details>` に畳む
+
+設計の用語や記号に頼らず、このアプリで実際に起きる場面を具体例に、話し言葉で書くのは今までどおり。
+
+手元のエージェントがターミナルで聞くときは、選択肢を出す前に、図や案ごとのモックアップを載せたページ(HTML)か、画面の判断なら動画・比較画像を作って見せる。
 
 ## 文書と既存コードが食い違うとき
 

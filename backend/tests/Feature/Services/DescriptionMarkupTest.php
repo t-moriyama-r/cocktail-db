@@ -161,11 +161,11 @@ it('TC-287-08: 記法の種類が n・c・b・d でなければ、名前でも I
     expectMarkupRejected(fn () => $this->markup->toStored('前に@m12@を見る'));
 });
 
-it('TC-287-09: 文末の閉じていない記法(@ と英字の後が数字)は 422。メールアドレスのような書き方は通す', function () {
+it('TC-287-09: 文末の閉じていない記法(@ と英字の後が数字)は 422。メールアドレスも 422(#392 で改めた)', function () {
     descriptionMarkupTree();
 
     expectMarkupRejected(fn () => $this->markup->toStored('前に@c12'));
-    expect($this->markup->toStored('連絡は info@example.com へ'))->toBe('連絡は info@example.com へ');
+    expectMarkupRejected(fn () => $this->markup->toStored('連絡は info@example.com へ'));
 });
 
 it('TC-287-10: 旧で決め打ちしていた漢字の名前を、ミドルの方から先にノードの記法にする', function () {
@@ -268,4 +268,88 @@ it('TC-287-19: 名前の一致する語は根にリンクしない。名前で�
     expect($this->markup->toStored('ソフトドリンクで割る'))->toBe('ソフトドリンクで割る')
         ->and($this->markup->toStored('ホワイト'))->toBe("@n{$n['ラム/ホワイト']->id}@")
         ->and($this->markup->toStored('@nソフトドリンク@と@nホワイト@'))->toBe("@n{$soft->id}@と@n{$white->id}@");
+});
+
+/**
+ * 422 になったときのメッセージ($attribute の最初の 1 件)。422 にならなければ null。
+ */
+function markupRejectionMessage(callable $call, string $attribute = 'description'): ?string
+{
+    try {
+        $call();
+    } catch (ValidationException $e) {
+        return $e->validator->errors()->first($attribute);
+    }
+
+    return null;
+}
+
+it('TC-392-01: 文末の、名前で書いた記法の閉じ忘れは 422', function () {
+    markupCocktail('モヒート');
+    markupBrand('バカルディ');
+
+    expectMarkupRejected(fn () => $this->markup->toStored('@cモヒート@と@bバカルディ'));
+});
+
+it('TC-392-02: 2 つの記法の間の @ を 1 つで済ませたものは 422', function () {
+    markupCocktail('モヒート');
+    markupCocktail('ジントニック');
+
+    expectMarkupRejected(fn () => $this->markup->toStored('@cモヒート@cジントニック@'));
+    expectMarkupRejected(fn () => $this->markup->toStored('@c5@c7@'));
+});
+
+it('TC-392-03: 余分な @ があれば 422', function () {
+    markupCocktail('モヒート');
+    markupBrand('バカルディ');
+
+    expectMarkupRejected(fn () => $this->markup->toStored('@c5@と@b9@@'));
+    expectMarkupRejected(fn () => $this->markup->toStored('@cモヒート@と@@bバカルディ@'));
+});
+
+it('TC-392-04: 種類の英字・先頭の @ が無い記法と、全角の ＠ は 422(エラーは渡した入力の名前に付く)', function () {
+    foreach (['@3621@', 'p29@', '＠p@'] as $text) {
+        expectMarkupRejected(fn () => $this->markup->toStored($text));
+        expectMarkupRejected(fn () => $this->markup->toStored($text, 'note'), 'note');
+    }
+});
+
+it('TC-392-05: 記法でない @(メールアドレス)は 422', function () {
+    expectMarkupRejected(fn () => $this->markup->toStored('連絡は info@example.com へ'));
+});
+
+it('TC-392-06: 422 のメッセージに、残った @ の前後の文字が入る', function () {
+    expect(markupRejectionMessage(fn () => $this->markup->toStored('連絡は info@example.com へ')))
+        ->toBe('記法になっていない @ があります:  info@examp')
+        ->and(markupRejectionMessage(fn () => $this->markup->toStored('p29@')))
+        ->toBe('記法になっていない @ があります: p29@');
+});
+
+it('TC-392-07: 正しく書いた記法(複数・隣り合う・名前と ID の混在・同じ記法が 2 回)は変換される', function () {
+    $n = descriptionMarkupTree();
+    $mojito = markupCocktail('モヒート');
+    $bacardi = markupBrand('バカルディ');
+
+    expect($this->markup->toStored("@cモヒート@@Bバカルディ@と@c{$mojito->id}@と@cモヒート@、@nラム@"))
+        ->toBe("@c{$mojito->id}@@B{$bacardi->id}@と@c{$mojito->id}@と@c{$mojito->id}@、@n{$n['ラム']->id}@");
+});
+
+it('TC-392-08: 編集で開いた({!…!} 付きの)文に記法を書き足して保存すると、書き足した記法も ID になる', function () {
+    $n = descriptionMarkupTree();
+    $mojito = markupCocktail('モヒート');
+    $gin = markupCocktail('ジントニック');
+    $stored = "@n{$n['ラム']->id}@で作る@c{$mojito->id}@";
+
+    expect($this->markup->toStored($this->markup->withNotes($stored).'と@cジントニック@'))
+        ->toBe("{$stored}と@c{$gin->id}@");
+});
+
+it('TC-392-09: 正しい記法と地の文だけの保存済みの文は、編集で開いてそのまま保存しても 422 にならず、変わらない', function () {
+    $n = descriptionMarkupTree();
+    $mojito = markupCocktail('モヒート');
+    $bacardi = markupBrand('バカルディ');
+    $shaker = markupDictionary('シェーカー');
+    $stored = "@n{$n['ラム/ホワイト']->id}@@C{$mojito->id}@を、@b{$bacardi->id}@で。\n@d{$shaker->id}@で振る。@C{$mojito->id}@";
+
+    expect($this->markup->toStored($this->markup->withNotes($stored)))->toBe($stored);
 });

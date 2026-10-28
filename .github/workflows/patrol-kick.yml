@@ -28,6 +28,8 @@ concurrency:
 
 jobs:
   kick:
+    # draft の PR の CI は全ジョブを飛ばす(test.yml)。draft の動きでは見回りを起こさない
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     permissions:
       contents: read

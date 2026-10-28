@@ -609,6 +609,347 @@
                 }
             }
         },
+        "/admin/paraphrases": {
+            "get": {
+                "operationId": "paraphrases.index",
+                "description": "q \u306f\u3001\u5909\u63db\u524d\u30fb\u5909\u63db\u5f8c\u30fb\u30df\u30c9\u30eb\u306e\u540d\u524d\u306e\u3069\u3053\u304b\u306b\u542b\u3080\u8a9e(\u90e8\u5206\u4e00\u81f4)\u3002",
+                "summary": "\u8a00\u3044\u63db\u3048\u8f9e\u66f8\u306e\u4e00\u89a7\u3092\u3001ID \u306e\u9806(\u8db3\u3057\u305f\u9806)\u3067 1 \u30da\u30fc\u30b8\u305a\u3064\u8fd4\u3059\u3002",
+                "tags": [
+                    "Paraphrase"
+                ],
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `ParaphraseResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ParaphraseResource"
+                                            }
+                                        },
+                                        "links": {
+                                            "type": "object",
+                                            "properties": {
+                                                "first": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "last": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "prev": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "next": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "from": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "minimum": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "links": {
+                                                    "type": "array",
+                                                    "description": "Generated paginator links.",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "url": {
+                                                                "type": [
+                                                                    "string",
+                                                                    "null"
+                                                                ]
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            },
+                                                            "active": {
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "url",
+                                                            "label",
+                                                            "active"
+                                                        ]
+                                                    }
+                                                },
+                                                "path": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "description": "Base path for paginator generated URLs."
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0
+                                                },
+                                                "to": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "description": "Number of the last item in the slice.",
+                                                    "minimum": 1
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "description": "Total number of items being paginated.",
+                                                    "minimum": 0
+                                                }
+                                            },
+                                            "required": [
+                                                "current_page",
+                                                "from",
+                                                "last_page",
+                                                "links",
+                                                "path",
+                                                "per_page",
+                                                "to",
+                                                "total"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "links",
+                                        "meta"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "paraphrases.store",
+                "summary": "\u8a00\u3044\u63db\u3048\u8f9e\u66f8\u306b 1 \u8a9e\u3092\u8db3\u3059\u3002",
+                "tags": [
+                    "Paraphrase"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveParaphraseRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`ParaphraseResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ParaphraseResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/paraphrases/{paraphrase}": {
+            "get": {
+                "operationId": "paraphrases.show",
+                "summary": "\u8a00\u3044\u63db\u3048\u8f9e\u66f8\u306e 1 \u8a9e\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "Paraphrase"
+                ],
+                "parameters": [
+                    {
+                        "name": "paraphrase",
+                        "in": "path",
+                        "required": true,
+                        "description": "The paraphrase ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ParaphraseResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ParaphraseResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "paraphrases.update",
+                "summary": "\u8a00\u3044\u63db\u3048\u8f9e\u66f8\u306e 1 \u8a9e\u3092\u66f8\u304d\u63db\u3048\u308b\u3002",
+                "tags": [
+                    "Paraphrase"
+                ],
+                "parameters": [
+                    {
+                        "name": "paraphrase",
+                        "in": "path",
+                        "required": true,
+                        "description": "The paraphrase ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveParaphraseRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`ParaphraseResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ParaphraseResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "paraphrases.destroy",
+                "summary": "\u8a00\u3044\u63db\u3048\u8f9e\u66f8\u306e 1 \u8a9e\u3092\u6d88\u3059\u3002",
+                "tags": [
+                    "Paraphrase"
+                ],
+                "parameters": [
+                    {
+                        "name": "paraphrase",
+                        "in": "path",
+                        "required": true,
+                        "description": "The paraphrase ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            }
+        },
         "/search-form": {
             "get": {
                 "operationId": "searchForm",
@@ -645,6 +986,160 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/admin/skip-words": {
+            "get": {
+                "operationId": "skip-words.index",
+                "summary": "\u30b9\u30ad\u30c3\u30d7\u8a9e\u3092\u3059\u3079\u3066\u3001ID \u306e\u9806\u3067\u8fd4\u3059(\u65e7\u3067 5 \u4ef6\u3002\u30da\u30fc\u30b8\u306b\u5206\u3051\u306a\u3044)\u3002",
+                "tags": [
+                    "SkipWord"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `SkipWordResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SkipWordResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "skip-words.store",
+                "summary": "\u30b9\u30ad\u30c3\u30d7\u8a9e\u3092 1 \u8a9e\u8db3\u3059\u3002",
+                "tags": [
+                    "SkipWord"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveSkipWordRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SkipWordResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SkipWordResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/skip-words/{skipWord}": {
+            "put": {
+                "operationId": "skip-words.update",
+                "summary": "\u30b9\u30ad\u30c3\u30d7\u8a9e\u3092 1 \u8a9e\u66f8\u304d\u63db\u3048\u308b\u3002",
+                "tags": [
+                    "SkipWord"
+                ],
+                "parameters": [
+                    {
+                        "name": "skipWord",
+                        "in": "path",
+                        "required": true,
+                        "description": "The skip word ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveSkipWordRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SkipWordResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SkipWordResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "skip-words.destroy",
+                "summary": "\u30b9\u30ad\u30c3\u30d7\u8a9e\u3092 1 \u8a9e\u6d88\u3059\u3002",
+                "tags": [
+                    "SkipWord"
+                ],
+                "parameters": [
+                    {
+                        "name": "skipWord",
+                        "in": "path",
+                        "required": true,
+                        "description": "The skip word ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 }
             }
@@ -1226,6 +1721,107 @@
                 ],
                 "title": "NodeRefResource"
             },
+            "ParaphraseResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "\u5909\u63db\u524d\u306e\u540d\u524d"
+                    },
+                    "converted": {
+                        "type": "string",
+                        "description": "\u5909\u63db\u5f8c\u306e\u540d\u524d(\u30ce\u30fc\u30c9\u304b\u9298\u67c4)"
+                    },
+                    "middle": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "command": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "null: \u6307\u5b9a\u306a\u3057 / hot: \u5f37\u5236\u30db\u30c3\u30c8"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "resolved": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "path": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "name_eng": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name",
+                                        "name_eng"
+                                    ]
+                                }
+                            },
+                            "brand": {
+                                "type": [
+                                    "object",
+                                    "null"
+                                ],
+                                "properties": {
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "name_eng": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name",
+                                    "name_eng"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "path",
+                            "brand"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "converted",
+                    "middle",
+                    "command",
+                    "note",
+                    "resolved"
+                ],
+                "title": "ParaphraseResource"
+            },
             "SaveBrandRequest": {
                 "type": "object",
                 "description": "\u9298\u67c4\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/brands\u30fbPUT /api/admin/brands/{id}\u3002#314)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditBrandValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u306a\u3069\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b\n(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
@@ -1328,6 +1924,67 @@
                 ],
                 "title": "SaveBrandRequest"
             },
+            "SaveParaphraseRequest": {
+                "type": "object",
+                "description": "\u8a00\u3044\u63db\u3048\u8f9e\u66f8\u306e 1 \u8a9e\u306e\u8ffd\u52a0\u30fb\u66f4\u65b0(POST /api/admin/paraphrases\u30fbPUT /api/admin/paraphrases/{id}\u3002#316)\u3002",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "\u5909\u63db\u524d\u306e\u540d\u524d(\u53d6\u308a\u8fbc\u3093\u3060\u6750\u6599\u306e\u540d\u524d)\u3002\u307b\u304b\u306e\u8a9e\u3068\u91cd\u306a\u3089\u306a\u3044",
+                        "maxLength": 255
+                    },
+                    "converted": {
+                        "type": "string",
+                        "description": "\u5909\u63db\u5f8c\u306e\u540d\u524d\u3002\u30ce\u30fc\u30c9\u304b\u9298\u67c4\u306e\u540d\u524d\u3067\u3001\u89e3\u6c7a\u3067\u304d\u306a\u3044\u3068 422",
+                        "maxLength": 255
+                    },
+                    "middle": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "converted \u306e\u30ce\u30fc\u30c9\u306e\u914d\u4e0b\u306e\u30ce\u30fc\u30c9\u306e\u540d\u524d",
+                        "maxLength": 255
+                    },
+                    "command": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "null: \u6307\u5b9a\u306a\u3057 / hot: \u5f37\u5236\u30db\u30c3\u30c8(\u65e7\u306e\u753b\u9762\u306e\u9078\u629e\u80a2)",
+                        "enum": [
+                            "hot",
+                            null
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "name",
+                    "converted"
+                ],
+                "title": "SaveParaphraseRequest"
+            },
+            "SaveSkipWordRequest": {
+                "type": "object",
+                "description": "\u30b9\u30ad\u30c3\u30d7\u8a9e\u306e 1 \u8a9e\u306e\u8ffd\u52a0\u30fb\u66f4\u65b0(POST /api/admin/skip-words\u30fbPUT /api/admin/skip-words/{id}\u3002#316)\u3002",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "\u5217\u306e\u9577\u3055(docs/schema.md \u306e\u300cskip_words\u300d\u3002\u65e7 skip_db \u3068\u540c\u3058 256)\u307e\u3067\u3002\u307b\u304b\u306e\u8a9e\u3068\u91cd\u306a\u3089\u306a\u3044",
+                        "maxLength": 256
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "SaveSkipWordRequest"
+            },
             "SearchFormMethodResource": {
                 "type": "object",
                 "properties": {
@@ -1383,6 +2040,22 @@
                     "children"
                 ],
                 "title": "SearchFormNodeResource"
+            },
+            "SkipWordResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name"
+                ],
+                "title": "SkipWordResource"
             }
         },
         "responses": {

@@ -41,8 +41,7 @@ describe('CategoryTree', () => {
     openToBeefeater()
     fireEvent.click(screen.getByRole('radio', { name: 'ビーフィーター' }))
 
-    expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(onSelect.mock.calls[0][0].id).toBe(11000)
+    expect(onSelect.mock.calls.map(([node]) => node.id)).toEqual([11000])
   })
 
   test('TC-297-02: 複数選択で、深さ 5 のノードを開いてチェックを入れ外しできる', () => {
