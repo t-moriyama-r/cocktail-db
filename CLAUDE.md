@@ -24,7 +24,7 @@
 
 | ディレクトリ | 中身 | テスト・チェック |
 |---|---|---|
-| `backend/` | Laravel(PHP 8.4)。`/api/*` の API と、SPA を返すルート | `php artisan test`(下の「BE のテスト」) |
+| `backend/` | Laravel(PHP。CI は 8.5、サーバーの版は `README.md` の「サーバーの PHP の版」)。`/api/*` の API と、SPA を返すルート | `php artisan test`(下の「BE のテスト」) |
 | `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
