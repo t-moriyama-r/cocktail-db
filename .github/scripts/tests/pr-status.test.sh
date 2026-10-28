@@ -70,6 +70,20 @@ main() {
 	check TC-456-02 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
 	check TC-456-03 '下書きは、手元の作業待ちより先' '.isDraft = true | .labels = ["needs-local"]' '状態:作業中'
 
+	# 積み上げの PR(向き先が develop・staging・release 以外)。ai-auto-merge.yml は見送るので、マージ待ちにしない
+	check TC-460-01 '積み上げの PR で、GitHub がマージを許す' '.baseRefName = "issue-47-affiliate-api"' '状態:ベースブランチ待ち'
+	check TC-460-02 'develop 向けは、これまでどおりマージ待ち' '.baseRefName = "develop"' '状態:マージ待ち'
+	check TC-460-03 'staging 向けは、これまでどおり人のマージ待ち' '.baseRefName = "staging"' '状態:人のマージ待ち'
+	check TC-460-04 'release 向けは、これまでどおり人のマージ待ち' '.baseRefName = "release"' '状態:人のマージ待ち'
+	check TC-460-05 '積み上げの PR でも、コンフリクトはコンフリクト' '.baseRefName = "issue-47-affiliate-api" | .mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"' '状態:コンフリクト'
+	check TC-460-06 '積み上げの PR でも、GitHub がマージを許さなければ(BEHIND)マージ不可' '.baseRefName = "issue-47-affiliate-api" | .mergeStateStatus = "BEHIND"' '状態:マージ不可'
+	check TC-460-07 '積み上げの PR でも、needs-approval は人のマージ待ち(人のマージ待ちの後に判定する)' '.baseRefName = "issue-47-affiliate-api" | .labels = ["needs-approval"]' '状態:人のマージ待ち'
+	check TC-460-08 '積み上げの PR でも、UNSTABLE(必須でないチェックの失敗)はベースブランチ待ち' '.baseRefName = "issue-47-affiliate-api" | .mergeStateStatus = "UNSTABLE"' '状態:ベースブランチ待ち'
+	check TC-460-09 '積み上げの PR でも、下書きは作業中' '.baseRefName = "issue-47-affiliate-api" | .isDraft = true' '状態:作業中'
+	check TC-460-10 '積み上げの PR でも、いまのコミットが未レビューならレビュー待ち' '.baseRefName = "issue-47-affiliate-api" | .headReviewed = false' '状態:レビュー待ち'
+	check TC-460-11 '事実に向き先が無いときは develop 向けとみなす(従来どおりマージ待ち)' 'del(.baseRefName)' '状態:マージ待ち'
+	check TC-460-12 '向き先が空文字のときも develop 向けとみなす' '.baseRefName = ""' '状態:マージ待ち'
+
 	# facts: gh をスタブにして、必須のチェックの終了コードごとに数えられるかを確かめる
 	check_checks TC-385-18 '必須のチェックが失敗(gh は終了コード 1 で、JSON を標準出力に出す)' 1 '[{"bucket":"fail"},{"bucket":"pass"}]' '' '1 0'
 	check_checks TC-385-19 '必須のチェックが実行中(終了コード 8)' 8 '[{"bucket":"pending"},{"bucket":"pass"}]' '' '0 1'

@@ -42,10 +42,17 @@ main() {
 # 止めている理由ごとにラベルを分け、どれにも当てはまらない受け皿をマージ待ちにしない。
 # 保護の設定は GITHUB_TOKEN では読めないことがあるので、BLOCKED のうち実行中・未解決で説明できないものは、
 # 必須のチェックが付いていないものとみなす(いまの保護で、ほかに BLOCKED になる条件は無い)
+#
+# 向き先が develop・staging・release 以外の PR(積み上げの PR。土台の PR のブランチに向けたもの)は、ai-auto-merge.yml が見送り、
+# test.yml も流れない。向き先のブランチに保護が無いので GitHub は CLEAN を返すが、マージ待ちにはせずベースブランチ待ちにする(#460)。
+# 土台がマージされると向き先が develop に付け替わり、ci-rerun.yml が CI を流してからはこれまでどおりに決まる。
+# 事実に向き先が無い(空)ときは develop 向けとみなす
 decide() {
   jq -r --arg p "$PREFIX" '
     (.labels // []) as $l
-    | ((.baseRefName // "") | IN("staging", "release")) as $promotion
+    | (.baseRefName // "") as $base
+    | ($base | IN("staging", "release")) as $promotion
+    | ($base != "" and ($base | IN("develop", "staging", "release") | not)) as $stacked
     | ($l | index("needs-approval") != null) as $approval
     | if .state != "OPEN" then ""
       elif .isDraft then $p + "作業中"
@@ -61,6 +68,7 @@ decide() {
       elif .mergeStateStatus == "UNKNOWN" then $p + "確認中"
       elif (.mergeStateStatus | IN("CLEAN", "HAS_HOOKS", "UNSTABLE") | not) then $p + "マージ不可"
       elif $promotion or $approval then $p + "人のマージ待ち"
+      elif $stacked then $p + "ベースブランチ待ち"
       else $p + "マージ待ち"
       end'
 }
@@ -156,6 +164,7 @@ ensure_label() {
     CI未実行) color=b60205 description="必須のチェックが、いまのコミットで成功していない(付いていない、など)" ;;
     確認中) color=ededed description="GitHub がマージできるかを計算している。次の出し直しで決まる" ;;
     マージ不可) color=b60205 description="GitHub がマージを止めている(上のどのラベルでもない理由)" ;;
+    ベースブランチ待ち) color=bfdadc description="向き先が develop 以外(積み上げの PR)。ベースブランチの PR がマージされると develop に付け替わり、CI が流れる" ;;
     マージ待ち) color=5319e7 description="マージできる。ai-auto-merge.yml のマージを待っている" ;;
     *) color=ededed description="" ;;
   esac
