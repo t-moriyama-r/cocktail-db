@@ -360,6 +360,8 @@ it('TC-314-13: YouTube は URL か動画 ID で受け、開始位置は時 0 か
     '短い URL' => [['youtube' => 'https://youtu.be/abcdefghijk'], null, 'abcdefghijk', null],
     '動画 ID' => [['youtube' => 'abcdefghijk'], null, 'abcdefghijk', null],
     'YouTube でない URL' => [['youtube' => 'https://example.com/watch?v=abcdefghijk'], 'youtube', null, null],
+    '動画 ID の形でない値(引用符・空白・タグ)' => [['youtube' => 'abc"def <b>'], 'youtube', null, null],
+    '動画 ID に使える記号(_ と -)' => [['youtube' => 'ab_cd-efghij'], null, 'ab_cd-efghij', null],
     '動画 ID の読めない URL' => [['youtube' => 'https://www.youtube.com/'], 'youtube', null, null],
     '時 0・分 59・秒 59' => [['youtube' => 'abcdefghijk', 'youtube_start_hour' => 0, 'youtube_start_minute' => 59, 'youtube_start_second' => 59], null, 'abcdefghijk', 3599],
     '分だけ(空の欄は 0)' => [['youtube' => 'abcdefghijk', 'youtube_start_minute' => 1], null, 'abcdefghijk', 60],
