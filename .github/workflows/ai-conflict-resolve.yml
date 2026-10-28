@@ -4,7 +4,8 @@
 # - pick: シェルで候補を絞る(.github/scripts/conflict-candidates.sh。見送った理由はジョブのログに出す)
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
-#   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
+#   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する。それでも push が断られたら、
+#   手元で取り込んでもらうよう PR にコメントして needs-local を付ける(Slack には知らせない。手元のエージェントが拾う)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
 #   いまのコミットをレビューさせる。新しく付いた needs-human は Slack に知らせ、状態のラベルを付け替える
@@ -142,7 +143,7 @@ jobs:
           # PR のコメントは第三者も書ける。force push・別ブランチへの push・ブランチの削除をツールの許可で防ぐため、git は使うサブコマンドと push 先に絞る
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }}(ブランチ `${{ matrix.pr.branch }}`)が develop とコンフリクトしている。
             develop のコミット ${{ env.BASE }} を取り込んで、コンフリクトを解消してほしい。
@@ -163,7 +164,12 @@ jobs:
                触ったファイルの構文(シェルは `bash -n`、PHP は `php -l`。JSON は Read で読んで確かめる)
             5. `issue-<issue 番号>: develop を取り込み、コンフリクトを解消(<ファイル>)` でコミットし、本文に `Refs #<issue 番号>` を書く
                (issue 番号はブランチ名 issue-<番号>-… から)。`git push origin HEAD:${{ matrix.pr.branch }}` で push する。
-               force push はしない。push が拒否されたら(その間に誰かが push した)、何もせずに終える
+               force push はしない。push が拒否されたら(その間に誰かが push した)、何もせずに終える。
+               ただし、ワークフローのファイルを変えたことで断られた(`refusing to allow a GitHub App to create or update workflow` など)ときは、
+               この環境では push できないので、手元で同じ取り込みをしてもらう。PR にコメントを書いてから
+               `gh pr edit ${{ env.PR }} --add-label needs-local` で `needs-local` を付けて終える(人の判断は要らないので、Slack には知らせない)。
+               コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=push --> <!-- ai-dev:conflict-resolve sha=${{ env.PICKED_HEAD }} base=${{ env.BASE }} --> を付け、
+               中身は、手元でする手順(develop(${{ env.BASE }})を取り込む・ファイルごとの混ぜ方・push の後に CI とレビューを頼む)を、そのまま流せる形で書く
             6. push したら、PR に次をコメントして終える(先頭の目印は一字も変えない)
                「<!-- ai-dev:agent --> <!-- ai-dev:conflict-resolve sha=${{ env.PICKED_HEAD }} base=${{ env.BASE }} -->
                develop(${{ env.BASE }} の先頭 7 文字)を取り込んで、コンフリクトを解消した(<コミット>)。」と、ファイルごとにどう混ぜたか(1 行ずつ)
@@ -263,7 +269,7 @@ jobs:
             MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
             # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
             # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
-            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision"))] | join(",")' <<<"$pr")
+            held=$(bash .github/scripts/held-labels.sh <<<"$pr")
             if [ "$(jq -r .isDraft <<<"$pr")" = false ] && [ -z "$held" ]; then
               gh workflow run ai-claude-review.yml -R "$REPO" -f number="$PR" -f reason=conflict-resolve
             fi

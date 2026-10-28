@@ -10,8 +10,8 @@
 # レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
 # 候補はシェルで絞り、理由をジョブのログに出す。Claude Code はここでは動かさず、次のワークフローを workflow_dispatch で呼ぶ
 #
-# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-approval が
-# 付いていない(人の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
+# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-local / needs-approval が
+# 付いていない(人か手元の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
 # ai-in-actions が付いていれば 3 時間待つ(Actions が対応している途中。止まって印だけ残ったものは、そのあと拾う)
 #
 # 向き先が staging・release の PR(昇格の PR)は、返信待ちの指摘があっても ai-review-loop.yml を呼ばない(head が保護されたブランチ(develop・staging)で
@@ -88,7 +88,7 @@ jobs:
               bash .github/scripts/thread-handoff.sh release "$REPO" "$n" || echo "::warning::#$n の needs-human を外せるか確かめられなかった"
               continue
             fi
-            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
+            label=$(bash .github/scripts/held-labels.sh needs-approval <<<"$pr")
             if [ -n "$label" ]; then skip "ラベル $label"; continue; fi
             min=$MIN_IDLE_MINUTES
             if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then min=$MIN_IDLE_MINUTES_IN_ACTIONS; fi
