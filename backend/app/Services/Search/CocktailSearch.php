@@ -29,4 +29,21 @@ class CocktailSearch
             ->whereUsesAny(Cocktail::query()->published(), $nodeIds)
             ->orderBy('id');
     }
+
+    /**
+     * 手持ちの材料(選んだノード)だけで作れるカクテル(あるもの検索)を、ID の昇順で引くクエリ。
+     *
+     * 持っていなくてよい材料(任意・「その他」)の判定は IngredientMatch::whereMakeableWith に任せる。下書き・並びは
+     * OR 検索と同じ。旧はカクテル ID を 1 から件数までしか見ておらず、ID が件数を超えるカクテルが出なかったが、
+     * その不具合は再現しない(docs/search-expected-diffs.md の「[#165] で再現しないもの」)。
+     *
+     * @param  list<int>  $nodeIds
+     * @return Builder<Cocktail>
+     */
+    public function queryMakeable(array $nodeIds): Builder
+    {
+        return $this->match
+            ->whereMakeableWith(Cocktail::query()->published(), $nodeIds)
+            ->orderBy('id');
+    }
 }
