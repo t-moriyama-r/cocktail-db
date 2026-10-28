@@ -112,7 +112,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 |---|---|---|
 | `状態:作業中` | 下書き | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
 | `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
-| `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(1 時間ごと。draft は選ばない)。直せない衝突は `needs-human` で人に頼む |
+| `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(1 時間ごと。draft は選ばない)。生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の衝突は、人に頼まずに同じワークフローが作り直して push する。直せない衝突は `needs-human` で人に頼む |
 | `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
 | `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある(向き先が `staging`・`release` の PR と、`needs-approval` の PR は除く) | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
 | `状態:レビュー待ち` | いまのコミットを AI レビュアーがまだ見ていない(`needs-approval` の PR は除く) | CodeRabbit(上限なら `ai-claude-review.yml`)。push されたコミットは、CI の終わりに `review-on-push.yml` が依頼を出す(取りこぼしは `ai-review-sweep.yml` が拾う) |
