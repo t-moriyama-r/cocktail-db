@@ -12,7 +12,6 @@ use App\Support\NameNormalizer;
 use App\Support\YoutubeInput;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 use UnexpectedValueException;
 
 /**
@@ -83,19 +82,16 @@ class AdminBrandWriter
             $brand->image = $this->images->update($request->file('image'), $request->boolean('remove_image'), $brand->image);
             $uploaded = $request->file('image') !== null ? $brand->image : null;
 
-            try {
-                $brand->save();
+            // ロールバックされると、置いたファイルを指す行は残らない。孤児にならないよう消す
+            // (ここで落ちたときも、外側のトランザクションが後でロールバックされたときも、同じ経路で消える)
+            if ($uploaded !== null) {
+                DB::afterRollBack(fn () => $this->images->discard($uploaded));
+            }
 
-                if ($movedFrom !== null) {
-                    $this->followCategory($brand);
-                }
-            } catch (Throwable $e) {
-                // ロールバックされるので、置いたファイルを指す行は残らない。孤児にならないよう消す
-                if ($uploaded !== null) {
-                    $this->images->discard($uploaded);
-                }
+            $brand->save();
 
-                throw $e;
+            if ($movedFrom !== null) {
+                $this->followCategory($brand);
             }
 
             return $brand;
