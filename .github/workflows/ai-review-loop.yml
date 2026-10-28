@@ -288,6 +288,7 @@ jobs:
       run: ${{ steps.pr.outputs.run }}
       # Claude Code が仕事をしないまま終わり、既定のブランチで起こし直す(claude-idle.sh が retry と決めた)
       retry: ${{ steps.idle.outputs.result == 'retry' }}
+      sha: ${{ steps.idle.outputs.sha }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -431,9 +432,11 @@ jobs:
         env:
           RAN: ${{ steps.claude.outputs.execution_file != '' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DEFER_RETRY_MARK: "1"
         run: |
           result=$(bash .ai-dev/.github/scripts/claude-idle.sh review "$REPO" "$PR" "$RAN")
           echo "result=$result" >> "$GITHUB_OUTPUT"
+          echo "sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
 
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
       - name: 途中で止まったら、対応中の印を外す
@@ -447,7 +450,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write   # 通知・判定・代わりのレビューのワークフローを gh workflow run で呼ぶ
-      pull-requests: read
+      pull-requests: write   # 起こし直しに成功した後、目印のコメントを書く
     steps:
       # 動いているワークフローと同じ版のスクリプトを使う(review ジョブの .ai-dev と同じ)
       - uses: actions/checkout@v6
@@ -465,7 +468,11 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: gh workflow run ai-review-loop.yml -R "$REPO" --ref "$DEFAULT_BRANCH" -f number="$PR"
+          SHA: ${{ needs.review.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh workflow run ai-review-loop.yml -R "$REPO" --ref "$DEFAULT_BRANCH" -f number="$PR"
+          bash .github/scripts/claude-idle.sh mark-retry "$REPO" "$PR" "$SHA"
 
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
