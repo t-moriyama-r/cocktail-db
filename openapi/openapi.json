@@ -108,6 +108,129 @@
                 }
             }
         },
+        "/cocktails": {
+            "get": {
+                "operationId": "cocktailList.index",
+                "description": "- recent: \u66f4\u65b0\u65e5\u6642(updated_at)\u306e\u65b0\u3057\u3044\u9806\u3002\u540c\u3058\u65e5\u6642\u306a\u3089 ID \u306e\u5927\u304d\u3044\u9806\n- recommend: \u8a55\u4fa1(rate)\u304c 3 \u4ee5\u4e0a\u306e\u30ab\u30af\u30c6\u30eb\u304b\u3089\u3001\u30e9\u30f3\u30c0\u30e0\u306b\u9078\u3076(\u65e7 cocktailRecommend)\n- random: \u3059\u3079\u3066\u306e\u30ab\u30af\u30c6\u30eb\u304b\u3089\u3001\u30e9\u30f3\u30c0\u30e0\u306b\u9078\u3076\n\nlimit \u306f 1\u301c50(\u7701\u7565\u3059\u308b\u3068 10)\u3002sort\u30fblimit \u304c\u5916\u308c\u3066\u3044\u305f\u3089 422\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u3001\u6307\u5b9a\u3057\u305f\u4e26\u3079\u65b9\u3067 limit \u4ef6\u307e\u3067\u8fd4\u3059\u30021 \u4ef6\u306f\u4e00\u89a7\u306e\u8868(#298)\u306e 1 \u884c\u306e\u5f62\u3002",
+                "tags": [
+                    "CocktailList"
+                ],
+                "parameters": [
+                    {
+                        "name": "sort",
+                        "in": "query",
+                        "required": true,
+                        "description": "recent: \u66f4\u65b0\u306e\u65b0\u3057\u3044\u9806\u3002recommend: \u8a55\u4fa1\u304c 3 \u4ee5\u4e0a\u304b\u3089\u30e9\u30f3\u30c0\u30e0\u3002random: \u30e9\u30f3\u30c0\u30e0",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "recent",
+                                "recommend",
+                                "random"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `CocktailListItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CocktailListItemResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/cocktails/count": {
+            "get": {
+                "operationId": "cocktailList.count",
+                "summary": "\u516c\u958b\u3057\u3066\u3044\u308b\u30ab\u30af\u30c6\u30eb\u306e\u4ef6\u6570\u3092\u8fd4\u3059(\u4e0b\u66f8\u304d\u306f\u6570\u3048\u306a\u3044)\u3002",
+                "tags": [
+                    "CocktailList"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "count": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "count"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/cocktails/latest-video": {
+            "get": {
+                "operationId": "cocktailList.latestVideo",
+                "description": "\u52d5\u753b(youtube)\u306e\u7121\u3044\u30ab\u30af\u30c6\u30eb\u306f\u9078\u3070\u306a\u3044\u3002\u52d5\u753b\u306e\u3042\u308b\u516c\u958b\u306e\u30ab\u30af\u30c6\u30eb\u304c 1 \u4ef6\u3082\u7121\u3051\u308c\u3070 404\u3002",
+                "summary": "\u52d5\u753b\u306e\u516c\u958b\u65e5\u6642(youtube_created_at)\u304c\u3044\u3061\u3070\u3093\u65b0\u3057\u3044\u30ab\u30af\u30c6\u30eb\u3092\u8fd4\u3059\u3002\u540c\u3058\u65e5\u6642\u306a\u3089 ID \u306e\u5927\u304d\u3044\u3082\u306e\u3002",
+                "tags": [
+                    "CocktailList"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`LatestVideoCocktailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/LatestVideoCocktailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            }
+        },
         "/admin/cocktails/{cocktail}/preview": {
             "get": {
                 "operationId": "admin.cocktailPreview",
@@ -1815,6 +1938,94 @@
                 ],
                 "title": "CocktailIngredientResource"
             },
+            "CocktailListItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "base": {
+                        "$ref": "#/components/schemas/NodeRefResource"
+                    },
+                    "method": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "name_eng": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "name_eng"
+                        ]
+                    },
+                    "recipe_count": {
+                        "type": "integer"
+                    },
+                    "strength": {
+                        "type": "number"
+                    },
+                    "sweet_degree": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "rate": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "is_major",
+                    "base",
+                    "method",
+                    "recipe_count",
+                    "strength",
+                    "sweet_degree",
+                    "rate",
+                    "youtube",
+                    "updated_at"
+                ],
+                "title": "CocktailListItemResource"
+            },
             "CocktailSearchRequest": {
                 "type": "object",
                 "description": "\u6761\u4ef6\u691c\u7d22(POST /api/cocktails/search)\u306e\u6761\u4ef6(docs/search.md \u306e\u300c\u65b0\u3057\u3044\u6761\u4ef6\u3068\u306e\u5bfe\u5fdc\u300d)\u3002\n\n\u9078\u3093\u3060\u30ce\u30fc\u30c9\u306e ID \u306f\u3001\u753b\u9762\u304c\u90e8\u5206\u6728\u3092\u89aa\u306b\u7573\u3081\u306a\u3044\u3068\u6570\u767e\u500b\u306b\u306a\u308a\u3046\u308b(docs/decisions/search-screen.md \u306e 3)\u306e\u3067\u3001\nGET \u306e\u30af\u30a8\u30ea\u3067\u306f\u306a\u304f JSON \u306e\u672c\u6587\u3067\u53d7\u3051\u308b(#163 \u306e\u300c\u8ffd\u8a18: API \u306e\u5f62\u300d)\u3002",
@@ -1957,6 +2168,104 @@
                     }
                 },
                 "title": "ConvertLegacySearchConditionRequest"
+            },
+            "LatestVideoCocktailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube_created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "base": {
+                        "$ref": "#/components/schemas/NodeRefResource"
+                    },
+                    "description": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "const": "text"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "type",
+                                        "text"
+                                    ]
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "node",
+                                                "cocktail",
+                                                "brand",
+                                                "dictionary"
+                                            ]
+                                        },
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        },
+                                        "has_youtube": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "type",
+                                        "id",
+                                        "text",
+                                        "has_youtube"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "youtube",
+                    "youtube_created_at",
+                    "base",
+                    "description"
+                ],
+                "title": "LatestVideoCocktailResource"
             },
             "NodeRefResource": {
                 "type": "object",
