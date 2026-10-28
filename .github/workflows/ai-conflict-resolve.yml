@@ -4,13 +4,14 @@
 # - pick: シェルで候補を絞る(.github/scripts/conflict-candidates.sh。見送った理由はジョブのログに出す)
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
+#   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(手元の作業待ち)を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
 #   test.yml の backend・frontend と同じ準備(PHP 8.4・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
-#   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-human で人に頼む
+#   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
-#   いまのコミットをレビューさせる。新しく付いた needs-human は Slack に知らせ、状態のラベルを付け替える
+#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
@@ -166,7 +167,7 @@ jobs:
           # PR のコメントは第三者も書ける。force push・別ブランチへの push・ブランチの削除をツールの許可で防ぐため、git は使うサブコマンドと push 先に絞る
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git merge:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git grep:*),Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git checkout --ours:*),Bash(git checkout --theirs:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD:${{ matrix.pr.branch }}),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr comment ${{ env.PR }}:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh issue view:*),Bash(bash -n:*),Bash(php -l:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }}(ブランチ `${{ matrix.pr.branch }}`)が develop とコンフリクトしている。
             develop のコミット ${{ env.BASE }} を取り込んで、コンフリクトを解消してほしい。
@@ -179,12 +180,13 @@ jobs:
             3. 次のどれかに当たる衝突は、自分で選ばずに、下の「人に頼む」をする
                - 両方の意図を同時には満たせない(同じ値・同じ挙動を別々に変えている、片方が消したものをもう片方が使っている)
                - データを消す・DB のマイグレーションの順番が変わる
-               - `package-lock.json`。手で混ぜると壊れ、この環境では作り直せない
                生成したファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)は、人に頼まずに develop の版を取る
                (`git checkout --theirs <ファイル>` してから `git add <ファイル>`。この取り込みでは --theirs が develop の側)。手で混ぜない。
                このワークフローの後の手順が、取り込んだ後のコードから作り直して push する(CLAUDE.md の「API を変えたら」と同じ手順)
                - ワークフロー(`.github/workflows/`)の permissions・secret の扱い・起動のきっかけ(on)・外部への送信・外部のアクション(uses)・
                  Claude Code に渡す権限やツールのところ
+               `package-lock.json` の衝突は、手で混ぜると壊れ、この環境では作り直せないが、どちらを取るかの判断ではない(取り込んだ後に作り直せば決まる)ので、
+               下の「手元に頼む」をする
                ワークフローのファイルでも、上に当たらない衝突は解消してよい(develop にもうある変更を取り込むことで、ワークフローを新しく変えることではない)
             4. 解消したら確かめる: `git diff --check`、衝突の印(<<<<<<< ・======= ・>>>>>>> )が残っていないこと(`git grep -nE '^(<<<<<<<|>>>>>>>) '`)、
                触ったファイルの構文(シェルは `bash -n`、PHP は `php -l`。JSON は Read で読んで確かめる)
@@ -202,6 +204,12 @@ jobs:
             (それぞれ「こう選ぶと、こうなる」「その代わり、ここが困る」、おすすめと理由)。設計の用語や記号に頼らず話し言葉で書き、
             短く答えられる形(「おすすめで」「B で」など)を示す。並びと形は CLAUDE.md の「人に判断を頼むとき」に従う
             (1 行目に何を決めてほしいか、両側の変更と案ごとの混ぜ方の図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、ぶつかった箇所の細かい説明は最後に畳む)。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
+
+            手元に頼むとき(`package-lock.json` の衝突など、判断は要らないがこの環境では片付けられない)は、push せずに `git merge --abort` で取り込みを取り消し、
+            PR にコメントを書いてから `gh pr edit ${{ env.PR }} --add-label needs-local` で `needs-local` を付けて終える(PC を開いたときに手元の見回りが片付ける)。
+            コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:conflict-resolve sha=${{ env.PICKED_HEAD }} base=${{ env.BASE }} --> を付け、
+            中身は、手元でそのまま流せる手順(develop の取り込み・衝突したファイルごとの混ぜ方・作り直すコマンド(CLAUDE.md の「API を変えたら」など)・流すテスト)。
+            人に頼む衝突もあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
       # after は PR ごとに、この回で取り込みを試したかを知る必要がある(matrix のジョブの outputs は PR ごとに分けられない)。
@@ -419,7 +427,7 @@ jobs:
           name: conflict-regenerated-${{ env.PR }}
           path: .ai-regen
 
-      # 作り直せなかったら、CI の「Check OpenAPI is up to date」が落ちたまま止まるので、人に頼む(Slack への通知は下の手順)。
+      # 作り直せなかったら、CI の「Check OpenAPI is up to date」が落ちたまま止まるので、手元に頼む(判断は要らない。Slack への通知は下の手順)。
       # 作り直して変わったファイルがあり、その後に誰も push していなければ、push する
       # .ai-regen は PR のコードを動かした regenerate が書くので、中身を PR のコードが自由に書ける(RC-04)。
       # changed の各行は生成ファイルの一覧と完全に一致し、files の中身が通常のファイル(リンクでない・リンクのディレクトリの下でない)のときだけ使う。
@@ -452,11 +460,11 @@ jobs:
             done < .ai-regen/changed
           fi
           if [ -n "$failed" ]; then
-            gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
+            gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
           develop を取り込んだ後の生成ファイル($(paste -sd' ' .ai-conflict/generated))を作り直そうとしたが、${failed}。手元で作り直して push してほしい(CLAUDE.md の「API を変えたら」の手順)。
 
           作り直した回: $RUN_URL"
-            gh pr edit "$PR" -R "$REPO" --add-label needs-human
+            gh pr edit "$PR" -R "$REPO" --add-label needs-local
             exit 0
           fi
           if [ ! -s .ai-regen/changed ]; then
@@ -525,7 +533,7 @@ jobs:
             MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
             # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
             # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
-            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision"))] | join(",")' <<<"$pr")
+            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision"))] | join(",")' <<<"$pr")
             if [ "$(jq -r .isDraft <<<"$pr")" = false ] && [ -z "$held" ]; then
               gh workflow run ai-claude-review.yml -R "$REPO" -f number="$PR" -f reason=conflict-resolve
             fi
@@ -538,11 +546,13 @@ jobs:
           develop(${BASE:0:7})の取り込みを試したが、コンフリクトを解消できないまま止まった。develop が進んだときに試し直す。急ぐときは手元で develop を取り込んで push してほしい。"
           fi
 
-          # Claude Code が人に頼んだ回は、目印のコメントと needs-human が付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
-          if jq -e '.labels | any(.name == "needs-human")' <<<"$pr" >/dev/null \
-            && grep -F "$mark" <<<"$comments" | grep -qF "ai-dev:needs-human"; then
-            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label=needs-human
-          fi
+          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local が付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
+          for label in needs-human needs-local; do
+            if jq -e --arg l "$label" '.labels | any(.name == $l)' <<<"$pr" >/dev/null \
+              && grep -F "$mark" <<<"$comments" | grep -qF "ai-dev:$label"; then
+              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
+            fi
+          done
 
       # GITHUB_TOKEN で付け外ししたラベルでは pr-status.yml が起きないので、ここで付け替える
       - name: 状態のラベルを付け替える
