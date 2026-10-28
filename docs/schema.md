@@ -84,7 +84,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 - 検索フォーム(`laravel6/resources/js/components/Forms/Search/Cocktail/form.vue` の `kind_and_categories_aiu`)は、種別ごとにカテゴリを名前の五十音順(カタカナをひらがなにそろえて比べる)に並べ直す。種別は ID の順。ミドルは並べ直さず、BE から来た順
 - 結果の一覧のカテゴリ・ミドル(`components/Results/children/CategoryMiddle.vue`)は、既定で ID の順
 
-移行の並び順は ID の順なので、検索フォームのカテゴリは旧(五十音順)と違う順に出る。検索フォームでどちらに合わせるかは #400 で決める。
+移行の並び順は ID の順のままにし、検索フォームのカテゴリだけを FE で旧と同じ五十音順に並べ直す(#400 で決めた)。並べ直しは `frontend/src/features/search/sortSearchFormTree.ts` で、根(旧の種別)と、根の子より深い段(旧のミドルとその下)は API の順(`sort_order`)のまま。API(`GET /api/search-form`)は `sort_order` の順で返し、結果の一覧などほかの画面も `sort_order`(旧の ID の順)で並べる。
 
 ### `category_closures`
 
