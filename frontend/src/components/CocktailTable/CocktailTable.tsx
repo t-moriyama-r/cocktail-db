@@ -70,7 +70,7 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
               <Link to={cocktailPath(c.id)}>{c.name}</Link>
             </td>
             <td className={styles.nameEng}>
-              <Link to={cocktailPath(c.id)}>{c.name_eng}</Link>
+              {c.name_eng && <Link to={cocktailPath(c.id)}>{c.name_eng}</Link>}
             </td>
             <td className={styles.base}>
               <Link to={categoryPath(c.base.id)}>

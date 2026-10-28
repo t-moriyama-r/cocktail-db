@@ -46,6 +46,13 @@ describe('CocktailTable の中身', () => {
     expect(cells[3]).toHaveTextContent('ラム(Rum)')
   })
 
+  test('TC-298-23: 英名が無いカクテルは、英名の列に中身が空のリンクを出さない', () => {
+    renderTable([row({ id: 5, name: 'あ', name_eng: null })])
+
+    const cells = within(screen.getAllByRole('row')[1]).getAllByRole('cell')
+    expect(within(cells[2]).queryByRole('link')).toBeNull()
+  })
+
   test('TC-298-05: 値は、必須の数・甘さの言葉・評価の ★・小数 1 桁の度数で出す', () => {
     renderTable([row({ recipe_count: 3, sweet_degree: -6, rate: 3, strength: 30 })])
 
