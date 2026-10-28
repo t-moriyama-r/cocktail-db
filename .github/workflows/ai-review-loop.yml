@@ -64,6 +64,9 @@ permissions:
 concurrency:
   group: ai-review-loop-${{ github.event.issue.number || github.event.pull_request.number || inputs.number }}
   cancel-in-progress: false
+  # 既定(single)だと、待っている回が後から来た回に置き換えられて捨てられる。
+  # gh workflow run で起こし直した回を待たせたまま失わないよう、待ちを積む
+  queue: max
 
 jobs:
   resume:
