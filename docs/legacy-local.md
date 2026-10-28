@@ -122,9 +122,6 @@ curl -si -b "$JAR" -c "$JAR" -H "X-XSRF-TOKEN: $token" \
   -d '{"id": 1}' http://127.0.0.1:8000/api/cocktailDetail
 ```
 
-- `X-XSRF-TOKEN` のヘッダーか、セッションのクッキー(`-b`)のどちらかが欠けると 419 になる
-- 続けて呼ぶときは、手順 1・2 をやり直さず、同じ `$JAR` と `$token` を使ってよい(`-c` で更新したクッキーを次の呼び出しに渡す)
-
 ## 本番の Google Analytics に計測を送らない
 
 旧画面は本番の Google Analytics に計測を送る。手元で開くときは止める。Playwright なら:
