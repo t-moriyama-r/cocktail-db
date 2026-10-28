@@ -14,7 +14,7 @@
    - 動画は、動画のあるものどうしをカクテルの更新日時で比べる
 4. **値の無いものは、向きによらずいつも最後**: 甘さ・評価・英名が null のもの、動画が無いもの
 5. **同じ値のものは、どちらの向きでも ID の昇順**(#167 の本文)
-6. **ページングは `page`(1 から)・`per_page`(1〜50。省くと 50)**。応答は `data` に 1 ページ分、`meta` に件数(`current_page`・`per_page`・`total`・`last_page` など)と、`links` を返す(Laravel のページ付きのリソースの形。管理画面の一覧 #289 と同じ)。最後のページより後は、空の `data` と件数を返す
+6. **ページングは `page`(1 から)・`per_page`(1〜50。省くと 50)**。応答は `data` に 1 ページ分、`meta` に件数(`current_page`・`per_page`・`total`・`last_page` など)と、`links` を返す(Laravel のページ付きのリソースの形。管理画面の一覧 #289 と同じ)。最後のページより後は、空の `data` と件数を返す。このエンドポイントは POST で条件が本文にあり、`links` は `path?page=N` だけの GET の URL になる(`sort` などが入らない)ので、FE は `links` をたどらず、`meta` の `current_page`・`last_page` から `page` を組み立てて、同じ条件で POST し直す
 7. `sort`・`order`・`page`・`per_page` が決まった値でなければ 422(`category_ids` と同じく、真偽値・小数は整数として受けない)
 
 ## 旧との差分
