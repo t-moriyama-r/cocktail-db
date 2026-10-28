@@ -1,4 +1,4 @@
-# 実装したエージェントが途中で落ちて draft のまま残った PR を毎日見て、Actions の Claude Code が引き継いで仕上げる
+# 実装したエージェントが途中で落ちて draft のまま残った PR を 1 時間ごとに見て、Actions の Claude Code が引き継いで仕上げる
 #
 # draft を ready にするのは、実装したエージェントの役目(実装が終わったら ready にする)。この見回りは、その役目を果たさないまま
 # 止まった PR を回収する。落ちた draft は CI が赤のことも、実装・テスト・PR の本文が足りないこともあるので、足りないものを埋めて
@@ -10,7 +10,7 @@
 # - notify: 新しく付いた needs-human・needs-local を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
-# schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 24 時間たったところで起こす(#269)
+# schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)
 #
 # GITHUB_TOKEN で ready にしても ai-auto-merge.yml の ready_for_review は起きないが、
 # CodeRabbit のレビュー・コメントで ai-auto-merge.yml が起きるので、マージの流れはそのまま続く
@@ -20,7 +20,7 @@ name: 落ちた draft の PR を引き継ぐ
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # 毎日 9:00(日本時間)
+    - cron: '40 * * * *'   # 1 時間ごと(ほかの定期実行の 0・10・20・30 分と重ならないよう 40 分)
   workflow_dispatch:
 
 permissions:
