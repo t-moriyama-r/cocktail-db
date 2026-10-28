@@ -190,6 +190,8 @@ jobs:
             - この回のトークンでは、ワークフローのファイルを変えたコミットを push できない(Claude の GitHub App にワークフローへの書き込み権限が無い)。
               変えることになったら push を試さずに、当てる差分(`git diff` の形)と理由を PR にコメントし、`needs-human` を付けて手元で当ててもらう。
               コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付ける。ワークフロー以外の直しは、これまでどおりコミットして push する
+            この回に書くコメント・スレッドへの返信には、どれにも最後の行に「実行の記録: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}」を書く
+            (後の手順(claude-idle.sh)は、この URL のあるコメントだけを、この回が書いたものとして数える)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
       # PR のブランチの checkout が作業ディレクトリを消すので、.ai-dev(既定のブランチのスクリプト)を取り直す
@@ -439,8 +441,10 @@ jobs:
           DEFER_RETRY_MARK: "1"
         run: |
           result=$(bash .ai-dev/.github/scripts/claude-idle.sh review "$REPO" "$PR" "$RAN")
+          # 代入を分けて、gh が失敗したら手順を落とす(echo の中で取ると sha が空のまま出て、mark-retry が目印を書けない)
+          sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
           echo "result=$result" >> "$GITHUB_OUTPUT"
-          echo "sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
       - name: 途中で止まったら、対応中の印を外す

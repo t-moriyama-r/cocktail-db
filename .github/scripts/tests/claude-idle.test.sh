@@ -19,6 +19,7 @@ AGENT='<!-- ai-dev:agent --> 直した'
 RETRIED='<!-- ai-dev:claude-idle-retry sha=sha7 --> 起こし直す'
 ASKED='<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:claude-idle sha=sha7 --> 人に頼む'
 SINCE=2026-10-25T15:00:00Z
+RUN=https://github.com/o/r/actions/runs/1
 
 main() {
 	setup_fake_gh
@@ -148,19 +149,19 @@ main() {
 
 	reset
 	pr 7 ''
-	comments "2026-10-25T15:01:00Z|<!-- ai-dev:agent --> 承認は、マージでお願いします"
+	comments "2026-10-25T15:01:00Z|<!-- ai-dev:agent --> 承認は、マージでお願いします 実行の記録: $RUN"
 	run resume true sha7 "$SINCE"
 	expect TC-240-18 '動き始めてからエージェントがコメントしていれば、仕事をした' "$(out)|$(edited)$(commented)" 'ok|'
 
 	reset
 	pr 7 ai-in-actions
-	review_comments "2026-10-25T15:01:00Z|<!-- ai-dev:agent --> 決めたこと。理由: …"
+	review_comments "2026-10-25T15:01:00Z|<!-- ai-dev:agent --> 決めたこと。理由: … 実行の記録: $RUN"
 	run resume true sha7 "$SINCE"
 	expect TC-240-19 '動き始めてからエージェントがスレッドに返信していれば、仕事をした' "$(out)|$(edited)$(commented)" 'ok|'
 
 	reset
 	pr 7 ai-in-actions,needs-human
-	comments "2026-10-25T15:01:00Z|<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> 聞き直す"
+	comments "2026-10-25T15:01:00Z|<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> 聞き直す 実行の記録: $RUN"
 	run resume true sha7 "$SINCE"
 	expect TC-240-20 'needs-human を付けて聞き直して終わったら、印を外す(人の番)' \
 		"$(out)|$(edited)|$(commented)" 'cleared|7 -R o/r --remove-label ai-in-actions|'
@@ -175,14 +176,14 @@ main() {
 
 	reset
 	pr 7 ai-in-actions
-	comments "2026-10-25T15:01:00Z|$AGENT"
+	comments "2026-10-25T15:01:00Z|$AGENT 実行の記録: $RUN"
 	run resume false sha7 "$SINCE"
 	expect TC-240-22 'Claude Code が動かなかった回は、コメントがあっても仕事をしていない' "$(out)" 'asked'
 
 	reset
 	pr 7 ai-in-actions
-	comments "outsider:2026-10-25T15:01:00Z|$AGENT"
-	review_comments "outsider:2026-10-25T15:01:00Z|$AGENT"
+	comments "outsider:2026-10-25T15:01:00Z|$AGENT 実行の記録: $RUN"
+	review_comments "outsider:2026-10-25T15:01:00Z|$AGENT 実行の記録: $RUN"
 	run resume true sha7 "$SINCE"
 	expect TC-240-23 '書き込み権限の無い人が目印を書いても、仕事をしたとみなさない' "$(out)" 'asked'
 
@@ -196,6 +197,19 @@ main() {
 	touch "$FAKE/comments-fail"
 	run resume true sha7 "$SINCE"
 	expect TC-240-27 'resume でコメントを読めなかったら、書いていないと取り違えず、何も変えずに失敗で終わる' "$(edited)$(commented)|$RC" '|1'
+
+	reset
+	pr 7 ai-in-actions
+	comments "bot:2026-10-25T15:01:00Z|$AGENT 実行の記録: https://github.com/o/r/actions/runs/2"
+	review_comments "bot:2026-10-25T15:01:00Z|$AGENT"
+	run resume true sha7 "$SINCE"
+	expect TC-240-33 '別の回・別のワークフローの bot のコメント(この回の実行の記録の URL が無い)は、仕事をしたと数えない' "$(out)" 'asked'
+
+	reset
+	pr 7 ai-in-actions
+	comments "2026-10-25T15:01:00Z|$AGENT 実行の記録: $RUN"
+	RUN_URL= run resume true sha7 "$SINCE"
+	expect TC-240-34 'RUN_URL が無ければ、この回のコメントを見分けられないので、何も変えずに失敗で終わる' "$(edited)$(commented)|$RC" '|1'
 
 	reset
 	run bogus true
@@ -314,7 +328,7 @@ out() { cat "$FAKE/out" 2>/dev/null; }
 
 run() {
 	RC=0
-	PATH="$FAKE/bin:$PATH" bash "$SCRIPT" "$1" o/r 7 "${@:2}" >"$FAKE/out" 2>"$FAKE/err" || RC=$?
+	RUN_URL=${RUN_URL-$RUN} PATH="$FAKE/bin:$PATH" bash "$SCRIPT" "$1" o/r 7 "${@:2}" >"$FAKE/out" 2>"$FAKE/err" || RC=$?
 }
 
 expect() {

@@ -38,7 +38,8 @@
 #   起こし直しの workflow_dispatch が無い(オーナーの返信のコメントで動く)ので、仕事をしていなければ、印を外し、
 #   もう一度返信してほしいことをコメントして needs-human を付ける(asked)。直して push した回は、次のレビューで
 #   review が印を外すので残す(ok)。needs-human を付けて終わった回は、人の番なので印を外す(cleared)
-#   仕事をしたかは、コミットが進んだか・動き始めてからエージェントの目印の付いたコメント・返信があるかで見る
+#   仕事をしたかは、コミットが進んだか・動き始めてから、この回の実行の記録の URL(環境変数 RUN_URL)を書いた
+#   エージェントの目印の付いたコメント・返信があるかで見る
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -246,14 +247,19 @@ has_marker() {
   jq -e --arg m "$2" 'any(.[]; .body // "" | contains($m))' <<<"$1" >/dev/null
 }
 
-# 動き始めてから、エージェント(目印 ai-dev:agent)が PR へのコメントかスレッドへの返信を書いたか。
-# 終了コード: 0 書いた、1 書いていない、2 コメントを読めなかった(「書いていない」と取り違えない)
+# 動き始めてから、この回のエージェント(目印 ai-dev:agent と、この回の実行の記録の URL)が PR へのコメントかスレッドへの返信を書いたか。
+# 目印だけで見ると、同じ PR に並行して動く別のワークフロー(ai-auto-merge など)の bot のコメントも数えてしまう。
+# 終了コード: 0 書いた、1 書いていない、2 コメントを読めなかった・RUN_URL が無い(「書いていない」と取り違えない)
 agent_wrote_since() {
   local repo=$1 n=$2 since=$3 issue review rc=0
+  if [ -z "${RUN_URL:-}" ]; then
+    log "RUN_URL が無いので、この回が書いたコメントを見分けられない"
+    return 2
+  fi
   issue=$(trusted_comments "$repo" "$n") || return 2
   review=$(gh api --paginate --slurp "repos/$repo/pulls/$n/comments?per_page=100" | jq 'add // [] | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or .user.type == "Bot"))') || return 2
-  jq -e -n --argjson c "$issue" --argjson r "$review" --arg since "$since" \
-    'any(($c + $r)[]; (.body // "" | contains("ai-dev:agent")) and (.created_at >= $since))' >/dev/null || rc=$?
+  jq -e -n --argjson c "$issue" --argjson r "$review" --arg since "$since" --arg run "$RUN_URL" \
+    'any(($c + $r)[]; (.body // "" | contains("ai-dev:agent") and contains($run)) and (.created_at >= $since))' >/dev/null || rc=$?
   if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then return "$rc"; fi
   return 2
 }
