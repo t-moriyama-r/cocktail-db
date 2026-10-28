@@ -530,7 +530,6 @@
                     "CocktailSearch"
                 ],
                 "requestBody": {
-                    "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
@@ -2349,26 +2348,36 @@
                             "string",
                             "null"
                         ],
-                        "description": "\u65b9\u5f0f\u3002\u7701\u304f\u3068 or\u3002and(#164)\u30fbhaving(#165)\u306f\u3001\u53d7\u3051\u308b\u5f62\u3092\u6c7a\u3081\u3066\u304b\u3089\u8db3\u3059\u3002\u305d\u308c\u307e\u3067\u53d7\u3051\u308b\u3068\u3001\nOR \u691c\u7d22\u306e\u7d50\u679c\u3092\u9ed9\u3063\u3066\u8fd4\u3057\u3066\u3057\u307e\u3046",
+                        "description": "\u65b9\u5f0f\u3002\u7701\u304f\u3068 or\u3002having(#165)\u306f\u3001\u53d7\u3051\u308b\u5f62\u3092\u6c7a\u3081\u3066\u304b\u3089\u8db3\u3059\u3002\u305d\u308c\u307e\u3067\u53d7\u3051\u308b\u3068\u3001\nOR \u691c\u7d22\u306e\u7d50\u679c\u3092\u9ed9\u3063\u3066\u8fd4\u3057\u3066\u3057\u307e\u3046",
                         "enum": [
                             "or",
+                            "and",
                             null
                         ]
                     },
                     "category_ids": {
                         "type": "array",
-                        "description": "\u9078\u3093\u3060\u30ce\u30fc\u30c9\u3002\u6839\u3082\u3088\u3044(\u753b\u9762\u304c\u90e8\u5206\u6728\u3092\u3059\u3079\u3066\u9078\u3093\u3060\u3068\u304d\u306b\u7573\u3093\u3067\u9001\u308b\u3002docs/search.md \u306e\u300c\u4e00\u81f4\u306e\u5b9a\u7fa9\u300d)\n\u4ef6\u6570\u306e\u4e0a\u9650\u306f\u3001\u8a8d\u8a3c\u306e\u8981\u3089\u306a\u3044\u516c\u958b API \u306b\u5de8\u5927\u306a\u914d\u5217\u3092\u9001\u3089\u308c\u3066\u691c\u8a3c\u3068\u691c\u7d22\u304c\u91cd\u304f\u306a\u308b\u306e\u3092\u9632\u3050\u305f\u3081(docs/search.md)",
+                        "description": "\u9078\u3093\u3060\u30ce\u30fc\u30c9(or)\u3002\u6839\u3082\u3088\u3044(\u753b\u9762\u304c\u90e8\u5206\u6728\u3092\u3059\u3079\u3066\u9078\u3093\u3060\u3068\u304d\u306b\u7573\u3093\u3067\u9001\u308b\u3002docs/search.md \u306e\u300c\u4e00\u81f4\u306e\u5b9a\u7fa9\u300d)\n\u4ef6\u6570\u306e\u4e0a\u9650\u306f\u3001\u8a8d\u8a3c\u306e\u8981\u3089\u306a\u3044\u516c\u958b API \u306b\u5de8\u5927\u306a\u914d\u5217\u3092\u9001\u3089\u308c\u3066\u691c\u8a3c\u3068\u691c\u7d22\u304c\u91cd\u304f\u306a\u308b\u306e\u3092\u9632\u3050\u305f\u3081(docs/search.md)\nand \u306f\u307e\u3068\u307e\u308a\u306e\u4e26\u3073(category_groups)\u3067\u53d7\u3051\u308b\u306e\u3067\u3001\u9001\u3089\u308c\u305f\u3089\u9ed9\u3063\u3066\u6368\u3066\u305a\u306b\u5f3e\u304f",
                         "items": {
                             "type": "integer",
                             "description": "`integer` \u306f PHP \u306e\u6574\u6570\u30d5\u30a3\u30eb\u30bf\u30fc\u306a\u306e\u3067\u3001true \u3084 1.0 \u3082 1 \u3068\u3057\u3066\u901a\u308b\u3002JSON \u306e\u6574\u6570\u3068\u6570\u5b57\u306e\u6587\u5b57\u3060\u3051\u3092\u53d7\u3051\u308b"
                         },
-                        "minItems": 1,
+                        "maxItems": 1000
+                    },
+                    "category_groups": {
+                        "type": "array",
+                        "description": "\u9078\u3093\u3060\u30ce\u30fc\u30c9\u306e\u307e\u3068\u307e\u308a\u306e\u4e26\u3073(and\u3002#164)\u3002\u753b\u9762\u304c\u300c\u540c\u3058\u89aa\u304b\u3089\u9078\u3093\u3060\u3082\u306e\u300d\u3092 1 \u3064\u306e\u307e\u3068\u307e\u308a\u306b\u3057\u3066\u9001\u308a\u3001\n\u307e\u3068\u307e\u308a\u3054\u3068\u306b\u300c\u3069\u308c\u304b 1 \u3064\u3092\u4f7f\u3046\u300d\u3067\u63a2\u3059(docs/decisions/search-screen.md \u306e 1)\u3002\u307e\u3068\u307e\u308a\u306e\u5358\u4f4d\u306f\u753b\u9762\u304c\u6c7a\u3081\u308b\u3002\nand \u4ee5\u5916\u3067\u9001\u3089\u308c\u305f\u3089\u3001\u9ed9\u3063\u3066\u6368\u3066\u305a\u306b\u5f3e\u304f\u3002ID \u306e\u7dcf\u6570\u306e\u4e0a\u9650\u306f category_ids \u3068\u540c\u3058(after \u3067\u6570\u3048\u308b)",
+                        "items": {
+                            "type": "array",
+                            "description": "\u7a7a\u306e\u307e\u3068\u307e\u308a\u306f\u3001\u3069\u306e\u30ab\u30af\u30c6\u30eb\u3082\u6e80\u305f\u305b\u306a\u3044\u6761\u4ef6\u306b\u306a\u308b\u306e\u3067\u5f3e\u304f(\u753b\u9762\u306f\u7a7a\u306e\u307e\u3068\u307e\u308a\u3092\u9001\u3089\u306a\u3044)",
+                            "items": {
+                                "type": "integer"
+                            },
+                            "minItems": 1
+                        },
                         "maxItems": 1000
                     }
                 },
-                "required": [
-                    "category_ids"
-                ],
                 "title": "CocktailSearchRequest"
             },
             "CocktailSummaryResource": {
