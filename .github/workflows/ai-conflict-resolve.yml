@@ -421,10 +421,15 @@ jobs:
 
       # 作り直せなかったら、CI の「Check OpenAPI is up to date」が落ちたまま止まるので、人に頼む(Slack への通知は下の手順)。
       # 作り直して変わったファイルがあり、その後に誰も push していなければ、push する
+      # .ai-regen は PR のコードを動かした regenerate が書くので、中身を PR のコードが自由に書ける(RC-04)。
+      # changed の各行は生成ファイルの一覧と完全に一致し、files の中身が通常のファイル(リンクでない・リンクのディレクトリの下でない)のときだけ使う。
+      # 作り直した回の URL は、failed の中身をコメントに埋めずに組み立て直す(regenerate は同じ実行のジョブ)
       - name: 作り直した生成ファイルを push するか決める
         id: regen_decide
         if: steps.tried.outcome == 'success' && steps.regen.outcome == 'success'
         continue-on-error: true
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           regen_head=$(cat .ai-regen/head)
           head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
@@ -432,11 +437,25 @@ jobs:
             echo "#$PR 作り直した後に ${head:0:7} が push されたので、push しない"
             exit 0
           fi
-          if [ -s .ai-regen/failed ]; then
+          failed=
+          [ -s .ai-regen/failed ] && failed="作り直すコマンドが失敗した"
+          if [ -z "$failed" ] && [ -s .ai-regen/changed ]; then
+            while IFS= read -r f; do
+              ok=
+              for g in $GENERATED_FILES; do [ "$f" = "$g" ] && ok=1; done
+              src=".ai-regen/files/$f"
+              if [ -z "$ok" ] || [ ! -f "$src" ] || [ -L "$src" ] || [ "$(realpath -- "$src")" != "$(realpath .)/$src" ]; then
+                echo "::warning::#$PR 作り直したファイルの一覧に、生成ファイルではないか通常のファイルでないものがあるので、push しない"
+                failed="作り直したファイルの一覧が正しい形でなかった"
+                break
+              fi
+            done < .ai-regen/changed
+          fi
+          if [ -n "$failed" ]; then
             gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
-          develop を取り込んだ後の生成ファイル($(paste -sd' ' .ai-conflict/generated))を作り直そうとしたが、失敗した。手元で作り直して push してほしい(CLAUDE.md の「API を変えたら」の手順)。
+          develop を取り込んだ後の生成ファイル($(paste -sd' ' .ai-conflict/generated))を作り直そうとしたが、${failed}。手元で作り直して push してほしい(CLAUDE.md の「API を変えたら」の手順)。
 
-          作り直した回: $(cat .ai-regen/failed)"
+          作り直した回: $RUN_URL"
             gh pr edit "$PR" -R "$REPO" --add-label needs-human
             exit 0
           fi
