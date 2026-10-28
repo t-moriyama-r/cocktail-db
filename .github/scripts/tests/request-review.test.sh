@@ -34,6 +34,9 @@ workflow ai-claude-review.yml reason=request-failed'
 	check TC-227-21 '人の番(needs-human)は見送る' request pat '{"labels": [{"name": "needs-human"}]}' ''
 	check TC-456-06 '手元の番(needs-local)は見送る' request pat '{"labels": [{"name": "needs-local"}]}' ''
 	check TC-227-22 '閉じた PR は見送る' request pat '{"state": "CLOSED"}' ''
+	check TC-479-08 '昇格の PR(staging 向け)は見送る' request pat '{"baseRefName": "staging"}' ''
+	check TC-479-09 '昇格の PR(release 向け)は見送る' request pat '{"baseRefName": "release"}' ''
+	check TC-479-10 'develop 向けの PR は、これまでどおり CodeRabbit に頼む' request pat '{"baseRefName": "develop"}' 'pr-comment token=pat'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -65,7 +68,7 @@ setup_fakes() {
 
 check() {
 	local id=$1 title=$2 state=$3 token=$4 pr=$5 expected=$6 actual
-	jq -n --argjson pr "$pr" '{state: "OPEN", isDraft: false, labels: []} + $pr' >"$FAKE/pr.json"
+	jq -n --argjson pr "$pr" '{state: "OPEN", isDraft: false, labels: [], baseRefName: "develop"} + $pr' >"$FAKE/pr.json"
 	: >"$FAKE/calls"
 	PATH="$FAKE/bin:$PATH" FAKE_DIR="$FAKE" FAKE_STATE=$state GH_TOKEN=github CODERABBIT_REQUEST_TOKEN=$token \
 		bash "$FAKE/scripts/request-review.sh" o/r 1 >/dev/null

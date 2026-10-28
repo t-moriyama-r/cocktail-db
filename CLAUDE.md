@@ -163,8 +163,9 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
      - MINOR: 機能を足したとき
      - PATCH: 不具合の修正・見た目の調整だけのとき
    - `release` 向けの PR をマージすると、`release-tag.yml` がタイトルの版でマージコミットにタグ(`v1.2.0`)を打ち、GitHub Release(本文は自動生成のリリースノート)を作る。デプロイ(`deploy.yml`)とは別のワークフローで、デプロイの成否とは関係なく作る
-   - この PR(昇格の PR)の中身は、`develop` に入る前に PR ごとにレビュー済み。AI レビューは流すが、指摘が残ってもマージは止めず、Actions の Claude Code は直さない(head が保護されたブランチ(`develop`・`staging`)なので直せない)。`needs-human` も付かない。直したい指摘は、`develop` への PR で直す
-   - CI が緑で、いまのコミットを AI がレビューし終えると、`ai-auto-merge.yml` が `needs-approval` を付けて Slack に知らせる。残っている指摘の件数も PR にコメントされる。人は差分と指摘を見て、マージするか決める
+   - 昇格の PR は必ず手元のエージェントが作る。**レビューは CodeRabbit ではなく、作った手元の Claude がする**(#479)。PR を作ったら、`base...head` の差分を読み、`gh pr review <番号> --comment` で、本文の先頭に `<!-- ai-dev:agent --> <!-- ai-dev:local-review -->` を付けたレビューを書く(指摘が無くても書く。指摘は本文に並べる)。Actions(`request-review.sh`)は昇格の PR に CodeRabbit・代わりの Claude のレビューを頼まず、`ai-auto-merge.yml` はいまのコミットに付いたこの目印のレビューだけをレビュー済みとみなす(`head-reviewed.sh`)。head の `develop`・`staging` に後からコミットが入ったら、レビュー済みでなくなるので、手元でもう一度レビューする
+   - この PR(昇格の PR)の中身は、`develop` に入る前に PR ごとにレビュー済み。指摘が残ってもマージは止めず、Actions の Claude Code は直さない(head が保護されたブランチ(`develop`・`staging`)なので直せない)。`needs-human` も付かない。直したい指摘は、`develop` への PR で直す
+   - CI が緑で、いまのコミットを手元の Claude がレビューし終えると、`ai-auto-merge.yml` が `needs-approval` を付けて Slack に知らせる。残っている指摘の件数も PR にコメントされる。人は差分と指摘を見て、マージするか決める
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 

@@ -79,6 +79,8 @@ jobs:
           [ "$(jq -r .isDraft <<<"$pr")" = false ] || skip "#$PR は下書き(ready にしたときの依頼を CodeRabbit に出す)"
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$PR はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$PR を作ったのがオーナーではない"
+          # 昇格の PR は、作った手元の Claude がレビューする(#479)。手で CodeRabbit に頼んで上限が返ったときも代わりにしない
+          case "$(jq -r .baseRefName <<<"$pr")" in staging | release) skip "#$PR は昇格の PR(手元の Claude がレビューする)" ;; esac
           # 同じコミットを、CodeRabbit か Claude がもう見ていれば、しない(上限のコメントは 1 回の依頼に 2 つ付くことがある)。
           # CodeRabbit はスレッドへの返信のたびに本文の無いレビューをいまのコミットに付けるので、それはレビューとして数えない
           # (ai-auto-merge.yml と同じ数え方。数えると、上限で誰もレビューしていないコミットを見送ってしまう)
