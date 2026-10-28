@@ -28,7 +28,7 @@
 | `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
-| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
+| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行と、旧 DB のダンプの確かめ(`docs/legacy-local.md` から呼ぶ)) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
 | `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`、画面のスタイルの書き方と見た目の基準は `docs/design/style.md`) | — |
 
 ### BE のテスト
@@ -43,7 +43,7 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` のシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 
