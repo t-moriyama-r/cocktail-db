@@ -101,6 +101,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/legacy/search-condition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 旧サイトが保存した検索条件(旧のカテゴリ・ミドル・技法の ID)を、新しいノード・技法の ID に直して返す。
+         * @description 直し方は App\Services\LegacySearchCondition。対応の無い ID などは捨て、捨てた数を dropped_count に入れる
+         *     (画面が「戻せなかった条件がある」と出すため。#175)。検索方法・かんたん検索は画面がそのまま移すので受けない。
+         */
+        post: operations["legacySearchCondition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/logout": {
         parameters: {
             query?: never;
@@ -431,6 +452,18 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
         };
+        /**
+         * ConvertLegacySearchConditionRequest
+         * @description 旧サイトが保存した検索条件を直す(POST /api/legacy/search-condition。#290)。
+         *
+         *     旧の localStorage(キー searchInstant・searchUser)の categories・middles・methods をそのまま受ける。省いたキーは
+         *     空の配列と同じに扱う。旧の画面は「全てチェック」で数百の ID を保存しうるので、本文で受ける(#163 と同じ理由)。
+         */
+        ConvertLegacySearchConditionRequest: {
+            categories?: number[];
+            middles?: number[];
+            methods?: number[];
+        };
         /** NodeRefResource */
         NodeRefResource: {
             id: number;
@@ -705,6 +738,34 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    legacySearchCondition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConvertLegacySearchConditionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        category_ids: number[];
+                        method_ids: number[];
+                        dropped_count: number;
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "admin.logout": {

@@ -10,12 +10,16 @@ use App\Http\Controllers\Auth\PasskeyLoginController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailSameNameController;
 use App\Http\Controllers\HelloController;
+use App\Http\Controllers\LegacySearchConditionController;
 use App\Http\Controllers\SearchFormController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/hello', HelloController::class);
 
 Route::get('/search-form', SearchFormController::class);
+
+// 旧サイトが保存した検索条件を直す(#290)。ID が数百になりうるので、GET ではなく本文で受ける
+Route::post('/legacy/search-condition', LegacySearchConditionController::class);
 
 // ID は int に収まる桁数に縛る(超える数字は経路に合わず 404。TypeError の 500 にしない)
 Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
