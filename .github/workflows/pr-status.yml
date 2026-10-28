@@ -44,16 +44,20 @@ jobs:
     # ラベルの付け外しは、状態の決め方(pr-status.sh)が見る制御用のラベルと、状態のラベルのときだけ。
     # 人が状態のラベルを手で付け替えたときは動いて、事実どおりに戻す。
     # CI は PR に結び付いた回だけ。このジョブが付け替えたラベルは GITHUB_TOKEN なので、ここへは戻ってこない。
-    # draft の状態はいつも「作業中」なので、draft では状態が変わるとき(開いた・draft に戻した・閉じた)だけ動かす。
+    # draft の状態は、作業中か、待ちのラベル(needs-human・needs-decision・needs-local)による人の判断待ち・手元の作業待ちなので、
+    # draft では開いた・draft に戻した・閉じた・待ちのラベルの付け外しのときだけ動かす。
     # CI は draft で全ジョブを飛ばす(test.yml)ので、飛ばした回では動かさない
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && github.event.pull_request.draft
-        && contains(fromJSON('["opened","reopened","converted_to_draft","closed"]'), github.event.action))
+        && (contains(fromJSON('["opened","reopened","converted_to_draft","closed"]'), github.event.action)
+          || ((github.event.action == 'labeled' || github.event.action == 'unlabeled')
+            && (startsWith(github.event.label.name, '状態:')
+              || contains(fromJSON('["needs-human","needs-local","needs-decision"]'), github.event.label.name)))))
       || (github.event_name == 'pull_request_target' && !github.event.pull_request.draft && (
         (github.event.action != 'labeled' && github.event.action != 'unlabeled')
         || startsWith(github.event.label.name, '状態:')
-        || contains(fromJSON('["needs-human","needs-decision","needs-approval","ai-in-actions"]'), github.event.label.name)))
+        || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions"]'), github.event.label.name)))
       || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
         && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')

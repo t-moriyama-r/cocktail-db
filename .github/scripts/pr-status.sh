@@ -33,6 +33,10 @@ main() {
 # 上から見て最初に当てはまったものにする。誰の番かが変わるところで分け、レビューの流れが止まるもの(コンフリクト・CI の失敗)は
 # 人が気づけるよう別にする。mergeable が UNKNOWN(push の直後に GitHub が計算している間)はコンフリクトとみなさない
 #
+# 人の判断待ち(needs-human・needs-decision)と手元の作業待ち(needs-local)は、下書きより先に見る。クラウドのルーチンや Actions は、
+# 判断や証跡を待つ PR を下書きのまま止めるので、下書きを先に見ると、止まっている PR が一覧でみな作業中に見える(#471)。
+# 下書きでこれらのラベルが無いものは作業中
+#
 # 向き先が staging・release の PR(昇格の PR)は、中身が develop に入る前にレビュー済みで、head が保護されたブランチ(develop・staging)なので
 # Actions の Claude Code が指摘を直せない。指摘が残っていてもレビュー対応の番にはしない。needs-approval の PR は、ai-auto-merge.yml が
 # レビューの済んだのを確かめてから付けたものなので、同じくレビューの番にはしない
@@ -42,14 +46,22 @@ main() {
 # 止めている理由ごとにラベルを分け、どれにも当てはまらない受け皿をマージ待ちにしない。
 # 保護の設定は GITHUB_TOKEN では読めないことがあるので、BLOCKED のうち実行中・未解決で説明できないものは、
 # 必須のチェックが付いていないものとみなす(いまの保護で、ほかに BLOCKED になる条件は無い)
+#
+# 向き先が develop・staging・release 以外の PR(積み上げの PR。土台の PR のブランチに向けたもの)は、ai-auto-merge.yml が見送り、
+# test.yml も流れない。向き先のブランチに保護が無いので GitHub は CLEAN を返すが、マージ待ちにはせずベースブランチ待ちにする(#460)。
+# 土台がマージされると向き先が develop に付け替わり、ci-rerun.yml が CI を流してからはこれまでどおりに決まる。
+# 事実に向き先が無い(空)ときは develop 向けとみなす
 decide() {
   jq -r --arg p "$PREFIX" '
     (.labels // []) as $l
-    | ((.baseRefName // "") | IN("staging", "release")) as $promotion
+    | (.baseRefName // "") as $base
+    | ($base | IN("staging", "release")) as $promotion
+    | ($base != "" and ($base | IN("develop", "staging", "release") | not)) as $stacked
     | ($l | index("needs-approval") != null) as $approval
     | if .state != "OPEN" then ""
-      elif .isDraft then $p + "作業中"
       elif ($l | index("needs-human") or index("needs-decision")) then $p + "人の判断待ち"
+      elif ($l | index("needs-local")) then $p + "手元の作業待ち"
+      elif .isDraft then $p + "作業中"
       elif .mergeable == "CONFLICTING" then $p + "コンフリクト"
       elif (.failedChecks // 0) > 0 then $p + "CI失敗"
       elif ($promotion or $approval | not) and (($l | index("ai-in-actions")) or (.unansweredThreads // 0) > 0) then $p + "レビュー対応中"
@@ -60,6 +72,7 @@ decide() {
       elif .mergeStateStatus == "UNKNOWN" then $p + "確認中"
       elif (.mergeStateStatus | IN("CLEAN", "HAS_HOOKS", "UNSTABLE") | not) then $p + "マージ不可"
       elif $promotion or $approval then $p + "人のマージ待ち"
+      elif $stacked then $p + "ベースブランチ待ち"
       else $p + "マージ待ち"
       end'
 }
@@ -142,10 +155,11 @@ apply() {
 ensure_label() {
   local repo=$1 name=$2 color description
   case "${name#"$PREFIX"}" in
-    作業中) color=ededed description="下書き。まだレビューに出していない" ;;
+    作業中) color=ededed description="下書き。まだレビューに出していない(人の判断待ち・手元の作業待ちのラベルは無い)" ;;
     レビュー待ち) color=c5def5 description="AI レビュアーがいまのコミットを見るのを待っている" ;;
     レビュー対応中) color=0e8a16 description="レビューの指摘に、Actions の Claude Code が対応する番" ;;
     人の判断待ち) color=d93f0b description="人の判断を待っている(needs-human・needs-decision)" ;;
+    手元の作業待ち) color=c2e0c6 description="証跡の撮影など、手元のエージェントの作業を待っている(needs-local)。人の判断は要らない" ;;
     人のマージ待ち) color=fbca04 description="マージできる。人の確認とマージを待っている(needs-approval・staging/release 向けの PR)" ;;
     コンフリクト) color=b60205 description="develop とコンフリクトしている。Actions の Claude Code が取り込んで直す" ;;
     CI失敗) color=b60205 description="必須のチェックが失敗している" ;;
@@ -154,6 +168,7 @@ ensure_label() {
     CI未実行) color=b60205 description="必須のチェックが、いまのコミットで成功していない(付いていない、など)" ;;
     確認中) color=ededed description="GitHub がマージできるかを計算している。次の出し直しで決まる" ;;
     マージ不可) color=b60205 description="GitHub がマージを止めている(上のどのラベルでもない理由)" ;;
+    ベースブランチ待ち) color=bfdadc description="向き先が develop 以外(積み上げの PR)。ベースブランチの PR がマージされると develop に付け替わり、CI が流れる" ;;
     マージ待ち) color=5319e7 description="マージできる。ai-auto-merge.yml のマージを待っている" ;;
     *) color=ededed description="" ;;
   esac

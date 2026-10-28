@@ -28,7 +28,7 @@
 | `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
-| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
+| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行と、旧 DB のダンプの確かめ(`docs/legacy-local.md` から呼ぶ)) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
 | `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`、画面のスタイルの書き方と見た目の基準は `docs/design/style.md`) | — |
 
 ### BE のテスト
@@ -43,7 +43,7 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` のシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 
@@ -141,18 +141,19 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
    - issue・PR のタイトルの先頭に、対象を示す接頭辞(`【BE】`・`【FE】`・`【CI】`・`【移行】`・`【運用】`)を付ける。`area:*` ラベルとの対応は `docs/labels.md` の「タイトルの接頭辞」。PR のタイトルは、閉じる issue と同じ接頭辞の後に `issue-<番号>: <何をしたか>` を続ける(例: `【BE】issue-90: …`)
 2. ブランチは issue から `develop` を元に作る: `gh issue develop <番号> --base develop --name issue-<番号>-<短い英名> --checkout`
 3. コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く
-4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする。同じファイルを変える PR がまだ開いていて、その上に積むときだけ、ブランチと PR の向き先を土台の PR のブランチにする(土台がマージされると GitHub が向き先を `develop` に付け替え、`ci-rerun.yml` が 1 時間以内に CI を流し直す)
+4. PR は `develop` 向けに下書き(draft)で作り、本文の先頭に `Closes #<番号>` を書く。作った人を assignee にする。同じファイルを変える PR がまだ開いていて、その上に積むときだけ、ブランチと PR の向き先を土台の PR のブランチにする(土台を `ai-auto-merge.yml` が自動でマージすると、積んだ PR の向き先を `develop` に付け替えてから土台のブランチを消し、積んだ PR の CI を流し直す。人がマージしてブランチを消したときは GitHub が付け替え、`ci-rerun.yml` が 1 時間以内に CI を流し直す)
 5. 本文にテストケースの表と結果、確かめたこと(コマンドと結果)を書く。**FE・BE のコード(文書・テスト・CI の設定・`ops/`・ロックファイル以外)を変えたら、何がどう変わったかを、修正前後のスクリーンショット・動画・比較画像(修正前後を並べた画像)の 3 つで「## 証跡」に貼る**。どれか 1 つで済ませない。差分のコードと文章だけでは、レビューする人が実際にどう変わったかを確かめられないため
    - 撮るもの: 画面に出る変更は画面。画面の無い BE(API)は、修正前と修正後に同じリクエストを `curl -si` で送った応答(evidence-capture の `http2html.js` で HTML にして撮る。新しい API なら修正前は 404)。API にも出ない変更(マイグレーション・モデル・サービスの中だけ)は、`SHOW CREATE TABLE` や `php artisan tinker` で呼んだ結果、その変更を確かめるテストの実行結果。修正前は PR の base のコミットを別の worktree に取り出して動かす
+   - FE の画面を変える PR は、幅の区切りごとの「証跡を撮る幅」(`docs/design/style.md` の「幅の区切り」。xs 375px・sm 768px・md 1024px・lg 1440px)の 4 つすべてで、修正前後の静止画を撮る。比較画像は幅ごとに 1 枚。動画は、操作で変わるものがある幅で撮る(少なくとも lg と xs)。区切りの境目(599/600px・959/960px)で出し方を変える CSS を足した・変えたときは、境目の両側も撮る。幅によって変わらないことが明らかなもの(文言だけの変更など)でも、4 つの幅は撮る(省くと、崩れていないことを確かめていない証跡になる)。「## 証跡」には撮った幅を `<数字>px` で書く。画面に出ない FE の変更(純関数・型・テストだけ)で `.tsx`・`.css` を変えたときは、本文に `<!-- ai-dev:no-viewport-evidence 理由 -->` を書く。BE だけの PR(画面が無い)は対象外(#432)
    - 文書・テスト・CI の設定だけの変更は撮らなくてよいが、撮らない理由を「## 証跡」に書く(CI の変更は CI の画面を撮る)
-   - 撮れない環境(ブラウザ・PHP が無いなど)では、「撮れなかった」と書いて ready にしない。draft のまま、何を撮ってほしいかを PR にコメントして `needs-human` を付ける(`ai-draft-sweep.yml` は `needs-human` の付いた draft を拾わない)
-   - `evidence-gate.yml` が、ready の PR でこれを確かめる(決め方は `.github/scripts/evidence-gate.sh`)。赤のあいだは `ai-auto-merge.yml` がマージしない
+   - 撮れない環境(ブラウザ・PHP が無いなど)では、「撮れなかった」と書いて ready にしない。draft のまま、何を撮ってほしいかを PR にコメントして `needs-local`(手元の作業待ち。人の判断は要らない)を付ける。コメントの先頭には `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` を付ける(`ai-draft-sweep.yml` は `needs-local` の付いた draft を拾わない。手元の見回りが撮って貼る)
+   - `evidence-gate.yml` が、ready の PR でこれを確かめる(決め方は `.github/scripts/evidence-gate.sh`。`frontend/src/` の `.tsx`・`.css` を変えた PR では、4 つの区切りそれぞれに入る幅が「## 証跡」に書かれているかも見る)。赤のあいだは `ai-auto-merge.yml` がマージしない
    - **見た目の案を人に選んでもらう PR**(閉じる issue に `needs-review` が付き、PR 本文で色・余白・レイアウト・スタイルの方式などの案を並べて選んでもらうもの。例: #348)は、決着したら、本文に「最終的にどうなったか(証跡)」の節を置き、同じ中身を PR の最後のコメントにも貼る。選ぶ前の案の画像だけでは、何に決まって最終的にどう見えるのかが PR から分からないため
    - 節に書くのは、決まったこと(どのコメントで誰が決めたか)、まだ決まっていないこと、決まった後に変えたところ(レビュー対応で色を変えた、など)、最終の見た目の証跡(決める前 → 最終の比較画像と、最終の見た目の動画)。見た目が変わるたびに(人の判断を反映した・レビュー対応で直した)撮り直して差し替える
-   - Actions の Claude Code は画面を撮れない。この種の PR で見た目を変えたら、節を文字で書いたうえで、何を撮ればよいかをコメントして `needs-human` を付ける(`ai-review-loop.yml`)。撮って貼るのは手元のエージェントで、貼ったら `needs-human` を外す(外すと `ai-auto-merge.yml` がマージできる状態かを見直す)。貼るコメントの先頭には `<!-- ai-dev:agent -->` を付ける(オーナーのアカウントで書いた印の無いコメントは、Actions に人の返信として拾われる)
-6. 実装が終わって手元のテストが通り、証跡を貼ったら ready にし(ready の前に手元で `.github/scripts/evidence-gate.sh <owner/repo> <番号>` が通ることを確かめる)、CI を待つ。CI(`test.yml`)は draft では全ジョブを飛ばし、ready にしたときから流れる(#410)。落ちたら直して push し、緑になったらレビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が毎日見て(GitHub の `schedule` が遅れた・落とされたときは、PR に動きがあれば `patrol-kick.yml` が起こす)、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断や証跡が要るものは、ready にせず `needs-human` を付ける)
+   - Actions の Claude Code は画面を撮れない。この種の PR で見た目を変えたら、節を文字で書いたうえで、何を撮ればよいかをコメントして `needs-local` を付ける(`ai-review-loop.yml`)。撮って貼るのは手元のエージェントで、貼ったら `needs-local` を外す(外すと `ai-auto-merge.yml` がマージできる状態かを見直す)。貼るコメントの先頭には `<!-- ai-dev:agent -->` を付ける(オーナーのアカウントで書いた印の無いコメントは、Actions に人の返信として拾われる)
+6. 実装が終わって手元のテストが通り、証跡を貼ったら ready にし(ready の前に手元で `.github/scripts/evidence-gate.sh <owner/repo> <番号>` が通ることを確かめる)、CI を待つ。CI(`test.yml`)は draft では全ジョブを飛ばし、ready にしたときから流れる(#410)。落ちたら直して push し、緑になったらレビュアーを動かす。レビュアーは `.github/ai-dev.yml` の `reviewer`(今は CodeRabbit。設定は `.coderabbit.yaml`)。OSS のリポジトリでは CodeRabbit が自動で動かないので、PR に `@coderabbitai review` とコメントして頼む。ready にするのは PR を作ったエージェントの役目(実装が終わったら ready にする)。エージェントが途中で落ちて draft のまま残った PR は、`ai-draft-sweep.yml` が 1 時間ごとに見て(最後のコミット・コメントから 1 時間たったものを、実装したエージェントが落ちたとみなす。GitHub の `schedule` が遅れた・落とされたときは、PR に動きがあれば `patrol-kick.yml` が起こす)、Actions の Claude Code が引き継いで仕上げ、ready にしてレビューを頼む(判断が要るものは、ready にせず `needs-human` を付ける。証跡が要るだけのものは `needs-local` を付ける)
 7. 指摘への対応は、手元のエージェントではなく GitHub Actions の Claude Code(`ai-review-loop.yml`)が行う。レビューを頼んだら手元の作業はそこで終える。Actions は、指摘を直すか、直さない理由をスレッドに返信する。判断が要るものは、何を決めてほしいかを PR にコメントしてから `needs-human` ラベルを付ける(Slack に通知が行く)。返されないまま残った指摘は、`ai-review-sweep.yml` が 2 時間ごと(PR に動きのある日は、CI の終わりに `patrol-kick.yml` が前の回から 1 時間たったところで起こすので 1 時間ごと)に見つけて対応させる。`develop` とコンフリクトした ready の PR(draft は選ばない)は、`ai-conflict-resolve.yml` の Claude Code が 1 時間ごとに見つけて `develop` を取り込み(rebase・force push はしない)、CI と代わりのレビューを流して流れに戻す。両方の意図を残せない衝突は、何を決めてほしいかを PR にコメントして `needs-human` を付ける
-8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。返事をしないまま残ったものは、毎朝まとめて知らせ直す
+8. エージェントは自分でマージしない。指摘の対応が終わって CI が緑になった PR を、`ai-auto-merge.yml` がマージする。人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている)は、マージせずに `needs-approval` を付けて Slack に知らせる。自動でマージする PR でも、`gh pr merge` が GitHub に断られたら、エラーの 1 行を PR にコメントして `needs-approval` を付け、Slack に知らせる(#218)。人の番になるのは Slack に知らせが来たときだけ(`needs-human`: 途中で判断が要る、`needs-approval`: マージできる状態になった、`needs-decision`: issue の着手前に決めることがある)。`needs-local`(証跡の撮影など手元の作業待ち)も Slack に知らせるが、人の判断は要らず、PC を開いたときに手元の見回りが片付ける。返事をしないまま残ったものは、毎朝まとめて知らせ直す
 9. `develop`(dev 環境に出る)→ `staging`(stg 環境に出る)→ `release`(本番に出る)の順に PR でマージする。`staging`・`release` へのマージはデプロイになるので、必ず人が行う(自動ではマージしない)。`staging` へは `develop` から、`release` へは `staging` からしか出せない(`branch-flow.yml`)。
    - 昇格の PR のタイトル(一覧で、いつの分か・本番のどの版かを分かるようにするため。#334)
      - `staging` 向け: `【運用】staging <PR を作った日 YYYY-MM-DD>`(例: `【運用】staging 2026-10-26`)。補足は後ろに括弧で足してよい(例: `【運用】staging 2026-10-26(stg 環境への切り替えを含む)`)。機械では確かめない
@@ -167,6 +168,26 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 
+## URL の直後は必ず空白か改行にする
+
+URL を地の文に書くときは、**直後を必ず半角スペースか改行にする**。括弧・句読点・日本語・バッククォートを URL に続けて書いてはいけない。地の文の URL に例外は無い(下の Markdown リンクと Slack 形式は、URL の範囲が記号で閉じているので対象外)。下のコードブロックの「悪い」「良い」の例と、`https://…` のように URL の形だけを示したものは例示で、この決まりの対象外。
+
+GitHub・Slack・ターミナルの自動リンクは、空白までを URL として拾う。`https://…/pull/449#discussion_r4398741625(` のように 1 文字でも続くと、その文字まで含んだ 404 のリンクになる(#449 で起きた)。
+
+- 対象は、エージェントが書くもの(issue・PR の本文・コメント・レビューの返信・コミットメッセージ・ユーザーへの返答)と、スクリプト・ワークフローが組み立てる本文(`gh pr comment` の `--body`・Slack の文面など)のすべて
+- URL は行末に置くのを基本にする。補足は URL の前に書くか、空白を挟んで後ろに書く
+- URL を括弧で囲まない。補足を括弧で書くなら、URL との間に空白を入れる
+- スクリプトで URL に文字をつなげて組み立てるときも同じ。`"\(.url)(…)"` ではなく `"\(.url) (…)"` にする
+- Markdown のリンク(`[テキスト](URL)`)と Slack の `<URL|テキスト>` は、URL の範囲が記号で閉じているので、この決まりの対象外
+
+```text
+悪い: - https://github.com/o/r/pull/1#discussion_r1(`a.yml`)
+悪い: 詳しくは https://github.com/o/r/pull/1を見る
+悪い: PR(https://github.com/o/r/pull/1)を見る
+良い: - https://github.com/o/r/pull/1#discussion_r1 (`a.yml`)
+良い: - `a.yml` のスレッド: https://github.com/o/r/pull/1#discussion_r1
+```
+
 ## 人に判断を頼むとき
 
 人に決めてもらうこと(`needs-human`・`needs-decision` の頼むコメント、issue の「判断が要ること」、手元のエージェントがターミナルで聞くとき)は、文章を読み込まなくても、何を決めるのか・案ごとに何が変わるのかがつかめる形で頼む。文章だけの説明は、理解するまでに時間がかかるため。
@@ -176,13 +197,15 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
 1. **1 行目に、何を決めてほしいかを 1 文で**。Slack の通知(先頭の 600 文字)と毎朝のまとめ(1 行目)に出る。目印のコメント(`<!-- ai-dev:… -->`)はこの前に置いてよい
 2. **図**。案ごとに何がどう変わるかを、Mermaid のコードブロック(` ```mermaid `。GitHub が図にする)で描く。処理の流れ・ラベルや状態の移り変わり・どのワークフローがどれを呼ぶかはフローチャートかシーケンス図、案の違いは案ごとに並べた図にする。図にしても分かりやすくならない判断(はい・いいえで答えられる 1 点だけ、など)は省いてよい
 3. **案を並べた比較表**。列に案(A・B・…)、行に「こう選ぶと、こうなる」「その代わり、ここが困る」、最後の行におすすめと理由
-4. **画面の見た目・操作が変わる判断は、案ごとのスクリーンショット・動画・比較画像**。Actions の Claude Code は画面を撮れないので、撮ってほしいもの(画面・幅・比べるコミット)を書いて手元に頼む(上の手順 5 と同じ)
+4. **結果が画面に出る判断は、案ごとに「この案だと、この画面はこう見える」**。画面に出るもの(並び・出す値・文言・色・余白・レイアウト・操作)が案によって変わるなら、ロジックの判断に見えても対象にする(例: #427 の並べ替えで、`-` と出す行を最後に置くか。案ごとに表の並びが変わる)。図と比較表だけでは、選んだ後に画面がどうなるのかが分からないため
+   - 手元のエージェントは、案ごとに同じ画面・同じ幅・同じデータで撮ったスクリーンショット・動画と、案を並べた比較画像を貼る。違うところは枠と吹き出しで示す。まだ実装していない案も、手元で一時的に書き換えて撮る
+   - Actions の Claude Code は画面を撮れないので、案ごとの見え方を文字で再現したもの(表なら、実際のデータで案ごとに上から数行を並べた Markdown の表。文言なら、案ごとの出る文)を載せる。そのうえで、撮ってほしいもの(画面・幅・データ・どの案か・比べるコミット)を書いて手元に頼む(上の手順 5 と同じ)。手元のエージェントが撮って、先頭に `<!-- ai-dev:agent -->` を付けたコメントで貼る
 5. **短く答えられる形**(「おすすめで」「B で」「2 だけ B で」など)
 6. 経緯や細かい理由など、文章での説明は最後に置き、`<details><summary>詳しく</summary>…</details>` に畳む
 
 設計の用語や記号に頼らず、このアプリで実際に起きる場面を具体例に、話し言葉で書くのは今までどおり。
 
-手元のエージェントがターミナルで聞くときは、選択肢を出す前に、図や案ごとのモックアップを載せたページ(HTML)か、画面の判断なら動画・比較画像を作って見せる。
+手元のエージェントがターミナルで聞くときは、選択肢を出す前に、図や案ごとのモックアップを載せたページ(HTML)か、結果が画面に出る判断なら案ごとのスクリーンショット・動画・比較画像を作って見せる。
 
 ## 文書と既存コードが食い違うとき
 
