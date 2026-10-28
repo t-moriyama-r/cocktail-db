@@ -2,7 +2,6 @@
 
 namespace App\Services\LegacyImport;
 
-use App\Models\LegacyIdMap;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -89,15 +88,7 @@ final class MiscImporter implements LegacyImporter
      */
     private function copyKeepingIds(string $legacyTable, string $newTable, callable $toNewRow): string
     {
-        $rows = $this->legacyRows($legacyTable, 'id', $toNewRow);
-        $this->upsert($newTable, $rows, 'id');
-
-        $newIdByLegacyId = [];
-        foreach ($rows as $row) {
-            $id = LegacyRows::int($row, 'id', $legacyTable);
-            $newIdByLegacyId[$id] = $id;
-        }
-        LegacyIdMap::record($legacyTable, $newTable, $newIdByLegacyId);
+        KeptIdCopier::copy($legacyTable, $newTable, $toNewRow);
 
         return $newTable;
     }
@@ -122,7 +113,7 @@ final class MiscImporter implements LegacyImporter
      */
     private function copyByName(string $legacyTable, string $newTable, callable $toNewRow): string
     {
-        $this->upsert($newTable, $this->legacyRows($legacyTable, 'name', $toNewRow), 'name');
+        KeptIdCopier::upsert($newTable, $this->legacyRows($legacyTable, 'name', $toNewRow), 'name');
 
         return $newTable;
     }
@@ -134,22 +125,5 @@ final class MiscImporter implements LegacyImporter
     private function legacyRows(string $table, string $orderBy, callable $toNewRow): array
     {
         return array_map($toNewRow(...), LegacyRows::ordered($table, $orderBy));
-    }
-
-    /**
-     * 同じキーの行があれば、キー以外の列を旧の値で書き直す。
-     *
-     * @param  list<array<string, mixed>>  $rows
-     * @param  'id'|'name'  $uniqueBy
-     */
-    private function upsert(string $table, array $rows, string $uniqueBy): void
-    {
-        if ($rows === []) {
-            return;
-        }
-
-        // 更新する列を空にすると、upsert は重複を無視せずにただの INSERT になるので、キー自身を書き直す
-        $columns = array_values(array_diff(array_keys($rows[0]), [$uniqueBy]));
-        DB::table($table)->upsert($rows, [$uniqueBy], $columns === [] ? [$uniqueBy] : $columns);
     }
 }
