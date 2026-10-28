@@ -16,6 +16,11 @@ use Illuminate\Validation\Validator;
 class CocktailSearchRequest extends FormRequest
 {
     /**
+     * `category_ids` の件数の上限。画面で選べるノードの総数(畳まずに全部送っても)を十分に超える大きさ。
+     */
+    public const MAX_CATEGORY_IDS = 1000;
+
+    /**
      * 認証の要らない公開の検索なので、だれでも呼べる。
      */
     public function authorize(): bool
@@ -33,7 +38,8 @@ class CocktailSearchRequest extends FormRequest
             // OR 検索の結果を黙って返してしまう
             'mode' => ['nullable', 'string', Rule::in(['or'])],
             // 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
-            'category_ids' => ['required', 'array', 'list'],
+            // 件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
+            'category_ids' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             'category_ids.*' => ['required', 'integer'],
         ];
     }

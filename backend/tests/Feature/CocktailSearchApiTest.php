@@ -305,4 +305,13 @@ describe('条件の検証', function () {
 
         expect($existenceChecks)->toHaveCount(1);
     });
+
+    it('TC-163-19: category_ids が 1000 件を超えたら 422、1000 件までは受ける', function () {
+        $id = $this->n['ラム']->id;
+
+        cocktailSearchPost($this, ['category_ids' => array_fill(0, 1001, $id)])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_ids']);
+        cocktailSearchPost($this, ['category_ids' => array_fill(0, 1000, $id)])->assertOk();
+    });
 });
