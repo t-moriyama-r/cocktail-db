@@ -15,4 +15,7 @@ return [
     'amazon.credential_id' => env('AMAZON_CREDENTIAL_ID'),
     'amazon.credential_secret' => env('AMAZON_CREDENTIAL_SECRET'),
     'amazon.partner_tag' => env('AMAZON_PARTNER_TAG'),
+
+    // 楽天アフィリエイトの ID(App\Services\Affiliate\AffiliateSearchUrls が、検索結果のページへのリンクに付ける)
+    'rakuten.affiliate_id' => env('RAKUTEN_AFFILIATE_ID'),
 ];

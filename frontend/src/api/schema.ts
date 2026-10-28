@@ -4,6 +4,27 @@
  */
 
 export interface paths {
+    "/affiliates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ノード・銘柄の詳細の、商品の欄に出すアフィリエイトの 1 件を返す。
+         * @description 選び方は旧(AffiliateController@getAffiliateData)と同じ。銘柄を指定したらその銘柄の行。指定しなければ、ノードに
+         *     有名な銘柄があればその銘柄の行、無ければノードの行。行の無いノード・銘柄、無い ID は 404(旧は 500 だった)。
+         */
+        get: operations["affiliate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cocktails/{cocktail}": {
         parameters: {
             query?: never;
@@ -345,6 +366,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AffiliateResource */
+        AffiliateResource: {
+            category_id: number;
+            brand_id: number | null;
+            name: string;
+            display: {
+                /** @constant */
+                source: "human";
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                fetched_at: null;
+            } | {
+                /** @constant */
+                source: "amazon";
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            } | {
+                /** @constant */
+                source: "rakuten";
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            } | null;
+            amazon: {
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                search_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            };
+            rakuten: {
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                detail_url: string | null;
+                search_url: string | null;
+                /** Format: date-time */
+                fetched_at: string | null;
+            };
+            human: {
+                title: string | null;
+                price: number | null;
+                image_url: string | null;
+                amazon_detail_url: string | null;
+                amazon_search_url: string | null;
+            };
+        };
         /**
          * CategoryRole
          * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
@@ -571,6 +650,18 @@ export interface components {
         };
     };
     responses: {
+        /** @description Not found */
+        ModelNotFoundException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Error overview. */
+                    message: string;
+                };
+            };
+        };
         /** @description Validation error */
         ValidationException: {
             headers: {
@@ -603,18 +694,6 @@ export interface components {
                 };
             };
         };
-        /** @description Not found */
-        ModelNotFoundException: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": {
-                    /** @description Error overview. */
-                    message: string;
-                };
-            };
-        };
     };
     parameters: never;
     requestBodies: never;
@@ -623,6 +702,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    affiliate: {
+        parameters: {
+            query: {
+                category_id: number;
+                brand_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `AffiliateResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AffiliateResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
     cocktailDetail: {
         parameters: {
             query?: never;
