@@ -50,6 +50,7 @@ decide() {
     | if .state != "OPEN" then ""
       elif .isDraft then $p + "作業中"
       elif ($l | index("needs-human") or index("needs-decision")) then $p + "人の判断待ち"
+      elif ($l | index("needs-local")) then $p + "手元の作業待ち"
       elif .mergeable == "CONFLICTING" then $p + "コンフリクト"
       elif (.failedChecks // 0) > 0 then $p + "CI失敗"
       elif ($promotion or $approval | not) and (($l | index("ai-in-actions")) or (.unansweredThreads // 0) > 0) then $p + "レビュー対応中"
@@ -146,6 +147,7 @@ ensure_label() {
     レビュー待ち) color=c5def5 description="AI レビュアーがいまのコミットを見るのを待っている" ;;
     レビュー対応中) color=0e8a16 description="レビューの指摘に、Actions の Claude Code が対応する番" ;;
     人の判断待ち) color=d93f0b description="人の判断を待っている(needs-human・needs-decision)" ;;
+    手元の作業待ち) color=c2e0c6 description="証跡の撮影など、手元のエージェントの作業を待っている(needs-local)。人の判断は要らない" ;;
     人のマージ待ち) color=fbca04 description="マージできる。人の確認とマージを待っている(needs-approval・staging/release 向けの PR)" ;;
     コンフリクト) color=b60205 description="develop とコンフリクトしている。Actions の Claude Code が取り込んで直す" ;;
     CI失敗) color=b60205 description="必須のチェックが失敗している" ;;

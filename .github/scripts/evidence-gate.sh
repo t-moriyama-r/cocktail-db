@@ -38,7 +38,7 @@ else
 	# 説明の文中の「撮れず」では落とさない。行の頭(箇条書き・太字の記号の後)で宣言している行だけ見る
 	declared=$(grep -E '^[[:space:]]*([-*>]|[0-9]+\.)?[[:space:]]*(\*\*)?(未撮影|撮れなかった|撮れず)' <<<"$section" || true)
 	if [ -n "$declared" ]; then
-		problems+=('「未撮影」「撮れなかった」のまま。撮れない環境なら ready にせず、draft のまま needs-human で撮影を頼む' "該当の行: $(head -3 <<<"$declared" | paste -sd'/' -)")
+		problems+=('「未撮影」「撮れなかった」のまま。撮れない環境なら ready にせず、draft のまま needs-local で撮影を頼む' "該当の行: $(head -3 <<<"$declared" | paste -sd'/' -)")
 	fi
 	[ "$images" -ge 1 ] || problems+=('静止画(修正前後の比較画像)が貼られていない')
 	[ "$videos" -ge 2 ] || problems+=("動画が修正前・修正後の 2 本以上そろっていない(${videos} 本)")

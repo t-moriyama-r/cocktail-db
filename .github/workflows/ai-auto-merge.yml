@@ -12,7 +12,7 @@
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
 # - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
-# - ラベル needs-human / needs-decision / needs-approval / ai-in-actions が付いている(人の番か、Actions が対応している途中)
+# - ラベル needs-human / needs-local / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
@@ -73,7 +73,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
-        || contains(fromJSON('["needs-human","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
+        || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
       || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
         && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
@@ -151,7 +151,7 @@ jobs:
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$NUMBER はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$NUMBER を作ったのがオーナーではない"
 
-          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
+          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
           [ -z "$held" ] || skip "#$NUMBER にラベル $held が付いている"
           if jq -e '.labels | any(.name == "no-auto-merge")' <<<"$pr" >/dev/null; then human="ラベル no-auto-merge が付いている"; fi
 
