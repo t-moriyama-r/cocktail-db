@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
 use App\Http\Controllers\Admin\LogoutController;
@@ -12,6 +13,8 @@ use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailListController;
 use App\Http\Controllers\CocktailSameNameController;
 use App\Http\Controllers\CocktailSearchController;
+use App\Http\Controllers\DictionaryDetailController;
+use App\Http\Controllers\DictionaryIndexController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
 use App\Http\Controllers\SearchFormController;
@@ -37,6 +40,9 @@ Route::post('/legacy/search-condition', LegacySearchConditionController::class);
 Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
 Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
 
+Route::get('/dictionaries', DictionaryIndexController::class);
+Route::get('/dictionaries/{dictionary}', DictionaryDetailController::class)->where('dictionary', '[0-9]{1,18}');
+
 // パスキーでのログイン(#311)。ログインの前に呼ぶので管理 API の外に置くが、チャレンジをセッションに持つので
 // セッションと CSRF の確かめ(web)は通す。署名を何度も試されないよう、IP ごとに 1 分 10 回まで
 Route::prefix('auth/passkey')->middleware(['web', 'throttle:10,1'])->group(function () {
@@ -47,6 +53,7 @@ Route::prefix('auth/passkey')->middleware(['web', 'throttle:10,1'])->group(funct
 // 管理 API。ミドルウェアの中身は bootstrap/app.php の admin のグループ
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/me', CurrentAdminController::class);
+    Route::get('/cocktails', CocktailIndexController::class);
     Route::post('/logout', LogoutController::class);
     Route::get('/passkeys', [PasskeyController::class, 'index']);
     Route::post('/passkeys/registration-options', [PasskeyController::class, 'registrationOptions']);

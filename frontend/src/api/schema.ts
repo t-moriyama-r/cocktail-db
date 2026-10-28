@@ -46,7 +46,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/cocktails": {
+    "/admin/cocktails": {
         parameters: {
             query?: never;
             header?: never;
@@ -54,51 +54,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * カクテルを、指定した並べ方で limit 件まで返す。1 件は一覧の表(#298)の 1 行の形。
-         * @description - recent: 更新日時(updated_at)の新しい順。同じ日時なら ID の大きい順
-         *     - recommend: 評価(rate)が 3 以上のカクテルから、ランダムに選ぶ(旧 cocktailRecommend)
-         *     - random: すべてのカクテルから、ランダムに選ぶ
-         *
-         *     limit は 1〜50(省略すると 10)。sort・limit が外れていたら 422。
+         * 管理画面のカクテルの一覧。公開済みか下書きのどちらかを、名前の昇順で 1 ページずつ返す。
+         * @description 名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順(旧の管理画面の
+         *     一覧と同じ並び)。q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
          */
-        get: operations["cocktailList.index"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cocktails/count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 公開しているカクテルの件数を返す(下書きは数えない)。 */
-        get: operations["cocktailList.count"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cocktails/latest-video": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 動画の公開日時(youtube_created_at)がいちばん新しいカクテルを返す。同じ日時なら ID の大きいもの。
-         * @description 動画(youtube)の無いカクテルは選ばない。動画のある公開のカクテルが 1 件も無ければ 404。
-         */
-        get: operations["cocktailList.latestVideo"];
+        get: operations["admin.cocktailIndex"];
         put?: never;
         post?: never;
         delete?: never;
@@ -178,6 +138,46 @@ export interface paths {
         };
         /** ログインしている管理者を返す。 */
         get: operations["admin.currentAdmin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dictionaries/{dictionary}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語の詳細。用語の種類(技法・グラス・そのほか)と、技法なら技法の ID も返す(docs/decisions/dictionary.md)。
+         * @description 無い用語は 404(旧は 500 だった)。
+         */
+        get: operations["dictionaryDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語辞典の一覧。分類を ID の順に、分類ごとの用語を名前の順で返す(docs/decisions/dictionary.md)。
+         * @description 用語の無い分類も、旧と同じく空の並びで返す(出すかどうかは画面が決める)。
+         */
+        get: operations["dictionaryIndex"];
         put?: never;
         post?: never;
         delete?: never;
@@ -598,19 +598,7 @@ export interface components {
             id: number;
             name: string;
             name_eng: string | null;
-            is_major: boolean;
-            base: components["schemas"]["NodeRefResource"];
-            method: {
-                id: number;
-                name: string;
-                name_eng: string;
-            };
-            recipe_count: number;
-            strength: number;
-            sweet_degree: number | null;
-            rate: number | null;
-            youtube: string | null;
-            /** Format: date-time */
+            is_draft: boolean;
             updated_at: string | null;
         };
         /**
@@ -664,26 +652,39 @@ export interface components {
             middles?: number[];
             methods?: number[];
         };
-        /** LatestVideoCocktailResource */
-        LatestVideoCocktailResource: {
+        /** DictionaryCategoryResource */
+        DictionaryCategoryResource: {
             id: number;
             name: string;
-            name_eng: string | null;
-            youtube: string | null;
-            /** Format: date-time */
-            youtube_created_at: string | null;
-            base: components["schemas"]["NodeRefResource"];
-            description: ({
-                /** @constant */
-                type: "text";
-                text: string;
-            } | {
-                /** @enum {string} */
-                type: "node" | "cocktail" | "brand" | "dictionary";
+            name_eng: string;
+            dictionaries: components["schemas"]["DictionaryRefResource"][];
+        };
+        /** DictionaryDetailResource */
+        DictionaryDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            category: {
                 id: number;
-                text: string;
-                has_youtube: boolean;
-            })[] | null;
+                name: string;
+                name_eng: string;
+            };
+            /** @enum {string} */
+            kind: "method" | "glass" | "other";
+            /** @description 技法の用語なら、その技法の ID(技法から探すカクテルの条件に使う)。技法でなければ null */
+            method_id: number | null;
+            description: string;
+            youtube: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+        };
+        /** DictionaryRefResource */
+        DictionaryRefResource: {
+            id: number;
+            name: string;
+            name_eng: string;
         };
         /** NodeRefResource */
         NodeRefResource: {
@@ -895,12 +896,15 @@ export interface operations {
             };
         };
     };
-    "cocktailList.index": {
+    "admin.cocktailIndex": {
         parameters: {
             query: {
-                /** @description recent: 更新の新しい順。recommend: 評価が 3 以上からランダム。random: ランダム */
-                sort: "recent" | "recommend" | "random";
-                limit?: number;
+                /** @description published: 公開済み / draft: 下書き */
+                status: "published" | "draft";
+                /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
+                q?: string | null;
+                page?: number | null;
+                per_page?: number | null;
             };
             header?: never;
             path?: never;
@@ -908,7 +912,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Array of `CocktailListItemResource` */
+            /** @description Paginated set of `CocktailListItemResource` */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -916,54 +920,35 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["CocktailListItemResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
                     };
                 };
             };
             422: components["responses"]["ValidationException"];
-        };
-    };
-    "cocktailList.count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        count: number;
-                    };
-                };
-            };
-        };
-    };
-    "cocktailList.latestVideo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description `LatestVideoCocktailResource` */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["LatestVideoCocktailResource"];
-                    };
-                };
-            };
-            404: components["responses"]["ModelNotFoundException"];
         };
     };
     "admin.cocktailPreview": {
@@ -1059,6 +1044,53 @@ export interface operations {
                     "application/json": {
                         id: number;
                         name: string;
+                    };
+                };
+            };
+        };
+    };
+    dictionaryDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DictionaryDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    dictionaryIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `DictionaryCategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryCategoryResource"][];
                     };
                 };
             };
