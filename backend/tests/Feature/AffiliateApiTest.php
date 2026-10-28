@@ -17,9 +17,19 @@ uses(RefreshDatabase::class)->group('db');
 
 const AFFILIATE_NOW = '2026-10-27 12:00:00';
 
+/**
+ * Creators API を使える設定(認証情報とパートナータグがそろっている)。どれかが無いと Amazon の値を返さない(#136)ので、
+ * 既定はこれにする。値はテスト用の仮のもの。
+ */
+const AMAZON_CONFIGURED = [
+    'amazon.credential_id' => 'test-credential-id',
+    'amazon.credential_secret' => 'test-credential-secret',
+    'amazon.partner_tag' => 'cocktail-22',
+];
+
 beforeEach(function () {
     $this->travelTo(Carbon::parse(AFFILIATE_NOW));
-    config()->set('settings', []);
+    config()->set('settings', AMAZON_CONFIGURED);
 });
 
 /**
@@ -217,7 +227,7 @@ it('TC-47-07: Amazon だけが期限切れなら、期限内の楽天の値を�
             'price' => null,
             'image_url' => null,
             'detail_url' => null,
-            'search_url' => 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3',
+            'search_url' => 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3&tag=cocktail-22',
             'fetched_at' => null,
         ])
         ->assertJsonPath('data.rakuten.search_url', 'https://hb.afl.rakuten.example/search-from-db');
@@ -235,7 +245,7 @@ it('TC-47-08: Amazon・楽天とも期限切れで手入力も無ければ、名
             'display' => null,
             'amazon' => [
                 'title' => null, 'price' => null, 'image_url' => null, 'detail_url' => null,
-                'search_url' => 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3',
+                'search_url' => 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3&tag=cocktail-22',
                 'fetched_at' => null,
             ],
             'rakuten' => [
@@ -369,7 +379,7 @@ it('TC-47-17: 商品が一度も見つかっていない提供元は、検索の
 });
 
 it('TC-47-18: 期限切れの検索のリンクは、設定にあればパートナータグ・アフィリエイトの ID を付けて組み立てる', function (string $name, string $amazon, string $rakuten) {
-    config()->set('settings', ['amazon.partner_tag' => 'cocktail-22', 'rakuten.affiliate_id' => '1a2b3c4d.5e6f7a8b']);
+    config()->set('settings', [...AMAZON_CONFIGURED, 'rakuten.affiliate_id' => '1a2b3c4d.5e6f7a8b']);
     $affiliate = nodeAffiliate([...amazonValues(expiredAt()), ...rakutenValues(expiredAt())], $name);
 
     getAffiliate($this, $affiliate)
@@ -389,3 +399,98 @@ it('TC-47-18: 期限切れの検索のリンクは、設定にあればパート
         'https://hb.afl.rakuten.co.jp/hgc/1a2b3c4d.5e6f7a8b/?pc=https%3A%2F%2Fsearch.rakuten.co.jp%2Fsearch%2Fmall%2FGordon+%26+Gin%2F510915%2F',
     ],
 ]);
+
+// Amazon の認証情報・パートナータグが設定に無いとき(#136)。設定は App\Support\Settings が .env(config/settings.php)から読む
+
+it('TC-136-01: 認証情報が無ければ、期限内の Amazon の値も返さず、パートナータグ付きの検索結果のリンクだけを返す', function (array $settings) {
+    config()->set('settings', $settings);
+    $affiliate = nodeAffiliate(amazonValues(freshAt()));
+
+    getAffiliate($this, $affiliate)
+        ->assertOk()
+        ->assertJsonPath('data.display', null)
+        ->assertJsonPath('data.amazon', [
+            'title' => null,
+            'price' => null,
+            'image_url' => null,
+            'detail_url' => null,
+            'search_url' => 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3&tag=cocktail-22',
+            'fetched_at' => null,
+        ]);
+})->with([
+    'ID と secret が無い' => [['amazon.partner_tag' => 'cocktail-22']],
+    'ID だけが無い' => [['amazon.credential_secret' => 'test-credential-secret', 'amazon.partner_tag' => 'cocktail-22']],
+    'secret だけが無い' => [['amazon.credential_id' => 'test-credential-id', 'amazon.partner_tag' => 'cocktail-22']],
+    'ID と secret が空の文字列' => [['amazon.credential_id' => '', 'amazon.credential_secret' => '', 'amazon.partner_tag' => 'cocktail-22']],
+]);
+
+it('TC-136-02: 認証情報が無ければ、Amazon で商品が一度も見つかっていない行でも、検索結果のリンクを返す', function () {
+    config()->set('settings', ['amazon.partner_tag' => 'cocktail-22']);
+    $affiliate = nodeAffiliate();
+
+    getAffiliate($this, $affiliate)
+        ->assertOk()
+        ->assertJsonPath('data.amazon.search_url', 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3&tag=cocktail-22');
+});
+
+it('TC-136-03: パートナータグが無ければ、認証情報があっても Amazon の値を返さず、タグの無い検索結果のリンクだけを返す', function (array $settings) {
+    config()->set('settings', $settings);
+    $affiliate = nodeAffiliate(amazonValues(freshAt()));
+
+    getAffiliate($this, $affiliate)
+        ->assertOk()
+        ->assertJsonPath('data.display', null)
+        ->assertJsonPath('data.amazon', [
+            'title' => null,
+            'price' => null,
+            'image_url' => null,
+            'detail_url' => null,
+            'search_url' => 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3',
+            'fetched_at' => null,
+        ]);
+})->with([
+    'パートナータグが無い' => [['amazon.credential_id' => 'test-credential-id', 'amazon.credential_secret' => 'test-credential-secret']],
+    'パートナータグが空の文字列' => [['amazon.credential_id' => 'test-credential-id', 'amazon.credential_secret' => 'test-credential-secret', 'amazon.partner_tag' => '']],
+]);
+
+it('TC-136-04: 認証情報とパートナータグがそろっていれば、期限内の Amazon の値と保存した検索結果のリンクを返す', function () {
+    $affiliate = nodeAffiliate(amazonValues(freshAt()));
+
+    getAffiliate($this, $affiliate)
+        ->assertOk()
+        ->assertJsonPath('data.display.source', 'amazon')
+        ->assertJsonPath('data.amazon', [
+            'title' => 'Amazon の商品',
+            'price' => 2000,
+            'image_url' => 'https://m.media-amazon.example/M.jpg',
+            'detail_url' => 'https://www.amazon.co.jp/dp/B000000001?tag=from-api-22',
+            'search_url' => 'https://www.amazon.co.jp/s?k=from-api&tag=from-api-22',
+            'fetched_at' => '2026-10-27T11:00:00.000000Z',
+        ]);
+});
+
+it('TC-136-05: 認証情報とパートナータグがそろっていて、Amazon で商品が一度も見つかっていなければ、検索結果のリンクも返さない', function () {
+    $affiliate = nodeAffiliate(rakutenValues(freshAt()));
+
+    getAffiliate($this, $affiliate)
+        ->assertOk()
+        ->assertJsonPath('data.amazon.search_url', null);
+});
+
+it('TC-136-06: 認証情報が無くても、楽天と手で入れた値はそのまま返す', function () {
+    config()->set('settings', ['amazon.partner_tag' => 'cocktail-22']);
+    $withRakuten = nodeAffiliate([...amazonValues(freshAt(), 1000), ...rakutenValues(freshAt(), 1500)]);
+    $withHuman = nodeAffiliate([...humanValues(), ...amazonValues(freshAt())], 'ラム');
+
+    getAffiliate($this, $withRakuten)
+        ->assertOk()
+        ->assertJsonPath('data.display.source', 'rakuten')
+        ->assertJsonPath('data.display.price', 1500)
+        ->assertJsonPath('data.rakuten.price', 1500)
+        ->assertJsonPath('data.rakuten.search_url', 'https://hb.afl.rakuten.example/search-from-db');
+    getAffiliate($this, $withHuman)
+        ->assertOk()
+        ->assertJsonPath('data.display.source', 'human')
+        ->assertJsonPath('data.human.amazon_detail_url', 'https://www.amazon.co.jp/dp/B00000000H')
+        ->assertJsonPath('data.human.amazon_search_url', 'https://www.amazon.co.jp/s?k=human');
+});
