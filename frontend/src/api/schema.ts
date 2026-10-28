@@ -145,6 +145,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/legacy/search-condition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 旧サイトが保存した検索条件(旧のカテゴリ・ミドル・技法の ID)を、新しいノード・技法の ID に直して返す。
+         * @description 直し方は App\Services\LegacySearchCondition。対応の無い ID などは捨て、捨てた数を dropped_count に入れる
+         *     (画面が「戻せなかった条件がある」と出すため。#175)。検索方法・かんたん検索は画面がそのまま移すので受けない。
+         */
+        post: operations["legacySearchCondition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理画面からログアウトする(#311)。
+         * @description セッションを捨てて CSRF のトークンも作り直すので、ログアウトの前のセッションのクッキーではもう管理 API を呼べない。
+         */
+        post: operations["admin.logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/paraphrases": {
         parameters: {
             query?: never;
@@ -180,6 +221,107 @@ export interface paths {
         post?: never;
         /** 言い換え辞書の 1 語を消す。 */
         delete: operations["paraphrases.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 自分のパスキーを、登録した順で返す。 */
+        get: operations["passkey.index"];
+        put?: never;
+        /**
+         * 登録を終える。navigator.credentials.create() の結果を確かめて、名前を付けて保存する。
+         * @description 登録を始めていない・チャレンジやオリジンの合わない応答、登録済みの資格情報は 422(credential のエラー)。
+         */
+        post: operations["passkey.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/passkeys/registration-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 登録を始める。ブラウザの navigator.credentials.create() に渡す options を返す。
+         * @description 登録済みのパスキーは options の excludeCredentials に載せ、同じ端末を 2 回登録させない。
+         */
+        post: operations["passkey.registrationOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/passkeys/{passkey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 自分のパスキーを 1 つ消す。ほかの人のパスキーは、無いものと同じく 404。
+         * @description 最後の 1 つも消せる(docs/decisions/passkey.md)。消すと、非常用のログイン URL(#115)でしか入れなくなる。
+         */
+        delete: operations["passkey.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/login-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * ログインを始める。ブラウザの navigator.credentials.get() に渡す options を返す。
+         * @description ユーザー名を入れずにログインする(端末が覚えているパスキーから選ぶ)ので、options にパスキーの一覧は載せない。
+         */
+        post: operations["passkeyLogin.options"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * ログインを終える。navigator.credentials.get() の結果を確かめ、そのパスキーの持ち主でログインする。
+         * @description 登録されていない・消したパスキー、チャレンジやオリジンの合わない応答は 422(credential のエラー)。
+         */
+        post: operations["passkeyLogin.login"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -400,6 +542,18 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
         };
+        /**
+         * ConvertLegacySearchConditionRequest
+         * @description 旧サイトが保存した検索条件を直す(POST /api/legacy/search-condition。#290)。
+         *
+         *     旧の localStorage(キー searchInstant・searchUser)の categories・middles・methods をそのまま受ける。省いたキーは
+         *     空の配列と同じに扱う。旧の画面は「全てチェック」で数百の ID を保存しうるので、本文で受ける(#163 と同じ理由)。
+         */
+        ConvertLegacySearchConditionRequest: {
+            categories?: number[];
+            middles?: number[];
+            methods?: number[];
+        };
         /** NodeRefResource */
         NodeRefResource: {
             id: number;
@@ -429,6 +583,36 @@ export interface components {
                     name_eng: string;
                 } | null;
             } | null;
+        };
+        /** PasskeyRegistrationRequest */
+        PasskeyRegistrationRequest: {
+            name: string;
+            credential: {
+                id: string;
+                rawId: string;
+                /** @enum {string} */
+                type: "public-key";
+                response: string[];
+            };
+        };
+        /** PasskeyResource */
+        PasskeyResource: {
+            id: number;
+            name: string;
+            /** @description 登録した日時。一度も使っていなければ last_used_at は null */
+            created_at: string | null;
+            last_used_at: string | null;
+        };
+        /** PasskeyVerificationRequest */
+        PasskeyVerificationRequest: {
+            credential: {
+                id: string;
+                rawId: string;
+                /** @enum {string} */
+                type: "public-key";
+                response: string[];
+            };
+            remember?: boolean;
         };
         /**
          * SaveBrandRequest
@@ -511,18 +695,6 @@ export interface components {
         };
     };
     responses: {
-        /** @description Not found */
-        ModelNotFoundException: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": {
-                    /** @description Error overview. */
-                    message: string;
-                };
-            };
-        };
         /** @description Validation error */
         ValidationException: {
             headers: {
@@ -536,6 +708,34 @@ export interface components {
                     errors: {
                         [key: string]: string[];
                     };
+                };
+            };
+        };
+        /** @description Validation error */
+        InvalidPasskeyException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Errors overview. */
+                    message: string;
+                    /** @description A detailed description of each field that failed validation. */
+                    errors: {
+                        [key: string]: string[];
+                    };
+                };
+            };
+        };
+        /** @description Not found */
+        ModelNotFoundException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Error overview. */
+                    message: string;
                 };
             };
         };
@@ -821,6 +1021,52 @@ export interface operations {
             };
         };
     };
+    legacySearchCondition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConvertLegacySearchConditionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        category_ids: number[];
+                        method_ids: number[];
+                        dropped_count: number;
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "admin.logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     "paraphrases.index": {
         parameters: {
             query?: {
@@ -976,6 +1222,150 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "passkey.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `PasskeyResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PasskeyResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "passkey.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description `PasskeyResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PasskeyResource"];
+                    };
+                };
+            };
+            422: components["responses"]["InvalidPasskeyException"];
+        };
+    };
+    "passkey.registrationOptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        options: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "passkey.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The passkey ID */
+                passkey: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "passkeyLogin.options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        options: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "passkeyLogin.login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyVerificationRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: number;
+                        name: string;
+                    };
+                };
+            };
+            422: components["responses"]["InvalidPasskeyException"];
         };
     };
     searchForm: {
