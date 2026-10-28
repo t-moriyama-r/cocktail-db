@@ -29,17 +29,17 @@ test('TC-98-12: 通信に失敗したら通信の失敗の表示を出し、aler
     dialogs.push(dialog.message())
     void dialog.dismiss()
   })
-  await page.goto('/')
-  let reloaded = false
-  // 最初の読み込みの後に load がもう一度起きたら、読み直した
+  // 移動の前から数える。load が 1 回(最初の読み込み)より多く起きたら、読み直した
+  let loads = 0
   page.on('load', () => {
-    reloaded = true
+    loads += 1
   })
+  await page.goto('/')
 
   await expect(page.getByRole('alert')).toHaveText(/通信に失敗しました/)
   await expect(page.getByRole('button', { name: RETRY })).toBeVisible()
   expect(dialogs).toEqual([])
-  expect(reloaded).toBe(false)
+  expect(loads).toBe(1)
 })
 
 test('TC-98-13: 応答が返るまでは読み込み中の表示を出す', async ({ page }) => {

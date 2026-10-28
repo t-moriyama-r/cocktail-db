@@ -28,8 +28,9 @@ export async function toApiResult<T>(request: () => Promise<FetchResult<T>>): Pr
   }
 
   const { data, response } = result
-  if (response.ok && data !== undefined) {
-    return { kind: 'success', data }
+  if (response.ok) {
+    // 204 など本文のない成功応答は data が undefined になる。それも成功として扱う(T は void などにする)
+    return { kind: 'success', data: data as T }
   }
   if (response.status === 404) {
     return { kind: 'not-found' }
