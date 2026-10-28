@@ -27,6 +27,10 @@
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
 # 同じ理由で、ワークフローを変えた PR をマージしたら notify-workflow-merged.yml を、develop にマージしたら deploy-dev.yml を直接呼ぶ
+#
+# 条件を満たしても、gh pr merge が GitHub に断られることがある(#191 はワークフローを書き換える PR で workflows の権限が無いと、
+# #217 は base branch policy で断られた)。そのときは、エラーの 1 行を PR にコメントして needs-approval を付け、人の手でマージする PR と
+# 同じように知らせる(#218)。needs-approval の付いた PR は見回り(ai-review-sweep.yml)も見送るので、同じ失敗を繰り返さない
 name: マージできるかの判定と自動マージ
 
 on:
@@ -96,6 +100,19 @@ jobs:
       - name: 条件を確かめて、マージするか人に知らせる
         run: |
           skip() { echo "見送り: $*"; exit 0; }
+
+          # needs-approval を付けて人に知らせる。$1 は PR に書くコメントの本文(Slack の通知とまとめは、この目印のコメントを引用する。まとめは最初の 1 行だけ)
+          ask_approval() {
+            # 待っている間に、ほかのきっかけの回が先に付けていれば、もう知らせてある
+            gh pr view "$NUMBER" -R "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-approval \
+              && skip "#$NUMBER にはもう needs-approval が付いている"
+            gh label create needs-approval -R "$REPO" --color fbca04 --description "人の承認(マージ)を待っている PR" 2>/dev/null || true
+            gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->
+          $1"
+            gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
+            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
+            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
+          }
 
           # 人の手でマージする理由。空なら自動でマージする
           human=""
@@ -204,14 +221,9 @@ jobs:
           [ "$mergeable" = MERGEABLE ] || skip "#$NUMBER はマージできない状態($mergeable)"
 
           if [ -n "$human" ]; then
-            # 待っている間に、ほかのきっかけの回が先に付けていれば、もう知らせてある
-            gh pr view "$NUMBER" -R "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-approval \
-              && skip "#$NUMBER にはもう needs-approval が付いている"
-            gh label create needs-approval -R "$REPO" --color fbca04 --description "人の承認(マージ)を待っている PR" 2>/dev/null || true
             # エージェントが、いまのコミットの後に見てほしいところをまとめていれば、そこへのリンクを添える
             summary=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
               | jq -r --arg since "$pushed" 'add // [] | map(select(.created_at > $since and (.body | contains("ai-dev:approval-summary")))) | last | .html_url // empty')
-            # Slack の通知とまとめは、この目印のコメントを引用する(まとめは最初の 1 行だけ)
             if [ "$promotion" = true ]; then
               ready="マージできる状態になった(AI レビュー済み・CI 緑・コンフリクトなし)。人の手でマージする PR なので、確かめてマージしてほしい。"
               remaining="- AI レビューの指摘: ${unanswered} 件が返信待ちで残っている(中身は develop に入る前にレビュー済みなので、マージは止めていない。見て、マージするか決める)
@@ -222,15 +234,11 @@ jobs:
               remaining=""
               ask="- 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
             fi
-            gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->
-          $ready
+            ask_approval "$ready
 
           - 人の手でマージする理由: $human
           ${remaining}${summary:+- 見てほしいところ: $summary
           }$ask"
-            gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
-            gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
-            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
             echo "#$NUMBER はマージできる状態。人の手でマージするので needs-approval を付けて知らせた($human)"
             exit 0
           fi
@@ -245,7 +253,22 @@ jobs:
 
           # 昇格の PR は上で人の手でマージするものにしてあるので、ここへは来ない。それでも、デプロイになるマージは絶対にしない
           [ "$base" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH ではないので、自動ではマージしない"
-          gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head"
+          if ! merged=$(gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head" 2>&1); then
+            echo "$merged"
+            # 断られている間に、人がマージした・閉じた・push した(新しいコミットで呼び直される)なら、知らせない(RC-07)
+            now=$(gh pr view "$NUMBER" -R "$REPO" --json state,headRefOid --jq '.state + " " + .headRefOid') || skip "#$NUMBER のマージに失敗し、いまの状態も読めない"
+            [ "$now" = "OPEN $head" ] || skip "#$NUMBER のマージに失敗したが、いまは $now"
+            # gh のエラーは 1 行のことが多い。複数行なら最後の行(GitHub の返した理由)を使う
+            reason=$(grep -v '^[[:space:]]*$' <<<"$merged" | tail -n 1 | cut -c 1-500)
+            ask_approval "自動マージを GitHub に断られた。人の手でマージしてほしい。
+
+          - 断られた理由(\`gh pr merge\` のエラー):
+            > ${reason:-(エラーの出力なし)}
+          - マージできる状態(AI レビューの指摘への対応済み・CI 緑・コンフリクトなし)までは確かめてある
+          - 問題が無ければ、マージすると承認になる。直してほしいことは、この PR にコメントすると Actions の Claude Code が直し、再レビューの後でまた知らせる"
+            echo "::warning::#$NUMBER のマージを GitHub に断られたので、needs-approval を付けて知らせた: $reason"
+            exit 0
+          fi
           echo "#$NUMBER をマージした"
 
           # ワークフローを変えた PR なら、オーナーに知らせる(GITHUB_TOKEN のマージは notify-workflow-merged.yml を起こさないので直接呼ぶ)
