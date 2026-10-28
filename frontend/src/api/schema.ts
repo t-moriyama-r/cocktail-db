@@ -109,6 +109,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cocktails/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 条件に当たるカクテルを、一覧の表の行の形で ID の昇順にすべて返す。当たらなければ空の配列。
+         * @description ページングと並べ替えは #167 で足す。旧も条件に合うものを全件返していた(docs/search.md の「返すもの」)。
+         */
+        post: operations["cocktailSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/me": {
         parameters: {
             query?: never;
@@ -541,6 +561,26 @@ export interface components {
             is_draft: boolean;
             updated_at: string | null;
         };
+        /**
+         * CocktailSearchRequest
+         * @description 条件検索(POST /api/cocktails/search)の条件(docs/search.md の「新しい条件との対応」)。
+         *
+         *     選んだノードの ID は、画面が部分木を親に畳めないと数百個になりうる(docs/decisions/search-screen.md の 3)ので、
+         *     GET のクエリではなく JSON の本文で受ける(#163 の「追記: API の形」)。
+         */
+        CocktailSearchRequest: {
+            /**
+             * @description 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
+             *     OR 検索の結果を黙って返してしまう
+             * @enum {string|null}
+             */
+            mode?: "or" | null;
+            /**
+             * @description 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+             *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
+             */
+            category_ids: number[];
+        };
         /** CocktailSummaryResource */
         CocktailSummaryResource: {
             id: number;
@@ -679,18 +719,6 @@ export interface components {
         };
     };
     responses: {
-        /** @description Not found */
-        ModelNotFoundException: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": {
-                    /** @description Error overview. */
-                    message: string;
-                };
-            };
-        };
         /** @description Validation error */
         ValidationException: {
             headers: {
@@ -704,6 +732,18 @@ export interface components {
                     errors: {
                         [key: string]: string[];
                     };
+                };
+            };
+        };
+        /** @description Not found */
+        ModelNotFoundException: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** @description Error overview. */
+                    message: string;
                 };
             };
         };
@@ -884,6 +924,33 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    cocktailSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CocktailSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "admin.currentAdmin": {

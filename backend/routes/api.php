@@ -11,6 +11,7 @@ use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailSameNameController;
+use App\Http\Controllers\CocktailSearchController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
 use App\Http\Controllers\SearchFormController;
@@ -19,6 +20,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/hello', HelloController::class);
 
 Route::get('/search-form', SearchFormController::class);
+
+// 条件検索。選んだノードの ID が数百個になりうるので、GET のクエリではなく JSON の本文で受ける(#163)
+Route::post('/cocktails/search', CocktailSearchController::class);
 
 Route::get('/affiliates', AffiliateController::class);
 
