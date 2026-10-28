@@ -416,6 +416,7 @@ jobs:
             コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=<evidence|push|other> --> を付け(撮影なら evidence、push なら push、コマンドが要る作業なら other。
             2 つ以上なら evidence > push > other の順で重いものにして、ほかの作業も同じコメントに書く)、
             中身は、何をしてほしいか(撮ってほしいもの、当てる差分と理由、または手元でそのまま流せる手順)。人に頼むものもあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
+            `needs-local` で終えるときも、`ai-in-actions` ラベルを外す(付けたままだと、手元で `needs-local` を外した後の自動マージが見送られる)。
 
             直したものがあれば push し、PR に `<!-- ai-dev:agent --> <!-- ai-dev:round -->` と「レビューの指摘に対応した(<n> 回目)」をコメントしてから、
             `ai-in-actions` ラベルを外して終える(次のレビューが付けば、また付けて対応する)。CodeRabbit への再レビューの依頼は書かない(後のジョブがオーナーのトークンで出す)。

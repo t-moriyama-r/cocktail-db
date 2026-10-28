@@ -100,6 +100,10 @@ jobs:
           persist-credentials: false
 
       - name: 条件を確かめて、マージするか人に知らせる
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          # needs-local が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           skip() { echo "見送り: $*"; exit 0; }
           # いまのコミットで CI が動いていないので見送るときは、CI の流し直し(ci-rerun.yml。#228)にこの PR を見させる(#268)。
@@ -179,7 +183,14 @@ jobs:
           finished=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
             | jq --arg since "$pushed" 'add // [] | map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
                 | any(.body // "" | test("Review finished|No actionable comments|LGTM"))')
-          [ "$reviewed" = true ] || [ "$finished" = true ] || skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
+          if [ "$reviewed" != true ] && [ "$finished" != true ]; then
+            # needs-local の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
+            # (出さないと次の ai-review-sweep.yml まで最大 2 時間待つ)。依頼済みなら request-review.sh が見送る
+            if [ "$EVENT_ACTION" = unlabeled ]; then
+              bash .ai-dev/.github/scripts/request-review.sh "$REPO" "$NUMBER"                 || echo "::warning::レビューの依頼を出せなかった(ai-review-sweep.yml が拾う)"
+            fi
+            skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
+          fi
 
           # 昇格の PR は、残っている指摘でマージを止めない(件数を人に知らせるだけ)
           unanswered=0
