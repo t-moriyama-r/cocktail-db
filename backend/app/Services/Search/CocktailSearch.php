@@ -29,4 +29,20 @@ class CocktailSearch
             ->whereUsesAny(Cocktail::query()->published(), $nodeIds)
             ->orderBy('id');
     }
+
+    /**
+     * まとまりごとに、そのまとまりのどれかと一致する材料を使うカクテル(AND 検索)を、ID の昇順で引くクエリ。
+     *
+     * まとまりは画面が「同じ親から選んだもの」をまとめて送る(docs/decisions/search-screen.md の 1。#282)。
+     * 旧の AND がカテゴリごとに 1 つの条件だったのと同じ結果になる。下書き・並びは OR 検索と同じ。
+     *
+     * @param  list<list<int>>  $groups
+     * @return Builder<Cocktail>
+     */
+    public function queryEach(array $groups): Builder
+    {
+        return $this->match
+            ->whereUsesEach(Cocktail::query()->published(), $groups)
+            ->orderBy('id');
+    }
 }

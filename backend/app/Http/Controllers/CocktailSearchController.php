@@ -16,8 +16,11 @@ class CocktailSearchController extends Controller
      */
     public function __invoke(CocktailSearchRequest $request, CocktailSearch $search): AnonymousResourceCollection
     {
-        // 方式は検証で or だけを受けている
-        $cocktails = $search->query($request->categoryIds())
+        // 方式は検証で or・and だけを受けている
+        $query = $request->isAnd()
+            ? $search->queryEach($request->categoryGroups())
+            : $search->query($request->categoryIds());
+        $cocktails = $query
             ->with(['baseCategory', 'method'])
             ->get();
 

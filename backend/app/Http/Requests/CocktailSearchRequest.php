@@ -34,21 +34,31 @@ class CocktailSearchRequest extends FormRequest
      */
     public function rules(): array
     {
+        $integerOnly = [
+            'required',
+            'integer',
+            fn (string $attribute, mixed $value, Closure $fail) => ! is_bool($value) && ! is_float($value)
+                ? null
+                : $fail('The :attribute field must be an integer.'),
+        ];
+
         return [
-            // 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
+            // 方式。省くと or。having(#165)は、受ける形を決めてから足す。それまで受けると、
             // OR 検索の結果を黙って返してしまう
-            'mode' => ['nullable', 'string', Rule::in(['or'])],
-            // 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+            'mode' => ['nullable', 'string', Rule::in(['or', 'and'])],
+            // 選んだノード(or)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
             // 件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
-            'category_ids' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
+            // and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く
+            'category_ids' => ['required_unless:mode,and', 'prohibited_if:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             // `integer` は PHP の整数フィルターなので、true や 1.0 も 1 として通る。JSON の整数と数字の文字だけを受ける
-            'category_ids.*' => [
-                'required',
-                'integer',
-                fn (string $attribute, mixed $value, Closure $fail) => ! is_bool($value) && ! is_float($value)
-                    ? null
-                    : $fail('The :attribute field must be an integer.'),
-            ],
+            'category_ids.*' => $integerOnly,
+            // 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
+            // まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
+            // and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
+            'category_groups' => ['required_if:mode,and', 'prohibited_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
+            // 空のまとまりは、どのカクテルも満たせない条件になるので弾く(画面は空のまとまりを送らない)
+            'category_groups.*' => ['required', 'array', 'list'],
+            'category_groups.*.*' => $integerOnly,
         ];
     }
 
@@ -68,12 +78,30 @@ class CocktailSearchRequest extends FormRequest
                     return;
                 }
 
-                $ids = array_values(array_unique(self::integers($this->input('category_ids'))));
+                $field = $this->isAnd() ? 'category_groups' : 'category_ids';
+                $ids = $this->isAnd()
+                    ? array_merge(...self::groups($this->input('category_groups')))
+                    : self::integers($this->input('category_ids'));
+                if (count($ids) > self::MAX_CATEGORY_IDS) {
+                    $validator->errors()->add($field, '選んだノードは、全部で '.self::MAX_CATEGORY_IDS.' 個までです。');
+
+                    return;
+                }
+
+                $ids = array_values(array_unique($ids));
                 if (Category::query()->whereIn('id', $ids)->count() !== count($ids)) {
-                    $validator->errors()->add('category_ids', '選んだノードに、無いノードが含まれています。');
+                    $validator->errors()->add($field, '選んだノードに、無いノードが含まれています。');
                 }
             },
         ];
+    }
+
+    /**
+     * AND 検索か。
+     */
+    public function isAnd(): bool
+    {
+        return $this->input('mode') === 'and';
     }
 
     /**
@@ -84,6 +112,26 @@ class CocktailSearchRequest extends FormRequest
     public function categoryIds(): array
     {
         return self::integers($this->validated('category_ids'));
+    }
+
+    /**
+     * 選んだノードのまとまりの並び(and)。
+     *
+     * @return list<list<int>>
+     */
+    public function categoryGroups(): array
+    {
+        return self::groups($this->validated('category_groups'));
+    }
+
+    /**
+     * 検証を通ったまとまりの並びを、int の並びの並びにそろえる。
+     *
+     * @return list<list<int>>
+     */
+    private static function groups(mixed $groups): array
+    {
+        return array_map(self::integers(...), array_values(is_array($groups) ? $groups : []));
     }
 
     /**
