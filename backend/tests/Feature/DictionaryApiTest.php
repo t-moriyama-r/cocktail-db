@@ -118,7 +118,9 @@ it('TC-46-05: 技法に結び付いた用語は、種類が method で、技法�
     // 用語の ID と技法の ID をずらす(旧は同じ ID であることに頼っていた)
     Method::factory()->create(['name' => 'ビルド', 'name_eng' => 'Build']);
     Method::factory()->create(['name' => 'ステア', 'name_eng' => 'Stir']);
-    $method = Method::factory()->create(['name' => 'シェイク', 'name_eng' => 'Shake', 'dictionary_id' => $shake->id]);
+    $method = Method::factory()->create([
+        'id' => $shake->id + 1000, 'name' => 'シェイク', 'name_eng' => 'Shake', 'dictionary_id' => $shake->id,
+    ]);
     expect($method->id)->not->toBe($shake->id);
 
     $this->getJson("/api/dictionaries/{$shake->id}")
