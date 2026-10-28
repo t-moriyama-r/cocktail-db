@@ -116,6 +116,13 @@ main() {
 	run
 	expect TC-455-16 'コメントを読めなかったら、当たらないと取り違えずに失敗で終わる' "$(out)|$RC" '|1'
 
+	# 1 引数の上限(Linux は 128KB)を超える大きさ。#415 はコメントが多く、jq の引数で渡して Argument list too long で落ちた
+	reset
+	comments "$ASK" "outsider:$(big_body)" 'A'
+	run
+	expect TC-469-01 'コメントの合計が 200KB を超える PR でも落ちずに、問いと返信の URL を出す' \
+		"$(out)|$RC" "$(printf 'question=https://example.test/c1\nreply=https://example.test/c3')|0"
+
 	reset
 	RC=0
 	PATH="$FAKE/bin:$PATH" bash "$SCRIPT" o/r >"$FAKE/out" 2>"$FAKE/err" || RC=$?
@@ -171,6 +178,9 @@ to_json() {
 				created_at: "2026-10-28T00:\($o + $i | tostring | if length < 2 then "0" + . else . end):00Z"})
 		| [.]'
 }
+
+# 250KB の本文
+big_body() { head -c 250000 /dev/zero | tr '\0' x; }
 
 # Windows の jq は CRLF で出すので、手元でも CI と同じに比べられるよう CR を落とす
 out() { tr -d '\r' <"$FAKE/out" 2>/dev/null; }
