@@ -23,6 +23,12 @@
 # Claude Code は PR・レビューのコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限
 # (actions: write。deploy.yml も起動できてしまう)を渡さず、通知を呼ぶジョブ(notify-*)だけに渡す
 #
+# claude-code-action は、Claude を動かさずに終わっても(ワークフローのファイルの検査で飛ばされた。#237)、Claude が権限で止められて
+# 仕事をしないまま終わっても(#209・#244)、手順は成功になる。そのため Claude Code の後に、仕事をしたかを確かめ、
+# 対応中の印(ai-in-actions)だけが残っていれば外す(.github/scripts/claude-idle.sh)。review で仕事をしていなければ、
+# notify-review が既定のブランチの workflow_dispatch で 1 回だけ起こし直し、それでも動かなければ needs-human で人に頼む。
+# resume は起こし直せない(オーナーの返信で動く)ので、もう一度返信してほしいことを needs-human で頼む
+#
 # エージェントが書くコメントには目印 <!-- ai-dev:agent --> を付け、判断を頼むコメントには
 # <!-- ai-dev:needs-human --> も付ける。目印の付いたコメントでは起動しない
 #
@@ -114,6 +120,16 @@ jobs:
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
           echo "before=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')" >> "$GITHUB_OUTPUT"
 
+      # Claude Code が仕事をしたか(コミットが進んだか・この後にエージェントがコメントしたか)を、終わった後に比べるために残す
+      - name: 動く前のコミットと時刻を残す
+        id: start
+        if: steps.target.outputs.promotion != 'true'
+        run: |
+          sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
+          at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "at=$at" >> "$GITHUB_OUTPUT"
+
       - name: PR のブランチを取る
         id: pr
         if: steps.target.outputs.promotion != 'true'
@@ -127,6 +143,7 @@ jobs:
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         if: steps.target.outputs.promotion != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
@@ -170,6 +187,27 @@ jobs:
               変えることになったら push を試さずに、当てる差分(`git diff` の形)と理由を PR にコメントし、`needs-human` を付けて手元で当ててもらう。
               コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付ける。ワークフロー以外の直しは、これまでどおりコミットして push する
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
+
+      # PR のブランチの checkout が作業ディレクトリを消すので、.ai-dev(既定のブランチのスクリプト)を取り直す
+      - uses: actions/checkout@v6
+        if: always() && steps.start.outcome == 'success'
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # 何もしないまま終わったら(Claude Code が動かなかった・動いたのにコミットもコメントもしなかった)、ai-in-actions を外し、
+      # もう一度返信してほしいことをコメントして needs-human を付ける(Slack への通知は notify-resume)。
+      # 途中で落ちた回も、何もしていなければ同じ。決め方は claude-idle.sh の resume
+      - name: 仕事をしないまま終わったら、対応中の印を外して人に頼み直す
+        if: always() && steps.start.outcome == 'success'
+        env:
+          RAN: ${{ steps.claude.outputs.execution_file != '' }}
+          BEFORE_SHA: ${{ steps.start.outputs.sha }}
+          STARTED_AT: ${{ steps.start.outputs.at }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .ai-dev/.github/scripts/claude-idle.sh resume "$REPO" "$PR" "$RAN" "$BEFORE_SHA" "$STARTED_AT"
 
   notify-resume:
     needs: resume
@@ -248,6 +286,8 @@ jobs:
     outputs:
       before: ${{ steps.pr.outputs.before }}
       run: ${{ steps.pr.outputs.run }}
+      # Claude Code が仕事をしないまま終わり、既定のブランチで起こし直す(claude-idle.sh が retry と決めた)
+      retry: ${{ steps.idle.outputs.result == 'retry' }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -317,6 +357,7 @@ jobs:
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         if: steps.pr.outputs.run
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
@@ -373,6 +414,27 @@ jobs:
             `needs-approval` ラベルは付けない。CI が緑でマージできる状態になったら、ai-auto-merge.yml が付けて人に知らせる(自動でマージする PR なら、そのままマージする)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
+      # PR のブランチの checkout が作業ディレクトリを消すので、.ai-dev のスクリプトを取り直す(最初の checkout と同じ版)
+      - uses: actions/checkout@v6
+        if: success() && steps.pr.outputs.run
+        with:
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # 成功で終わっても、仕事をしたとは限らない(Claude を動かさずに終わった #237・権限で止められた #209・外し忘れた #244)。
+      # 印だけ残っていれば外し、仕事をしていなければ notify-review が起こし直す(コミットごとに 1 回まで。決め方は claude-idle.sh の review)。
+      # この手順が落ちたら、次の手順が印を外す
+      - name: 仕事をしないまま終わったら、対応中の印を外す
+        id: idle
+        if: success() && steps.pr.outputs.run
+        env:
+          RAN: ${{ steps.claude.outputs.execution_file != '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          result=$(bash .ai-dev/.github/scripts/claude-idle.sh review "$REPO" "$PR" "$RAN")
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
       - name: 途中で止まったら、対応中の印を外す
         if: (failure() || cancelled()) && steps.pr.outputs.run
@@ -392,6 +454,18 @@ jobs:
         with:
           sparse-checkout: .github/scripts
           persist-credentials: false
+
+      # 仕事をしないまま終わった回は、既定のブランチのワークフローで 1 回だけ起こし直す。pull_request_review の回は PR のマージ後の形の
+      # ワークフローで動き、既定のブランチと中身が違うと claude-code-action が Claude を飛ばす(#237)。workflow_dispatch は既定のブランチの
+      # ファイルで動くので、その検査を通る。同じ PR の回は concurrency で並ぶので、この回が終わってから動く
+      - name: 仕事をしないまま終わった回を、既定のブランチで起こし直す
+        if: needs.review.outputs.retry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: gh workflow run ai-review-loop.yml -R "$REPO" --ref "$DEFAULT_BRANCH" -f number="$PR"
 
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
