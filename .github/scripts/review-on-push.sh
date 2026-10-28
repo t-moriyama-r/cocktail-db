@@ -11,7 +11,7 @@
 # GitHub の schedule が遅れる・落とされると、誰も依頼しないまま止まった(#353・#366)。push の後に必ず起きる CI の終わりで呼ぶ。
 #
 # 依頼するかどうか・誰に頼むか(まず CodeRabbit、上限・返事なし・依頼を書けないときだけ代わりの Claude)は request-review.sh が決める。
-# draft・needs-human・needs-approval の PR は、そちらが見送る。オーナーの依頼がいまのコミットの後にもうあれば(ai-review-loop.yml が
+# draft・needs-human・needs-local・needs-approval の PR は、そちらが見送る(held-labels.sh)。オーナーの依頼がいまのコミットの後にもうあれば(ai-review-loop.yml が
 # 直して push した後に出したものなど)、review-request-state.sh が waiting を返すので、同じコミットに 2 回依頼しない。
 #
 # ここで見送るもの:

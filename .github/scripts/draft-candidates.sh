@@ -12,9 +12,10 @@
 set -euo pipefail
 
 MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-180}
-# 引き継いでも仕上がらないまま、同じ PR を何度も引き継がない。上限に達したものは、引き継いだ Claude Code が needs-human を付けている
+# 引き継いでも仕上がらないまま、同じ PR を何度も引き継がない。上限に達したものは、引き継いだ Claude Code が needs-human か needs-local を付けている
 MAX_ROUNDS=${MAX_ROUNDS:-2}
 MARK="ai-dev:draft-sweep"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 main() {
   if [ "${1:-}" = decide ]; then
@@ -40,10 +41,11 @@ main() {
 
 # 上から見て最初に当てはまった理由で見送る
 decide() {
-  jq -r --argjson minIdle "$MIN_IDLE_MINUTES" --argjson maxRounds "$MAX_ROUNDS" '
-    (.labels // []) as $l
-    | ([$l[] | select(IN("needs-human","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")) as $held
-    | if .state != "OPEN" then "skip: 開いていない"
+  local facts held
+  facts=$(cat)
+  held=$(bash "$HERE/held-labels.sh" ai-in-actions no-auto-merge <<<"$facts")
+  jq -r --argjson minIdle "$MIN_IDLE_MINUTES" --argjson maxRounds "$MAX_ROUNDS" --arg held "$held" '
+      if .state != "OPEN" then "skip: 開いていない"
       elif .isDraft | not then "skip: draft でない"
       elif .isCrossRepository then "skip: フォークから"
       elif .author != .owner then "skip: オーナーの PR でない"
@@ -54,7 +56,7 @@ decide() {
       elif .handledHead then "skip: このコミットは引き継ぎ済み"
       elif .round > $maxRounds then "skip: 引き継ぎが \($maxRounds) 回に達した"
       else "pick"
-      end'
+      end' <<<"$facts"
 }
 
 # 引き継ぎの目印は Actions(Bot)が付ける。公開リポジトリなので、誰でも書ける人のコメントの目印は数えない(数えると、見回りから外せてしまう)

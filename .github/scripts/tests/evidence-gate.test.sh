@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-gate.sh のテスト(TC-380-01〜15)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# evidence-gate.sh のテスト(TC-380-01〜15・TC-421-35)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/evidence-gate.test.sh
 
@@ -55,6 +55,7 @@ main() {
 		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_BEFORE")" 1 '(1 本)'
 	check TC-380-15 '文の途中の「撮れず」は宣言として扱わない' "$CODE" \
 		"$(body "## 証跡" "修正前・修正後。旧は動画が撮れず静止画で比べた" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
+	check TC-421-35 '撮れないときの案内は、needs-local と目印の種類(kind=evidence)を指す' "$CODE" 		"$(body "## 証跡" "- 未撮影(この環境にブラウザが無い)")" 1 'draft のまま needs-local で撮影を頼む(目印 ai-dev:needs-local kind=evidence)'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]

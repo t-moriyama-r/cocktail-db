@@ -34,6 +34,7 @@ main() {
 	check TC-232-10 'needs-human が付いている' "$(pr '.labels = [{name: "needs-human"}]')" '[]' ''
 	check TC-232-11 'needs-decision が付いている' "$(pr '.labels = [{name: "needs-decision"}]')" '[]' ''
 	check TC-232-12 'ai-in-actions が付いている(Actions が対応中)' "$(pr '.labels = [{name: "ai-in-actions"}]')" '[]' ''
+	check TC-421-32 'needs-local が付いている(手元の作業待ち)' "$(pr '.labels = [{name: "needs-local"}]')" '[]' ''
 	check TC-232-13 '最後のコミットから 59 分' "$(pr)" '[]' '' 2026-10-25T11:01:00Z
 	check TC-232-14 '最後のコミットから 60 分ちょうど' "$(pr)" '[]' 1 2026-10-25T11:00:00Z
 	check TC-232-15 '同じコミットと develop の組をもう試した' "$(pr)" "[$(comment Bot "<!-- ai-dev:agent --> <!-- ai-dev:conflict-resolve sha=$HEAD base=$BASE -->")]" ''

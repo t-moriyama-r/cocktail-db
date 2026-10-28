@@ -32,6 +32,8 @@ workflow ai-claude-review.yml reason=request-failed'
 	check TC-227-19 '返事を待っているあいだは何もしない' waiting pat '{}' ''
 	check TC-227-20 'draft は見送る' request pat '{"isDraft": true}' ''
 	check TC-227-21 '人の番(needs-human)は見送る' request pat '{"labels": [{"name": "needs-human"}]}' ''
+	check TC-421-33 '手元の番(needs-local)は見送る' request pat '{"labels": [{"name": "needs-local"}]}' ''
+	check TC-421-34 '人のマージ待ち(needs-approval)はこれまでどおり見送る' request pat '{"labels": [{"name": "needs-approval"}]}' ''
 	check TC-227-22 '閉じた PR は見送る' request pat '{"state": "CLOSED"}' ''
 
 	echo "passed: $PASSED, failed: $FAILED"
@@ -41,7 +43,7 @@ workflow ai-claude-review.yml reason=request-failed'
 # request-review.sh を、偽物の review-request-state.sh と並べて置く。gh は呼ばれ方を $FAKE/calls に書く
 setup_fakes() {
 	mkdir -p "$FAKE/scripts" "$FAKE/bin"
-	cp "$HERE/../request-review.sh" "$FAKE/scripts/"
+	cp "$HERE/../request-review.sh" "$HERE/../held-labels.sh" "$FAKE/scripts/"
 	cat >"$FAKE/scripts/review-request-state.sh" <<-'EOF'
 		#!/usr/bin/env bash
 		echo "$FAKE_STATE"

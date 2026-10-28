@@ -9,13 +9,14 @@
 # 次のものは選ばない
 # - draft(実装している途中。ready にするエージェントが取り込む。落ちた draft は ai-draft-sweep.yml が引き継ぐ。#410)
 # - 閉じた・フォークから・オーナー以外が作った・向き先が既定のブランチでない(積んでいる途中は土台に合わせる)
-# - needs-human / needs-decision(人の判断待ち)・ai-in-actions(Actions が対応している途中)
+# - needs-human / needs-decision(人の判断待ち)・needs-local(手元の作業待ち)・ai-in-actions(Actions が対応している途中)。held-labels.sh
 # - 最後のコミットから MIN_IDLE_MINUTES 分たっていない(手元で作業している途中のブランチに push しない)
 # - 同じコミットと develop の組で、もう一度試した(目印 <!-- ai-dev:conflict-resolve sha=<コミット> base=<develop> -->)。
 #   解消できずに止まった回を、develop が進むまで繰り返さない
 # GitHub はマージできるかを後から計算するので、UNKNOWN の間は少し待って取り直す(ai-auto-merge.yml と同じ)
 set -euo pipefail
 
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-60}
 UNKNOWN_RETRY_SECONDS=${UNKNOWN_RETRY_SECONDS:-5}
 
@@ -51,7 +52,7 @@ candidate() {
   [ "$(jq -r .author.login <<<"$pr")" = "${repo%/*}" ] || skip "オーナーの PR でない"
   [ "$(jq -r .baseRefName <<<"$pr")" = "$default" ] || skip "向き先が $default でない"
   [ "$(jq -r .mergeable <<<"$pr")" = CONFLICTING ] || skip "コンフリクトしていない($(jq -r .mergeable <<<"$pr"))"
-  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-decision","ai-in-actions"))] | join(",")' <<<"$pr")
+  label=$(bash "$HERE/held-labels.sh" ai-in-actions <<<"$pr")
   [ -z "$label" ] || skip "ラベル $label"
   head=$(jq -r .headRefOid <<<"$pr")
   # --json commits は先頭 100 件までなので、いまのコミットの日付を直接取る

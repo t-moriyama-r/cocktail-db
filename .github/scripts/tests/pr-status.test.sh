@@ -58,6 +58,16 @@ main() {
 	check TC-385-07 'GitHub が計算中(UNKNOWN)' '.mergeStateStatus = "UNKNOWN"' '状態:確認中'
 	check TC-385-08 'ほかの理由でマージできない(BEHIND)' '.mergeStateStatus = "BEHIND"' '状態:マージ不可'
 	check TC-385-09 '必須でないチェックの失敗(UNSTABLE)はマージできる' '.mergeStateStatus = "UNSTABLE"' '状態:マージ待ち'
+
+	# 手元の作業待ち(needs-local)。証跡を撮れないクラウドが draft のまま頼むので、下書きより先に見る。人の判断が一緒なら人の判断を先にする
+	check TC-421-10 'needs-local(ready)' '.labels = ["needs-local"]' '状態:手元の作業待ち'
+	check TC-421-11 'needs-local の下書きは、作業中ではなく手元の作業待ち' '.isDraft = true | .labels = ["needs-local"]' '状態:手元の作業待ち'
+	check TC-421-12 'needs-local と needs-human なら人の判断待ち' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-421-13 'needs-local と needs-decision なら人の判断待ち' '.labels = ["needs-decision", "needs-local"]' '状態:人の判断待ち'
+	check TC-421-14 '下書きで needs-human も付いていれば、これまでどおり作業中(TC-216-03)' '.isDraft = true | .labels = ["needs-local", "needs-human"]' '状態:作業中'
+	check TC-421-15 'needs-local は、コンフリクト・CI の失敗・レビュー対応中より先' '.labels = ["needs-local", "ai-in-actions"] | .mergeable = "CONFLICTING" | .failedChecks = 1' '状態:手元の作業待ち'
+	check TC-421-16 'needs-local と needs-approval なら手元の作業待ち' '.labels = ["needs-approval", "needs-local"]' '状態:手元の作業待ち'
+	check TC-421-17 '閉じた PR は needs-local が残っていてもラベルなし' '.state = "MERGED" | .labels = ["needs-local"]' ''
 	check TC-385-10 'HAS_HOOKS はマージできる' '.mergeStateStatus = "HAS_HOOKS"' '状態:マージ待ち'
 	check TC-385-11 'needs-approval でも、未解決のスレッドがあれば指摘の解決待ち' '.labels = ["needs-approval"] | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-12 'needs-approval でも、コンフリクトならコンフリクト' '.labels = ["needs-approval"] | .mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"' '状態:コンフリクト'

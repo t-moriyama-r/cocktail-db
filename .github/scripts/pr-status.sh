@@ -33,6 +33,9 @@ main() {
 # 上から見て最初に当てはまったものにする。誰の番かが変わるところで分け、レビューの流れが止まるもの(コンフリクト・CI の失敗)は
 # 人が気づけるよう別にする。mergeable が UNKNOWN(push の直後に GitHub が計算している間)はコンフリクトとみなさない
 #
+# 手元の作業待ち(needs-local)は、証跡を撮れないクラウドが draft のまま頼むことが多いので、draft より先に見る。
+# 人の判断も一緒に頼んでいる(needs-human などが付いている)ときは、人の判断が先なので、作業中・人の判断待ちのほうにする
+#
 # 向き先が staging・release の PR(昇格の PR)は、中身が develop に入る前にレビュー済みで、head が保護されたブランチ(develop・staging)なので
 # Actions の Claude Code が指摘を直せない。指摘が残っていてもレビュー対応の番にはしない。needs-approval の PR は、ai-auto-merge.yml が
 # レビューの済んだのを確かめてから付けたものなので、同じくレビューの番にはしない
@@ -47,9 +50,11 @@ decide() {
     (.labels // []) as $l
     | ((.baseRefName // "") | IN("staging", "release")) as $promotion
     | ($l | index("needs-approval") != null) as $approval
+    | ($l | index("needs-human") or index("needs-decision")) as $human
     | if .state != "OPEN" then ""
+      elif ($l | index("needs-local")) and ($human | not) then $p + "手元の作業待ち"
       elif .isDraft then $p + "作業中"
-      elif ($l | index("needs-human") or index("needs-decision")) then $p + "人の判断待ち"
+      elif $human then $p + "人の判断待ち"
       elif .mergeable == "CONFLICTING" then $p + "コンフリクト"
       elif (.failedChecks // 0) > 0 then $p + "CI失敗"
       elif ($promotion or $approval | not) and (($l | index("ai-in-actions")) or (.unansweredThreads // 0) > 0) then $p + "レビュー対応中"
@@ -146,6 +151,7 @@ ensure_label() {
     レビュー待ち) color=c5def5 description="AI レビュアーがいまのコミットを見るのを待っている" ;;
     レビュー対応中) color=0e8a16 description="レビューの指摘に、Actions の Claude Code が対応する番" ;;
     人の判断待ち) color=d93f0b description="人の判断を待っている(needs-human・needs-decision)" ;;
+    手元の作業待ち) color=c2e0c6 description="手元のエージェントの作業(証跡の撮影・workflow の push など)を待っている(needs-local)" ;;
     人のマージ待ち) color=fbca04 description="マージできる。人の確認とマージを待っている(needs-approval・staging/release 向けの PR)" ;;
     コンフリクト) color=b60205 description="develop とコンフリクトしている。Actions の Claude Code が取り込んで直す" ;;
     CI失敗) color=b60205 description="必須のチェックが失敗している" ;;
