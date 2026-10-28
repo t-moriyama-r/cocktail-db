@@ -208,7 +208,7 @@ main() {
 	reset
 	pr 7 ai-in-actions
 	comments "2026-10-25T15:01:00Z|$AGENT 実行の記録: $RUN"
-	RUN_URL= run resume true sha7 "$SINCE"
+	RUN_URL='' run resume true sha7 "$SINCE"
 	expect TC-240-34 'RUN_URL が無ければ、この回のコメントを見分けられないので、何も変えずに失敗で終わる' "$(edited)$(commented)|$RC" '|1'
 
 	reset
