@@ -5,7 +5,7 @@
 # ready にし、レビューに回す。
 # - pick: .github/scripts/draft-candidates.sh で候補を絞る(条件はスクリプトの先頭)。理由はジョブのログに出す
 # - recover: 候補ごとに Claude Code が PR のブランチで仕上げる。仕上げたら ready にし、
-#   Actions では仕上げられないもの(判断が要る・画面の証跡が要る)は、何が足りないかをコメントして needs-human を付ける
+#   Actions では仕上げられないもの(判断が要る・修正前後の証跡が要る)は、何が足りないかをコメントして needs-human を付ける
 # - notify: 新しく付いた needs-human を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
@@ -112,6 +112,7 @@ jobs:
           gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:draft-sweep sha=$PICKED_HEAD --> draft のまま止まっていたので、Actions の Claude Code が引き継ぐ($ROUND 回目)"
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
 
+      # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
         if: steps.live.outputs.run
         with:
@@ -137,7 +138,7 @@ jobs:
             2. リポジトリの CLAUDE.md の決まり(「ブランチ・コミット・PR」「テストの書き方」など)と `.github/pull_request_template.md` に照らして、足りないものを洗い出す
                - issue の「やること」「受け入れ条件」に対して、実装・テストが足りないところ
                - CI が失敗していれば、その原因(`gh pr checks ${{ env.PR }}` と、失敗した回のログを `gh run view <回の番号> --log-failed` で読む)
-               - PR の本文: 先頭の `Closes #N`、テストケースの表と結果、確かめたこと(コマンドと結果)、証跡(画面に出る挙動が変わるなら修正前後の画像・動画・比較画像、変わらないなら撮らない理由)
+               - PR の本文: 先頭の `Closes #N`、テストケースの表と結果、確かめたこと(コマンドと結果)、証跡(FE・BE のコードを変えたなら、修正前後の比較画像と動画。画面の無い BE は、同じリクエストに対する応答の変化。文書・テスト・CI の設定だけなら撮らない理由)
             3. 足りないものを埋める。いまのブランチ(PR のブランチ)で直してコミットし、push する(force push はしない)。
                コミットメッセージは `issue-<issue 番号>: 途中で止まった実装を引き継いで仕上げる(<何を>)` で、本文に `Refs #<issue 番号>` を書く。
                この環境ではテスト(php・npm)を流せないので、テストは書いて CI で確かめる。PR の本文は `gh pr edit ${{ env.PR }} --body-file <ファイル>` で直し、
@@ -148,13 +149,14 @@ jobs:
                CI の結果は待たない(CI が緑になるまでは ai-auto-merge.yml がマージしない)
             5. 次のどれかに当たるものは、仕上げずに人に頼む。足りないものは埋められるところまで埋めて push してよい
                - 仕様の解釈・設計の選択など、判断が要る
-               - 画面の証跡(スクリーンショット・動画)が要る(この環境ではブラウザで撮れない)
+               - FE・BE のコードを変えていて、証跡(修正前後の比較画像・動画。画面の無い BE は応答の変化)がまだ貼られていない(この環境では撮れない)。ready にせず draft のまま頼む
                - データを消す・費用がかかる・テストで確かめられない
                - 引き継ぎが 2 回目で、前の回に頼んだことがまだ片付いていない
                人に頼むときは、PR にコメントを書いてから `needs-human` ラベルを付け、`ai-in-actions` ラベルを外して終える(Slack に通知が行く)。
                コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付け、中身は、引き継いでしたことと、人にしてほしいこと・決めてほしいこと。
                決めてほしいことは選択肢 2〜3 個で(それぞれの良い点・悪い点、おすすめと理由)、設計の用語や記号に頼らず話し言葉で、
                案ごとに「こう選ぶと、こうなる」「その代わり、ここが困る」を書き、短く答えられる形(「おすすめで」「B で」など)を示す。
+               並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、答え方の順に置き、引き継いでしたことは最後に畳む)。
 
             ワークフロー(`.github/workflows/`)のファイルを変えるときは、次に従う。
             - 変えてよいのは、閉じる issue をリポジトリのオーナー(${{ github.repository_owner }})が書いていて、その「やること」がワークフローの変更のときだけ
@@ -207,7 +209,8 @@ jobs:
 
       # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
       # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。
-      # push していない回・CI が普通に動いた回では、ci-rerun.yml が見送る。呼べなくても、1 時間ごとの ci-rerun.yml が拾う
+      # GITHUB_TOKEN で ready にした回は ready_for_review の CI が起きず、draft のときに飛ばした回しか無い(#410)ので、ci-rerun.yml が開き直して流す。
+      # draft のまま残した回・CI が普通に動いた回では、ci-rerun.yml が見送る。呼べなくても、1 時間ごとの ci-rerun.yml が拾う
       - name: 承認待ちで止まった CI を流し直させる
         run: gh workflow run ci-rerun.yml -R "$REPO" -f number="$PR" || echo "::warning::ci-rerun.yml を呼べなかった(1 時間ごとの見回りで拾う)"
 

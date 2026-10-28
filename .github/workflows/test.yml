@@ -3,6 +3,8 @@ name: test
 on:
   pull_request:
     branches: [develop, staging, release]
+    # draft の間は全ジョブを飛ばすので、ready にしたときに流す(既定の opened・synchronize・reopened に足す)
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [develop]
   # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
@@ -16,6 +18,10 @@ permissions:
 # staging → release の PR(向き先が release)は、develop → staging で一通り確かめた後なので、lint とテストの確認(必須の
 # backend・backend-lint・frontend・actionlint)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
 #
+# draft の PR は、実装している途中なので流さない(ready にしたときから流す。#410)。ジョブごとの if で飛ばすので、回は
+# conclusion が skipped で残る。飛ばしたジョブのチェックは必須のチェックでも成功に数えられるので、ready にしたコミットで
+# 回が流れたかは ci-rerun.sh・ai-auto-merge.yml が回の conclusion で確かめる
+#
 # PR に続けて push したら、前の回は取り消す(private ではジョブが動いた分だけ課金されるため)。
 # deploy-*.yml から workflow_call で呼んだ回は、github.workflow が呼んだ側の名前になるので、PR の回とは別の列になる
 concurrency:
@@ -24,6 +30,7 @@ concurrency:
 
 jobs:
   backend:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -89,6 +96,7 @@ jobs:
 
   # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れと、型の誤りを止める
   backend-lint:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -123,6 +131,7 @@ jobs:
   # run のシェルは actionlint が shellcheck に渡す。scripts ジョブと同じく、GraphQL・jq の $ を単一引用符で渡すので info(SC2016)と
   # style は見ない。staging・release 向けの PR でも流す(数秒で終わり、必須のチェックにするため)
   actionlint:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -140,7 +149,7 @@ jobs:
   # DB を使わないシェルスクリプトの検査とテスト。どれも数秒で終わるので 1 つのジョブで順に流す
   # (private ではジョブごとに 1 分に切り上げて課金されるため)。必須のチェックにはしていない
   scripts:
-    if: github.base_ref != 'release'
+    if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -181,7 +190,7 @@ jobs:
 
   # MariaDB を使う運用スクリプト(ops/backup)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
   ops-db:
-    if: github.base_ref != 'release'
+    if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -238,6 +247,7 @@ jobs:
             mariadb:10.11 bash ops/backup/tests/verify-restore.test.sh
 
   frontend:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -272,7 +282,7 @@ jobs:
 
   # 本番と同じく、ビルドした FE を Laravel から同じオリジンで配信し、ブラウザで画面を確かめる
   e2e:
-    if: github.base_ref != 'release'
+    if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     services:
       mariadb:

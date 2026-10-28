@@ -1,21 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import App from './App'
 import type { paths } from './api/schema'
+import { mockApi } from './test/api'
 
 type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
-
-// トップの画面が GET /api/hello を呼ぶ。本物の client は相対 URL(/api)で作られていて Node の fetch では解決できないため、
-// 同じ型付きのクライアントを、絶対 URL と差し替えた fetch で作り直したものに置き換える
-const fetchMock = vi.hoisted(() => vi.fn<(request: Request) => Promise<Response>>())
-
-vi.mock('./api/client', async () => {
-  const { default: createClient } = await import('openapi-fetch')
-  return {
-    api: createClient<paths>({ baseUrl: 'http://localhost/api', fetch: (request) => fetchMock(request) }),
-  }
-})
 
 const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
 const NOT_FOUND_HEADING = 'ページが見つかりません'
@@ -33,10 +23,8 @@ const expectHeading = async (name: string) => {
 
 describe('App のルーティング', () => {
   beforeEach(() => {
-    fetchMock.mockReset()
-    fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify(HELLO), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-    )
+    // トップの画面が GET /api/hello を呼ぶ
+    mockApi('get', '/hello', 200, HELLO)
   })
 
   test.each([

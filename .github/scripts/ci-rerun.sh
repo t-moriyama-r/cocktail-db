@@ -11,6 +11,8 @@
 # ブランチ保護の必須のチェックに数えられるのは、PR に結び付いた回(pull_request)のチェックだけ。workflow_dispatch で流した回は、
 # 同じコミットに同じ名前のチェックが成功で付いても PR のチェックに数えられず、マージは BLOCKED のまま(#389)。
 # そのため、何が起きたかではなく「いまのコミットに pull_request の回があり、承認待ちでないか」で決める。
+# draft では CI の全ジョブを飛ばす(test.yml。#410)ので、draft は見ない。飛ばした回(conclusion が skipped)は走ったに数えない。
+# GITHUB_TOKEN で ready にすると ready_for_review の回が起きず、draft のときに飛ばした回だけが残るため
 # - 承認待ち(conclusion が action_required)の回がある: Actions の Claude(claude[bot])や GITHUB_TOKEN が push したコミットでは、
 #   pull_request の回が「Approve and run」を待ったまま走らない(#353・#365)。その回を承認して走らせる。test.yml のほかの
 #   pull_request のワークフローの回も、待ったままだと自動マージが止まる(すべてのチェックの成功を見る)ので、まとめて承認する
@@ -51,18 +53,19 @@ ci_rerun() {
 rerun_one() {
   local repo=$1 default=$2 n=$3 pr sha
   skip() { echo "#$n 見送り: $*"; }
-  pr=$(gh pr view "$n" -R "$repo" --json state,baseRefName,headRefOid,isCrossRepository,mergeable,updatedAt,labels) || return 1  # || で呼ばれると set -e が効かないので、読めなかったら先へ進まない
+  pr=$(gh pr view "$n" -R "$repo" --json state,isDraft,baseRefName,headRefOid,isCrossRepository,mergeable,updatedAt,labels) || return 1  # || で呼ばれると set -e が効かないので、読めなかったら先へ進まない
   sha=$(jq -r .headRefOid <<<"$pr")
 
   if [ "$(jq -r .state <<<"$pr")" != OPEN ]; then skip "閉じている"; return; fi
+  if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft(CI は ready にしてから流す)"; return; fi
   # フォークの PR の回は、こちらから承認しない(動かすのも危ない)
   if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; return; fi
   if [ "$(jq -r .baseRefName <<<"$pr")" != "$default" ]; then skip "向き先が $default ではない(積んでいる途中)"; return; fi
   # いまのコミットの pull_request の回(どのワークフローも)。1 つのコミットの回は多くても十数個なので、100 件で足りる。
-  # 先頭は CI の回のうち承認待ちでない数、続けて承認待ちの回の ID(空白区切り)
+  # 先頭は CI の回のうち承認待ちでも飛ばした回でもない数、続けて承認待ちの回の ID(空白区切り)
   local runs ran waiting
   runs=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=100" \
-    --jq "[([.workflow_runs[] | select((.path | endswith(\"/$WORKFLOW\")) and .conclusion != \"action_required\")] | length | tostring)]
+    --jq "[([.workflow_runs[] | select((.path | endswith(\"/$WORKFLOW\")) and (.conclusion | IN(\"action_required\", \"skipped\") | not))] | length | tostring)]
           + [.workflow_runs[] | select(.conclusion == \"action_required\") | .id | tostring] | join(\" \")") || return 1  # 読めなかったのを「回が無い」と取り違えて開き直さない
   read -r ran waiting <<<"$runs"
   if [ "$ran" != 0 ] && [ -z "$waiting" ]; then

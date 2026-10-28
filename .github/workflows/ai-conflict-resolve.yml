@@ -1,6 +1,6 @@
 # develop とコンフリクトした PR に、Actions の Claude Code が develop を取り込んでコンフリクトを解消し、レビューと自動マージの流れに戻す
 #
-# コンフリクトした PR は、pull_request の CI が動かず、レビュアーも自動マージも先へ進めないので、誰の番でもないまま止まる。draft も同じ。
+# コンフリクトした PR は、pull_request の CI が動かず、レビュアーも自動マージも先へ進めないので、誰の番でもないまま止まる。draft は選ばない(実装している途中。落ちた draft は ai-draft-sweep.yml が引き継ぐ。#410)。
 # - pick: シェルで候補を絞る(.github/scripts/conflict-candidates.sh。見送った理由はジョブのログに出す)
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
@@ -66,6 +66,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/scripts
+          persist-credentials: false
 
       - name: 候補を絞る
         id: pick
@@ -105,6 +106,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev
           sparse-checkout: .github/scripts
+          persist-credentials: false
 
       # max-parallel: 1 なので、pick から時間がたつことがある。その間に push された・ラベルが付いた・解消されたものは見送る
       - name: pick のときから変わっていないか
@@ -121,6 +123,7 @@ jobs:
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
           echo "go=true" >> "$GITHUB_OUTPUT"
 
+      # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
         if: steps.live.outputs.go
         with:
@@ -170,7 +173,8 @@ jobs:
             コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:conflict-resolve sha=${{ env.PICKED_HEAD }} base=${{ env.BASE }} --> を付け、
             中身は、どのファイルのどこで、PR 側と develop 側がそれぞれ何をしようとしてぶつかったかと、決めてほしいことを選択肢 2〜3 個で
             (それぞれ「こう選ぶと、こうなる」「その代わり、ここが困る」、おすすめと理由)。設計の用語や記号に頼らず話し言葉で書き、
-            短く答えられる形(「おすすめで」「B で」など)を示す。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
+            短く答えられる形(「おすすめで」「B で」など)を示す。並びと形は CLAUDE.md の「人に判断を頼むとき」に従う
+            (1 行目に何を決めてほしいか、両側の変更と案ごとの混ぜ方の図、案の比較表、答え方の順に置き、ぶつかった箇所の細かい説明は最後に畳む)。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
       # after は PR ごとに、この回で取り込みを試したかを知る必要がある(matrix のジョブの outputs は PR ごとに分けられない)。
@@ -226,6 +230,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/scripts
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         id: tried

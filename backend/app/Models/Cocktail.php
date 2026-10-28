@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Database\Factories\CocktailFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 /**
  * カクテル。
@@ -45,6 +48,63 @@ class Cocktail extends Model
     public function baseCategory(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'base_category_id');
+    }
+
+    /**
+     * 技法。
+     *
+     * @return BelongsTo<Method, $this>
+     */
+    public function method(): BelongsTo
+    {
+        return $this->belongsTo(Method::class);
+    }
+
+    /**
+     * グラス(用語辞典の分類「グラス」の項目)。決めていないカクテルでは null。
+     *
+     * @return BelongsTo<Dictionary, $this>
+     */
+    public function glass(): BelongsTo
+    {
+        return $this->belongsTo(Dictionary::class, 'glass_dictionary_id');
+    }
+
+    /**
+     * 氷。決めていないカクテルでは null。
+     *
+     * @return BelongsTo<Ice, $this>
+     */
+    public function ice(): BelongsTo
+    {
+        return $this->belongsTo(Ice::class);
+    }
+
+    /**
+     * 公開しているカクテル(下書きでないもの)に絞る。下書きは公開の画面・API に出さない。
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function published(Builder $query): void
+    {
+        $query->where('is_draft', false);
+    }
+
+    /**
+     * 技法。外部キー(NOT NULL・RESTRICT)で必ずあるので、無ければデータの壊れとして例外にする。
+     */
+    public function requiredMethod(): Method
+    {
+        return $this->method ?? throw new LogicException("カクテル {$this->id} の技法が無い");
+    }
+
+    /**
+     * 度数(%)。列の volume は小数 1 桁の文字列で読まれるので、数にして返す(旧の API・画面は strength と呼んでいた)。
+     */
+    public function strength(): float
+    {
+        return (float) $this->volume;
     }
 
     /**

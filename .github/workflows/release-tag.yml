@@ -1,0 +1,65 @@
+name: release-tag
+
+# release 向けの PR(staging → release)をマージしたら、PR のタイトルの版(【運用】release v1.2.0 の v1.2.0)で、
+# マージコミットにタグを打ち、GitHub Release を作る(本文は自動生成のリリースノート)。#334。決まりは CLAUDE.md の手順 9
+# デプロイ(deploy.yml)とは別のワークフローにし、デプロイの成否とは切り離す(デプロイが落ちても、どの版をマージしたかは残す)。
+# タイトルの形と版の大きさは、マージの前に branch-flow.yml が確かめている。ここでも確かめ直し、合わなければタグを打たずに落とす。
+# 落ちたら、原因を直してから Actions の画面でこの回を再実行する(タグだけ先にできていれば、Release だけを作る)
+on:
+  pull_request:
+    branches: [release]
+    types: [closed]
+
+permissions: {}
+
+# 続けてマージしても、タグを打つのは 1 回ずつ順に
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  release-tag:
+    # マージせずに閉じた PR・フォークからの PR では何もしない
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      # タグと Release を作る
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Tag and create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -o pipefail
+          version=$(bash .github/scripts/release-version.sh parse "$TITLE")
+
+          # タグがもうあるか(再実行のとき)。404 のほかの失敗(権限・通信)は、無いのと同じに扱わずに落とす(RC-01)
+          if tagged=$(gh api "repos/$REPO/commits/refs/tags/$version" --jq .sha 2>err.txt); then
+            if [ "$tagged" != "$SHA" ]; then
+              echo "::error::タグ $version はもう別のコミット($tagged)にある。マージコミット $SHA には打たない"
+              exit 1
+            fi
+            if gh api "repos/$REPO/releases/tags/$version" --jq .html_url >/dev/null 2>err.txt; then
+              echo "タグ $version と GitHub Release はもうある"
+              exit 0
+            fi
+            grep -q 'HTTP 404' err.txt || { cat err.txt >&2; exit 1; }
+            gh release create "$version" -R "$REPO" --verify-tag --title "$version" --generate-notes
+            exit 0
+          fi
+          grep -Eq 'HTTP (404|422)' err.txt || { cat err.txt >&2; exit 1; }
+
+          # 版が前のタグより大きいか(マージの前に確かめた後で、別の版が先にタグになっていないか)
+          tags=$(gh api "repos/$REPO/git/matching-refs/tags/v" --paginate --jq '.[].ref | sub("^refs/tags/"; "")')
+          printf '%s\n' "$tags" | bash .github/scripts/release-version.sh check "$TITLE" >/dev/null
+
+          gh release create "$version" -R "$REPO" --target "$SHA" --title "$version" --generate-notes
