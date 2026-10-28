@@ -192,6 +192,12 @@ main() {
 	expect TC-240-24 '閉じた PR では、印だけ外して人に頼まない' "$(out)|$(edited)|$(commented)" 'cleared|7 -R o/r --remove-label ai-in-actions|'
 
 	reset
+	pr 7 ai-in-actions
+	touch "$FAKE/comments-fail"
+	run resume true sha7 "$SINCE"
+	expect TC-240-27 'resume でコメントを読めなかったら、書いていないと取り違えず、何も変えずに失敗で終わる' "$(edited)$(commented)|$RC" '|1'
+
+	reset
 	run bogus true
 	expect TC-240-25 '知らない使い方は失敗で終わる' "$RC" 2
 

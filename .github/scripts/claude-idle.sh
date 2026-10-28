@@ -142,7 +142,17 @@ resume() {
   sha=$(jq -r .headRefOid <<<"$pr")
 
   if [ "$ran" = true ]; then
-    if [ "$sha" != "$before" ] || agent_wrote_since "$repo" "$n" "$since"; then worked=true; fi
+    if [ "$sha" != "$before" ]; then
+      worked=true
+    else
+      local rc=0
+      agent_wrote_since "$repo" "$n" "$since" || rc=$?
+      case $rc in
+        0) worked=true ;;
+        1) ;;
+        *) log "#$n コメントを読めなかった。何も変えずに失敗で終わる"; return 1 ;;
+      esac
+    fi
   fi
   if [ "$worked" = true ]; then
     if has_label "$pr" "$LABEL" && has_label "$pr" needs-human; then
@@ -209,13 +219,16 @@ has_marker() {
   jq -e --arg m "$2" 'any(.[]; .body // "" | contains($m))' <<<"$1" >/dev/null
 }
 
-# 動き始めてから、エージェント(目印 ai-dev:agent)が PR へのコメントかスレッドへの返信を書いたか
+# 動き始めてから、エージェント(目印 ai-dev:agent)が PR へのコメントかスレッドへの返信を書いたか。
+# 終了コード: 0 書いた、1 書いていない、2 コメントを読めなかった(「書いていない」と取り違えない)
 agent_wrote_since() {
-  local repo=$1 n=$2 since=$3 issue review
-  issue=$(trusted_comments "$repo" "$n")
-  review=$(gh api --paginate --slurp "repos/$repo/pulls/$n/comments?per_page=100" | jq 'add // [] | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or .user.type == "Bot"))')
+  local repo=$1 n=$2 since=$3 issue review rc=0
+  issue=$(trusted_comments "$repo" "$n") || return 2
+  review=$(gh api --paginate --slurp "repos/$repo/pulls/$n/comments?per_page=100" | jq 'add // [] | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or .user.type == "Bot"))') || return 2
   jq -e -n --argjson c "$issue" --argjson r "$review" --arg since "$since" \
-    'any(($c + $r)[]; (.body // "" | contains("ai-dev:agent")) and (.created_at >= $since))' >/dev/null
+    'any(($c + $r)[]; (.body // "" | contains("ai-dev:agent")) and (.created_at >= $since))' >/dev/null || rc=$?
+  if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then return "$rc"; fi
+  return 2
 }
 
 # PR のコメントのうち、目印を信じてよいもの(書き込み権限のある人と GitHub App)だけを出す。
