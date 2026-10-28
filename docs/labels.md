@@ -71,7 +71,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 自動でマージする PR でも、条件を満たして `gh pr merge` まで進んだのに GitHub に断られることがある(ワークフローを書き換える PR で `workflows` の権限が無い・base branch policy で断られる、など)。そのときは、断られた理由(エラーの 1 行)を PR にコメントし(目印 `<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->`)、`needs-approval` を付けて Slack に知らせ、状態のラベルを付け直す(#218)。もう `needs-approval` が付いていれば知らせない。`needs-approval` の付いた PR は見回り(`ai-review-sweep.yml`)も見送るので、同じ失敗を繰り返さない。
 
-向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。AI レビューは流すが、指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを AI がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
+向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。レビューは CodeRabbit ではなく、PR を作った手元の Claude が目印(`ai-dev:local-review`)付きで書く(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを手元の Claude がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
 
 `ai-in-actions`・`needs-human`・`needs-local`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
 
