@@ -41,7 +41,13 @@ const SORT_VALUE: Record<CocktailSortKey, (cocktail: CocktailTableRow) => string
   rate: (c) => c.rate,
   strength: (c) => c.strength,
   // 動画のある行の更新日時が無いことは旧のデータに無い。比べられるよう、いちばん古いものとして扱う
-  youtube: (c) => (c.youtube ? (c.updated_at ? Date.parse(c.updated_at) : Number.NEGATIVE_INFINITY) : null),
+  youtube: (c) => (c.youtube ? updatedAtTime(c.updated_at) : null),
+}
+
+// 日時として読めない文字列(NaN)は比べると並びが安定しないので、無い場合と同じくいちばん古いものとして扱う
+function updatedAtTime(updatedAt: string | null | undefined): number {
+  const time = updatedAt ? Date.parse(updatedAt) : Number.NaN
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time
 }
 
 function nullsLast(a: unknown, b: unknown): number {
