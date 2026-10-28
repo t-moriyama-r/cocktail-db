@@ -1082,7 +1082,8 @@
                         "items": {
                             "type": "integer"
                         },
-                        "minItems": 1
+                        "minItems": 1,
+                        "maxItems": 1000
                     }
                 },
                 "required": [

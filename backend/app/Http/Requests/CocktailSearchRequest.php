@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Category;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -40,7 +41,14 @@ class CocktailSearchRequest extends FormRequest
             // 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
             // 件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
             'category_ids' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
-            'category_ids.*' => ['required', 'integer'],
+            // `integer` は PHP の整数フィルターなので、true や 1.0 も 1 として通る。JSON の整数と数字の文字だけを受ける
+            'category_ids.*' => [
+                'required',
+                'integer',
+                fn (string $attribute, mixed $value, Closure $fail) => ! is_bool($value) && ! is_float($value)
+                    ? null
+                    : $fail('The :attribute field must be an integer.'),
+            ],
         ];
     }
 

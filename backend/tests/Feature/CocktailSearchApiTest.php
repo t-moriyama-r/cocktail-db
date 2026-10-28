@@ -284,6 +284,8 @@ describe('条件の検証', function () {
     })->with([
         '文字' => ['abc'],
         '小数' => [1.5],
+        '整数と同じ値の小数' => [1.0],
+        '真偽値' => [true],
         'null' => [null],
         '配列' => [[1]],
         'int に収まらない数字' => ['99999999999999999999'],
@@ -306,7 +308,7 @@ describe('条件の検証', function () {
         expect($existenceChecks)->toHaveCount(1);
     });
 
-    it('TC-163-19: category_ids が 1000 件を超えたら 422、1000 件までは受ける', function () {
+    it('TC-163-20: category_ids が 1000 件を超えたら 422、1000 件までは受ける', function () {
         $id = $this->n['ラム']->id;
 
         cocktailSearchPost($this, ['category_ids' => array_fill(0, 1001, $id)])
