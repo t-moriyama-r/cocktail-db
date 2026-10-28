@@ -2,12 +2,11 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\AdminFormInput;
 use App\Rules\NotRootCategory;
 use App\Services\AdminImageStore;
-use App\Support\YoutubeInput;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
-use InvalidArgumentException;
 
 /**
  * 銘柄の新規・更新(POST /api/admin/brands・PUT /api/admin/brands/{id}。#314)の入力。
@@ -17,6 +16,8 @@ use InvalidArgumentException;
  */
 class SaveBrandRequest extends FormRequest
 {
+    use AdminFormInput;
+
     /**
      * @return array<string, mixed>
      */
@@ -31,11 +32,7 @@ class SaveBrandRequest extends FormRequest
             'strength' => ['required', 'numeric', 'between:0,100'],
             // 説明。保存のときに記法へ変換する(DescriptionMarkup。#287)
             'description' => ['required', 'string'],
-            // YouTube の URL か動画 ID
-            'youtube' => ['nullable', 'string', 'max:255'],
-            'youtube_start_hour' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_HOUR],
-            'youtube_start_minute' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
-            'youtube_start_second' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
+            ...$this->youtubeRules(),
             'is_major' => ['required', 'boolean'],
             'is_like' => ['required', 'boolean'],
             // 画像のリンクの文字と URL
@@ -52,41 +49,6 @@ class SaveBrandRequest extends FormRequest
      */
     public function after(): array
     {
-        return [
-            function (Validator $validator): void {
-                if ($validator->errors()->has('youtube')) {
-                    return;
-                }
-                try {
-                    YoutubeInput::videoId($this->youtubeInput());
-                } catch (InvalidArgumentException $e) {
-                    $validator->errors()->add('youtube', $e->getMessage());
-                }
-            },
-        ];
-    }
-
-    /**
-     * 入れた YouTube の URL か動画 ID。空なら null。
-     */
-    public function youtubeInput(): ?string
-    {
-        return $this->filled('youtube') ? $this->string('youtube')->toString() : null;
-    }
-
-    /**
-     * 整数の項目の値。空なら null。
-     */
-    public function nullableInt(string $key): ?int
-    {
-        return $this->filled($key) ? $this->integer($key) : null;
-    }
-
-    /**
-     * 文字列の項目の値。空なら null。
-     */
-    public function nullableString(string $key): ?string
-    {
-        return $this->filled($key) ? $this->string($key)->toString() : null;
+        return [$this->youtubeValidator()];
     }
 }

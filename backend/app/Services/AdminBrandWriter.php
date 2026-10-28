@@ -60,12 +60,7 @@ class AdminBrandWriter
                 'description' => $this->markup->toStored($request->string('description')->toString()),
                 'is_major' => $request->boolean('is_major'),
                 'is_like' => $request->boolean('is_like'),
-                'youtube_start_seconds' => YoutubeInput::startSeconds(
-                    $videoId,
-                    $request->nullableInt('youtube_start_hour'),
-                    $request->nullableInt('youtube_start_minute'),
-                    $request->nullableInt('youtube_start_second'),
-                ),
+                'youtube_start_seconds' => $request->youtubeStartSeconds($videoId),
                 'image_txt' => $request->nullableString('image_txt'),
                 'image_url' => $request->nullableString('image_url'),
             ]);
@@ -79,14 +74,8 @@ class AdminBrandWriter
             $brand->youtube = $videoId;
 
             // 画像は最後に置く。ここより前で止まったときに、上げたファイルだけが残らないようにする
+            // (ここより後で落ちてロールバックされたときは、AdminImageStore が置いたファイルを消す)
             $brand->image = $this->images->update($request->file('image'), $request->boolean('remove_image'), $brand->image);
-            $uploaded = $request->file('image') !== null ? $brand->image : null;
-
-            // ロールバックされると、置いたファイルを指す行は残らない。孤児にならないよう消す
-            // (ここで落ちたときも、外側のトランザクションが後でロールバックされたときも、同じ経路で消える)
-            if ($uploaded !== null) {
-                DB::afterRollBack(fn () => $this->images->discard($uploaded));
-            }
 
             $brand->save();
 

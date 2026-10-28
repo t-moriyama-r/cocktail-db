@@ -27,6 +27,8 @@ final class AdminImageStore
      * 画像の列に入れる値を返す。
      *
      * 新しいファイルを置けてから前のファイルを消す。置くのに失敗したとき、画像の無い行にしないため。
+     * トランザクションの中で呼ぶときは、行の保存より前に呼んでよい。後の処理が落ちてロールバックされると、置いた
+     * ファイルを指す行は残らないので、置いたファイルを消す(外側のトランザクションが後でロールバックされたときも同じ)。
      */
     public function update(?UploadedFile $image, bool $removeImage, ?string $current): ?string
     {
@@ -35,6 +37,7 @@ final class AdminImageStore
             if ($stored === false) {
                 throw new RuntimeException('画像を保存できなかった');
             }
+            DB::afterRollBack(fn () => $this->disk()->delete($stored));
             $this->deleteStored($current);
 
             return $stored;
@@ -47,14 +50,6 @@ final class AdminImageStore
         }
 
         return $current;
-    }
-
-    /**
-     * update() で置いたばかりのファイルを、保存に失敗したときに消す。
-     */
-    public function discard(string $stored): void
-    {
-        $this->disk()->delete($stored);
     }
 
     /**
