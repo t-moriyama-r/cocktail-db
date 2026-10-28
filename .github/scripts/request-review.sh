@@ -21,8 +21,8 @@ main() {
   pr=$(gh pr view "$number" -R "$repo" --json state,isDraft,labels)
   if [ "$(jq -r .state <<<"$pr")" != OPEN ]; then echo "#$number 見送り: 開いていない"; return; fi
   if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then echo "#$number 見送り: draft"; return; fi
-  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
-  if [ -n "$label" ]; then echo "#$number 見送り: ラベル $label(人の番)"; return; fi
+  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-approval"))] | join(",")' <<<"$pr")
+  if [ -n "$label" ]; then echo "#$number 見送り: ラベル $label(人か手元の番)"; return; fi
 
   state=$(bash "$here/review-request-state.sh" "$repo" "$number")
   case "$state" in

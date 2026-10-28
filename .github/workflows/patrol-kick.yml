@@ -3,8 +3,7 @@
 # schedule は、GitHub が混んでいると遅れたり落とされたりする。2026-10-26 には ai-review-sweep.yml が 5 時間以上動かず、
 # 残った ai-in-actions を誰も拾わなかった(#269)。そのため、PR に動きがあればよく動く CI(test.yml)の終わりにここを動かし、
 # 見回りごとに前の回からの時間を見て、間隔を過ぎていれば workflow_dispatch で起こす。過ぎていなければ何もせず、ログにそう出す。
-#   - ai-review-sweep.yml・ci-rerun.yml・ai-conflict-resolve.yml: 前の回から 1 時間
-#   - ai-draft-sweep.yml: 前の回から 24 時間(毎日の見回りが遅れた・落とされたときの代わり)
+#   - ai-review-sweep.yml・ci-rerun.yml・ai-conflict-resolve.yml・ai-draft-sweep.yml: 前の回から 1 時間
 # schedule が動いていれば、それが前の回になるので、ここは何も起こさない。PR に動きの無い日は CI も動かないので、schedule だけになる。
 # 外(夜間のクラウドのルーチンなど)から起こす形にしないのは、その仕組みが止まったときに同じことが起きるため。
 #

@@ -1,6 +1,6 @@
 name: evidence-gate
 
-# FE・BE のコードを変えた PR の本文の「## 証跡」に、修正前後の静止画と動画がそろっているかを確かめる。決め方は .github/scripts/evidence-gate.sh
+# FE・BE のコードを変えた PR の本文の「## 証跡」に、修正前後の静止画と動画がそろっているか(画面のコード(frontend/src/ の .tsx・.css)を変えた PR は、幅の区切りごとの幅も。#432)を確かめる。決め方は .github/scripts/evidence-gate.sh
 # 証跡は ready にする前に貼る決まり(CLAUDE.md の「ブランチ・コミット・PR」の 5・6)なので、draft では流さず、ready にしたときと、
 # その後に本文を直した・push したときに流す。赤のあいだは ai-auto-merge.yml がマージしない(チェックがすべて成功していることを見るため)
 on:

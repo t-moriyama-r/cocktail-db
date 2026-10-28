@@ -21,7 +21,7 @@ set -euo pipefail
 PATROLS=${PATROLS:-"ai-review-sweep.yml 60 schedule|workflow_dispatch
 ci-rerun.yml 60 schedule|workflow_dispatch
 ai-conflict-resolve.yml 60 schedule|workflow_dispatch|push
-ai-draft-sweep.yml 1440 schedule|workflow_dispatch"}
+ai-draft-sweep.yml 60 schedule|workflow_dispatch"}
 PER_PAGE=30
 
 patrol_kick() {

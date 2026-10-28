@@ -1,13 +1,16 @@
 # CI(test.yml)の pull_request の回がいまのコミットで走っていない PR に、pull_request の回を走らせる。決め方は .github/scripts/ci-rerun.sh
 #
 # ブランチ保護の必須のチェックに数えられるのは、PR に結び付いた回(pull_request)のチェックだけ。workflow_dispatch で流した回は数えられない(#389)。
-# 開いている PR の上に積んだ PR は、土台がマージされてブランチが消えると、GitHub が base を既定のブランチに付け替える。
+# 開いている PR の上に積んだ PR は、土台がマージされてブランチが消えると、base が既定のブランチに付け替わる(人がマージして
+# GitHub がブランチを消したときは GitHub が、ai-auto-merge.yml が自動でマージしたときは ai-auto-merge.yml が付け替えてから消す。#463)。
 # 付け替えでは test.yml が動かず、必須のチェックがそろわないまま止まる。付け替えのイベント(edited)が起きるとは限らず、
-# ai-auto-merge.yml が GITHUB_TOKEN でブランチを消したときはワークフローも起きないので、1 時間ごとの見回りで拾う。
+# ai-auto-merge.yml が GITHUB_TOKEN で付け替えたときはワークフローも起きない。ai-auto-merge.yml は付け替えた PR に ci-rerun.sh を直接流すが、
+# それが落ちたときや、ほかの付け替えは、1 時間ごとの見回りで拾う。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
 # edited は、起きたときに早く拾うためのもの。付け替えは push ではないので、push 直後の待ち(MIN_AGE_MINUTES)を 0 にする。
 # Actions の Claude(claude[bot])が push したコミットでは、pull_request の回が承認待ち(action_required)のまま走らない(#365)。
 # claude[bot] が push するワークフロー(ai-review-loop.yml・ai-draft-sweep.yml)は、終わりに番号を付けてこれを呼ぶ(ai-conflict-resolve.yml は ci-rerun.sh を直接呼ぶ)。
+# ai-auto-merge.yml も、いまのコミットで CI が動いていないので見送るときに、番号を付けてこれを呼ぶ(.github/scripts/ci-rerun-request.sh。#268)。
 # 承認待ちの回は GITHUB_TOKEN(actions: write)で承認する。pull_request の回が無い(承認できなかった)ときは、オーナーの PAT で PR を閉じて開き直し、
 # reopened で pull_request の回を起こす(GITHUB_TOKEN の開き直しではワークフローが起きない)。走った回が終わると ai-auto-merge.yml・
 # pr-status.yml(workflow_run)も起きる。PR のコードは checkout しない(pull_request_target で書き込みの権限を持つため)

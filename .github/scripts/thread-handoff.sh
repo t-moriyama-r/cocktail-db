@@ -71,7 +71,7 @@ ask() {
   if jq -e --arg m "$marker" 'any(.body // "" | contains($m))' <<<"$comments" >/dev/null; then
     echo "#$n このコミット(${sha:0:7})ではもう頼むコメントを書いてある"
   else
-    links=$(jq -r '.[] | "- \(.url)\(if .path then "(`\(.path)`)" else "" end)"' <<<"$threads")
+    links=$(jq -r '.[] | "- \(.url)\(if .path then " (`\(.path)`)" else "" end)"' <<<"$threads")
     gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- $marker -->
 解決(Resolve)されていないスレッドが $count 件残っていて、自動マージが止まっている(AI レビュアーの指摘にはエージェントが返信済み・CI は緑・コンフリクトなし)。スレッドごとに決めてほしい。
 
