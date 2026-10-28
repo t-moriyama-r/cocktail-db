@@ -111,7 +111,8 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           github_token: ${{ github.token }}
-          allowed_bots: coderabbitai,coderabbitai[bot]
+          # ほかのワークフロー(ai-conflict-resolve.yml など)が GITHUB_TOKEN で起こすと、起こした人が github-actions[bot] になる(#469)
+          allowed_bots: coderabbitai,coderabbitai[bot],github-actions,github-actions[bot]
           claude_args: |
             --max-turns 60
             --allowedTools "Read,Glob,Grep,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
