@@ -41,10 +41,11 @@ const brandHit = (id: number): components['schemas']['NameSearchBrandResource'] 
   category: node,
 })
 
-const hits = (cocktails: number, nodes = 0, brands = 0): NameSearchResponse => ({
+const hits = (cocktails: number, nodes = 0, brands = 0, ingredientMatches = 0): NameSearchResponse => ({
   cocktails: Array.from({ length: cocktails }, (_, i) => cocktail(i + 1)),
   nodes: Array.from({ length: nodes }, (_, i) => nodeHit(i + 1)),
   brands: Array.from({ length: brands }, (_, i) => brandHit(i + 1)),
+  ingredient_matches: Array.from({ length: ingredientMatches }, (_, i) => cocktail(i + 101)),
 })
 
 /** 今の URL を出す(移った先を確かめるため) */
@@ -191,6 +192,14 @@ describe('ヘッダー(SiteHeader)', () => {
       expect(await header().findByRole('button', { name: '0件ヒット' })).toBeDisabled()
       fireEvent.submit(header().getByRole('search'))
       expect(location()).toHaveTextContent('/helpme')
+    })
+
+    test('TC-99-23: 材料名だけで当たったカクテルも件数に数え、押せる', async () => {
+      mockApi('get', '/search', 200, hits(0, 0, 0, 2))
+      renderAt('/helpme')
+      await typeAndWait('ライム')
+
+      expect(await header().findByRole('button', { name: '2件ヒット' })).toBeEnabled()
     })
 
     test('TC-99-10: 1 件なら「1件ヒット」で押せ、押すと /result/FromNameResult/〈語〉へ移る', async () => {

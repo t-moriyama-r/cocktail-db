@@ -21,8 +21,9 @@ type ButtonState =
   | { kind: 'server-error' }
   | { kind: 'hits'; word: string; count: number }
 
-/** 当たった件数。カクテル・ノード・銘柄の合計(材料名で当たったカクテルは #173 で API に足す) */
-const countHits = ({ cocktails, nodes, brands }: NameSearchResponse) => cocktails.length + nodes.length + brands.length
+/** 当たった件数。カクテル・ノード・銘柄・材料名で当たったカクテル(#173)の合計 */
+const countHits = ({ cocktails, nodes, brands, ingredient_matches }: NameSearchResponse) =>
+  cocktails.length + nodes.length + brands.length + ingredient_matches.length
 
 /**
  * ヘッダーの名前検索(旧 Forms/Search/FromName/fromName.vue)。入力が止まって 500ms たったら名前の横断検索(#172)を呼び、
