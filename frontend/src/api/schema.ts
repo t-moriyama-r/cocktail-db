@@ -566,7 +566,10 @@ export interface paths {
         };
         /**
          * ノード・銘柄・ベース・技法・グラスのどれか 1 つを起点にした別のカクテルを、ランダムの順で limit 件まで返す。
-         * @description 下書きは返さない。無いノード・銘柄・ベース・グラスを指定したら、当たるものが無いので空の配列(旧と同じ)。
+         * @description 起点は category_id・brand_id・base_id・method_id・glass_id のうち、ちょうど 1 つを送る。0 個・2 個以上を送ったら 422。
+         *     起点の 1 つ 1 つは任意のクエリに見えるが、この組の制約は OpenAPI の構造では表せないので、ここに書く。
+         *
+         *     下書きは返さない。無いノード・銘柄・ベース・グラスを指定したら、当たるものが無いので空の配列(旧と同じ)。
          *     何が当たるかは docs/decisions/related-cocktails.md。
          */
         get: operations["randomCocktails"];
