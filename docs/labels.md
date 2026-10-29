@@ -88,7 +88,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
 - 付いたときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだこれらのラベルが付いて開いている PR・issue を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件の日は送らない。手動で送るときは、`notify-needs-human.yml` を `number` を空、`label` を `all` にして動かす
-- 頼んだラベルが外れるか、PR・issue が閉じるか、同じラベルで頼み直したら、その通知に ✅ のリアクションが付き、本文の先頭に「【済】」が付く(bot で送ったときだけ)。ラベルが外れた・閉じたときのイベント、ラベルを外すワークフロー(`ai-review-loop.yml`・`ai-decision-loop.yml`・`ai-review-sweep.yml`)の終わり、毎朝の見回りで、`notify-needs-human.yml` の `mark-done` ジョブが付ける。手動で付けさせるときは、`label` を `done` にして動かす
+- 頼んだラベルが外れるか、PR・issue が閉じるか、同じラベルで頼み直したら、その通知に ✅ のリアクションが付き、本文の先頭に「【済】」が付いて、残りが打ち消し線になる(bot で送ったときだけ)。ラベルが外れた・閉じたときのイベント、ラベルを外すワークフロー(`ai-review-loop.yml`・`ai-decision-loop.yml`・`ai-review-sweep.yml`)の終わり、毎朝の見回りで、`notify-needs-human.yml` の `mark-done` ジョブが付ける。手動で付けさせるときは、`label` を `done` にして動かす
 
 ### Slack の設定
 
