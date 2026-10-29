@@ -20,8 +20,9 @@ const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
   beforeEach(() => {
-    // トップの画面が GET /api/hello を呼ぶ
+    // トップの画面が GET /api/hello を、用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
     mockApi('get', '/hello', 200, HELLO)
+    mockApi('get', '/dictionaries', 200, { data: [] })
   })
 
   test('TC-296-01: フッターに著作の表示と、作者のサイトへのリンク(新しいタブ)がある', async () => {
