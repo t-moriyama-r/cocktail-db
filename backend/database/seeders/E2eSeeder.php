@@ -25,12 +25,12 @@ class E2eSeeder extends Seeder
      */
     private function seedIngredientTree(CategoryTree $tree): void
     {
-        $node = fn (?Category $parent, string $name, array $extra = []): Category => $tree->addNode($parent, [
+        $node = fn (?Category $parent, string $name, ?CategoryRole $role = null): Category => $tree->addNode($parent, [
             'name' => $name,
             'name_search' => $name,
             'name_eng' => $name,
             'is_major' => true,
-            ...$extra,
+            'role' => $role,
         ]);
 
         $liquor = $node(null, '蒸留酒');
@@ -40,8 +40,8 @@ class E2eSeeder extends Seeder
         $node($londonDryGin, 'ビーフィーター');
         $node($liquor, 'ウォッカ');
 
-        $node(null, 'ソフトドリンク', ['role' => CategoryRole::SoftDrink]);
-        $other = $node(null, 'その他', ['role' => CategoryRole::Other]);
+        $node(null, 'ソフトドリンク', CategoryRole::SoftDrink);
+        $other = $node(null, 'その他', CategoryRole::Other);
         $node($other, 'ミント');
     }
 }
