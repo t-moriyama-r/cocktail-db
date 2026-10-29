@@ -31,6 +31,9 @@ jobs:
       db_suffix: cocktail_dev
       app_url: ${{ vars.DEV_APP_URL }}
       force: ${{ inputs.force || false }}
+      # develop に入るコミットは PR の CI で通している。マージのたびに 9 ジョブを流し直すと、private では 1 回 約 11 分かかる(#535)。
+      # stg・本番は、出す前に流す
+      run_tests: false
     secrets:
       DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
       BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
