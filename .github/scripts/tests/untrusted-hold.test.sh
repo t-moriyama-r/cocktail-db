@@ -81,7 +81,8 @@ case "$*" in
 	"api --paginate --slurp repos/o/r/issues/"*"/comments"*) n=$(num "$4"); cat "$FAKE/comments-$n" 2>/dev/null || echo '[]' ;;
 	"api --paginate --slurp repos/o/r/pulls/"*) echo '[]' ;;
 	"api --paginate repos/o/r/issues/"*"/comments"*)
-		n=$(num "$3"); [ -f "$FAKE/hold-comments-$n" ] && jq -r '.[][].body | select(contains("ai-dev:untrusted"))' "$FAKE/hold-comments-$n" ;;
+		n=$(num "$3")
+		if [ -f "$FAKE/hold-comments-$n" ]; then jq -r '.[][].body | select(contains("ai-dev:untrusted"))' "$FAKE/hold-comments-$n"; fi ;;
 	"api -X POST repos/o/r/issues/"*"/labels -f labels[]=needs-human")
 		echo labels:needs-human >>"$FAKE/posts" ;;
 	*) echo "unexpected: gh $*" >&2; exit 2 ;;
