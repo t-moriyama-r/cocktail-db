@@ -10,7 +10,7 @@ const pages = [
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', title: SITE_TITLE },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', title: SITE_TITLE },
   { path: '/result/Cocktails', title: `カクテル検索結果 ｜ ${SITE_TITLE}` },
-  { path: '/category/1', title: SITE_TITLE },
+  { path: '/category/1', title: `蒸留酒(蒸留酒) ｜ ${SITE_TITLE}` },
   { path: '/detail/brand/1', title: SITE_TITLE },
   { path: '/detail/cocktail/1', title: SITE_TITLE },
   { path: '/dictionary', title: `用語辞典 ｜ ${SITE_TITLE}` },

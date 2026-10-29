@@ -8,7 +8,7 @@ const pages = [
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', heading: '名前検索の結果' },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', heading: '名前検索の結果' },
   { path: '/result/Cocktails', heading: '条件検索の結果' },
-  { path: '/category/1', heading: 'カテゴリの詳細' },
+  { path: '/category/1', heading: '蒸留酒(蒸留酒)' },
   { path: '/detail/brand/1', heading: '銘柄の詳細' },
   { path: '/detail/cocktail/1', heading: 'カクテルの詳細' },
   { path: '/dictionary', heading: '用語辞典' },

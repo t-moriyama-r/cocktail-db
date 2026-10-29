@@ -26,6 +26,7 @@ class E2eSeeder extends Seeder
      * ヘッダー(#99)の E2E 用のカクテルと銘柄。登録数(公開のカクテルの数)を 1 にし、ランダムウォークがどの種類
      * (カクテル・ノード・銘柄)を選んでも行き先があるようにする。
      * 名前検索「ジン」は、ノードのジン・ドライジン・ロンドンドライジンとカクテルのジントニックの 4 件に当たる(銘柄の名前にはジンを入れない)。
+     * 銘柄はジンの有名な銘柄にもする(カテゴリの詳細の E2E(#105)で、有名な銘柄の欄が出るノードと出ないノードを作る)。
      */
     private function seedHeaderData(Category $gin, Category $beefeater): void
     {
@@ -36,12 +37,13 @@ class E2eSeeder extends Seeder
             'base_category_id' => $gin->id,
             'method_id' => Method::factory()->create(['name' => 'ビルド', 'name_eng' => 'Build'])->id,
         ]);
-        Brand::factory()->create([
+        $brand = Brand::factory()->create([
             'category_id' => $beefeater->id,
             'name' => 'ビーフィーター 40度',
             'name_search' => 'ビーフィーター40度',
             'name_eng' => 'Beefeater 40',
         ]);
+        $gin->update(['famous_brand_id' => $brand->id]);
     }
 
     /**
