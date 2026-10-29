@@ -70,6 +70,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories/{category}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ノードの詳細を返す。基本情報・根からのパンくず・子のノード・有名な銘柄と、そのノードの配下すべて(自分を含む)の銘柄。
+         * @description 旧のカテゴリ(DetailController@category)とミドル(@middle)の詳細を、任意の深さのノードで 1 つにしたもの。
+         *     根(大元)も返す。無いノードは 404(旧は 500 だった。docs/decisions/category-detail.md)。
+         */
+        get: operations["categoryDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cocktails/{cocktail}": {
         parameters: {
             query?: never;
@@ -691,6 +712,52 @@ export interface components {
             image_url: string | null;
             updated_at: string | null;
         };
+        /** BrandSummaryResource */
+        BrandSummaryResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%) */
+            strength: number;
+            youtube: string | null;
+            /** @description 根が先頭で、所属ノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+        };
+        /** CategoryDetailResource */
+        CategoryDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            is_major: boolean;
+            is_like: boolean;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description 根が先頭で、このノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+            children: components["schemas"]["NodeRefResource"][];
+            famous_brand: components["schemas"]["BrandSummaryResource"] | null;
+            brands: components["schemas"]["BrandSummaryResource"][];
+        };
         /**
          * CategoryRole
          * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
@@ -1305,6 +1372,31 @@ export interface operations {
             };
             404: components["responses"]["ModelNotFoundException"];
             422: components["responses"]["ValidationException"];
+        };
+    };
+    categoryDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CategoryDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     cocktailDetail: {
