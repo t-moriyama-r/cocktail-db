@@ -2495,7 +2495,7 @@
                             "minItems": 1,
                             "maxItems": 1000
                         },
-                        "maxItems": 1000
+                        "maxItems": 20
                     },
                     "sort": {
                         "type": [

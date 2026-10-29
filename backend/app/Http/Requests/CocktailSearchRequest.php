@@ -23,6 +23,12 @@ class CocktailSearchRequest extends FormRequest
     public const MAX_CATEGORY_IDS = 1000;
 
     /**
+     * `category_groups` のまとまりの個数の上限。まとまりごとに副問い合わせが 1 つ走るので、ID の総数とは別に絞る。
+     * 現実のカクテルの材料は 20 に届かない(#164 のオーナーの判断)。
+     */
+    public const MAX_CATEGORY_GROUPS = 20;
+
+    /**
      * 1 ページの件数の既定と上限(#167。画面は 1 ページ 50 件。docs/decisions/search-screen.md の 5)。
      */
     public const PER_PAGE = 50;
@@ -53,7 +59,7 @@ class CocktailSearchRequest extends FormRequest
             // 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
             // まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
             // and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
-            'category_groups' => ['required_if:mode,and', 'missing_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
+            'category_groups' => ['required_if:mode,and', 'missing_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_GROUPS],
             // 空のまとまりは、どのカクテルも満たせない条件になるので弾く(画面は空のまとまりを送らない)
             // 1 つのまとまりの件数にも上限を掛け、after の総数の上限の前に巨大な配列を検証しないようにする
             'category_groups.*' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],

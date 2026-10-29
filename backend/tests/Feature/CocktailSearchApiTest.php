@@ -399,6 +399,16 @@ describe('AND 検索の条件の検証', function () {
             ->assertOnlyJsonValidationErrors(['category_groups']);
     });
 
+    it('TC-164-23: まとまりの個数が 20 個を超えたら 422、20 個までは受ける', function () {
+        $id = $this->n['ラム']->id;
+
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => array_fill(0, 21, [$id])])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => array_fill(0, 20, [$id])])
+            ->assertOk();
+    });
+
     it('TC-164-18: ID の総数が 1000 個を超えたら 422、1000 個までは受ける', function () {
         $id = $this->n['ラム']->id;
 
