@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\PendingCommand;
 use Tests\Support\LegacyFixture;
 use Tests\Support\LegacyImportCommand;
+use Tests\Support\LegacyNodeMap;
 use Tests\TestCase;
 
 // legacy:import --only=cocktails(カクテルと材料を移す。#31)。旧 DB を使うので db グループ
@@ -36,16 +37,6 @@ function cocktailColumnInt(mixed $value): int
 }
 
 /**
- * 移した先のノードの ID から、旧の表と ID(「m_middle:3」の形)を legacy_id_maps で引く。
- */
-function legacyNodeOf(int $nodeId): string
-{
-    $map = LegacyIdMap::query()->where('new_table', 'categories')->where('new_id', $nodeId)->sole();
-
-    return "{$map->legacy_table}:{$map->legacy_id}";
-}
-
-/**
  * 移したカクテルの材料を、並び順のまま、ノードを旧の表と ID に戻して返す。
  *
  * @return list<array{int, string, int|null, string, bool}> [position, 旧のノード, 銘柄, 量, 任意]
@@ -56,7 +47,7 @@ function legacyIngredientsOf(int $cocktailId): array
     foreach (DB::table('cocktail_ingredients')->where('cocktail_id', $cocktailId)->orderBy('position')->get() as $row) {
         $ingredients[] = [
             cocktailColumnInt($row->position),
-            legacyNodeOf(cocktailColumnInt($row->category_id)),
+            LegacyNodeMap::legacyOf(cocktailColumnInt($row->category_id)),
             $row->brand_id === null ? null : cocktailColumnInt($row->brand_id),
             is_string($row->amount) ? $row->amount : throw new RuntimeException('量が文字列でない'),
             (bool) $row->is_optional,
@@ -160,8 +151,8 @@ it('TC-31-04: ベースを、旧のカテゴリを移した先のノードに付
     $base = fn (int $id): int => cocktailColumnInt(DB::table('cocktails')->where('id', $id)->value('base_category_id'));
     $path = fn (int $id): array => array_values(app(CategoryTree::class)->path(Category::query()->findOrFail($base($id)))
         ->map(fn (Category $c): string => $c->name)->all());
-    expect(legacyNodeOf($base(1)))->toBe('m_category:1')
-        ->and(legacyNodeOf($base(2)))->toBe('m_category:2')
+    expect(LegacyNodeMap::legacyOf($base(1)))->toBe('m_category:1')
+        ->and(LegacyNodeMap::legacyOf($base(2)))->toBe('m_category:2')
         ->and($path(1))->toBe(['蒸留酒', 'ジン'])
         ->and($path(2))->toBe(['蒸留酒', 'ラム']);
 });
@@ -304,7 +295,7 @@ it('TC-31-16: 2 回目の前に旧の値が変わっていたら、カクテル�
     importLegacyCocktails($this)->assertExitCode(0)->run();
 
     expect(DB::table('cocktails')->where('id', 1)->value('name'))->toBe('ジン・トニック(変更)')
-        ->and(legacyNodeOf(cocktailColumnInt(DB::table('cocktails')->where('id', 1)->value('base_category_id'))))->toBe('m_category:2')
+        ->and(LegacyNodeMap::legacyOf(cocktailColumnInt(DB::table('cocktails')->where('id', 1)->value('base_category_id'))))->toBe('m_category:2')
         ->and(legacyIngredientsOf(1))->toBe([
             [1, 'm_category:1', 1, '45ml', false],
             [2, 'm_category:4', null, '適量', false],
