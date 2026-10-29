@@ -2483,6 +2483,24 @@
                         "minItems": 1,
                         "maxItems": 1000
                     },
+                    "method_ids": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "\u6280\u6cd5(#166)\u3002\u30ab\u30af\u30c6\u30eb\u306e\u6280\u6cd5\u304c\u3053\u306e\u4e2d\u306b\u3042\u308b\u3082\u306e\u306b\u7d5e\u308b\u3002\u7701\u304f\u30fbnull\u30fb\u7a7a\u306e\u914d\u5217\u306a\u3089\u3001\u3059\u3079\u3066\u306e\u6280\u6cd5\u3068\u3057\u3066\u6271\u3046\n(\u65e7\u306f 1 \u3064\u4ee5\u4e0a\u304c\u5fc5\u9808\u3060\u3063\u305f\u3002docs/decisions/search-screen.md \u306e 6)\u3002\u7121\u3044\u6280\u6cd5\u306e ID \u306f\u5f3e\u304b\u305a\u3001\u4f55\u306b\u3082\u4e00\u81f4\u3057\u306a\u3044\n(\u65e7\u3068\u540c\u3058)\u3002\u4ef6\u6570\u306e\u4e0a\u9650\u306f category_ids \u3068\u540c\u3058\u7406\u7531",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "maxItems": 1000
+                    },
+                    "is_easy": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ],
+                        "description": "\u304b\u3093\u305f\u3093\u691c\u7d22(#166)\u3002\u771f\u306a\u3089\u3001\u6750\u6599\u306e\u6570(recipe_count\u3002docs/decisions/recipe-count.md)\u304c 3 \u4ee5\u4e0b\u306e\u3082\u306e\u306b\u7d5e\u308b\u3002\n\u7701\u304f\u3068\u7d5e\u3089\u306a\u3044(\u65e7\u306e\u753b\u9762\u306e\u65e2\u5b9a\u3068\u540c\u3058)\u3002\u53d7\u3051\u308b\u5024\u306f\u65e7\u3068\u540c\u3058 Laravel \u306e boolean(true\u30fbfalse\u30fb1\u30fb0\u30fb\"1\"\u30fb\"0\")"
+                    },
                     "sort": {
                         "type": [
                             "string",

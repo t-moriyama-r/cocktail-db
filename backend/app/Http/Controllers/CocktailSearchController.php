@@ -23,7 +23,11 @@ class CocktailSearchController extends Controller
     public function __invoke(CocktailSearchRequest $request, CocktailSearch $search, CocktailSearchSort $sort): AnonymousResourceCollection
     {
         // 方式は検証で or だけを受けている
-        $ids = $sort->sortedIds($search->query($request->categoryIds()), $request->sort(), $request->order());
+        $ids = $sort->sortedIds(
+            $search->query($request->categoryIds(), $request->methodIds(), $request->isEasy()),
+            $request->sort(),
+            $request->order(),
+        );
 
         $page = $request->page();
         $perPage = $request->perPage();
