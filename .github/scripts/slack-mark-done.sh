@@ -128,12 +128,16 @@ mark_done() {
 	# 打ち消し線の中の太字(*…*)は打ち消されずに出るので、太字の印は外す。開きの ~ の直前が文字だと書式とみなされない
 	# ので、【済】との間に空白を置く。前の形で打ち消した通知は、各行の ~ を外してから囲み直す
 	res=$(jq -n --arg channel "$channel" --argjson ask "$ask" --arg repo "$REPO" '
-	def strike: split("\n") | map(capture("^(?<q>(&gt;|>) ?)?(?<s>.*)$")
-		| (.q // "") + (.s | gsub("^\\s+|\\s+$"; "") | gsub("^~|~$"; "") | gsub("\\*(?<t>[^*]+)\\*"; "\(.t)")
+	def unbold: split("`") | to_entries
+		| map(if .key % 2 == 1 then .value else (.value | gsub("\\*\\*(?<t>[^*]+)\\*\\*"; "\(.t)") | gsub("\\*(?<t>[^*]+)\\*"; "\(.t)")) end)
+		| join("`");
+	def unstrike($old): if $old then gsub("^~|~$"; "") else . end;
+	def strike($old): split("\n") | map(capture("^(?<q>(&gt;|>) ?)?(?<s>.*)$")
+		| (.q // "") + (.s | gsub("^\\s+|\\s+$"; "") | unstrike($old) | unbold
 			| if . == "" then . else "~" + . + "~" end)) | join("\n");
 	{
 		channel: $channel, ts: $ask.ts,
-		text: ("【済】 " + ($ask.text | ltrimstr("【済】") | ltrimstr(" ") | strike)),
+		text: ("【済】 " + ($ask.text | ltrimstr("【済】") | ltrimstr(" ") | strike($ask.done))),
 		metadata: {event_type: "ai_dev_done", event_payload: {repo: $repo, number: $ask.number, label: $ask.label}}
 	}' | slack_json chat.update)
 	if [ "$(jq -r .ok <<<"$res")" != true ]; then

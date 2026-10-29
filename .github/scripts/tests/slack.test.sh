@@ -163,6 +163,13 @@ main() {
 		"$(calls | grep -c 'gh api'):$(sent chat.update .text)" \
 		"0:$(printf '%s\n' '【済】 ~:raising_hand: ask(owner/app)~' '' '~PR: <https://example.com|open>~' '&gt; ~line 1~')"
 
+	reset
+	history "$(ask 100 7 needs-human | with_text $'**重要** `**/*.py`\n&gt; ~/project')"
+	issue 7 closed '[]'
+	run_mark >/dev/null
+	expect TC-502-03 '二重の太字の印は外し、コード内のアスタリスクと本文のチルダは残す' \
+		"$(sent chat.update .text)" "$(printf '%s\n' '【済】 ~重要 `**/*.py`~' '&gt; ~~/project~')"
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
