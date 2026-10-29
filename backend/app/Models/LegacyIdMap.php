@@ -27,6 +27,36 @@ class LegacyIdMap extends Model
     public $timestamps = false;
 
     /**
+     * 旧の表の ID と新しい表の ID の対応を書く。同じ旧 ID の対応が既にあれば、新しい方で書き直す。
+     *
+     * @param  array<int, int>  $newIdByLegacyId  旧 ID => 新 ID
+     */
+    public static function record(string $legacyTable, string $newTable, array $newIdByLegacyId): void
+    {
+        $rows = [];
+        foreach ($newIdByLegacyId as $legacyId => $newId) {
+            $rows[] = ['legacy_table' => $legacyTable, 'legacy_id' => $legacyId, 'new_table' => $newTable, 'new_id' => $newId];
+        }
+
+        static::query()->upsert($rows, ['legacy_table', 'legacy_id'], ['new_table', 'new_id']);
+    }
+
+    /**
+     * 旧の表の ID から新しい表の ID を引く対応(record で書いたもの)を読む。
+     *
+     * @return array<int, int> 旧 ID => 新 ID
+     */
+    public static function newIdsByLegacyId(string $legacyTable, string $newTable): array
+    {
+        $newIds = [];
+        foreach (static::query()->where('legacy_table', $legacyTable)->where('new_table', $newTable)->get() as $map) {
+            $newIds[$map->legacy_id] = $map->new_id;
+        }
+
+        return $newIds;
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

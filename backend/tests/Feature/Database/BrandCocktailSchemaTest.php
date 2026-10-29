@@ -92,7 +92,7 @@ it('TC-22-07: cocktails の列の型・null 可・既定値が設計どおり', 
     ]);
 });
 
-it('TC-22-08: cocktails の索引は旧と同じ 11 列と主キーで、外部キーはベースの 1 本だけ', function () {
+it('TC-22-08: cocktails の索引は旧と同じ 11 列と主キー(と #325 で足した ice_id)で、外部キーはベース・技法・グラス・氷', function () {
     expect(SchemaShape::indexes('cocktails'))->toEqualCanonicalizing([
         'primary' => ['id'],
         'cocktails_name_index' => ['name'],
@@ -106,10 +106,14 @@ it('TC-22-08: cocktails の索引は旧と同じ 11 列と主キーで、外部�
         'cocktails_rate_index' => ['rate'],
         'cocktails_youtube_created_at_index' => ['youtube_created_at'],
         'cocktails_recipe_count_index' => ['recipe_count'],
+        // ice_id の索引と、method_id・glass_dictionary_id・ice_id の外部キーは、指す表(#23)の後に #325 で足した(TC-325-01)
+        'cocktails_ice_id_index' => ['ice_id'],
     ])
-        // method_id・glass_dictionary_id・ice_id の外部キーは、指す表(#23)ができてから足す
-        ->and(SchemaShape::foreignKeys('cocktails'))->toBe([
+        ->and(SchemaShape::foreignKeys('cocktails'))->toEqualCanonicalizing([
             ['base_category_id', 'categories', 'id', 'restrict'],
+            ['method_id', 'methods', 'id', 'restrict'],
+            ['glass_dictionary_id', 'dictionaries', 'id', 'restrict'],
+            ['ice_id', 'ices', 'id', 'restrict'],
         ]);
 });
 

@@ -3,18 +3,24 @@ name: test
 on:
   pull_request:
     branches: [develop, staging, release]
+    # draft の間は全ジョブを飛ばすので、ready にしたときに流す(既定の opened・synchronize・reopened に足す)
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [develop]
   # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
   workflow_call:
-  # PR のブランチで流し直す(ci-rerun.yml・ai-conflict-resolve.yml)。base の付け替えや GITHUB_TOKEN・ボットの push では pull_request の回が起きないため
+  # 手で PR のブランチを試すとき。この回のチェックはブランチ保護の必須のチェックに数えられないので、PR を通すには pull_request の回を走らせる(ci-rerun.yml。#389)
   workflow_dispatch:
 
 permissions:
   contents: read
 
 # staging → release の PR(向き先が release)は、develop → staging で一通り確かめた後なので、lint とテストの確認(必須の
-# backend・backend-lint・frontend)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
+# backend・backend-lint・frontend・actionlint)だけにする。e2e・scripts・ops-db は飛ばす(base_ref は PR 以外では空なので、そのほかの回は全部流れる)
+#
+# draft の PR は、実装している途中なので流さない(ready にしたときから流す。#410)。ジョブごとの if で飛ばすので、回は
+# conclusion が skipped で残る。飛ばしたジョブのチェックは必須のチェックでも成功に数えられるので、ready にしたコミットで
+# 回が流れたかは ci-rerun.sh・ai-auto-merge.yml が回の conclusion で確かめる
 #
 # PR に続けて push したら、前の回は取り消す(private ではジョブが動いた分だけ課金されるため)。
 # deploy-*.yml から workflow_call で呼んだ回は、github.workflow が呼んだ側の名前になるので、PR の回とは別の列になる
@@ -24,6 +30,7 @@ concurrency:
 
 jobs:
   backend:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -58,7 +65,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
@@ -89,6 +96,7 @@ jobs:
 
   # テストから呼ばれない PHP ファイル(config・routes・migrations など)の構文エラーと、書式の乱れと、型の誤りを止める
   backend-lint:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -101,7 +109,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           tools: composer:v2
           coverage: none
 
@@ -119,10 +127,29 @@ jobs:
       - name: Static analysis (PHPStan)
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
+  # ワークフローの YAML の誤り(構文・存在しないジョブや step の参照・式の型など)と、run に書いたシェルの誤りを止める。
+  # run のシェルは actionlint が shellcheck に渡す。scripts ジョブと同じく、GraphQL・jq の $ を単一引用符で渡すので info(SC2016)と
+  # style は見ない。staging・release 向けの PR でも流す(数秒で終わり、必須のチェックにするため)
+  actionlint:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # 手元でも同じ結果になるよう、image の版を固定する(手元のコマンドは CLAUDE.md の「ワークフローを変えたら」)
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+        with:
+          args: -color
+
   # DB を使わないシェルスクリプトの検査とテスト。どれも数秒で終わるので 1 つのジョブで順に流す
   # (private ではジョブごとに 1 分に切り上げて課金されるため)。必須のチェックにはしていない
   scripts:
-    if: github.base_ref != 'release'
+    if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -149,9 +176,21 @@ jobs:
       - name: Test copy-storage.sh
         run: ops/migrate/tests/copy-storage.test.sh
 
-  # MariaDB を使う運用スクリプト(ops/backup)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
+      # バックアップの世代管理・毎日のバックアップ・手元への取り込み(ops/backup)。DB を使わない
+      - name: ShellCheck (backup rotation)
+        run: shellcheck ops/backup/prune-backups.sh ops/backup/daily-backup.sh ops/backup/pull-backups.sh ops/backup/tests/prune-backups.test.sh ops/backup/tests/daily-backup.test.sh ops/backup/tests/pull-backups.test.sh
+
+      - name: Test backup rotation
+        env:
+          PULL_TEST_REQUIRE_RSYNC: 1
+        run: |
+          bash ops/backup/tests/prune-backups.test.sh
+          bash ops/backup/tests/daily-backup.test.sh
+          bash ops/backup/tests/pull-backups.test.sh
+
+  # MariaDB を使う運用スクリプト(ops/backup・ops/migrate)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
   ops-db:
-    if: github.base_ref != 'release'
+    if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -171,7 +210,7 @@ jobs:
           persist-credentials: false
 
       - name: ShellCheck
-        run: shellcheck ops/backup/archive-storage.sh ops/backup/tests/archive-storage.test.sh ops/backup/dump-db.sh ops/backup/tests/dump-db.test.sh
+        run: shellcheck ops/backup/archive-storage.sh ops/backup/tests/archive-storage.test.sh ops/backup/dump-db.sh ops/backup/tests/dump-db.test.sh ops/backup/verify-restore.sh ops/backup/tests/verify-restore.test.sh
 
       # 画像の退避スクリプト(ops/backup/archive-storage.sh)
       - name: Test archive-storage.sh
@@ -195,7 +234,35 @@ jobs:
             -e DUMP_TEST_REQUIRE_DB=1 \
             mariadb:10.11 bash ops/backup/tests/dump-db.test.sh
 
+      # ops/backup/verify-restore.sh で、dump-db.sh のダンプを使い捨ての DB に戻して元の DB と比べ、一致すれば通り、
+      # ダンプの後に 1 行消す・値を変えると失敗することを確かめる。dump-db.sh と同じく mariadb の image の中で動かす
+      - name: Test verify-restore.sh
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -w /w \
+            -e VERIFY_TEST_DB_HOST=127.0.0.1 \
+            -e VERIFY_TEST_DB_PORT=3306 \
+            -e VERIFY_TEST_DB_ROOT_PASSWORD=root \
+            -e VERIFY_TEST_REQUIRE_DB=1 \
+            mariadb:10.11 bash ops/backup/tests/verify-restore.test.sh
+
+      # 旧 DB のダンプの確かめ(ops/migrate/check-legacy-dump.sh)。旧 DB の DDL で作った DB を正しいダンプとして 0 で終わり、
+      # 表を消す・主な表を空にすると欠けたものを出して 0 以外で終わることを確かめる。上と同じく mariadb の image の中で動かす
+      - name: ShellCheck (check-legacy-dump)
+        run: shellcheck ops/migrate/check-legacy-dump.sh ops/migrate/tests/check-legacy-dump.test.sh
+
+      - name: Test check-legacy-dump.sh
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -w /w \
+            -e CHECK_TEST_DB_HOST=127.0.0.1 \
+            -e CHECK_TEST_DB_PORT=3306 \
+            -e CHECK_TEST_DB_ROOT_PASSWORD=root \
+            -e CHECK_TEST_REQUIRE_DB=1 \
+            mariadb:10.11 bash ops/migrate/tests/check-legacy-dump.test.sh
+
   frontend:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -230,7 +297,7 @@ jobs:
 
   # 本番と同じく、ビルドした FE を Laravel から同じオリジンで配信し、ブラウザで画面を確かめる
   e2e:
-    if: github.base_ref != 'release'
+    if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -260,7 +327,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none

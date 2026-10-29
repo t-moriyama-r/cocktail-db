@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CategoryRole;
 use Database\Factories\CategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
  *
  * 親子は列に持たず、閉包表(category_closures)だけで持つ。閉包表の行には自分自身(depth 0)も入るため、
  * 祖先・子孫のリレーションは depth 0 の行を除いて引く。
+ *
+ * @property CategoryRole|null $role 根の役割。根だけが値を持つ(docs/decisions/category-root-role.md)
  */
 #[Fillable([
     'name', 'name_search', 'name_eng', 'description', 'role',
@@ -95,6 +98,7 @@ class Category extends Model
     protected function casts(): array
     {
         return [
+            'role' => CategoryRole::class,
             'is_major' => 'boolean',
             'is_like' => 'boolean',
             'is_powder' => 'boolean',

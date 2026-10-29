@@ -8,14 +8,24 @@ use Tests\Support\SchemaShape;
 
 uses(RefreshDatabase::class)->group('db');
 
-it('TC-23-03: methods は旧 m_method と同じ列で、作成・更新の時刻を持たない', function () {
+it('TC-23-03: methods は旧 m_method と同じ列(と、#40 で足した用語への列)で、作成・更新の時刻を持たない', function () {
     expect(SchemaShape::columns('methods'))->toBe([
         'id' => ['bigint(20) unsigned', false, null],
         'name' => ['varchar(255)', false, null],
         'name_eng' => ['varchar(255)', false, null],
         'description' => ['text', false, null],
+        'dictionary_id' => ['bigint(20) unsigned', true, 'NULL'],
     ])
-        ->and(SchemaShape::indexes('methods'))->toBe(['primary' => ['id']]);
+        ->and(SchemaShape::indexes('methods'))->toEqualCanonicalizing([
+            'primary' => ['id'],
+            'methods_dictionary_id_foreign' => ['dictionary_id'],
+        ]);
+});
+
+it('TC-40-21: methods.dictionary_id は用語辞典を指し、指された用語は消せない(RESTRICT)', function () {
+    expect(SchemaShape::foreignKeys('methods'))->toBe([
+        ['dictionary_id', 'dictionaries', 'id', 'restrict'],
+    ]);
 });
 
 it('TC-23-04: ices は旧 m_ice と同じ列で、英名だけ null 可', function () {
@@ -145,16 +155,17 @@ it('TC-23-10: affiliates の列の型・null 可が設計どおり(#247 の時�
     ]);
 });
 
-it('TC-23-11: affiliates の索引は (category_id, brand_key) の unique・brand_id・last_viewed_at で、外部キーは categories だけ', function () {
+it('TC-23-11: affiliates の索引は (category_id, brand_key) の unique・brand_id・last_viewed_at で、外部キーは categories と brands', function () {
     expect(SchemaShape::indexes('affiliates'))->toEqualCanonicalizing([
         'primary' => ['id'],
         'affiliates_category_id_brand_key_unique' => ['category_id', 'brand_key'],
         'affiliates_brand_id_index' => ['brand_id'],
         'affiliates_last_viewed_at_index' => ['last_viewed_at'],
     ])
-        // brand_id の外部キー(brands への CASCADE)は、brands(#22)と両方そろってから足す
-        ->and(SchemaShape::foreignKeys('affiliates'))->toBe([
+        // brand_id の外部キー(brands への CASCADE)は、brands(#22)と両方そろった後に #325 で足した(TC-325-02)
+        ->and(SchemaShape::foreignKeys('affiliates'))->toEqualCanonicalizing([
             ['category_id', 'categories', 'id', 'restrict'],
+            ['brand_id', 'brands', 'id', 'cascade'],
         ]);
 });
 

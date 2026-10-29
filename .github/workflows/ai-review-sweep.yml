@@ -2,14 +2,16 @@
 #
 # private のリポジトリでは、定期実行は PR が無くても 1 回 1 分ずつ課金される。1 時間ごとの定期実行を 2 本(この見回りと
 # pr-status.yml の出し直し)持つと月 1,400 分ほどになるので、1 本のジョブにまとめて 2 時間ごとにしている。
-# 人が作業しているあいだは、pr-patrol スキルで同じ見回りを早めに起こせる
+# 人が作業しているあいだは、pr-patrol スキルで同じ見回りを早めに起こせる。
+# schedule は GitHub が混むと遅れたり落とされたりするので、PR に動きがあれば、CI の終わりに patrol-kick.yml が
+# 前の回から 1 時間たったところで起こす(PR に動きのある日は 1 時間ごとになる。#269)
 #
 # ai-review-loop.yml・ai-claude-review.yml はレビューやコメントが付いたときに動くが、Claude Code が途中で止まった・上限に当たった・
 # レビューがワークフローを起こさなかった(GITHUB_TOKEN で付いたものなど)・ワークフローを入れる前だった、ときは、そのまま残る。
 # 候補はシェルで絞り、理由をジョブのログに出す。Claude Code はここでは動かさず、次のワークフローを workflow_dispatch で呼ぶ
 #
-# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-approval が
-# 付いていない(人の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
+# 見る PR: オーナーが作った、draft でない、フォークからでない、ラベル needs-human / needs-local / needs-manual / needs-approval が
+# 付いていない(人か手元の番)、最後に動きがあってから 1 時間以上たった(ai-review-loop.yml が動いている途中のものを拾わない)PR。
 # ai-in-actions が付いていれば 3 時間待つ(Actions が対応している途中。止まって印だけ残ったものは、そのあと拾う)
 #
 # 向き先が staging・release の PR(昇格の PR)は、返信待ちの指摘があっても ai-review-loop.yml を呼ばない(head が保護されたブランチ(develop・staging)で
@@ -20,9 +22,15 @@
 #   - いまのコミットに CodeRabbit のレビューも代わりの Claude のレビュー(<!-- ai-dev:claude-review -->)も付いていない
 #     → .github/scripts/request-review.sh。オーナーの依頼がまだ無ければオーナーの PAT で CodeRabbit に頼み、
 #       依頼に上限が返った・30 分たっても返事もレビューも無い・依頼を書けなかったときだけ ai-claude-review.yml を呼ぶ。
-#       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)
+#       ボット(Actions の Claude)の依頼には CodeRabbit が応じないので、依頼として数えない(#227)。
+#       push されたコミットの依頼は、CI の終わりに review-on-push.yml が出す(#366)。ここはそれが動かなかった・失敗したときの取りこぼしを拾う
 #   - レビュー済みで返信待ちも無いのに開いたまま → ai-auto-merge.yml(マージするか、人の手でマージするものとして知らせるかはそちらが決める)。
-#     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる
+#     ai-in-actions が残っていれば、自動マージはそれで見送るので、ai-review-loop.yml に終わりの処理をさせる。
+#     返信済みで未解決のスレッドだけが残っていれば、ai-auto-merge.yml が needs-human で人に頼む
+#
+# needs-human の付いた PR は人の番なので上のどれも呼ばないが、ai-auto-merge.yml が「返信済みで未解決のスレッド」の理由で付けたものは、
+# 人がスレッドをすべて解決したら外して ai-auto-merge.yml を呼ぶ(.github/scripts/thread-handoff.sh release。スレッドの解決では
+# ワークフローが起きない。pull_request_review_thread は Actions のトリガーに無い。#388)。最後の動きからの時間は待たない
 #
 # ワークフローを呼ぶので actions: write が要る。Claude Code を動かさないジョブなので渡してよい。
 # 必要な secret: CODERABBIT_REQUEST_TOKEN(オーナーの fine-grained PAT。このリポジトリの Pull requests: write)
@@ -30,7 +38,7 @@ name: 止まったレビューを見回る
 
 on:
   schedule:
-    - cron: '30 */2 * * *'   # 2 時間ごと(ほかの定期実行の 0・10・20 分と重ならないよう 30 分)
+    - cron: '30 */2 * * *'   # 2 時間ごと(ほかの定期実行の 0・10・20 分と重ならないよう 30 分)。PR に動きがあれば patrol-kick.yml も起こす
   workflow_dispatch:
 
 permissions:
@@ -60,6 +68,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           sparse-checkout: .github/scripts
+          persist-credentials: false
 
       - name: 候補を絞って、止まったところのワークフローを呼ぶ
         env:
@@ -68,12 +77,18 @@ jobs:
           now=$(date -u +%s)
           for n in $(gh pr list -R "$REPO" --state open --author "$OWNER" --limit 100 --json number --jq '.[].number'); do
             skip() { echo "#$n 見送り: $*"; }
-            pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,baseRefName,labels,updatedAt,headRefOid,commits)
+            pr=$(gh pr view "$n" -R "$REPO" --json isDraft,isCrossRepository,baseRefName,labels,updatedAt,headRefOid)
             promotion=false
             case "$(jq -r .baseRefName <<<"$pr")" in staging | release) promotion=true ;; esac
             if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then skip "draft"; continue; fi
             if [ "$(jq -r .isCrossRepository <<<"$pr")" = true ]; then skip "フォークから"; continue; fi
-            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-approval"))] | join(",")' <<<"$pr")
+            # 返信済みで未解決のスレッドを人に頼んだ PR は、人がすべて解決したら needs-human を外して自動マージの判定に戻す。
+            # スレッドの解決ではワークフローが起きないので、ここで拾う。解決は PR の更新に数えられることがあるので、待たずに見る
+            if jq -e '.labels | any(.name == "needs-human")' <<<"$pr" >/dev/null; then
+              bash .github/scripts/thread-handoff.sh release "$REPO" "$n" || echo "::warning::#$n の needs-human を外せるか確かめられなかった"
+              continue
+            fi
+            label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-approval"))] | join(",")' <<<"$pr")
             if [ -n "$label" ]; then skip "ラベル $label"; continue; fi
             min=$MIN_IDLE_MINUTES
             if jq -e '.labels | any(.name == "ai-in-actions")' <<<"$pr" >/dev/null; then min=$MIN_IDLE_MINUTES_IN_ACTIONS; fi
@@ -88,7 +103,10 @@ jobs:
               fi
             fi
             head=$(jq -r .headRefOid <<<"$pr")
-            committed=$(jq -r '.commits[-1].committedDate' <<<"$pr")
+            # --json commits は先頭 100 件までなので(RC-06)、いまのコミットの日時を直接取る
+            if ! committed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date); then
+              echo "::warning::#$n のいまのコミット ${head:0:7} の日時を読めなかった"; continue
+            fi
             comments=$(gh api --paginate --slurp "repos/$REPO/issues/$n/comments?per_page=100" | jq 'add // []')
             # 「いまのコミットを見た」は ai-auto-merge.yml と同じに数える。そのコミットへの本文のあるレビューか、
             # そのコミットより後の「Review finished」「No actionable comments」のコメント(指摘が無いとレビューは付かない)

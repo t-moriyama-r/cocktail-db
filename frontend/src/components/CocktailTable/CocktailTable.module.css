@@ -1,0 +1,170 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+/* 見出しは押すと並べ替わる。見た目は見出しの文字のままにし、ボタンの枠は出さない */
+.sortButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sortMark {
+  margin-left: var(--space-1);
+  font-size: 0.75em;
+}
+
+/* 列の幅と寄せ方は旧(Results/Tables/table.scss)に合わせる */
+.method {
+  min-width: 40px;
+  text-align: center;
+}
+
+.name {
+  text-align: left;
+}
+
+.nameEng {
+  width: 200px;
+  text-align: left;
+}
+
+.base {
+  text-align: left;
+}
+
+.baseEng {
+  color: var(--color-text-muted);
+}
+
+.recipeCount {
+  text-align: center;
+}
+
+.sweet {
+  width: 3em;
+  text-align: center;
+}
+
+.rate {
+  width: 5em;
+  text-align: center;
+}
+
+.table td.rate {
+  color: var(--color-rate);
+}
+
+/* 旧は ★ のある行だけ左に寄せ、★ の数を左からそろえて見せていた */
+.table td.rateFilled {
+  text-align: left;
+}
+
+.strength {
+  width: 3em;
+}
+
+.table td.strength {
+  text-align: right;
+}
+
+.youtube {
+  width: 3em;
+  text-align: center;
+}
+
+/* 動画のあるカクテルの行は、リンクの色を変えて目立たせる(旧 table.scss の hasMovie) */
+.hasMovie a,
+.hasMovie .baseEng {
+  color: var(--color-has-movie);
+}
+
+.hasMovie .youtube svg {
+  color: var(--color-youtube);
+}
+
+/* 960px 未満: 旧と同じく英名の列と、ベースの英名を出さない */
+@media (max-width: 959px) {
+  .nameEng,
+  .baseEng {
+    display: none;
+  }
+
+  .base {
+    max-width: 150px;
+  }
+}
+
+/* 700px 未満: 旧と同じくベースの列も出さない(幅の区切りの例外。docs/design/style.md の「幅の区切り」) */
+@media (max-width: 699px) {
+  .base {
+    display: none;
+  }
+}
+
+@media (min-width: 960px) {
+  .base {
+    max-width: 180px;
+  }
+
+  .name {
+    max-width: 300px;
+  }
+}
+
+/* 600px 未満: 名前を 1 段目、製法・必須・甘さ・評価・度数・動画を 2 段目に並べる。見出しも同じ 2 段にし、押して並べ替えられるままにする */
+@media (max-width: 599px) {
+  .table thead tr,
+  .table tbody tr {
+    display: grid;
+    /* 製法(アイコン)・必須・甘さ・評価(★ 5 つ)・度数・動画 */
+    grid-template-columns: 2em 1fr 1fr 6.5em 1fr 1fr;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .table th,
+  .table td {
+    grid-row: 2;
+    width: auto;
+    padding: var(--space-1);
+    border-bottom: none;
+    text-align: center;
+  }
+
+  .table th.name,
+  .table td.name {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  .table .nameEng,
+  .table .base {
+    display: none;
+  }
+
+  .table td.rateFilled,
+  .table td.strength {
+    text-align: center;
+  }
+}

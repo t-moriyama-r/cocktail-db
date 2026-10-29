@@ -23,7 +23,7 @@ main() {
 	setup_fake_gh
 
 	check TC-232-01 'コンフリクトしている ready の PR を選ぶ' "$(pr)" '[]' 1
-	check TC-232-02 'draft も選ぶ' "$(pr '.isDraft = true')" '[]' 1
+	check TC-410-01 'draft は選ばない' "$(pr '.isDraft = true')" '[]' ''
 	check TC-232-03 'needs-approval(人のマージ待ち)も選ぶ' "$(pr '.labels = [{name: "needs-approval"}]')" '[]' 1
 	check TC-232-04 'コンフリクトしていない' "$(pr '.mergeable = "MERGEABLE"')" '[]' ''
 	check_unknown TC-232-05 'UNKNOWN の間は取り直し、CONFLICTING になれば選ぶ'
@@ -32,6 +32,8 @@ main() {
 	check TC-232-08 'オーナー以外が作った' "$(pr '.author.login = "someone"')" '[]' ''
 	check TC-232-09 '向き先が develop でない(積んでいる途中)' "$(pr '.baseRefName = "issue-1-base"')" '[]' ''
 	check TC-232-10 'needs-human が付いている' "$(pr '.labels = [{name: "needs-human"}]')" '[]' ''
+	check TC-456-05 'needs-local が付いている' "$(pr '.labels = [{name: "needs-local"}]')" '[]' ''
+	check TC-496-06 'needs-manual が付いている' "$(pr '.labels = [{name: "needs-manual"}]')" '[]' ''
 	check TC-232-11 'needs-decision が付いている' "$(pr '.labels = [{name: "needs-decision"}]')" '[]' ''
 	check TC-232-12 'ai-in-actions が付いている(Actions が対応中)' "$(pr '.labels = [{name: "ai-in-actions"}]')" '[]' ''
 	check TC-232-13 '最後のコミットから 59 分' "$(pr)" '[]' '' 2026-10-25T11:01:00Z
@@ -41,31 +43,35 @@ main() {
 	check TC-232-17 '人の書いた目印は数えない' "$(pr)" "[$(comment User "<!-- ai-dev:conflict-resolve sha=$HEAD base=$BASE -->")]" 1
 	check TC-232-18 '目印の後に大きなコメントがあっても見落とさない' "$(pr)" \
 		"[$(comment Bot "<!-- ai-dev:conflict-resolve sha=$HEAD base=$BASE -->"), $(jq -nc '{user: {type: "Bot"}, body: ("x" * 300000)}')]" ''
-	check_all TC-232-19 '番号なしなら開いている PR をすべて見て、コンフリクトしているものだけを選ぶ'
+	check_all TC-232-19 '番号なしなら開いている PR をすべて見て、コンフリクトしている ready のものだけを選ぶ'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }
 
 # gh api・gh pr view・gh pr list に、$FAKE_DIR に置いた JSON を返す。--jq は本物の jq で当てる
+# 外の jq の出力から \r を落とす。Windows の jq は CRLF で出し、Git Bash のコマンド置換は最後の行の \r しか落とさないので、
+# 番号が 1\r のようになって pr-1\r.json を探してしまう(#362)。本物の gh の --jq は Windows でも LF で出す
 setup_fake_gh() {
 	cat >"$FAKE/gh" <<-'EOF'
 		#!/usr/bin/env bash
+		# tr にパイプしても、jq が失敗したら gh も失敗で返す(ファイルが無いときなど)
+		set -o pipefail
 		jq_expr=.
 		args=("$@")
 		for i in "${!args[@]}"; do [ "${args[$i]}" = --jq ] && jq_expr=${args[$((i + 1))]}; done
 		case "$*" in
 		  "api repos/o/r --jq"*) echo develop ;;
 		  "api repos/o/r/branches/develop"*) echo "$FAKE_BASE" ;;
-		  "pr list"*) jq -r "$jq_expr" "$FAKE_DIR/list.json" ;;
+		  "pr list"*) jq -r "$jq_expr" "$FAKE_DIR/list.json" | tr -d '\r' ;;
 		  "pr view"*)
 		    n=$3
 		    # pr-<番号>.json.<回数> があれば、呼ばれた回数ごとに返すものを変える(UNKNOWN から変わる場合)
 		    count=$(($(cat "$FAKE_DIR/count-$n" 2>/dev/null || echo 0) + 1))
 		    echo "$count" >"$FAKE_DIR/count-$n"
 		    if [ -f "$FAKE_DIR/pr-$n.json.$count" ]; then cat "$FAKE_DIR/pr-$n.json.$count"; else cat "$FAKE_DIR/pr-$n.json"; fi ;;
-		  *"/commits/"*) jq -r "$jq_expr" "$FAKE_DIR/commit.json" ;;
-		  *"/comments"*) jq -r "$jq_expr" "$FAKE_DIR/comments-$(sed -E 's#.*/issues/([0-9]+)/.*#\1#' <<<"$*").json" ;;
+		  *"/commits/"*) jq -r "$jq_expr" "$FAKE_DIR/commit.json" | tr -d '\r' ;;
+		  *"/comments"*) jq -r "$jq_expr" "$FAKE_DIR/comments-$(sed -E 's#.*/issues/([0-9]+)/.*#\1#' <<<"$*").json" | tr -d '\r' ;;
 		  *) echo "unexpected gh $*" >&2; exit 1 ;;
 		esac
 	EOF
@@ -111,7 +117,7 @@ check_all() {
 	pr '.mergeable = "MERGEABLE"' >"$FAKE/pr-2.json"
 	pr '.isDraft = true' >"$FAKE/pr-3.json"
 	for n in 1 2 3; do echo '[]' >"$FAKE/comments-$n.json"; done
-	assert "$1" "$2" 1,3 "$(run)"
+	assert "$1" "$2" 1 "$(run)"
 }
 
 assert() {

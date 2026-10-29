@@ -2,14 +2,21 @@ name: branch-flow
 
 # デプロイするブランチへの PR が、決まった元のブランチから来ているかを確かめる。
 # staging(stg 環境)へは develop から、release(本番)へは staging から出す。ステージングで確かめていないものを本番に出さないため。
+# release 向けの PR では、タイトルが「【運用】release vX.Y.Z」の形で、版が前のタグより大きいかも確かめる(#334。決まりは CLAUDE.md の手順 9)。
+# マージしたらその版のタグと GitHub Release を作る(release-tag.yml)。staging 向けの PR のタイトルは、文書の決まりだけで確かめない
 # staging・release の保護で、このジョブ(branch-flow)を必須のチェックにしている
+# pull_request_target で、PR の中の定義ではなく向き先のブランチ(staging・release)にあるこのファイルで動かす。
+# pull_request だと、PR の中でこのファイルを書き換えれば、決まった元でないブランチからの PR でも判定を通せてしまうため(#205)。
+# PR のコードは checkout も実行もしない(使うスクリプトも向き先のブランチから取る。RC-04)
 on:
-  pull_request:
+  pull_request_target:
     branches: [staging, release]
-    # 向き先を変えたときにも確かめ直す
+    # 向き先・タイトルを変えたときにも確かめ直す
     types: [opened, synchronize, reopened, edited]
 
-permissions: {}
+# タグの一覧を読む(release 向けの PR のタイトルの確かめ)
+permissions:
+  contents: read
 
 jobs:
   branch-flow:
@@ -32,3 +39,23 @@ jobs:
             exit 1
           fi
           echo "$BASE <- $expected"
+
+      # 向き先のブランチ(release)のスクリプトを取る。PR の head は取らない
+      - uses: actions/checkout@v7
+        if: github.base_ref == 'release'
+        with:
+          ref: ${{ github.base_ref }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Check the release title
+        if: github.base_ref == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # タグを読めなかったときは、タグが無いのと同じに扱わずに落とす(RC-01)
+          tags=$(gh api "repos/$REPO/git/matching-refs/tags/v" --paginate --jq '.[].ref | sub("^refs/tags/"; "")')
+          version=$(printf '%s\n' "$tags" | bash .github/scripts/release-version.sh check "$TITLE")
+          echo "release $version"

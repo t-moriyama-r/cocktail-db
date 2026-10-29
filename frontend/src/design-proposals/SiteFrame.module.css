@@ -1,0 +1,131 @@
+.frame {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height);
+}
+
+.frame a {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.frame a:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--header-height);
+  padding: 0 var(--space-3);
+  background: var(--color-header-bg);
+  box-shadow: var(--header-shadow);
+}
+
+.siteTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-lg);
+  font-weight: var(--heading-weight);
+  white-space: nowrap;
+}
+
+.frame .siteTitle {
+  color: var(--color-header-text);
+}
+
+.logo {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+/* 狭い幅ではサイト名を隠し、旧と同じくアイコンだけを出す */
+.siteName {
+  display: none;
+}
+
+.searchButton {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.searchButtonLong {
+  display: none;
+}
+
+.nameSearch {
+  min-width: 0;
+  flex: 1;
+  max-width: 280px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.count {
+  display: none;
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-header-text);
+  white-space: nowrap;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-3);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-footer-bg);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 600px) {
+  .count {
+    display: inline;
+  }
+}
+
+@media (min-width: 960px) {
+  .siteName,
+  .searchButtonLong {
+    display: inline;
+  }
+
+  .main {
+    padding: var(--space-5) var(--space-4);
+  }
+}

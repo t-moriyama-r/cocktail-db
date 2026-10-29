@@ -13,13 +13,13 @@ SCRIPT="$HERE/../pr-status.sh"
 FAILED=0
 PASSED=0
 
-# レビューが済み、指摘も CI の失敗も無い、マージを待つだけの PR。各ケースはここから 1 つだけ変える
-BASE='{"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","labels":[],"failedChecks":0,"unansweredThreads":0,"headReviewed":true}'
+# レビューが済み、指摘も CI の失敗も無く、GitHub がマージを許す PR。各ケースはここから変える
+BASE='{"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","labels":[],"failedChecks":0,"pendingChecks":0,"unansweredThreads":0,"unresolvedThreads":0,"headReviewed":true}'
 
 main() {
 	check TC-216-01 '閉じた PR はラベルなし' '.state = "MERGED"' ''
 	check TC-216-02 '下書き' '.isDraft = true' '状態:作業中'
-	check TC-216-03 '下書きは、ほかの条件より先' '.isDraft = true | .labels = ["needs-human"] | .failedChecks = 1' '状態:作業中'
+	check TC-216-03 '下書きは、人の判断待ち・手元の作業待ち以外の条件より先' '.isDraft = true | .labels = ["needs-approval", "ai-in-actions"] | .mergeable = "CONFLICTING" | .failedChecks = 1 | .unansweredThreads = 1 | .headReviewed = false' '状態:作業中'
 	check TC-216-04 'needs-human' '.labels = ["needs-human"]' '状態:人の判断待ち'
 	check TC-216-05 'needs-decision' '.labels = ["task", "needs-decision"]' '状態:人の判断待ち'
 	check TC-216-06 'needs-approval' '.labels = ["needs-approval"]' '状態:人のマージ待ち'
@@ -48,8 +48,100 @@ main() {
 	check TC-332-10 'staging 向けの下書きは作業中' '.baseRefName = "staging" | .isDraft = true' '状態:作業中'
 	check TC-332-11 'develop・main など、昇格でない向き先は従来どおり' '.baseRefName = "issue-1-base" | .unansweredThreads = 1' '状態:レビュー対応中'
 
+	# マージ待ち・人のマージ待ちは、GitHub がマージを許すときだけ。止めている理由ごとにラベルを分ける
+	check TC-385-01 '返信は済んだが、未解決のスレッドがある' '.unresolvedThreads = 3 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
+	check TC-385-02 '必須のチェックが 1 つも付いていない(BLOCKED で、ほかの理由が無い)' '.mergeStateStatus = "BLOCKED"' '状態:CI未実行'
+	check TC-385-03 '必須のチェックが実行中' '.pendingChecks = 2 | .mergeStateStatus = "BLOCKED"' '状態:CI実行中'
+	check TC-385-04 'CI 実行中は、指摘の解決待ちより先' '.pendingChecks = 1 | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:CI実行中'
+	check TC-385-05 'レビュー待ちは、CI 実行中より先' '.headReviewed = false | .pendingChecks = 1 | .mergeStateStatus = "BLOCKED"' '状態:レビュー待ち'
+	check TC-385-06 'レビュー対応中は、指摘の解決待ちより先' '.unansweredThreads = 1 | .unresolvedThreads = 2 | .mergeStateStatus = "BLOCKED"' '状態:レビュー対応中'
+	check TC-385-07 'GitHub が計算中(UNKNOWN)' '.mergeStateStatus = "UNKNOWN"' '状態:確認中'
+	check TC-385-08 'ほかの理由でマージできない(BEHIND)' '.mergeStateStatus = "BEHIND"' '状態:マージ不可'
+	check TC-385-09 '必須でないチェックの失敗(UNSTABLE)はマージできる' '.mergeStateStatus = "UNSTABLE"' '状態:マージ待ち'
+	check TC-385-10 'HAS_HOOKS はマージできる' '.mergeStateStatus = "HAS_HOOKS"' '状態:マージ待ち'
+	check TC-385-11 'needs-approval でも、未解決のスレッドがあれば指摘の解決待ち' '.labels = ["needs-approval"] | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
+	check TC-385-12 'needs-approval でも、コンフリクトならコンフリクト' '.labels = ["needs-approval"] | .mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"' '状態:コンフリクト'
+	check TC-385-13 'needs-approval でも、必須のチェックが付いていなければ CI未実行' '.labels = ["needs-approval"] | .mergeStateStatus = "BLOCKED"' '状態:CI未実行'
+	check TC-385-14 'needs-approval は、ai-in-actions が残っていてもレビュー対応中にしない' '.labels = ["needs-approval", "ai-in-actions"]' '状態:人のマージ待ち'
+	check TC-385-15 'staging 向けで、指摘に返信が済み未解決のスレッドがある' '.baseRefName = "staging" | .unresolvedThreads = 2 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
+	check TC-385-16 'staging 向けで、返信待ちの指摘があり未解決' '.baseRefName = "staging" | .unansweredThreads = 1 | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
+	check TC-385-17 'release 向けで、必須のチェックが付いていない' '.baseRefName = "release" | .mergeStateStatus = "BLOCKED"' '状態:CI未実行'
+	check TC-456-01 'needs-local は見回り待ち(#496 で手元の作業待ちから分けた)' '.labels = ["needs-local"] | .failedChecks = 1' '状態:見回り待ち(証跡など)'
+	check TC-456-02 '人の判断待ちは、見回り待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-456-03 '見回り待ちは、下書きより先' '.isDraft = true | .labels = ["needs-local"]' '状態:見回り待ち(証跡など)'
+
+	# 人が手を動かさないと進まない作業(needs-manual)は手元の作業待ち。見回りが片付ける needs-local と分ける(#496)
+	check TC-496-01 'needs-manual は手元の作業待ち' '.labels = ["needs-manual"] | .failedChecks = 1' '状態:手元の作業待ち'
+	check TC-496-02 'needs-manual と needs-local の両方なら、待っていても進まない手元の作業待ち' '.labels = ["needs-local", "needs-manual"]' '状態:手元の作業待ち'
+	check TC-496-03 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-manual", "needs-human"]' '状態:人の判断待ち'
+	check TC-496-04 '下書きで needs-manual' '.isDraft = true | .labels = ["needs-manual"]' '状態:手元の作業待ち'
+	check TC-496-05 '閉じた PR は、needs-manual があってもラベルなし' '.state = "CLOSED" | .labels = ["needs-manual"]' ''
+
+	# 下書きでも、人の判断待ち・手元の作業待ち・見回り待ちのラベルがあれば、それを出す(#471)
+	check TC-471-01 '下書きで needs-local' '.isDraft = true | .labels = ["needs-local"] | .failedChecks = 1' '状態:見回り待ち(証跡など)'
+	check TC-471-02 '下書きで needs-human' '.isDraft = true | .labels = ["needs-human"] | .failedChecks = 1' '状態:人の判断待ち'
+	check TC-471-03 '下書きで needs-decision' '.isDraft = true | .labels = ["task", "needs-decision"]' '状態:人の判断待ち'
+	check TC-471-04 '下書きで needs-local と needs-human の両方' '.isDraft = true | .labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-471-05 '下書きで needs-local と needs-decision の両方' '.isDraft = true | .labels = ["needs-decision", "needs-local"]' '状態:人の判断待ち'
+	check TC-471-06 '下書きで待ちのラベルが無い' '.isDraft = true | .labels = ["task"]' '状態:作業中'
+	check TC-471-07 '下書きで needs-approval だけ(待ちのラベルではない)' '.isDraft = true | .labels = ["needs-approval"]' '状態:作業中'
+	check TC-471-08 '閉じた下書きは、needs-local があってもラベルなし' '.state = "CLOSED" | .isDraft = true | .labels = ["needs-local"]' ''
+
+	# 積み上げの PR(向き先が develop・staging・release 以外)。ai-auto-merge.yml は見送るので、マージ待ちにしない
+	check TC-460-01 '積み上げの PR で、GitHub がマージを許す' '.baseRefName = "issue-47-affiliate-api"' '状態:ベースブランチ待ち'
+	check TC-460-02 'develop 向けは、これまでどおりマージ待ち' '.baseRefName = "develop"' '状態:マージ待ち'
+	check TC-460-03 'staging 向けは、これまでどおり人のマージ待ち' '.baseRefName = "staging"' '状態:人のマージ待ち'
+	check TC-460-04 'release 向けは、これまでどおり人のマージ待ち' '.baseRefName = "release"' '状態:人のマージ待ち'
+	check TC-460-05 '積み上げの PR でも、コンフリクトはコンフリクト' '.baseRefName = "issue-47-affiliate-api" | .mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"' '状態:コンフリクト'
+	check TC-460-06 '積み上げの PR でも、GitHub がマージを許さなければ(BEHIND)マージ不可' '.baseRefName = "issue-47-affiliate-api" | .mergeStateStatus = "BEHIND"' '状態:マージ不可'
+	check TC-460-07 '積み上げの PR でも、needs-approval は人のマージ待ち(人のマージ待ちの後に判定する)' '.baseRefName = "issue-47-affiliate-api" | .labels = ["needs-approval"]' '状態:人のマージ待ち'
+	check TC-460-08 '積み上げの PR でも、UNSTABLE(必須でないチェックの失敗)はベースブランチ待ち' '.baseRefName = "issue-47-affiliate-api" | .mergeStateStatus = "UNSTABLE"' '状態:ベースブランチ待ち'
+	check TC-460-09 '積み上げの PR でも、下書きは作業中' '.baseRefName = "issue-47-affiliate-api" | .isDraft = true' '状態:作業中'
+	check TC-460-10 '積み上げの PR でも、いまのコミットが未レビューならレビュー待ち' '.baseRefName = "issue-47-affiliate-api" | .headReviewed = false' '状態:レビュー待ち'
+	check TC-460-11 '事実に向き先が無いときは develop 向けとみなす(従来どおりマージ待ち)' 'del(.baseRefName)' '状態:マージ待ち'
+	check TC-460-12 '向き先が空文字のときも develop 向けとみなす' '.baseRefName = ""' '状態:マージ待ち'
+
+	# facts: gh をスタブにして、必須のチェックの終了コードごとに数えられるかを確かめる
+	check_checks TC-385-18 '必須のチェックが失敗(gh は終了コード 1 で、JSON を標準出力に出す)' 1 '[{"bucket":"fail"},{"bucket":"pass"}]' '' '1 0'
+	check_checks TC-385-19 '必須のチェックが実行中(終了コード 8)' 8 '[{"bucket":"pending"},{"bucket":"pass"}]' '' '0 1'
+	check_checks TC-385-20 '必須のチェックがすべて成功(終了コード 0)' 0 '[{"bucket":"pass"}]' '' '0 0'
+	check_checks TC-385-21 '必須のチェックが 1 つも付いていない(終了コード 1、標準出力は空)' 1 '' 'no required checks reported on the branch' '0 0'
+	check_checks TC-385-22 '必須のチェックを読めない(JSON でも未付与でもない)' 1 '' 'HTTP 500' 'error'
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
+}
+
+check_checks() {
+	local id=$1 title=$2 rc=$3 out=$4 err=$5 expected=$6 actual bin
+	bin=$(mktemp -d)
+	cat >"$bin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+"pr checks")
+	printf '%s' "$STUB_OUT"
+	printf '%s' "$STUB_ERR" >&2
+	exit "$STUB_RC"
+	;;
+"pr view")
+	echo '{"state":"OPEN","isDraft":false,"labels":[],"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"develop","headRefOid":"abc","commits":[{"committedDate":"2026-01-01T00:00:00Z"}]}'
+	;;
+"api graphql") echo 0 ;;
+*) echo '[]' ;;
+esac
+STUB
+	chmod +x "$bin/gh"
+	actual=$(PATH="$bin:$PATH" STUB_RC=$rc STUB_OUT=$out STUB_ERR=$err bash "$SCRIPT" o/r 1 --dry-run 2>/dev/null |
+		sed 's/^#1 //; s/ => .*//' | jq -r '"\(.failedChecks) \(.pendingChecks)"' 2>/dev/null) || actual=
+	[ -n "$actual" ] || actual=error
+	rm -rf "$bin"
+	if [ "$actual" = "$expected" ]; then
+		PASSED=$((PASSED + 1))
+		echo "ok   $id $title"
+	else
+		FAILED=$((FAILED + 1))
+		echo "FAIL $id $title: expected '$expected', got '$actual'"
+	fi
 }
 
 check() {
