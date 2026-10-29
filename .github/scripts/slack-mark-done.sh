@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 #
-# 人に頼んだ Slack の通知(needs-human・needs-local・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足す。
+# 人に頼んだ Slack の通知(needs-human・needs-local・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足して、
+# 残りを打ち消し線にする。DM を見返したときに、もう見なくてよい通知を読み飛ばせるようにするため。
 #
 # 頼んだ通知は、notify-needs-human.yml が bot で送るときに、どの PR・issue のどのラベルかをメッセージのメタデータ
 # (event_type ai_dev_ask)に持たせている。GitHub 側に記録を残さないので、bot と人の DM の履歴を読んで頼んだ通知を探す。
 # 片付いたかは GitHub の今の状態で決める。ラベルを外すのは Actions の中(GITHUB_TOKEN)のことが多く、そのときは unlabeled の
 # イベントが起きないため、「外れた」という出来事ではなく、今の状態と見比べる。だから、どこから何度呼んでもよい。
-# 「済」を付けた通知は、メタデータを ai_dev_done に書き換えて、次からは見ない。
+# 「済」を付けた通知は、メタデータを ai_dev_done に書き換えて、次からは見ない。ただし、打ち消し線を入れる前(#491 より前)に
+# 「済」だけ付けた通知は、片付いたかを見直さずに打ち消し線だけ入れる。
 #
 # 片付いたとみなすのは、次のどれか
 # - PR・issue が閉じた
@@ -43,7 +45,7 @@ slack_mark_done() {
 	fi
 
 	local pending
-	pending=$(jq -c '.[] | select(.done | not)' <<<"$asks")
+	pending=$(jq -c '.[] | select((.done | not) or .unstruck)' <<<"$asks")
 	if [ -z "$pending" ]; then
 		echo "「済」を付けていない通知は無かった"
 		return 0
@@ -53,15 +55,19 @@ slack_mark_done() {
 	while read -r ask; do
 		number=$(jq -r .number <<<"$ask")
 		label=$(jq -r .label <<<"$ask")
-		why=$(settled_reason "$ask" "$number" "$label")
+		if [ "$(jq -r .unstruck <<<"$ask")" = true ]; then
+			why="前に「済」だけ付けた"
+		else
+			why=$(settled_reason "$ask" "$number" "$label")
+		fi
 		if [ -n "$why" ] && mark_done "$channel" "$ask"; then
 			echo "#$number の $label の通知に「済」を付けた($why)"
 		fi
 	done <<<"$pending"
 }
 
-# DM の履歴から、このリポジトリについて頼んだ通知を [{ts, text, number, label, done, superseded}] で返す。
-# superseded は、同じ PR・issue の同じラベルで、後から頼み直した通知があるもの
+# DM の履歴から、このリポジトリについて頼んだ通知を [{ts, text, number, label, done, unstruck, superseded}] で返す。
+# unstruck は、「済」を付けたが打ち消し線の無いもの。superseded は、同じ PR・issue の同じラベルで、後から頼み直した通知があるもの
 read_asks() {
 	local channel=$1 oldest cursor="" page messages="[]"
 	oldest=$(($(date -u +%s) - LOOKBACK_DAYS * 86400))
@@ -80,6 +86,7 @@ read_asks() {
 			| select(.metadata.event_payload.repo == $repo)
 			| {ts, text, number: (.metadata.event_payload.number | tostring), label: .metadata.event_payload.label,
 				done: (.metadata.event_type == "ai_dev_done")})
+		| map(. + {unstruck: (.done and (.text | startswith("【済】")) and (.text | startswith("【済】~") | not))})
 		| . as $all
 		| map(. as $a | . + {superseded: any($all[]; .number == $a.number and .label == $a.label
 			and (.ts | tonumber) > ($a.ts | tonumber))})' <<<"$messages"
@@ -115,9 +122,14 @@ mark_done() {
 		return 1
 	fi
 
-	res=$(jq -n --arg channel "$channel" --argjson ask "$ask" --arg repo "$REPO" '{
+	# Slack の打ち消し線(~…~)は行をまたがず、前後に空白があると効かないので、行ごとに中身を囲む。
+	# 引用の行は、印(履歴から読んだ本文では &gt; になっている)の後ろを囲む。空の行は ~~ がそのまま出るので囲まない
+	res=$(jq -n --arg channel "$channel" --argjson ask "$ask" --arg repo "$REPO" '
+	def strike: split("\n") | map(capture("^(?<q>(&gt;|>) ?)?(?<s>.*)$")
+		| (.q // "") + (.s | gsub("^\\s+|\\s+$"; "") | if . == "" then . else "~" + . + "~" end)) | join("\n");
+	{
 		channel: $channel, ts: $ask.ts,
-		text: ("【済】" + $ask.text),
+		text: ("【済】" + ($ask.text | ltrimstr("【済】") | strike)),
 		metadata: {event_type: "ai_dev_done", event_payload: {repo: $repo, number: $ask.number, label: $ask.label}}
 	}' | slack_json chat.update)
 	if [ "$(jq -r .ok <<<"$res")" != true ]; then
