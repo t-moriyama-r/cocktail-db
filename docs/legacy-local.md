@@ -95,9 +95,32 @@ docker rm -f cocktail-legacy-app cocktail-legacy-db; docker network rm cocktail-
 - 動くのは Laravel 6 の BE で、本番の BE(cocktail-legacy の `laravel13/`)とは認証まわりのルートなどが違う。カクテルの表示・検索の API は同じ(違いは cocktail-legacy の README の「本番との違い」)
 - **旧ソースの `public/index.php` は `../../cocktail` を読む**(本番の配置)。そのため旧ソースを `/app` と `/cocktail` の 2 か所にマウントしている
 - 接続先は環境変数で渡す。旧ソースの `.env` より環境変数が優先される(設定のキャッシュ `bootstrap/cache/config.php` が無いとき)。`.env` は書き換えない
-- POST の API は CSRF のトークンが要る。curl で直接呼ぶと 419 になるので、画面から操作する。セッションを `cookie` にしているのは、`array` だとトークンが保てず 419 になるため
+- POST の API は CSRF のトークンが要る。トークンを付けずに curl で呼ぶと 419 になる。トップのページで受け取った `XSRF-TOKEN` のクッキーを `X-XSRF-TOKEN` のヘッダーに付ければ、curl でも呼べる(下の「POST の API を curl で呼ぶ」)。セッションを `cookie` にしているのは、`array` だとトークンが保てず 419 になるため
 - 画面の読み込みに数秒かかる。Playwright で `networkidle` を待つとタイムアウトするので、`load` の後に待つ
 - jQuery の `.load` で出る `url.indexOf is not a function` は、旧の本番でも出るもので画面に影響しない
+
+## POST の API を curl で呼ぶ
+
+旧の API(`/api/cocktailDetail` など)は POST で、CSRF のトークンが要る。画面から操作しなくても、トップのページで受け取ったクッキーを使えば curl で呼べる。
+
+1. クッキーを保存しながらトップのページを開く。セッションのクッキーと `XSRF-TOKEN` のクッキーが入る
+2. `XSRF-TOKEN` の値は URL エンコードされて保存されているので、デコードして `X-XSRF-TOKEN` のヘッダーに付ける
+3. 保存したクッキーを送りながら POST する
+
+```bash
+JAR=<作業用のディレクトリ>/cookies.txt   # リポジトリの外
+
+# 1. トップを開き、クッキーを保存する
+curl -s -o /dev/null -c "$JAR" http://127.0.0.1:8000/
+# 2. XSRF-TOKEN を取り出して URL デコードする(%3D → = など)
+token=$(awk '$6 == "XSRF-TOKEN" { print $7 }' "$JAR")
+token=$(printf '%b' "${token//%/\\x}")
+[ -n "$token" ] || echo "XSRF-TOKEN のクッキーが取れなかった。次の curl は 419 になる。" >&2
+# 3. 同じクッキーを送り、トークンをヘッダーに付けて呼ぶ
+curl -si -b "$JAR" -c "$JAR" -H "X-XSRF-TOKEN: $token" \
+  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -d '{"id": 1}' http://127.0.0.1:8000/api/cocktailDetail
+```
 
 ## 本番の Google Analytics に計測を送らない
 

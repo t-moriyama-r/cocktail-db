@@ -1,0 +1,7 @@
+# actionlint の設定(CI の actionlint ジョブと手元のコマンドの両方が読む)
+paths:
+  .github/workflows/ai-review-loop.yml:
+    ignore:
+      # concurrency の queue は GitHub Actions が受け付けるが、actionlint は対応しない
+      # (rhysd/actionlint#746 は not planned で閉じられた)
+      - 'unexpected key "queue" for "concurrency" section'

@@ -19,7 +19,7 @@ BASE='{"state":"OPEN","isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus"
 main() {
 	check TC-216-01 '閉じた PR はラベルなし' '.state = "MERGED"' ''
 	check TC-216-02 '下書き' '.isDraft = true' '状態:作業中'
-	check TC-216-03 '下書きは、ほかの条件より先' '.isDraft = true | .labels = ["needs-human"] | .failedChecks = 1' '状態:作業中'
+	check TC-216-03 '下書きは、人の判断待ち・手元の作業待ち以外の条件より先' '.isDraft = true | .labels = ["needs-approval", "ai-in-actions"] | .mergeable = "CONFLICTING" | .failedChecks = 1 | .unansweredThreads = 1 | .headReviewed = false' '状態:作業中'
 	check TC-216-04 'needs-human' '.labels = ["needs-human"]' '状態:人の判断待ち'
 	check TC-216-05 'needs-decision' '.labels = ["task", "needs-decision"]' '状態:人の判断待ち'
 	check TC-216-06 'needs-approval' '.labels = ["needs-approval"]' '状態:人のマージ待ち'
@@ -66,9 +66,26 @@ main() {
 	check TC-385-15 'staging 向けで、指摘に返信が済み未解決のスレッドがある' '.baseRefName = "staging" | .unresolvedThreads = 2 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-16 'staging 向けで、返信待ちの指摘があり未解決' '.baseRefName = "staging" | .unansweredThreads = 1 | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-17 'release 向けで、必須のチェックが付いていない' '.baseRefName = "release" | .mergeStateStatus = "BLOCKED"' '状態:CI未実行'
-	check TC-456-01 'needs-local は手元の作業待ち' '.labels = ["needs-local"] | .failedChecks = 1' '状態:手元の作業待ち'
-	check TC-456-02 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
-	check TC-456-03 '下書きは、手元の作業待ちより先' '.isDraft = true | .labels = ["needs-local"]' '状態:作業中'
+	check TC-456-01 'needs-local は見回り待ち(#496 で手元の作業待ちから分けた)' '.labels = ["needs-local"] | .failedChecks = 1' '状態:見回り待ち(証跡など)'
+	check TC-456-02 '人の判断待ちは、見回り待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-456-03 '見回り待ちは、下書きより先' '.isDraft = true | .labels = ["needs-local"]' '状態:見回り待ち(証跡など)'
+
+	# 人が手を動かさないと進まない作業(needs-manual)は手元の作業待ち。見回りが片付ける needs-local と分ける(#496)
+	check TC-496-01 'needs-manual は手元の作業待ち' '.labels = ["needs-manual"] | .failedChecks = 1' '状態:手元の作業待ち'
+	check TC-496-02 'needs-manual と needs-local の両方なら、待っていても進まない手元の作業待ち' '.labels = ["needs-local", "needs-manual"]' '状態:手元の作業待ち'
+	check TC-496-03 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-manual", "needs-human"]' '状態:人の判断待ち'
+	check TC-496-04 '下書きで needs-manual' '.isDraft = true | .labels = ["needs-manual"]' '状態:手元の作業待ち'
+	check TC-496-05 '閉じた PR は、needs-manual があってもラベルなし' '.state = "CLOSED" | .labels = ["needs-manual"]' ''
+
+	# 下書きでも、人の判断待ち・手元の作業待ち・見回り待ちのラベルがあれば、それを出す(#471)
+	check TC-471-01 '下書きで needs-local' '.isDraft = true | .labels = ["needs-local"] | .failedChecks = 1' '状態:見回り待ち(証跡など)'
+	check TC-471-02 '下書きで needs-human' '.isDraft = true | .labels = ["needs-human"] | .failedChecks = 1' '状態:人の判断待ち'
+	check TC-471-03 '下書きで needs-decision' '.isDraft = true | .labels = ["task", "needs-decision"]' '状態:人の判断待ち'
+	check TC-471-04 '下書きで needs-local と needs-human の両方' '.isDraft = true | .labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-471-05 '下書きで needs-local と needs-decision の両方' '.isDraft = true | .labels = ["needs-decision", "needs-local"]' '状態:人の判断待ち'
+	check TC-471-06 '下書きで待ちのラベルが無い' '.isDraft = true | .labels = ["task"]' '状態:作業中'
+	check TC-471-07 '下書きで needs-approval だけ(待ちのラベルではない)' '.isDraft = true | .labels = ["needs-approval"]' '状態:作業中'
+	check TC-471-08 '閉じた下書きは、needs-local があってもラベルなし' '.state = "CLOSED" | .isDraft = true | .labels = ["needs-local"]' ''
 
 	# 積み上げの PR(向き先が develop・staging・release 以外)。ai-auto-merge.yml は見送るので、マージ待ちにしない
 	check TC-460-01 '積み上げの PR で、GitHub がマージを許す' '.baseRefName = "issue-47-affiliate-api"' '状態:ベースブランチ待ち'

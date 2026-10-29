@@ -29,13 +29,14 @@ main() {
 	check TC-236-10 'ai-in-actions(Actions が対応している途中)' '.labels = ["ai-in-actions"]' 'skip: ラベル ai-in-actions'
 	check TC-236-11 'no-auto-merge' '.labels = ["no-auto-merge"]' 'skip: ラベル no-auto-merge'
 	check TC-236-12 'CI が動いている途中' '.checksPending = true' 'skip: CI が動いている途中'
-	check TC-236-13 '境界: 最後の動きから 179 分は待つ' '.idleMinutes = 179' 'skip: 最後の動きから 179 分(180 分たつまで待つ)'
-	check TC-236-14 '境界: 最後の動きから 180 分で引き継ぐ' '.idleMinutes = 180' 'pick'
+	check TC-473-03 '境界: 最後の動きから 59 分は待つ(実装したエージェントがまだ動いているかもしれない)' '.idleMinutes = 59' 'skip: 最後の動きから 59 分(60 分たつまで待つ)'
+	check TC-473-04 '境界: 最後の動きから 60 分で引き継ぐ(落ちたとみなす)' '.idleMinutes = 60' 'pick'
 	check TC-236-15 '同じコミットで引き継ぎ済み' '.handledHead = true' 'skip: このコミットは引き継ぎ済み'
 	check TC-236-16 '境界: 2 回目の引き継ぎはする' '.round = 2' 'pick'
 	check TC-236-17 '境界: 3 回目の引き継ぎはしない' '.round = 3' 'skip: 引き継ぎが 2 回に達した'
 	check TC-236-18 '人の判断待ちは、CI の途中より先に理由に出る' '.labels = ["needs-human"] | .checksPending = true' 'skip: ラベル needs-human'
-	check TC-456-04 '手元の作業待ち(needs-local)は引き継がない' '.labels = ["needs-local"]' 'skip: ラベル needs-local'
+	check TC-456-04 '見回り待ち(needs-local)は引き継がない' '.labels = ["needs-local"]' 'skip: ラベル needs-local'
+	check TC-496-07 '手元の作業待ち(needs-manual)は引き継がない' '.labels = ["needs-manual"]' 'skip: ラベル needs-manual'
 
 	collect TC-469-02 'コメントの合計が 200KB を超える PR でも落ちずに、事実を集めて選ぶ' \
 		'[{"number":7,"head":"abc","branch":"issue-7-x","round":1}]|0'

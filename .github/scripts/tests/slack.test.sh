@@ -49,7 +49,7 @@ main() {
 	run_mark >/dev/null
 	expect TC-221-05 'ラベルが外れたら ✅ を付ける' "$(sent reactions.add '[.channel, .timestamp, .name] | join(",")')" 'D1,100,white_check_mark'
 	expect TC-221-06 'ラベルが外れたら本文の先頭に【済】を足し、メタデータを done にする' \
-		"$(sent chat.update '[.ts, .text, .metadata.event_type, .metadata.event_payload.number] | join(",")')" '100,【済】ask 7,ai_dev_done,7'
+		"$(sent chat.update '[.ts, .text, .metadata.event_type, .metadata.event_payload.number] | join(",")')" '100,【済】 ~ask 7~,ai_dev_done,7'
 
 	reset
 	history "$(ask 100 7 needs-human)"
@@ -128,6 +128,48 @@ main() {
 	expect TC-422-02 '履歴を組み立てられないときは、「無かった」で済ませず、警告を出して成功で終わる' \
 		"$?:$(grep -c '::warning::' <<<"$out"):$(grep -c '無かった' <<<"$out")" '0:1:0'
 
+	reset
+	history "$(ask 100 7 needs-human | with_text $'head\n\n*ask*\n&gt; line 1 \n&gt; \n<https://example.com|open>')"
+	issue 7 open '[]'
+	run_mark >/dev/null
+	expect TC-491-01 '「済」を付けるとき、空の行を除く各行を打ち消し線にし、引用の行は印の後ろを打ち消す' \
+		"$(sent chat.update .text)" "$(printf '%s\n' '【済】 ~head~' '' '~ask~' '&gt; ~line 1~' '&gt; ' '~<https://example.com|open>~')"
+
+	reset
+	history "$(done_msg 100 7 needs-human | with_text '【済】ask 7')"
+	issue 7 open '["needs-human"]'
+	run_mark >/dev/null
+	expect TC-491-02 '前に「済」だけ付けた通知は、状態を見直さずに打ち消し線にする' \
+		"$(calls | grep -c 'gh api'):$(sent chat.update '[.text, .metadata.event_type] | join(",")')" '0:【済】 ~ask 7~,ai_dev_done'
+
+	reset
+	history "$(done_msg 100 7 needs-human | with_text '【済】 ~ask 7~')"
+	issue 7 open '[]'
+	run_mark >/dev/null
+	expect TC-491-03 '打ち消し線にした通知は、もう書き換えない' "$(calls | grep -c -e 'gh api' -e chat.update)" 0
+
+	reset
+	history "$(ask 100 7 needs-approval | with_text $':white_check_mark: *承認を待っています*(owner/app)\n*PR*: <https://example.com|#7 title>')"
+	issue 7 closed '[]'
+	run_mark >/dev/null
+	expect TC-502-01 '見出しの前に空白を入れ、打ち消し線の中の太字の印を外す' \
+		"$(sent chat.update .text)" "$(printf '%s\n' '【済】 ~:white_check_mark: 承認を待っています(owner/app)~' '~PR: <https://example.com|#7 title>~')"
+
+	reset
+	history "$(done_msg 100 7 needs-human | with_text $'【済】~:raising_hand: *ask*(owner/app)~\n\n~*PR*: <https://example.com|open>~\n&gt; ~line 1~')"
+	issue 7 open '["needs-human"]'
+	run_mark >/dev/null
+	expect TC-502-02 '前の形(【済】~)で打ち消し線にした通知は、状態を見直さずに新しい形に書き直す' \
+		"$(calls | grep -c 'gh api'):$(sent chat.update .text)" \
+		"0:$(printf '%s\n' '【済】 ~:raising_hand: ask(owner/app)~' '' '~PR: <https://example.com|open>~' '&gt; ~line 1~')"
+
+	reset
+	history "$(ask 100 7 needs-human | with_text $'**重要** `**/*.py`\n&gt; ~/project')"
+	issue 7 closed '[]'
+	run_mark >/dev/null
+	expect TC-502-03 '二重の太字の印は外し、コード内のアスタリスクと本文のチルダは残す' \
+		"$(sent chat.update .text)" "$(printf '%s\n' '【済】 ~重要 `**/*.py`~' '&gt; ~~/project~')"
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -201,6 +243,11 @@ ask() {
 
 done_msg() {
 	ask "$@" | sed 's/"ai_dev_ask"/"ai_dev_done"/'
+}
+
+# 標準入力のメッセージの本文を差し替える
+with_text() {
+	jq -c --arg text "$1" '.text = $text'
 }
 
 # 「済」を付けた通知を、1 件 1KB の本文で n 件つないだもの(履歴を大きくするため)
