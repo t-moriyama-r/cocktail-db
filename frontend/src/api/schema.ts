@@ -702,7 +702,7 @@ export interface components {
             /**
              * @description 選んだノード(or)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
-             *     and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く
+             *     and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く(空の配列も弾くため、prohibited ではなく missing)
              */
             category_ids?: number[];
             /**
@@ -1204,7 +1204,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["CocktailSearchRequest"];
             };
