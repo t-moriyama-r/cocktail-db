@@ -112,6 +112,9 @@ final class SoftwareAuthenticator
         );
     }
 
+    /**
+     * @param  int<0, 255>  $flags  authenticator data のフラグ。1 バイトで書くので 0〜255
+     */
     private function authData(int $flags): string
     {
         return hash('sha256', $this->rpId, true).chr($flags).pack('N', $this->signCount);

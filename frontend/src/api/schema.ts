@@ -15,6 +15,7 @@ export interface paths {
          * ノード・銘柄の詳細の、商品の欄に出すアフィリエイトの 1 件を返す。
          * @description 選び方は旧(AffiliateController@getAffiliateData)と同じ。銘柄を指定したらその銘柄の行。指定しなければ、ノードに
          *     有名な銘柄があればその銘柄の行、無ければノードの行。行の無いノード・銘柄、無い ID は 404(旧は 500 だった)。
+         *     返す行には、見られた時刻を残す(#250。旧に無い)。
          */
         get: operations["affiliate"];
         put?: never;
@@ -180,8 +181,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 条件に当たるカクテルを、一覧の表の行の形で ID の昇順にすべて返す。当たらなければ空の配列。
-         * @description ページングと並べ替えは #167 で足す。旧も条件に合うものを全件返していた(docs/search.md の「返すもの」)。
+         * 条件に当たるカクテルを、一覧の表の行の形で 1 ページずつ返す。当たらなければ空の data。
+         * @description 並びは `sort`・`order` で選ぶ(省くと ID の昇順)。同じ値のものは ID の昇順。値の無いもの(甘さ・評価・英名が無い、
+         *     動画が無い)は、向きによらず最後。旧は全件を返して画面で並べ替えていた(docs/search.md の「返すもの」「並べ替え(画面)」)。
+         *     最後のページより後は、空の data を返す。
          */
         post: operations["cocktailSearch"];
         delete?: never;
@@ -701,6 +704,20 @@ export interface components {
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
              */
             category_ids: number[];
+            /**
+             * @description 並べ替える列(#167)。省くと ID の順
+             * @enum {string|null}
+             */
+            sort?: "id" | "method" | "name" | "name_eng" | "base" | "recipe_count" | "sweet_degree" | "rate" | "strength" | "youtube" | null;
+            /**
+             * @description 向き。省くと、列ごとに旧の画面で見出しを最初に押したときの向き(甘さ・評価・度数・動画は降順、ほかは昇順)
+             * @enum {string|null}
+             */
+            order?: "asc" | "desc" | null;
+            /** @description ページ(1 から)。最後のページより後は、空の data を返す */
+            page?: number | null;
+            /** @description 1 ページの件数。省くと 50 */
+            per_page?: number | null;
         };
         /** CocktailSummaryResource */
         CocktailSummaryResource: {
@@ -1186,7 +1203,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Array of `CocktailSummaryResource` */
+            /** @description Paginated set of `CocktailSummaryResource` */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1194,6 +1211,31 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["CocktailSummaryResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
                     };
                 };
             };

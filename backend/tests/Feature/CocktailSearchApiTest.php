@@ -207,9 +207,11 @@ describe('OR 検索の結果', function () {
             Category::factory()->make(['name' => 'テキーラ'])->getAttributes(),
         );
 
+        // #167 でページングを足し、応答に件数(meta)が付いた
         cocktailSearchPost($this, ['category_ids' => [$unused->id]])
             ->assertOk()
-            ->assertExactJson(['data' => []]);
+            ->assertJsonPath('data', [])
+            ->assertJsonPath('meta.total', 0);
     });
 });
 
@@ -467,4 +469,284 @@ describe('あるもの検索(mode=having)の条件の検証', function () {
                 ->assertOnlyJsonValidationErrors([$error]);
         }
     });
+});
+
+// 並べ替えとページング(#167)。並べ替えの比べ方は旧の画面(Results/Tables/Cocktails.vue)の sortedList を写したもの
+// (docs/search.md の「並べ替え(画面)」)。値の無いものの位置などは docs/decisions/search-sort.md の「旧との差分」。
+
+/**
+ * 並べ替えを確かめるカクテル。どれもジンを使い、ID は 1〜6。
+ *
+ * | ID | 名前 | 英名 | ベース | 技法 | 必須 | 甘さ | 評価 | 度数 | 動画 | 更新日時 |
+ * |---|---|---|---|---|---|---|---|---|---|---|
+ * | 1 | ギムレット | Gimlet | ジン | 2 | 2 | 2 | 3 | 25.0 | - | 2026-01-01 |
+ * | 2 | ぎむれっと | gimlet | じん | 1 | 3 | - | 5 | 9.5 | あり | 2026-03-01 |
+ * | 3 | Ａ5 | - | ラム | 3 | 2 | 4 | - | 40.0 | あり | 2026-02-01 |
+ * | 4 | A4 | Apple | ウォッカ | 1 | 1 | 2 | 3 | 10.0 | - | 2026-04-01 |
+ * | 5 | アレキサンダー | ALEXANDER | ブランデー | 2 | 4 | - | - | 100.0 | あり | 2026-03-01 |
+ * | 6 | モヒート | - | ラム | 3 | 3 | 1 | 1 | 9.5 | - | 2026-05-01 |
+ *
+ * @return list<int> 選ぶノードの ID
+ */
+function cocktailSearchSortFixture(): array
+{
+    $n = cocktailSearchTree();
+    $methods = [];
+    foreach ([1, 2, 3] as $id) {
+        $methods[$id] = Method::factory()->create(['id' => $id])->id;
+    }
+    $bases = [];
+    foreach (['ジン', 'じん', 'ラム', 'ウォッカ', 'ブランデー'] as $name) {
+        $bases[$name] = Category::factory()->create(['name' => $name])->id;
+    }
+
+    $rows = [
+        [1, 'ギムレット', 'Gimlet', 'ジン', 2, 2, 2, 3, 25.0, null, '2026-01-01 00:00:00'],
+        [2, 'ぎむれっと', 'gimlet', 'じん', 1, 3, null, 5, 9.5, 'yt-2', '2026-03-01 00:00:00'],
+        [3, 'Ａ5', null, 'ラム', 3, 2, 4, null, 40.0, 'yt-3', '2026-02-01 00:00:00'],
+        [4, 'A4', 'Apple', 'ウォッカ', 1, 1, 2, 3, 10.0, null, '2026-04-01 00:00:00'],
+        [5, 'アレキサンダー', 'ALEXANDER', 'ブランデー', 2, 4, null, null, 100.0, 'yt-5', '2026-03-01 00:00:00'],
+        [6, 'モヒート', null, 'ラム', 3, 3, 1, 1, 9.5, null, '2026-05-01 00:00:00'],
+    ];
+    foreach ($rows as [$id, $name, $nameEng, $base, $method, $recipeCount, $sweet, $rate, $volume, $youtube, $updatedAt]) {
+        cocktailSearchCocktail($name, [[$n['ジン'], false]], [
+            'id' => $id, 'name_eng' => $nameEng, 'base_category_id' => $bases[$base], 'method_id' => $methods[$method],
+            'recipe_count' => $recipeCount, 'sweet_degree' => $sweet, 'rate' => $rate, 'volume' => $volume,
+            'youtube' => $youtube, 'updated_at' => $updatedAt,
+        ]);
+    }
+
+    return [$n['ジン']->id];
+}
+
+/**
+ * 応答のカクテルの ID を、返った順で返す。
+ *
+ * @param  TestResponse<JsonResponse>  $response
+ * @return list<int>
+ */
+function cocktailSearchResultIds(TestResponse $response): array
+{
+    /** @var list<int> $ids */
+    $ids = $response->assertOk()->json('data.*.id');
+
+    return $ids;
+}
+
+/**
+ * 同じノードを使うカクテルを $count 件、ID 1 から作る。技法とベースは 1 つを使い回す。
+ *
+ * @return list<int> 選ぶノードの ID
+ */
+function cocktailSearchManyCocktails(int $count): array
+{
+    $n = cocktailSearchTree();
+    $method = Method::factory()->create();
+    foreach (range(1, $count) as $id) {
+        cocktailSearchCocktail(sprintf('かくてる%02d', $id), [[$n['ジン'], false]], [
+            'id' => $id, 'method_id' => $method->id, 'base_category_id' => $n['ジン']->id,
+        ]);
+    }
+
+    return [$n['ジン']->id];
+}
+
+describe('並べ替え', function () {
+    beforeEach(function () {
+        $this->ids = cocktailSearchSortFixture();
+    });
+
+    it('TC-167-01: sort・order を省くと ID の昇順', function () {
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids])))
+            ->toBe([1, 2, 3, 4, 5, 6]);
+    });
+
+    it('TC-167-02: 列ごとに、order を省くと旧の画面で見出しを最初に押したときの向きで並ぶ', function (string $sort, array $expected) {
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => $sort])))
+            ->toBe($expected);
+    })->with([
+        'id(昇順)' => ['id', [1, 2, 3, 4, 5, 6]],
+        '製法(昇順。技法の ID)' => ['method', [2, 4, 1, 5, 3, 6]],
+        '名前(昇順)' => ['name', [4, 3, 5, 1, 2, 6]],
+        '英名(昇順)' => ['name_eng', [5, 4, 1, 2, 3, 6]],
+        'ベース(昇順)' => ['base', [4, 1, 2, 5, 3, 6]],
+        '必須(昇順)' => ['recipe_count', [4, 1, 3, 2, 6, 5]],
+        '甘さ(降順)' => ['sweet_degree', [3, 1, 4, 6, 2, 5]],
+        '評価(降順)' => ['rate', [2, 1, 4, 6, 3, 5]],
+        '度数(降順)' => ['strength', [5, 3, 1, 4, 2, 6]],
+        '動画(降順)' => ['youtube', [2, 5, 3, 1, 4, 6]],
+    ]);
+
+    it('TC-167-03: order を書くと、その向きで並ぶ', function (string $sort, string $order, array $expected) {
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => $sort, 'order' => $order])))
+            ->toBe($expected);
+    })->with([
+        'id 降順' => ['id', 'desc', [6, 5, 4, 3, 2, 1]],
+        '製法 降順' => ['method', 'desc', [3, 6, 1, 5, 2, 4]],
+        '名前 降順' => ['name', 'desc', [6, 1, 2, 5, 3, 4]],
+        '英名 降順' => ['name_eng', 'desc', [1, 2, 4, 5, 3, 6]],
+        'ベース 降順' => ['base', 'desc', [3, 6, 5, 1, 2, 4]],
+        '必須 降順' => ['recipe_count', 'desc', [5, 2, 6, 1, 3, 4]],
+        '甘さ 昇順' => ['sweet_degree', 'asc', [6, 1, 4, 3, 2, 5]],
+        '評価 昇順' => ['rate', 'asc', [6, 1, 4, 2, 3, 5]],
+        '度数 昇順' => ['strength', 'asc', [2, 6, 4, 1, 3, 5]],
+        '動画 昇順' => ['youtube', 'asc', [3, 2, 5, 1, 4, 6]],
+        '名前 昇順(明示)' => ['name', 'asc', [4, 3, 5, 1, 2, 6]],
+    ]);
+
+    it('TC-167-04: sort を省いて order=desc なら ID の降順', function () {
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'order' => 'desc'])))
+            ->toBe([6, 5, 4, 3, 2, 1]);
+    });
+
+    it('TC-167-05: 名前・ベースはカタカナをひらがなに、全角の英数字を半角にそろえて比べる', function () {
+        // ギムレット(1)とぎむれっと(2)は同じ値で ID の順。Ａ5(3)は A5 として A4(4)の後
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => 'name'])))
+            ->toBe([4, 3, 5, 1, 2, 6])
+            // ベースのジン(1)とじん(2)は同じ値
+            ->and(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => 'base'])))
+            ->toBe([4, 1, 2, 5, 3, 6]);
+    });
+
+    it('TC-167-06: 英名は大文字・小文字を区別しない。英名の無いものは向きによらず最後', function () {
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => 'name_eng', 'order' => 'asc'])))
+            ->toBe([5, 4, 1, 2, 3, 6])
+            ->and(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => 'name_eng', 'order' => 'desc'])))
+            ->toBe([1, 2, 4, 5, 3, 6]);
+    });
+
+    it('TC-167-07: 度数は数として比べる(9.5 < 10.0 < 100.0)', function () {
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => 'strength', 'order' => 'asc'])))
+            ->toBe([2, 6, 4, 1, 3, 5]);
+    });
+
+    it('TC-167-08: 同じ値のものは、どちらの向きでも ID の昇順', function (string $sort) {
+        $asc = cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => $sort, 'order' => 'asc']));
+        $desc = cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => $sort, 'order' => 'desc']));
+
+        // 名前の 1 と 2、評価の 1 と 4、動画の 2 と 5(更新日時が同じ)は、どちらの向きでも ID の順に並ぶ
+        $pairs = ['name' => [1, 2], 'rate' => [1, 4], 'youtube' => [2, 5]][$sort];
+        foreach ([$asc, $desc] as $ids) {
+            expect(array_values(array_intersect($ids, $pairs)))->toBe($pairs);
+        }
+    })->with(['name', 'rate', 'youtube']);
+
+    it('TC-167-09: 同じ値がページの境目をまたいでも、ページをつなぐと抜けも重なりも無い', function () {
+        // 名前の昇順は [4, 3, 5, 1, 2, 6]。同じ値の 1 と 2 が 2 ページ目と 3 ページ目に分かれる
+        $pages = [];
+        foreach ([1, 2, 3] as $page) {
+            $pages[] = cocktailSearchResultIds(cocktailSearchPost($this, [
+                'category_ids' => $this->ids, 'sort' => 'name', 'page' => $page, 'per_page' => 2,
+            ]));
+        }
+
+        expect($pages)->toBe([[4, 3], [5, 1], [2, 6]]);
+    });
+
+    it('TC-167-10: sort が決まった列でなければ 422', function (mixed $sort) {
+        cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => $sort])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['sort']);
+    })->with([
+        '無い列' => ['volume'],
+        '大文字' => ['NAME'],
+        '数' => [1],
+        '配列' => [['name']],
+    ]);
+
+    it('TC-167-11: order が asc・desc でなければ 422', function (mixed $order) {
+        cocktailSearchPost($this, ['category_ids' => $this->ids, 'sort' => 'name', 'order' => $order])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['order']);
+    })->with([
+        '無い値' => ['up'],
+        '大文字' => ['ASC'],
+        '数' => [1],
+    ]);
+});
+
+describe('ページング', function () {
+    it('TC-167-12: per_page は 1〜50。範囲の外は 422', function (int $perPage, ?int $count) {
+        $ids = cocktailSearchManyCocktails(51);
+
+        $response = cocktailSearchPost($this, ['category_ids' => $ids, 'per_page' => $perPage]);
+
+        if ($count === null) {
+            $response->assertUnprocessable()->assertOnlyJsonValidationErrors(['per_page']);
+
+            return;
+        }
+
+        $response->assertOk()->assertJsonCount($count, 'data')->assertJsonPath('meta.per_page', $perPage);
+    })->with([
+        '0' => [0, null],
+        '1' => [1, 1],
+        '50' => [50, 50],
+        '51' => [51, null],
+    ]);
+
+    it('TC-167-13: per_page を省くと 50 件ずつ。最後のページに残りを、件数を meta に返す', function () {
+        $ids = cocktailSearchManyCocktails(51);
+
+        cocktailSearchPost($this, ['category_ids' => $ids])
+            ->assertOk()
+            ->assertJsonCount(50, 'data')
+            ->assertJsonPath('data.0.id', 1)
+            ->assertJsonPath('data.49.id', 50)
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.per_page', 50)
+            ->assertJsonPath('meta.total', 51)
+            ->assertJsonPath('meta.last_page', 2);
+
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $ids, 'page' => 2])))->toBe([51]);
+    });
+
+    it('TC-167-14: 最後のページの次のページ(とその先)は、空の data と件数を返す', function (int $page) {
+        $ids = cocktailSearchManyCocktails(3);
+
+        cocktailSearchPost($this, ['category_ids' => $ids, 'per_page' => 2, 'page' => $page])
+            ->assertOk()
+            ->assertJsonPath('data', [])
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonPath('meta.last_page', 2)
+            ->assertJsonPath('meta.current_page', $page);
+    })->with([
+        '最後の次' => [3],
+        'ずっと先' => [PHP_INT_MAX],
+    ]);
+
+    it('TC-167-15: page・per_page は数字の文字でも受ける', function () {
+        $ids = cocktailSearchManyCocktails(3);
+
+        expect(cocktailSearchResultIds(cocktailSearchPost($this, ['category_ids' => $ids, 'page' => '2', 'per_page' => '2'])))
+            ->toBe([3]);
+    });
+
+    it('TC-167-16: page が 1 以上の整数でなければ 422', function (mixed $page) {
+        $ids = cocktailSearchManyCocktails(1);
+
+        cocktailSearchPost($this, ['category_ids' => $ids, 'page' => $page])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['page']);
+    })->with([
+        '0' => [0],
+        '負' => [-1],
+        '文字' => ['abc'],
+        '小数' => [1.5],
+        '整数と同じ値の小数' => [1.0],
+        '真偽値' => [true],
+        'int に収まらない数字' => ['99999999999999999999'],
+    ]);
+
+    it('TC-167-17: per_page が整数でなければ 422', function (mixed $perPage) {
+        $ids = cocktailSearchManyCocktails(1);
+
+        cocktailSearchPost($this, ['category_ids' => $ids, 'per_page' => $perPage])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['per_page']);
+    })->with([
+        '文字' => ['abc'],
+        '整数と同じ値の小数' => [10.0],
+        '真偽値' => [true],
+    ]);
 });

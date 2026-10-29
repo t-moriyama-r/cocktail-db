@@ -11,7 +11,7 @@
 # 作業しているかは外から分からないので、最後の動き(コミット・コメント)から MIN_IDLE_MINUTES 分たったかで決める
 set -euo pipefail
 
-MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-180}
+MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-60}
 # 引き継いでも仕上がらないまま、同じ PR を何度も引き継がない。上限に達したものは、引き継いだ Claude Code が needs-human か needs-local を付けている
 MAX_ROUNDS=${MAX_ROUNDS:-2}
 MARK="ai-dev:draft-sweep"

@@ -9,7 +9,7 @@
 # 送り先は、Slack App の bot(secret SLACK_BOT_TOKEN)と、変数 SLACK_NOTIFY_USER の人の DM。
 # bot が無いリポジトリでは secret SLACK_WEBHOOK_URL(Incoming Webhook)。どちらも無ければ何もせず警告だけ出す(.github/scripts/slack-post.sh)
 #
-# bot で送ったときは、頼んだラベルが外れるか PR・issue が閉じたら、その通知に ✅ を付けて本文の先頭に「【済】」を足す(mark-done ジョブ)。
+# bot で送ったときは、頼んだラベルが外れるか PR・issue が閉じたら、その通知に ✅ を付けて本文の先頭に「【済】」を足し、残りを打ち消し線にする(mark-done ジョブ)。
 # ラベルを外すのは Actions の中(GITHUB_TOKEN)のことが多く、そのときはイベントが起きないので、ラベルが外れた・閉じたときのイベントに加えて、
 # ラベルを外すワークフローの終わり(label を done にして呼ぶ)と毎朝の見回りでも動かす。何度動いても、片付いたものに 1 回付けるだけ
 #

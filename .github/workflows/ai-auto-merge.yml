@@ -8,12 +8,13 @@
 # 向き先が staging・release の PR(昇格の PR)は、自動ではマージしない。マージはデプロイになるので、必ず人がする。
 # 中身は develop に入る前に PR ごとにレビュー済みで、head が保護されたブランチ(develop・staging)なので Actions の Claude Code が指摘を直せない。
 # そのため、AI レビューの指摘が残っていてもマージを止めず(残っている件数をコメントに書く)、CI が緑で、いまのコミットを
-# AI がレビューし終えたら、needs-approval を付けて人に知らせる
+# AI がレビューし終えたら、needs-approval を付けて人に知らせる。昇格の PR は必ず手元のエージェントが作るので、レビューも
+# CodeRabbit ではなく、作った手元の Claude が目印 <!-- ai-dev:local-review --> を付けて書く(#479。.github/scripts/head-reviewed.sh)
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
 # - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
 # - ラベル needs-human / needs-local / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
-# - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
+# - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml。昇格の PR では手元の Claude)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
 # - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)。
@@ -76,7 +77,8 @@ jobs:
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
         || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
-      || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
+      || (github.event_name == 'pull_request_review' && (github.event.review.user.login == 'coderabbitai[bot]'
+        || (github.event.review.user.login == github.repository_owner && contains(github.event.review.body, 'ai-dev:local-review'))))
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
         && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
           || contains(github.event.comment.body, 'LGTM')))
@@ -173,24 +175,17 @@ jobs:
           # 昇格の PR は、ほかの理由(no-auto-merge・needs-review)より、デプロイになることを理由にする
           if [ "$promotion" = true ]; then human="向き先が $base なので、マージはデプロイになる(人がマージする)"; fi
 
-          # CodeRabbit が最新のコミットを見たか。指摘があればそのコミットへのレビューが付き、
-          # 無ければ「Review finished」「No actionable comments」のコメントだけが付く(どちらか片方のこともあり、後から別のコメントが続くこともある)。
-          # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける。
-          # CodeRabbit はスレッドへの返信のたびに本文が空のレビューを最新のコミットに付けるので、本文の無いレビューは数えない
+          # AI レビュアーが最新のコミットを見たか(CodeRabbit・代わりの Claude、昇格の PR では手元の Claude。決め方は head-reviewed.sh)
           # --json commits は先頭 100 件までなので(RC-06)、いまのコミットの日時を直接取る
           pushed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date) || skip "いまのコミット ${head:0:7} の日時を読めない"
-          reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/reviews?per_page=100" \
-            | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
-                or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
-          finished=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
-            | jq --arg since "$pushed" 'add // [] | map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
-                | any(.body // "" | test("Review finished|No actionable comments|LGTM"))')
-          if [ "$reviewed" != true ] && [ "$finished" != true ]; then
+          reviewed=$(bash .ai-dev/.github/scripts/head-reviewed.sh "$REPO" "$NUMBER") || skip "#$NUMBER のレビューを読めない"
+          if [ "$reviewed" != true ]; then
             # needs-local の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
             # (出さないと次の ai-review-sweep.yml まで最大 2 時間待つ)。依頼済みなら request-review.sh が見送る
             if [ "$EVENT_ACTION" = unlabeled ]; then
               bash .ai-dev/.github/scripts/request-review.sh "$REPO" "$NUMBER"                 || echo "::warning::レビューの依頼を出せなかった(ai-review-sweep.yml が拾う)"
             fi
+            if [ "$promotion" = true ]; then skip "手元の Claude が最新のコミット ${head:0:7} をまだレビューしていない(昇格の PR。目印 ai-dev:local-review)"; fi
             skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
           fi
 
