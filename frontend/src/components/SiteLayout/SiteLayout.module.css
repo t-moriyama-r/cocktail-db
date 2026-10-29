@@ -5,19 +5,6 @@
   min-height: 100vh;
 }
 
-/* 上に固定のヘッダーの場所。中身は #99 で入れる */
-.header {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 10;
-  height: var(--header-height);
-  background: var(--color-header-bg);
-  color: var(--color-header-text);
-  box-shadow: var(--header-shadow);
-}
-
 /* 本文。固定のヘッダーの下から始める(旧はヘッダーの高さの分の空きを置いていた) */
 .content {
   flex: 1;

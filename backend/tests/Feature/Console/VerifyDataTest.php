@@ -261,7 +261,7 @@ it('TC-285-12: 説明文の参照(大文字を含む)がすべて指す先のあ
     $method = Method::factory()->create(['description' => '@D'.$dictionary->id.'@']);
     $n['ジン']->update(['description' => "@n{$n['ラム']->id}@と@c{$rumSoda->id}@"]);
     $data['brands']['バカルディ']->update(['description' => "@N{$n['ホワイトラム']->id}@"]);
-    $rumSoda->update(['description' => "@b{$data['brands']['ビーフィーター']->id}@", 'note' => "@d{$dictionary->id}@・@m@・a@example.com"]);
+    $rumSoda->update(['description' => "@b{$data['brands']['ビーフィーター']->id}@", 'note' => "@d{$dictionary->id}@・詳しくは用語で"]);
     expect($method->description)->toBe("@D{$dictionary->id}@");
 
     [$code, $output] = runVerifyData();
@@ -316,4 +316,37 @@ it('TC-285-14: 説明文に旧の記法(@p・@m)が残っていると、その�
         ->and($output)->toContain('旧の記法 @M2@ が残っている')
         ->and($output)->toContain("カクテル #{$rumSoda->id} ラムソーダ の note")
         ->and($output)->toContain('旧の記法 @p3@ が残っている');
+});
+
+it('TC-393-11: 説明文の記法の外に @・＠ が残っていると、どの表のどの行の列か・残った @ の前後を挙げて失敗する', function (string $text, string $around) {
+    $data = verifyDataFixture();
+    $rumSoda = $data['cocktails']['ラムソーダ'];
+    $rumSoda->update(['note' => $text]);
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('整合性が破れている(1 件)')
+        ->and($output)->toContain('説明文に記法の外の @')
+        ->and($output)->toContain("カクテル #{$rumSoda->id} ラムソーダ の note")
+        ->and($output)->toContain("記法になっていない @ がある(管理画面で保存できない): {$around}");
+})->with([
+    'ID の無い記法' => ['砂糖は@p@を使う', '砂糖は@p@を使う'],
+    '種類の英字の無い記法' => ['同じ名前の@12@', '同じ名前の@12@'],
+    '全角の ＠' => ['＠ソーダ', '＠ソーダ'],
+    'メールアドレス' => ['a@example.com', 'a@examp'],
+]);
+
+it('TC-393-12: 記法の外の @ を挙げるのは列ごとに 1 件で、旧の記法が残る列では旧の記法だけを挙げる', function () {
+    $data = verifyDataFixture();
+    $rumSoda = $data['cocktails']['ラムソーダ'];
+    $rumSoda->update(['description' => '@@と@', 'note' => '@p1@と@']);
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('整合性が破れている(2 件)')
+        ->and($output)->toContain('説明文に記法の外の @')
+        ->and($output)->toContain("カクテル #{$rumSoda->id} ラムソーダ の description")
+        ->and($output)->toContain('旧の記法 @p1@ が残っている');
 });

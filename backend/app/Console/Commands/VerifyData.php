@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
 use App\Services\CategoryTree;
+use App\Services\DescriptionMarkup;
 use App\Services\RecipeCounter;
 use App\Support\DescriptionParser;
 use Illuminate\Console\Command;
@@ -23,6 +24,8 @@ use Illuminate\Support\Facades\DB;
  *
  * 説明文(description・カクテルの note)の参照の記法も、指す先があるかと、旧の記法(`@p`・`@m`)が残っていないかを見る
  * (#285。docs/decisions/description-references.md)。指す先の無い参照は、画面では黙って消えるだけなので、機械で見つける。
+ * 記法の外に `@`・`＠` が残っていないか(管理画面で保存するときの検査を通るか。#392・#393)も見る。残っていると、管理画面で
+ * その行を編集して保存できない。
  *
  * 有名な銘柄を持たないノードは、移行したデータに残りうる(docs/decisions/strength.md の決まったこと 4)ので、
  * 失敗ではなく警告にし、--strict のときだけ失敗に数える。
@@ -32,7 +35,7 @@ final class VerifyData extends Command
     protected $signature = 'data:verify
         {--strict : 警告(有名な銘柄を持たないノード)も失敗に数える}';
 
-    protected $description = '材料・アフィリエイトのノード、材料の数(recipe_count)、根の使い方、有名な銘柄、説明文の参照が決まりどおりかを調べ、破れていれば一覧を出して失敗する';
+    protected $description = '材料・アフィリエイトのノード、材料の数(recipe_count)、根の使い方、有名な銘柄、説明文の参照と記法が決まりどおりかを調べ、破れていれば一覧を出して失敗する';
 
     private const INGREDIENT_BRAND_NODE = '材料のノードと銘柄の所属';
 
@@ -51,6 +54,8 @@ final class VerifyData extends Command
     private const DESCRIPTION_REFERENCE_TARGET = '説明文の参照の指す先が無い';
 
     private const DESCRIPTION_LEGACY_REFERENCE = '説明文に旧の記法';
+
+    private const DESCRIPTION_STRAY_AT = '説明文に記法の外の @';
 
     /**
      * 説明文を持つ表 => [表に出す名前, 説明文の列]。
@@ -355,7 +360,7 @@ final class VerifyData extends Command
             $rows = DB::table($table)
                 ->where(function (QueryBuilder $query) use ($columns) {
                     foreach ($columns as $column) {
-                        $query->orWhere($column, 'like', '%@%');
+                        $query->orWhere($column, 'like', '%@%')->orWhere($column, 'like', '%＠%');
                     }
                 })
                 ->orderBy('id')
@@ -380,6 +385,16 @@ final class VerifyData extends Command
                             self::DESCRIPTION_LEGACY_REFERENCE,
                             $where,
                             "旧の記法 {$legacy} が残っている(@n<ノードの ID>@ に直す)",
+                        ];
+                    }
+
+                    // 旧の記法の @ も記法の外の @ になるので、旧の記法が残る列は、上の 1 つだけで挙げる
+                    $strayAt = $legacyMatches[0] === [] ? DescriptionMarkup::strayAtContext($text) : null;
+                    if ($strayAt !== null) {
+                        $legacyViolations[] = [
+                            self::DESCRIPTION_STRAY_AT,
+                            $where,
+                            "記法になっていない @ がある(管理画面で保存できない): {$strayAt}",
                         ];
                     }
                 }

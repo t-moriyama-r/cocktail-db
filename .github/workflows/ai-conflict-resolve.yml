@@ -7,7 +7,7 @@
 #   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(見回り待ち。PC を開いたときに手元の見回りが片付ける)を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
-#   test.yml の backend・frontend と同じ準備(PHP 8.4・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
+#   test.yml の backend・frontend と同じ準備(PHP 8.5・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
 #   作り直しの手順と push してよいかの決め方は、ai-review-loop.yml の regenerate・regen-push と共通(.github/scripts/generated-regen.sh。#495)。
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
@@ -355,11 +355,13 @@ jobs:
       - uses: shivammathur/setup-php@v2
         if: steps.need.outputs.head
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
 
+      # この回は既定のブランチの文脈(schedule・workflow_dispatch)で PR のコードを動かす。ここで保存したキャッシュは既定のブランチの分として
+      # デプロイ(deploy.yml・deploy-env.yml)にも読まれるので、キャッシュは使わない(cache を書かない。#508)
       - uses: actions/setup-node@v7
         if: steps.need.outputs.head
         with:

@@ -4,7 +4,6 @@ namespace App\Services\LegacyImport;
 
 use App\Models\Affiliate;
 use App\Models\Brand;
-use App\Models\LegacyIdMap;
 use Illuminate\Support\Facades\DB;
 use UnexpectedValueException;
 
@@ -29,15 +28,7 @@ final class AffiliateImporter implements LegacyImporter
 
     private const NEW_TABLE = 'affiliates';
 
-    /** カテゴリ木のノードを書いた新しい表 */
-    private const NODE_TABLE = 'categories';
-
-    private const LEGACY_CATEGORY = 'm_category';
-
-    private const LEGACY_MIDDLE = 'm_middle';
-
-    /** @var array<string, array<int, int>> 旧の表 => (旧 ID => ノードの ID) */
-    private array $nodeIds = [];
+    private LegacyCategoryNodes $nodes;
 
     /** @var array<int, int> 銘柄の ID => 所属ノードの ID */
     private array $brandNodeIds = [];
@@ -45,9 +36,7 @@ final class AffiliateImporter implements LegacyImporter
     public function import(): array
     {
         DB::transaction(function () {
-            foreach ([self::LEGACY_CATEGORY, self::LEGACY_MIDDLE] as $legacyTable) {
-                $this->nodeIds[$legacyTable] = LegacyIdMap::newIdsByLegacyId($legacyTable, self::NODE_TABLE);
-            }
+            $this->nodes = LegacyCategoryNodes::load();
             foreach (Brand::query()->get(['id', 'category_id']) as $brand) {
                 $this->brandNodeIds[$brand->id] = $brand->category_id;
             }
@@ -88,13 +77,7 @@ final class AffiliateImporter implements LegacyImporter
      */
     private function nodeOnlyId(array $row): int
     {
-        $middleId = LegacyRows::nullableId($row, 'middle_id', self::LEGACY_TABLE);
-        [$legacyTable, $legacyId] = $middleId !== null
-            ? [self::LEGACY_MIDDLE, $middleId]
-            : [self::LEGACY_CATEGORY, LegacyRows::int($row, 'category_id', self::LEGACY_TABLE)];
-
-        return $this->nodeIds[$legacyTable][$legacyId]
-            ?? throw new UnexpectedValueException(self::LEGACY_TABLE." の {$this->describe($row)} が指す {$legacyTable} の id {$legacyId} を移した先のノードが無い(カテゴリ木を先に移す)");
+        return $this->nodes->forRow($row, self::LEGACY_TABLE, self::LEGACY_TABLE." の {$this->describe($row)}", 'category_id', 'middle_id');
     }
 
     /**

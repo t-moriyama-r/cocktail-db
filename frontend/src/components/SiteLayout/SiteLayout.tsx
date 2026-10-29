@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect } from 'react'
 import { Outlet, useLocation } from 'react-router'
+import SiteHeader from '../SiteHeader/SiteHeader'
 import SiteFooter from './SiteFooter'
 import styles from './SiteLayout.module.css'
 import { SITE_TITLE } from './usePageTitle'
 
 /**
  * すべての公開ページを包む枠(旧 components/mainView.vue)。上に固定のヘッダー、本文(各ページ)、フッターを置く。
- * ヘッダーの中身(名前検索・条件検索・ランダムウォーク)は #99 で作る。ここでは場所だけを取る。
+ * ヘッダー(名前検索・条件検索・ランダムウォーク)は SiteHeader(#99)。
  */
 export default function SiteLayout() {
   useScrollToTopOnNavigate()
@@ -18,7 +19,7 @@ export default function SiteLayout() {
 
   return (
     <div className={styles.root}>
-      <header className={styles.header}>{/* 中身は #99 */}</header>
+      <SiteHeader />
       <div className={styles.content}>
         <Outlet />
       </div>

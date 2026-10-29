@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from 'react'
 import CategoryTreeItem from './CategoryTreeItem'
-import type { CategoryTreeNode, CategoryTreeSelection } from './CategoryTree.types'
+import type { CategoryTreeAppearance, CategoryTreeNode, CategoryTreeSelection } from './CategoryTree.types'
 import { collectCategoryTreeIds } from './collectCategoryTreeIds'
 import { filterCategoryTree } from './filterCategoryTree'
 import styles from './CategoryTree.module.css'
@@ -13,6 +13,8 @@ type Props = {
   onNameClick?: (node: CategoryTreeNode) => void
   /** 木全体の名前(読み上げに使う) */
   label: string
+  /** ノードごとの見え方(見出しにする・クラスを足す・注記を添える)。省くとすべて既定 */
+  appearance?: CategoryTreeAppearance
 }
 
 /**
@@ -22,7 +24,7 @@ type Props = {
  * 木は 600 ノードほどあるので、畳んだノードの子は描かない。絞り込んでいる間は、
  * 当たったノードが見えるよう祖先を開き直す(開閉はそのあとも手で変えられる)。
  */
-export default function CategoryTree({ nodes, selection, onNameClick, label }: Props) {
+export default function CategoryTree({ nodes, selection, onNameClick, label, appearance = NO_APPEARANCE }: Props) {
   const rootIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes])
   const [query, setQuery] = useState('')
   // null は「まだ開閉を変えていない」。既定の開き方を根から導くので、nodes を後から受け取っても根が開く
@@ -77,6 +79,7 @@ export default function CategoryTree({ nodes, selection, onNameClick, label }: P
               radioName={radioName}
               onToggleOpen={toggleOpen}
               onNameClick={onNameClick}
+              appearance={appearance}
             />
           ))}
         </ul>
@@ -85,3 +88,4 @@ export default function CategoryTree({ nodes, selection, onNameClick, label }: P
   )
 }
 
+const NO_APPEARANCE: CategoryTreeAppearance = {}

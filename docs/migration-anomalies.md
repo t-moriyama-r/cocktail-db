@@ -4,7 +4,7 @@
 
 - 件数は、手元に復元した本番の旧 DB のダンプで数えたもの(2026-10-26。カクテル 5,707 件・材料の行 26,788 行)。**移行の直前に、本番の旧 DB で同じ SQL を流して数え直す**(下の「移行の直前にやること」)
 - 各節の SQL は、旧 DB(旧のテーブル名のまま)に流せばそのまま件数が出る
-- 扱いは、人が確かめたもの。1〜10 は #28(2026-10-25 のコメント)、11〜13 は数え直しで見つけて #257 で確かめた(2026-10-26)
+- 扱いは、人が確かめたもの。1〜10 は #28(2026-10-25 のコメント)、11〜13 は数え直しで見つけて #257 で確かめた(2026-10-26)、14 は #393 で確かめた(2026-10-27)
 
 ## 一覧
 
@@ -23,6 +23,7 @@
 | 11 | カテゴリしか指定していない材料の行に、そのカテゴリのミドルの下の銘柄が付いている | 62 行(62 カクテル・5 銘柄) | そのまま移す |
 | 12 | アフィリエイトの、ミドルの親とカテゴリが合わない行 | 1 行 | ミドルの親に合わせる |
 | 13 | 名前も材料・量も同じカクテル | 50 組(105 カクテル) | 移行でまとめる(残す ID などは下の 13) |
+| 14 | 説明文の記法が壊れている・無いカクテルを指す | 8 件(A〜E)・6 個(F) | 移行で直す(直し方は下の 14) |
 
 ## 1. カクテルが消えた後に残った材料の行
 
@@ -227,7 +228,7 @@ SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
 
 ## 数え直しで見つかったもの
 
-#28 で扱いを確かめた後に、数え直していて見つかったもの。#257 で人が確かめた。
+#28 で扱いを確かめた後に、数え直していて見つかったもの。11〜13 は #257、14 は #393 で人が確かめた。
 
 ### 11. カテゴリしか指定していない材料の行に、そのカテゴリのミドルの下の銘柄が付いている
 
@@ -289,6 +290,70 @@ SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
 ) g;
 ```
 
+### 14. 説明文の記法が壊れている・無いカクテルを指す
+
+説明文(種別・カテゴリ・ミドル・技法・用語・銘柄・カクテルの `description`、カクテルの `note`)の参照の記法(`@<種類><ID>@`。[description-references.md](decisions/description-references.md))のうち、正しい記法(`@[cCbBpPmMdD][1-9][0-9]*@`)を取り除いても `@`・`＠` が残るものが 8 件(A〜E)、無いカクテルを指す記法が 6 個(F)ある(2026-10-27 に数えた)。旧の画面では、`p` などの 1 文字や `@` が本文に混じって出ていたか、リンクが切れていた。そのまま移すと、公開画面でも同じように崩れ、管理画面では保存のときの検査(#392)で 422 になって、その行のほかの項目も保存できない。
+
+| # | 表・列・ID | 壊れ方 | 直し方 |
+|---|---|---|---|
+| A | `t_cocktails.description` 153 | 2 つ目の記法が `p@@p58@@` になっている(`@` の打ち間違い) | `@p58@` にする |
+| B | `t_cocktails.description` 3620・3621・5189・5629 | 種類の英字が無い(`@3621@` など。指す ID は、同じ名前の別のカクテル) | カクテルの記法 `@c<ID>@` にする |
+| C | `t_cocktails.note` 11 | ID の無い `@p@`(旧の自動リンクで、当時ノードの無かった決め打ちの漢字の名前。文脈からグラニュー糖) | いまある「グラニュー糖」のノードの記法にする |
+| D | `t_cocktails.note` 238 | 先頭の `@` が全角で、記法が二重(`＠p@p30@@`) | `@p30@` にする |
+| E | `t_cocktails.note` 1334 | 先頭の `@` が無い(`p29@`) | `@p29@` にする |
+| F | `t_cocktails.description` 5202・5294・5362・5488・6112 | 消えたカクテルを指す `@c<ID>@`(6 個) | 記法を取り除く |
+
+- **扱い: 移行で直す**(#393。2026-10-27 のオーナーのコメントで決めた)。旧 DB は書き換えず、`legacy:import` の `descriptions` が、参照の記法を新しい記法に直す前(#285)に、旧の値から直す(`App\Services\LegacyImport\LegacyDescriptionRepairs`)。移行のたびに同じように直る
+  - **A〜E**: 1 件ずつ壊れ方の違う手での打ち間違いなので、決まりで直さず、表・列・ID と直す前の部分を対にして直す。A・D・E・C は、直す前の部分(`p@@p58@@`・`＠p@p30@@`・`p29@`・`@p@`)が記法の外にちょうど 1 つあるときだけ直す。B は、種類の英字の無い `@<ID>@` が 1 つ以上あり、どれも旧にあるカクテルを指すときだけ直す。C のグラニュー糖は、旧のカテゴリとミドルから `name_search` で 1 つだけ見つかったものにする(旧の自動リンクはカテゴリで引いていた)
+  - **直す前の部分が見つからない行**(移行までに旧で書き換えられた・行が消えた・グラニュー糖が 1 つに決まらない)は直さず、`直す前の文が違い、壊れた記法(A〜E)を直さなかった説明文` の件数と、その行(`表.列 ID`)を出力する。記法の外に `@` が残れば、下の「A〜F 以外」と同じく取り除く
+  - **F**: 決まりで直す。旧に無いカクテルを指す `@c<ID>@`(大文字の `@C` も)は、記法を取り除く(名前が残っていないので、残す文字は無い。#285 の、対応の無い `@p`・`@m` と同じ扱い)。どの表の説明文でも同じに扱い、`無いカクテルを指し記法を外した参照` の件数を出力する
+  - **A〜F 以外の壊れた説明文**(移行の直前の数え直しで見つかったもの): 移行を止めない。記法の外に残った `@`・`＠` を取り除いて文字だけを残して移し、`記法の外の @・＠ を取り除いた説明文` の件数と、その行(`表.列 ID`)を出力する。**出たものは、人が見てこの節に足す**
+  - 出力する件数: `壊れた記法(A〜E)を直した説明文`(すべて直れば 8)・`直す前の文が違い、壊れた記法(A〜E)を直さなかった説明文`・`無いカクテルを指し記法を外した参照`・`記法の外の @・＠ を取り除いた説明文`
+- 移した後、`data:verify` が、説明文の記法の外に `@`・`＠` が残っていないか(管理画面で保存するときの検査を通るか)を確かめる
+- 無いノードを指す `@p`・`@m`(17 個)は #285 が扱う(記法を取り除く)ので、ここには入れない
+
+```sql
+-- A〜F 以外も含め、正しい記法を取り除いても @・＠ が残る説明文(2026-10-27 は 8 件。すべて t_cocktails)
+SELECT t, c, id FROM (
+  SELECT 'm_category_kinds' AS t, 'description' AS c, id, description AS txt FROM m_category_kinds
+  UNION ALL SELECT 'm_category', 'description', id, description FROM m_category
+  UNION ALL SELECT 'm_middle', 'description', id, description FROM m_middle
+  UNION ALL SELECT 'm_method', 'description', id, description FROM m_method
+  UNION ALL SELECT 't_dictionary', 'description', id, description FROM t_dictionary
+  UNION ALL SELECT 'm_brand', 'description', id, description FROM m_brand
+  UNION ALL SELECT 't_cocktails', 'description', id, description FROM t_cocktails
+  UNION ALL SELECT 't_cocktails', 'note', id, note FROM t_cocktails
+) d
+WHERE REGEXP_REPLACE(txt, '@[cCbBpPmMdD][1-9][0-9]*@', '') REGEXP '[@＠]'
+ORDER BY t, c, id;
+
+-- F: 無いカクテルを指す @c<ID>@(2026-10-27 は 6 個。すべて t_cocktails の description)
+WITH RECURSIVE refs (t, c, id, rest, ref) AS (
+  SELECT t, c, id, CAST(txt AS CHAR(65535)), CAST(NULL AS CHAR(32)) FROM (
+    SELECT 'm_category_kinds' AS t, 'description' AS c, id, description AS txt FROM m_category_kinds
+    UNION ALL SELECT 'm_category', 'description', id, description FROM m_category
+    UNION ALL SELECT 'm_middle', 'description', id, description FROM m_middle
+    UNION ALL SELECT 'm_method', 'description', id, description FROM m_method
+    UNION ALL SELECT 't_dictionary', 'description', id, description FROM t_dictionary
+    UNION ALL SELECT 'm_brand', 'description', id, description FROM m_brand
+    UNION ALL SELECT 't_cocktails', 'description', id, description FROM t_cocktails
+    UNION ALL SELECT 't_cocktails', 'note', id, note FROM t_cocktails
+  ) d
+  WHERE txt REGEXP '@[cC][1-9][0-9]*@'
+  UNION ALL
+  SELECT t, c, id,
+         SUBSTRING(rest, INSTR(rest, REGEXP_SUBSTR(rest, '@[cCbBpPmMdD][1-9][0-9]*@')) + CHAR_LENGTH(REGEXP_SUBSTR(rest, '@[cCbBpPmMdD][1-9][0-9]*@'))),
+         REGEXP_SUBSTR(rest, '@[cCbBpPmMdD][1-9][0-9]*@')
+  FROM refs WHERE rest REGEXP '@[cCbBpPmMdD][1-9][0-9]*@'
+)
+SELECT r.t, r.c, r.id, r.ref FROM refs r
+LEFT JOIN t_cocktails x ON x.id = CAST(SUBSTRING(r.ref, 3, CHAR_LENGTH(r.ref) - 3) AS UNSIGNED)
+WHERE LOWER(LEFT(r.ref, 2)) = '@c' AND x.id IS NULL
+ORDER BY r.t, r.c, r.id;
+```
+
 ## 移行の直前にやること
 
 本番の旧 DB で、この文書の SQL をすべて流して数え直す。件数が変わっていたら、この文書を直し、増えたものの扱いが今のままでよいかを確かめる(#31 の前に行う)。
+
+- 14 の SQL(説明文の壊れた記法と、無いカクテルを指す記法)も流す。A〜F の行のほかに出たものは、移行で `@`・`＠` を取り除いて移す(止まらない)ので、扱いがそれでよいかを人が見て 14 に足す。A〜F の行が出なくなった・形が変わったものは、移行で `直す前の文が違い、壊れた記法(A〜E)を直さなかった説明文` に出るので、直し方を足すかを決める
