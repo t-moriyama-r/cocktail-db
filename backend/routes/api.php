@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
 use App\Http\Controllers\BrandDetailController;
+use App\Http\Controllers\CategoryDetailController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailListController;
 use App\Http\Controllers\CocktailSameNameController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\DictionaryDetailController;
 use App\Http\Controllers\DictionaryIndexController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
+use App\Http\Controllers\NameSearchController;
 use App\Http\Controllers\RandomWalkController;
 use App\Http\Controllers\SearchFormController;
 use Illuminate\Support\Facades\Route;
@@ -42,11 +44,18 @@ Route::get('/random-walk', RandomWalkController::class);
 // 旧サイトが保存した検索条件を直す(#290)。ID が数百になりうるので、GET ではなく本文で受ける
 Route::post('/legacy/search-condition', LegacySearchConditionController::class);
 
+// 名前の横断検索(#172)。/cocktails より前に置くと、scramble:export が /cocktails の型を
+// 親の CocktailSummaryResource にしてしまい(子の CocktailListItemResource の項目が落ちる)、FE の型がずれる
+Route::get('/search', NameSearchController::class);
+
 // ID は int に収まる桁数に縛る(超える数字は経路に合わず 404。TypeError の 500 にしない)
 Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
 Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
 
 Route::get('/brands/{brand}', BrandDetailController::class)->where('brand', '[0-9]{1,18}');
+
+// ノードの詳細(#42)。旧のカテゴリ・ミドルの詳細を、任意の深さのノードで 1 つにしたもの
+Route::get('/categories/{category}', CategoryDetailController::class)->where('category', '[0-9]{1,18}');
 
 Route::get('/dictionaries', DictionaryIndexController::class);
 Route::get('/dictionaries/{dictionary}', DictionaryDetailController::class)->where('dictionary', '[0-9]{1,18}');

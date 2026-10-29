@@ -27,6 +27,10 @@
   /* 動画のあるカクテルの行のリンクと、説明文の中の動画があるリンク(#301)の色と、YouTube のアイコンの色(旧 Results/Tables/table.scss の hasMovie と同じ値) */
   --color-has-movie: #c24e00; /* 旧は #ff6600 だが、白地で 2.94:1 のため 4.5:1 を満たすよう濃くした */
   --color-youtube: #c4302b;
+  /* 検索フォームの材料の欄で、根(旧の種別)ごとに分ける背景の色(旧 form.vue の kind_1〜kind_5 と同じ値。#305) */
+  --color-ingredient-liquor-bg: #ddeeff; /* 役割なしの根(旧の蒸留酒・醸造酒・混成酒) */
+  --color-ingredient-soft-drink-bg: #ffffff; /* ソフトドリンク */
+  --color-ingredient-other-bg: #eeeeee; /* その他 */
 
   /* 余白。段階は共通にし、案ごとには倍率だけを変える */
   --space-scale: 1;
