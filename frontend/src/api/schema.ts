@@ -694,16 +694,23 @@ export interface components {
          */
         CocktailSearchRequest: {
             /**
-             * @description 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
+             * @description 方式。省くと or。having(#165)は、受ける形を決めてから足す。それまで受けると、
              *     OR 検索の結果を黙って返してしまう
              * @enum {string|null}
              */
-            mode?: "or" | null;
+            mode?: "or" | "and" | null;
             /**
-             * @description 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+             * @description 選んだノード(or)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
+             *     and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く
              */
-            category_ids: number[];
+            category_ids?: number[];
+            /**
+             * @description 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
+             *     まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
+             *     and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
+             */
+            category_groups?: number[][];
             /**
              * @description 並べ替える列(#167)。省くと ID の順
              * @enum {string|null}
@@ -1197,7 +1204,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": components["schemas"]["CocktailSearchRequest"];
             };
