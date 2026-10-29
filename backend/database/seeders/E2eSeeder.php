@@ -2,14 +2,46 @@
 
 namespace Database\Seeders;
 
+use App\Enums\CategoryRole;
+use App\Models\Category;
+use App\Services\CategoryTree;
 use Illuminate\Database\Seeder;
 
 /**
  * E2E テスト(e2e/)が前提にするデータを入れる。
  * 本番のデータは使わず、画面の E2E が要るデータをここに足していく。
- * 今の画面(トップの Hello World)は DB のデータを使わないので、まだ何も入れない。
  */
 class E2eSeeder extends Seeder
 {
-    public function run(): void {}
+    public function run(): void
+    {
+        $this->seedIngredientTree(app(CategoryTree::class));
+    }
+
+    /**
+     * トップの材料の欄(#305)の E2E 用の木。根(蒸留酒)から数えて深さ 5 の「ビーフィーター」まで
+     * (蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)。
+     * 閉包表は CategoryTree 経由でだけ書き換える決まりなので、ノードは addNode で作る。
+     */
+    private function seedIngredientTree(CategoryTree $tree): void
+    {
+        $node = fn (?Category $parent, string $name, ?CategoryRole $role = null): Category => $tree->addNode($parent, [
+            'name' => $name,
+            'name_search' => $name,
+            'name_eng' => $name,
+            'is_major' => true,
+            'role' => $role,
+        ]);
+
+        $liquor = $node(null, '蒸留酒');
+        $gin = $node($liquor, 'ジン');
+        $dryGin = $node($gin, 'ドライジン');
+        $londonDryGin = $node($dryGin, 'ロンドンドライジン');
+        $node($londonDryGin, 'ビーフィーター');
+        $node($liquor, 'ウォッカ');
+
+        $node(null, 'ソフトドリンク', CategoryRole::SoftDrink);
+        $other = $node(null, 'その他', CategoryRole::Other);
+        $node($other, 'ミント');
+    }
 }

@@ -97,3 +97,13 @@
   color: var(--color-link-hover);
   text-decoration: underline;
 }
+
+/* 見出しのノード(appearance.isHeading)。選ぶ入力も名前のボタンも出さない */
+.heading {
+  font-weight: bold;
+}
+
+.note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

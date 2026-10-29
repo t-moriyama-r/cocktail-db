@@ -183,6 +183,58 @@ describe('CategoryTree', () => {
     expect(screen.getByRole('checkbox', { name: 'ラム' })).toBeInTheDocument()
   })
 
+  test('TC-305-09: 見出しのノードは、単一選択でも複数選択でも選ぶ入力と名前のボタンを出さず、開閉はできる', () => {
+    const isHeading = (node: CategoryTreeNode) => node.id === 1
+    const { unmount } = render(
+      <CategoryTree
+        label="カテゴリ"
+        nodes={buildTestTree()}
+        selection={singleSelection()}
+        onNameClick={() => {}}
+        appearance={{ isHeading }}
+      />,
+    )
+    expect(screen.queryByRole('radio', { name: '蒸留酒' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '蒸留酒' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'ソフトドリンク' })).toBeInTheDocument()
+    unmount()
+
+    render(
+      <CategoryTree
+        label="カテゴリ"
+        nodes={buildTestTree()}
+        selection={multipleSelection()}
+        onNameClick={() => {}}
+        appearance={{ isHeading }}
+      />,
+    )
+    expect(screen.queryByRole('checkbox', { name: '蒸留酒' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '蒸留酒' })).not.toBeInTheDocument()
+    expect(screen.getByText('蒸留酒')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '蒸留酒を閉じる' }))
+    expect(screen.queryByRole('checkbox', { name: 'ラム' })).not.toBeInTheDocument()
+  })
+
+  test('TC-305-10: 行に足すクラスと、名前の後ろの注記を、ノードごとに外から渡せる', () => {
+    render(
+      <CategoryTree
+        label="カテゴリ"
+        nodes={buildTestTree()}
+        selection={multipleSelection()}
+        appearance={{
+          itemClassName: (node) => (node.id === 2 ? 'soft-drink' : undefined),
+          noteOf: (node) => (node.id === 2 ? '注記' : undefined),
+        }}
+      />,
+    )
+
+    const softDrinkRow = screen.getByRole('checkbox', { name: 'ソフトドリンク' }).closest('li')
+    expect(softDrinkRow).toHaveClass('soft-drink')
+    expect(softDrinkRow).toHaveTextContent(/ソフトドリンク注記/)
+    expect(screen.getByRole('checkbox', { name: '蒸留酒' }).closest('li')).not.toHaveClass('soft-drink')
+    expect(screen.getAllByText('注記')).toHaveLength(1)
+  })
+
   test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでが 1 秒以内で、閉じた子は描かない', () => {
     const { container } = render(
       <CategoryTree label="カテゴリ" nodes={buildLargeTree()} selection={multipleSelection()} />,
