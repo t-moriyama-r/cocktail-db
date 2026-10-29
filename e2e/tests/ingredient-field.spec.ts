@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 // トップの下の材料の欄(#305)。E2eSeeder の木(蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)を使う
-test('TC-305-12: 深さ 5 のノードを開いてチェックでき、名前を押すと詳細へ移り、戻るとチェックが残る', async ({ page }) => {
+test('TC-305-12: 深さ 5 のノードを開いてチェックでき、名前を押すと詳細へ移り、戻るとトップが出る', async ({ page }) => {
   await page.goto('/')
 
   await page.getByRole('button', { name: 'ジンを開く' }).click()
