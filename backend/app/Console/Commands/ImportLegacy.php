@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\LegacyImport\AffiliateImporter;
 use App\Services\LegacyImport\BrandImporter;
 use App\Services\LegacyImport\CategoryImporter;
 use App\Services\LegacyImport\CocktailImporter;
@@ -28,6 +29,7 @@ final class ImportLegacy extends Command
         'misc' => MiscImporter::class,
         'categories' => CategoryImporter::class,
         'brands' => BrandImporter::class,
+        'affiliates' => AffiliateImporter::class,
         'cocktails' => CocktailImporter::class,
         'descriptions' => DescriptionImporter::class,
     ];

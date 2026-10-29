@@ -14,14 +14,19 @@ use UnexpectedValueException;
 final class LegacyRows
 {
     /**
-     * $table の行を、$orderBy の昇順で読む。
+     * $table の行を、$orderBy の列の昇順(前の列から順に比べる)で読む。
      *
      * @return list<array<mixed>>
      */
-    public static function ordered(string $table, string $orderBy): array
+    public static function ordered(string $table, string $orderBy, string ...$thenBy): array
     {
+        $query = DB::connection('legacy')->table($table);
+        foreach ([$orderBy, ...$thenBy] as $column) {
+            $query->orderBy($column);
+        }
+
         $rows = [];
-        foreach (DB::connection('legacy')->table($table)->orderBy($orderBy)->get() as $row) {
+        foreach ($query->get() as $row) {
             $rows[] = (array) $row;
         }
 

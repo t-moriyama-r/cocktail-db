@@ -225,7 +225,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `amazon_detail_url` | `text` | ○ | | `amazon_detail_url` |
 | `amazon_search_url` | `text` | ○ | | `amazon_search_url` |
 | `amazon_fetched_at` | `dateTime` | ○ | Amazon の値を取った時刻(#247) | `updated_at`(#32) |
-| `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url` から取る(取れるかは #32 で確かめる) |
+| `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url`(アフィリエイトの転送の URL)の `pc=` に入った商品のページ `item.rakuten.co.jp/<店舗>/<管理番号>/` から `<店舗>:<管理番号>` を取る(#32。旧の 450 行すべてで取れた。API の `itemCode` と同じ値かは、取り直し(#249)で呼ぶまで確かめていない) |
 | `rakuten_title` | `text` | ○ | | `rakuten_title` |
 | `rakuten_price` | `unsignedInteger` | ○ | | `rakuten_price` |
 | `rakuten_image_url` | `text` | ○ | | `rakuten_image_url` |
