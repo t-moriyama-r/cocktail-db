@@ -199,15 +199,6 @@ jobs:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: bash .ai-dev/.github/scripts/permission-denials.sh "$EXECUTION_FILE"
 
-      # 図のラベルが長いと GitHub で見切れる(#478)。この回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
-      # ログに出すだけなので、失敗しても止めない
-      - name: 図のラベルの字数を確かめる
-        if: always() && steps.claude.outputs.execution_file != ''
-        continue-on-error: true
-        env:
-          SINCE: ${{ github.event.comment.created_at }}
-        run: bash .ai-dev/.github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
-
   notify-resume:
     needs: resume
     if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.promotion != 'true'
@@ -221,6 +212,17 @@ jobs:
         with:
           sparse-checkout: .github/scripts
           persist-credentials: false
+
+      # 図のラベルが長いと GitHub で見切れる(#478)。resume の回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # PR のコードを checkout したジョブではなく、ここで流す。ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number || github.event.pull_request.number }}
+          SINCE: ${{ github.event.comment.created_at }}
+        run: bash .github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
 
       # needs-approval はここでは新しく付かない(マージできる状態になったときに ai-auto-merge.yml が付ける)
       - name: 新しく付いた needs-human・needs-local を Slack に知らせる
@@ -289,6 +291,7 @@ jobs:
     outputs:
       before: ${{ steps.pr.outputs.before }}
       run: ${{ steps.pr.outputs.run }}
+      started: ${{ steps.start.outputs.at }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -360,7 +363,7 @@ jobs:
           # GITHUB_TOKEN で付けたラベルでは pr-status.yml が起きないので、状態のラベルはここで付け替える
           if [ -f .ai-dev/.github/scripts/pr-status.sh ]; then bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true; fi
 
-      # 図のラベルの字数を、この時刻より後に書いたコメントだけで確かめる(後ろの「図のラベルの字数を確かめる」)
+      # 図のラベルの字数を、この時刻より後に書いたコメントだけで確かめる(notify-review の「図のラベルの字数を確かめる」)
       - name: Claude Code を動かす前の時刻
         id: start
         if: steps.pr.outputs.run
@@ -449,25 +452,6 @@ jobs:
             `needs-approval` ラベルは付けない。CI が緑でマージできる状態になったら、ai-auto-merge.yml が付けて人に知らせる(自動でマージする PR なら、そのままマージする)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
-      # PR のブランチの checkout が .ai-dev を消し、Claude Code は作業ディレクトリのファイルを書き換えられるので、既定のブランチのスクリプトを取り直す
-      - uses: actions/checkout@v6
-        if: always() && steps.start.outputs.at
-        continue-on-error: true   # 字数を数えるためだけの取り直しなので、落ちても本来の仕事を止めない
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          path: .ai-dev
-          sparse-checkout: .github/scripts
-          persist-credentials: false
-
-      # 図のラベルが長いと GitHub で見切れる(#478)。この回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
-      # ログに出すだけなので、失敗しても止めない
-      - name: 図のラベルの字数を確かめる
-        if: always() && steps.start.outputs.at
-        continue-on-error: true
-        env:
-          SINCE: ${{ steps.start.outputs.at }}
-        run: bash .ai-dev/.github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
-
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
       - name: 途中で止まったら、対応中の印を外す
         if: (failure() || cancelled()) && steps.pr.outputs.run
@@ -487,6 +471,18 @@ jobs:
         with:
           sparse-checkout: .github/scripts
           persist-credentials: false
+
+      # 図のラベルが長いと GitHub で見切れる(#478)。review の回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # PR のコードを checkout したジョブではなく、ここで流す。ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        if: needs.review.outputs.started != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+          SINCE: ${{ needs.review.outputs.started }}
+        run: bash .github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
 
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
