@@ -1,27 +1,14 @@
 <?php
 
-use App\Models\LegacyIdMap;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\LegacyFixture;
 use Tests\Support\LegacyImportCommand;
+use Tests\Support\LegacyNodeMap;
 
 // legacy:import の descriptions(説明文の参照の記法を、新しいノードの ID に直す。#285)。旧 DB を使うので db グループ
 
 uses(RefreshDatabase::class)->group('db');
-
-/**
- * 旧の表と ID から、移した先のノードの ID を legacy_id_maps で引く。
- */
-function descriptionNodeId(string $legacyTable, int $legacyId): int
-{
-    return LegacyIdMap::query()
-        ->where('legacy_table', $legacyTable)
-        ->where('legacy_id', $legacyId)
-        ->where('new_table', 'categories')
-        ->sole()
-        ->new_id;
-}
 
 /**
  * 旧の行の説明文を書き換える。
@@ -70,11 +57,11 @@ it('TC-285-01: @p・@m を、移した先のノードの ID の @n にする(旧
 
     LegacyImportCommand::run($this, [])->assertExitCode(0)->run();
 
-    $category3 = descriptionNodeId('m_category', 3);
-    $middle3 = descriptionNodeId('m_middle', 3);
+    $category3 = LegacyNodeMap::id('m_category', 3);
+    $middle3 = LegacyNodeMap::id('m_middle', 3);
     expect($category3)->not->toBe($middle3)
         ->and(newDescription('cocktails', 1))
-        ->toBe('ベースは@n'.descriptionNodeId('m_category', 1).'@。@n'.$category3.'@の@n'.$middle3.'@も合う。');
+        ->toBe('ベースは@n'.LegacyNodeMap::id('m_category', 1).'@。@n'.$category3.'@の@n'.$middle3.'@も合う。');
 });
 
 it('TC-285-02: 大文字の @P・@M も @n にし、@C・@B・@D は ID を変えずに小文字にする', function () {
@@ -83,7 +70,7 @@ it('TC-285-02: 大文字の @P・@M も @n にし、@C・@B・@D は ID を変�
     LegacyImportCommand::run($this, [])->assertExitCode(0)->run();
 
     expect(newDescription('cocktails', 1))->toBe(
-        '@n'.descriptionNodeId('m_category', 2).'@と@n'.descriptionNodeId('m_middle', 1).'@、@c2@・@b1@・@d1@'
+        '@n'.LegacyNodeMap::id('m_category', 2).'@と@n'.LegacyNodeMap::id('m_middle', 1).'@、@c2@・@b1@・@d1@'
     );
 });
 
@@ -105,7 +92,7 @@ it('TC-285-04: 対応するノードが無い @p・@m は、記法を外して�
         ->assertExitCode(0)
         ->run();
 
-    expect(newDescription('cocktails', 1))->toBe('前後、。@n'.descriptionNodeId('m_category', 1).'@');
+    expect(newDescription('cocktails', 1))->toBe('前後、。@n'.LegacyNodeMap::id('m_category', 1).'@');
 });
 
 it('TC-285-05: 説明文を持つすべての表と列(種別・カテゴリ・ミドル・技法・用語・銘柄の description、カクテルの description・note)を直す', function () {
@@ -120,10 +107,10 @@ it('TC-285-05: 説明文を持つすべての表と列(種別・カテゴリ・�
 
     LegacyImportCommand::run($this, [])->assertExitCode(0)->run();
 
-    $node = fn (string $table, int $id): string => '@n'.descriptionNodeId($table, $id).'@';
-    expect(newDescription('categories', descriptionNodeId('m_category_kinds', 1)))->toBe('種別'.$node('m_category', 1))
-        ->and(newDescription('categories', descriptionNodeId('m_category', 2)))->toBe('カテゴリ'.$node('m_middle', 3))
-        ->and(newDescription('categories', descriptionNodeId('m_middle', 1)))->toBe('ミドル'.$node('m_category', 3))
+    $node = fn (string $table, int $id): string => '@n'.LegacyNodeMap::id($table, $id).'@';
+    expect(newDescription('categories', LegacyNodeMap::id('m_category_kinds', 1)))->toBe('種別'.$node('m_category', 1))
+        ->and(newDescription('categories', LegacyNodeMap::id('m_category', 2)))->toBe('カテゴリ'.$node('m_middle', 3))
+        ->and(newDescription('categories', LegacyNodeMap::id('m_middle', 1)))->toBe('ミドル'.$node('m_category', 3))
         ->and(newDescription('methods', 1))->toBe('技法'.$node('m_category', 4))
         ->and(newDescription('dictionaries', 1))->toBe('用語'.$node('m_category', 5))
         ->and(newDescription('brands', 1))->toBe('銘柄'.$node('m_middle', 2))
@@ -169,7 +156,7 @@ it('TC-285-07: 2 回流しても、説明文と出力する件数は変わらな
     expect(descriptionSnapshot())->toBe($first);
 });
 
-it('TC-285-08: 参照の記法の形でないものは書き換えない', function (?string $text) {
+it('TC-285-08: 参照の記法の形でないものは、参照として書き換えない(記法の外の @ は取り除く。#393)', function (?string $text, ?string $expected) {
     setLegacyDescription('t_cocktails', 1, ['description' => $text]);
 
     LegacyImportCommand::run($this, [])
@@ -178,16 +165,16 @@ it('TC-285-08: 参照の記法の形でないものは書き換えない', funct
         ->assertExitCode(0)
         ->run();
 
-    expect(newDescription('cocktails', 1))->toBe($text);
+    expect(newDescription('cocktails', 1))->toBe($expected);
 })->with([
-    'null' => [null],
-    '空の文字列' => [''],
-    '記法の無い文' => ['ジンをトニックで割る。'],
-    'ID の無い記法(旧の決め打ちの名前のノードが無かったもの)' => ['@p@と@m@'],
-    '0 で始まる ID' => ['@p0@・@m01@'],
-    '閉じていない記法' => ['前に@p12'],
-    '種類がほかの英字' => ['@x12@・@n3@'],
-    'メールアドレス' => ['admin@example.com'],
+    'null' => [null, null],
+    '空の文字列' => ['', ''],
+    '記法の無い文' => ['ジンをトニックで割る。', 'ジンをトニックで割る。'],
+    'ID の無い記法(旧の決め打ちの名前のノードが無かったもの)' => ['@p@と@m@', 'pとm'],
+    '0 で始まる ID' => ['@p0@・@m01@', 'p0・m01'],
+    '閉じていない記法' => ['前に@p12', '前にp12'],
+    '種類がほかの英字' => ['@x12@・@n3@', 'x12・n3'],
+    'メールアドレス' => ['admin@example.com', 'adminexample.com'],
 ]);
 
 it('TC-285-09: 移した先の行が無い(ほかの部分をまだ移していない)ときは、どの行かを添えて止め、何も書かない', function () {
@@ -210,7 +197,7 @@ it('TC-285-10: --only を付けないと、ほかの部分を移した後に説�
         ->assertExitCode(0)
         ->run();
 
-    expect(newDescription('dictionaries', 1))->toBe('@n'.descriptionNodeId('m_category', 1).'@');
+    expect(newDescription('dictionaries', 1))->toBe('@n'.LegacyNodeMap::id('m_category', 1).'@');
 });
 
 it('TC-285-11: 記法の無い行は書かない(ほかの部分が入れた説明文と更新日時をそのまま残す)', function () {
@@ -226,5 +213,5 @@ it('TC-285-11: 記法の無い行は書かない(ほかの部分が入れた説�
 
     expect(DB::table('cocktails')->where('id', '<>', 1)->orderBy('id')->get()->map(fn (object $row): array => (array) $row)->all())->toBe($before)
         ->and(DB::table('cocktails')->where('id', 1)->value('updated_at'))->toBe($updatedAt)
-        ->and(newDescription('cocktails', 1))->toBe('@n'.descriptionNodeId('m_category', 1).'@');
+        ->and(newDescription('cocktails', 1))->toBe('@n'.LegacyNodeMap::id('m_category', 1).'@');
 });

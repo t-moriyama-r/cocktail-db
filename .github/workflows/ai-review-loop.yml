@@ -1,6 +1,6 @@
 # AI レビュアーの指摘への対応と、needs-human・needs-approval で人に頼んだ後の続きを、GitHub Actions 上の Claude Code が行う
 #
-# - resume: needs-human か needs-approval の付いた PR にリポジトリのオーナーがコメントしたら、判断・直してほしいことのとおりに直し、
+# - resume: needs-human か needs-approval の付いた PR(オーナーがこのリポジトリのブランチで作ったもの)にリポジトリのオーナーがコメントしたら、判断・直してほしいことのとおりに直し、
 #           関係するスレッドに返信し、push して終わる。Claude Code が拒否されたツールは、後の手順でログに出す(.github/scripts/permission-denials.sh)
 # - review: オーナーの PR に CodeRabbit のレビューが付いたら、最初の回から指摘に対応する(手元のエージェントは対応しない)。
 #           CodeRabbit が上限で動かず、ai-claude-review.yml が代わりにレビューしたとき、
@@ -85,27 +85,33 @@ jobs:
     timeout-minutes: 30
     outputs:
       before: ${{ steps.labels.outputs.before }}
-      promotion: ${{ steps.target.outputs.promotion }}
+      skip: ${{ steps.target.outputs.skip }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
       PR: ${{ github.event.issue.number || github.event.pull_request.number }}
     steps:
-      # issue_comment のイベントには PR の向き先が無いので、ここで調べる。昇格の PR なら、以降の手順をすべて飛ばす
-      - name: 昇格の PR(staging・release 向け)か確かめる
+      # issue_comment のイベントには PR の向き先・作った人が無いので、ここで調べる。次のどれかなら、以降の手順をすべて飛ばす
+      # - 昇格の PR: head が保護されたブランチ(develop・staging)なので、直しを push できない
+      # - 閉じている・フォークから・オーナーが作ったものでない PR: review ジョブの「対応するか決める」と同じく、
+      #   Claude Code に checkout させるのは、オーナーがこのリポジトリのブランチで作った PR だけにする(#508)
+      - name: 対応する PR か確かめる
         id: target
         run: |
-          base=$(gh pr view "$PR" -R "$REPO" --json baseRefName --jq .baseRefName)
+          skip() { echo "#$PR 見送り: $*"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          pr=$(gh pr view "$PR" -R "$REPO" --json state,isCrossRepository,author,baseRefName)
+          base=$(jq -r .baseRefName <<<"$pr")
           case "$base" in
-            staging | release)
-              echo "#$PR は昇格の PR($base 向き)。head が保護されたブランチ(develop・staging)なので、Claude Code は動かさない"
-              echo "promotion=true" >> "$GITHUB_OUTPUT"
-              ;;
+            staging | release) skip "昇格の PR($base 向き)。head が保護されたブランチ(develop・staging)なので、Claude Code は動かさない" ;;
           esac
+          [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "閉じている"
+          [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "フォークから"
+          [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "オーナーの PR でない"
 
       # 状態のラベルを付け替えるスクリプト。PR のコードではなく既定のブランチのものを使う
       - uses: actions/checkout@v6
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev
@@ -116,7 +122,7 @@ jobs:
       # needs-approval は、直すことになったときに Claude Code が外す(承認だけの返信なら付けたままにする)
       - name: needs-human を外し、Actions で引き継いだ印を付ける
         id: labels
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         run: |
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "人の判断の後、GitHub Actions の Claude Code が引き継いだ PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
@@ -128,7 +134,7 @@ jobs:
       # Claude Code が仕事をしたか(コミットが進んだか・この後にエージェントがコメントしたか)を、終わった後に比べるために残す
       - name: 動く前のコミットと時刻を残す
         id: start
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         run: |
           sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
           at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -137,19 +143,19 @@ jobs:
 
       - name: PR のブランチを取る
         id: pr
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         run: echo "head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         with:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
         id: claude
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
@@ -235,7 +241,7 @@ jobs:
 
   notify-resume:
     needs: resume
-    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.promotion != 'true'
+    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: write   # 通知・代わりのレビューのワークフローを gh workflow run で呼ぶ
