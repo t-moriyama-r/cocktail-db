@@ -227,6 +227,16 @@ describe('RandomCocktails の失敗', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(1)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  test('TC-300-17: カクテル以外が起点で 404 なら、0 件の表にせず、エラーと「もう一度読み込む」を出す', async () => {
+    mockApiHandler('get', '/cocktails/random', () => jsonResponse({ message: 'Not Found' }, 404))
+
+    renderList(<RandomCocktails origin={{ kind: 'category', id: 999 }} />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('エラー 404')
+    expect(screen.getByRole('button', { name: 'もう一度読み込む' })).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
 })
 
 describe('RandomCocktails の「再取得」', () => {

@@ -36,7 +36,15 @@ export default function RandomCocktails({ origin, limit = DEFAULT_LIMIT }: Props
   // 「再取得」の読み込み中も前の一覧を出せるよう、同じ起点で最後に届いた一覧を覚えておく(描画の中で前の描画の値を覚える形)
   const [shown, setShown] = useState<{ request: typeof request; rows: readonly CocktailTableRow[] } | null>(null)
   // 起点のカクテルが下書き・無い ID(404)は、当たるものが無いのと同じく 0 件の表にする
-  const latest = state.kind === 'success' ? state.data.data : state.kind === 'not-found' ? NO_ROWS : null
+  // 起点がカクテル以外の 404 は、0 件ではなく API のエラーとして出す
+  const emptyOrigin = state.kind === 'not-found' && kind === 'cocktail'
+  const latest = state.kind === 'success' ? state.data.data : emptyOrigin ? NO_ROWS : null
+  const apiError =
+    state.kind === 'not-found' && kind !== 'cocktail'
+      ? ({ kind: 'http-error', status: 404 } as const)
+      : state.kind === 'http-error' || state.kind === 'network-error'
+        ? state
+        : null
   if (latest !== null && (shown?.request !== request || shown.rows !== latest)) {
     setShown({ request, rows: latest })
   } else if (latest === null && state.kind !== 'loading' && shown !== null) {
@@ -59,7 +67,7 @@ export default function RandomCocktails({ origin, limit = DEFAULT_LIMIT }: Props
           再取得
         </button>
       </div>
-      {(state.kind === 'http-error' || state.kind === 'network-error') && <ApiError error={state} onRetry={retry} />}
+      {apiError !== null && <ApiError error={apiError} onRetry={retry} />}
       {rows !== null && <CocktailTable cocktails={rows} sort={{ mode: 'local' }} label={heading} />}
     </section>
   )
