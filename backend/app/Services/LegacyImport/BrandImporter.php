@@ -67,7 +67,7 @@ final class BrandImporter implements LegacyImporter
             'name' => $row['name'],
             'name_search' => $row['name_search'],
             'name_eng' => $row['name_eng'],
-            'volume' => $this->volume($id, $row),
+            'volume' => LegacyVolume::fromLegacy($row['volume'] ?? null, self::LEGACY_TABLE." の id {$id}"),
             'description' => $row['description'],
             'is_major' => (bool) $row['is_major'],
             'is_like' => (bool) $row['is_like'],
@@ -96,27 +96,6 @@ final class BrandImporter implements LegacyImporter
         return $middleId !== null
             ? $this->nodeId(self::LEGACY_MIDDLE, $middleId, $context)
             : $this->nodeId(self::LEGACY_CATEGORY, LegacyRows::int($row, 'category', self::LEGACY_TABLE), $context);
-    }
-
-    /**
-     * 度数。旧の列は float なので、2 進で表せない値(1.7 など)が 1.7000000476837158 のように読めることがある。
-     * 新の列(小数 1 桁)に合わせて丸める。丸めで値が変わるほど桁の多い値は、黙って丸めずに止める。
-     *
-     * @param  array<mixed>  $row
-     */
-    private function volume(int $id, array $row): string
-    {
-        if (! is_numeric($row['volume'] ?? null)) {
-            throw new UnexpectedValueException(self::LEGACY_TABLE." の id {$id} の volume が数でない");
-        }
-
-        $volume = (float) $row['volume'];
-        $rounded = round($volume, 1);
-        if (abs($volume - $rounded) > 0.0001) {
-            throw new UnexpectedValueException(self::LEGACY_TABLE." の id {$id} の volume({$volume})が小数 1 桁に収まらない");
-        }
-
-        return number_format($rounded, 1, '.', '');
     }
 
     /**
