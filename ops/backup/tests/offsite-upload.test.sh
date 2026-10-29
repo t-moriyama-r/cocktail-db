@@ -72,8 +72,9 @@ tc_decrypts_and_hashes_match() {
   (cd "$restore/db" && sha256sum -c --quiet app-20261027-030000.sha256) || ok=0
   (cd "$restore/storage" && sha256sum -c --quiet 20261027-030500.tar.gz.sha256) || ok=0
   cmp -s "$restore/db/app-20261027-030000.sql.gz" "$case_dir/backups/db/app-20261027-030000.sql.gz" || ok=0
-  # B2 に置かれたものは暗号化されていて、元の中身がそのまま入っていない
-  ! grep -q 'CREATE TABLE secret_rows' "$case_dir/store/cocktail/db/app-20261027-030000.sql.gz.gpg" || ok=0
+  # B2 に置かれたものは暗号化されていて、元の中身がそのまま入っていない(.counts.tsv は元が平文なので、文字列で確かめられる)
+  ! grep -q secret_rows "$case_dir/store/cocktail/db/app-20261027-030000.counts.tsv.gpg" || ok=0
+  gpg --batch --homedir "$KEYS" --list-packets "$case_dir/store/cocktail/db/app-20261027-030000.counts.tsv.gpg" 2>/dev/null | grep -q 'pubkey enc packet' || ok=0
   ! cmp -s "$case_dir/store/cocktail/db/app-20261027-030000.sql.gz.gpg" "$case_dir/backups/db/app-20261027-030000.sql.gz" || ok=0
   check "TC-373-02: B2 に置いたものは平文でなく、秘密鍵で復号すると元と同じになり、sha256sum -c が通る" "$ok"
 }
