@@ -1004,16 +1004,23 @@ export interface components {
          */
         CocktailSearchRequest: {
             /**
-             * @description 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は、受ける形を
-             *     決めてから足す。それまで受けると、OR 検索の結果を黙って返してしまう
+             * @description 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は
+             *     選んだノードのまとまりの並び(category_groups)で受ける
              * @enum {string|null}
              */
-            mode?: "or" | "having" | null;
+            mode?: "or" | "and" | "having" | null;
             /**
              * @description 選んだノード(or では探す材料、having では手持ちの材料)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
+             *     and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く(空の配列も弾くため、prohibited ではなく missing)
              */
-            category_ids: number[];
+            category_ids?: number[];
+            /**
+             * @description 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
+             *     まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
+             *     and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
+             */
+            category_groups?: number[][];
             /**
              * @description 技法(#166)。カクテルの技法がこの中にあるものに絞る。省く・null・空の配列なら、すべての技法として扱う
              *     (旧は 1 つ以上が必須だった。docs/decisions/search-screen.md の 6)。無い技法の ID は弾かず、何にも一致しない
