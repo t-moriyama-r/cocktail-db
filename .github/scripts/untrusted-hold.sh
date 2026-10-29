@@ -49,8 +49,9 @@ untrusted_hold() {
   body=$(hold_body "$found")
   # 同じものを前の回でもう頼んでいれば書かない(信頼しないものの URL が、すべて目印の付いたコメントにあるか)。
   # untrusted-comments.sh の出力は書いた順ではないので、どれか 1 件だけでは新しく書かれたものを見落とす
+  # 頼むコメントは github-actions[bot] が書く。外の人が目印をまねたコメントは頼み済みに数えない(untrusted-notify.sh と同じ)
   # (パイプに直接つなぐと、grep -q が先に終わったときに gh が SIGPIPE で落ち、pipefail で「無い」と読まれるので、変数に受ける)
-  marked=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[].body | select(contains(\"$MARK\"))")
+  marked=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$MARK\"))) | .body")
   if ! all_asked "$found" "$marked"; then
     gh api "repos/$repo/issues/$n/comments" -f body="$body" >/dev/null
   fi

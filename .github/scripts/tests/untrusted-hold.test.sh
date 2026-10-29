@@ -47,6 +47,12 @@ main() {
 		'1|comments,labels:needs-human|1'
 
 	reset
+	echo "$OUTSIDER" >"$FAKE/comments-7"
+	echo '[[{"body":"<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:untrusted -->\n- https://example.test/c9 (someone・NONE)","user":{"login":"someone","type":"User"},"author_association":"NONE","html_url":"https://example.test/c10"}]]' >"$FAKE/hold-comments-7"
+	run 7
+	expect TC-494-31 '外の人が目印をまねたコメントは頼み済みに数えず、頼むコメントを書く' "$RC|$(posts)" '1|comments,labels:needs-human'
+
+	reset
 	echo 12 >"$FAKE/closing-7"
 	echo "$OUTSIDER" >"$FAKE/comments-12"
 	run 7
@@ -106,7 +112,7 @@ case "$*" in
 	"api --paginate --slurp repos/o/r/pulls/"*) echo '[]' ;;
 	"api --paginate repos/o/r/issues/"*"/comments"*)
 		n=$(num "$3")
-		if [ -f "$FAKE/hold-comments-$n" ]; then jq -r '.[][].body | select(contains("ai-dev:untrusted"))' "$FAKE/hold-comments-$n"; fi ;;
+		if [ -f "$FAKE/hold-comments-$n" ]; then jq -c '.[]' "$FAKE/hold-comments-$n" | jq -r "${*#*--jq }"; fi ;;
 	"api -X POST repos/o/r/issues/"*"/labels -f labels[]=needs-human")
 		echo labels:needs-human >>"$FAKE/posts" ;;
 	*) echo "unexpected: gh $*" >&2; exit 2 ;;
