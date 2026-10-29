@@ -11,6 +11,8 @@
 # 画面のコード(frontend/src/ の .tsx・.css)を変えた PR は、幅の区切り(xs・sm・md・lg。docs/design/style.md の「幅の区切り」)の
 # どれかで崩れていても気づけるよう、区切りごとに撮る決まり(#432)。節に、4 つの区切りそれぞれに入る幅(<数字>px)が書かれているかを見る。
 # 画面に出ない FE の変更(純関数・型だけ)は、本文に <!-- ai-dev:no-viewport-evidence 理由 --> を書けばこの検査を飛ばす
+# 撮る途中で気づいて直さなかったことを本文の「気づいたこと」に書くだけでは、誰も拾わないままマージされた(#512 の 375px の横スクロール)。
+# 「気づいたこと」の見出しの下の項目は、issue の参照(#<番号> か issue の URL)が付くまで落とす(#518)
 set -euo pipefail
 
 repo=$1
@@ -67,6 +69,27 @@ check_viewports() {
 	fi
 }
 
+# 本文の「気づいたこと」の見出し(## 〜 ######)の下にある箇条書きの項目のうち、issue の参照が無いものを 1 項目 1 行で出す。
+# 字下げした続きの行は、その項目に含める。PR のひな形の HTML コメントは数えない
+findings_without_issue() {
+	perl -0pe 's/<!--.*?-->//gs' <<<"$body" | awk '
+		/^#+[[:space:]]/ {
+			if (item != "") print item
+			item = ""
+			in_findings = ($0 ~ /^##+[[:space:]]*(\*\*)?気づいたこと/)
+			next
+		}
+		!in_findings { next }
+		/^([-*]|[0-9]+\.)[[:space:]]/ {
+			if (item != "") print item
+			item = $0
+			next
+		}
+		item != "" && /^[[:space:]]+[^[:space:]]/ { item = item " " $0 }
+		END { if (item != "") print item }
+	' | grep -vE '#[0-9]+|/issues/[0-9]+' || true
+}
+
 problems=()
 if ! grep -q '^## 証跡' <<<"$body"; then
 	problems+=('本文に「## 証跡」の節が無い')
@@ -89,6 +112,11 @@ else
 	if grep -Eq '^frontend/src/.*\.(tsx|css)$' <<<"$code"; then
 		check_viewports
 	fi
+fi
+unlinked=$(findings_without_issue)
+if [ -n "$unlinked" ]; then
+	problems+=('「気づいたこと」に、issue の参照(#<番号> か issue の URL)が無い項目がある。この PR で直さないものは issue にして参照を書く(この PR の中で判断が要るものは needs-human で聞く)')
+	problems+=("該当の項目: $(head -3 <<<"$unlinked" | paste -sd'/' -)")
 fi
 
 if [ ${#problems[@]} -gt 0 ]; then
