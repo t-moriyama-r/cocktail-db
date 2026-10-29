@@ -80,6 +80,8 @@ npm run dev
 | 押せないボタンの地 `--color-disabled-bg` | `#e0e0e0`(文字は `--color-text-muted` で 4.69:1) | ヘッダーの名前検索のボタンで、入力が空・検索中・0 件・サーバーエラーのとき(#99) |
 | 誤りの地 `--color-danger` | `#c62828`(文字は `--color-on-accent` で 5.62:1) | ヘッダーの名前検索のボタンで、禁止文字を含むときの「Error」(#99) |
 | モーダルの後ろ `--color-overlay` | `rgb(33 33 33 / 46%)`(旧の Vuetify の v-overlay と同じ色と濃さ) | ヘッダーの条件検索のモーダル(#99) |
+| 用語辞典の分類の見出しの線 `--color-dictionary-category-line` | `#006699`(旧の `Dictionary/index.vue` と同じ。旧でもほかの見出しの線 `#4499FF` と違った) | 用語辞典の一覧の、分類の見出しの左と下の線(#56) |
+| 用語辞典のカクテルの欄の線 `--color-dictionary-method-line`・`--color-dictionary-glass-line` | `#3399ff`・`#1f0d85`(旧の `Dictionary/detail.vue` と同じ。飾りの線で、文字には使わない) | 用語辞典の詳細の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(#56) |
 
 案 A の色は旧の画面から取った(ヘッダーの水色 `#99DDFF`・リンクの青 `#337ab7`・見出しの線 `#4499FF`・区切りの線 `#BBDDFF`)。
 
