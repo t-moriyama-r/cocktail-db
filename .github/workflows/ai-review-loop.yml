@@ -86,6 +86,7 @@ jobs:
     outputs:
       before: ${{ steps.labels.outputs.before }}
       promotion: ${{ steps.target.outputs.promotion }}
+      held: ${{ steps.trust.outputs.held }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -112,11 +113,18 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
+      # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+      # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+      - name: 信頼しない人が書いたものが無いか確かめる
+        id: trust
+        if: steps.target.outputs.promotion != 'true'
+        run: bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$PR" || echo "held=true" >> "$GITHUB_OUTPUT"
+
       # 同じ判断で二重に動かないよう、最初にラベルを外す。
       # needs-approval は、直すことになったときに Claude Code が外す(承認だけの返信なら付けたままにする)
       - name: needs-human を外し、Actions で引き継いだ印を付ける
         id: labels
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.promotion != 'true' && steps.trust.outputs.held != 'true'
         run: |
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "人の判断の後、GitHub Actions の Claude Code が引き継いだ PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
@@ -128,7 +136,7 @@ jobs:
       # Claude Code が仕事をしたか(コミットが進んだか・この後にエージェントがコメントしたか)を、終わった後に比べるために残す
       - name: 動く前のコミットと時刻を残す
         id: start
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.promotion != 'true' && steps.trust.outputs.held != 'true'
         run: |
           sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
           at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -137,24 +145,24 @@ jobs:
 
       - name: PR のブランチを取る
         id: pr
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.promotion != 'true' && steps.trust.outputs.held != 'true'
         run: echo "head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.promotion != 'true' && steps.trust.outputs.held != 'true'
         with:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
         id: claude
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.promotion != 'true' && steps.trust.outputs.held != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、人に次のどちらかを頼んでいた。
             - AI レビュアーの指摘についての判断(頼んだコメントに <!-- ai-dev:needs-human --> が付いている)
@@ -235,7 +243,7 @@ jobs:
 
   notify-resume:
     needs: resume
-    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.promotion != 'true'
+    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.promotion != 'true' && needs.resume.outputs.held != 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: write   # 通知・代わりのレビューのワークフローを gh workflow run で呼ぶ
@@ -359,6 +367,9 @@ jobs:
           esac
           label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-approval"))] | join(",")' <<<"$pr")
           [ -z "$label" ] || skip "ラベル $label"
+          # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+          # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+          bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$PR" || skip "信頼しない人が書いたものがある・確かめられなかった"
           # 人に頼んだ問いにオーナーが答えたのに、答えを受けた resume が何もしないまま終わっていると、
           # 次の review が同じ問いをもう一度頼んでいた(#426)。答えがあれば Claude Code に渡し、下の「対応は済んでいる」の見送りもしない
           answered=$(bash .ai-dev/.github/scripts/owner-answered.sh "$REPO" "$PR")
@@ -425,7 +436,7 @@ jobs:
           claude_args: |
             --max-turns 80
             --model ${{ vars.CLAUDE_LIGHT_MODEL || 'claude-sonnet-5-5' }}
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr:*),Bash(gh api:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、AI レビュアーのレビューが終わった: ${{ github.event.review.html_url || github.event.comment.html_url || '(代わりの Claude がレビューした、または見回りで返されていない指摘が見つかった)' }}
             未解決のレビュースレッド(最初のコメントが coderabbitai のもの、または github-actions で <!-- ai-dev:claude-review --> を含むもの)を

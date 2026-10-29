@@ -99,6 +99,10 @@ jobs:
             echo "#$PR は pick の後に push された"
           elif [ -n "$label" ]; then
             echo "#$PR は pick の後にラベル $label が付いた"
+          # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+          # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+          elif ! bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$PR"; then
+            echo "#$PR は信頼しない人が書いたものがある・確かめられなかったので見送る"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi

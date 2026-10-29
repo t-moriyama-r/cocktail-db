@@ -161,6 +161,14 @@ jobs:
 
           held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
           [ -z "$held" ] || skip "#$NUMBER にラベル $held が付いている"
+          # AI のワークフローは PR・issue のコメントを読み、書き込みのできる権限で動く。オーナー・コラボレーター・決まった bot 以外の人が
+          # 書いたものがある PR は、その指示で変わったかもしれないので自動ではマージせず、needs-human で人に確かめてもらう(決め方は untrusted-hold.sh。#494)
+          if ! bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$NUMBER"; then
+            if gh pr view "$NUMBER" -R "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-human; then
+              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-human || echo "::warning::通知のワークフローを呼べなかった(毎朝のまとめで知らせる)"
+            fi
+            skip "#$NUMBER に信頼しない人が書いたものがある・確かめられなかった"
+          fi
           if jq -e '.labels | any(.name == "no-auto-merge")' <<<"$pr" >/dev/null; then human="ラベル no-auto-merge が付いている"; fi
 
           # 閉じる issue には、別のリポジトリの issue(Closes owner/repo#N)も入るので、このリポジトリのものに絞る

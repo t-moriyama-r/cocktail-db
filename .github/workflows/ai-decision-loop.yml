@@ -60,8 +60,15 @@ jobs:
           # Claude Code は push しない(issue の本文を直すだけ)ので、トークンを .git/config に残さない
           persist-credentials: false
 
-      - uses: anthropics/claude-code-action@v1
+      # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+      # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+      - name: 信頼しない人が書いたものが無いか確かめる
+        id: trust
         if: steps.live.outputs.open == 'true'
+        run: bash .github/scripts/untrusted-hold.sh "$REPO" "$ISSUE" || echo "held=true" >> "$GITHUB_OUTPUT"
+
+      - uses: anthropics/claude-code-action@v1
+        if: steps.live.outputs.open == 'true' && steps.trust.outputs.held != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           # 人の判断を issue の本文に写すだけの軽いタスクなので、利用枠の減りの少ないモデルで動かす(リポジトリ変数 CLAUDE_LIGHT_MODEL で変えられる)
