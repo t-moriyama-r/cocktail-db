@@ -16,6 +16,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class KeptIdCopier
 {
+    /** MariaDB のプリペアドステートメント 1 文に置けるプレースホルダの数の上限 */
+    private const MAX_PLACEHOLDERS = 65535;
+
     /**
      * 旧の表の行を ID の順に読み、$toNewRow で新しい表の行にして書く。
      *
@@ -51,6 +54,10 @@ final class KeptIdCopier
 
         // 更新する列を空にすると、upsert は重複を無視せずにただの INSERT になるので、キー自身を書き直す
         $columns = array_values(array_diff(array_keys($rows[0]), [$uniqueBy]));
-        DB::table($table)->upsert($rows, [$uniqueBy], $columns === [] ? [$uniqueBy] : $columns);
+        // 1 文のプレースホルダは 65,535 個までなので、行 × 列がそれを超えないように分けて書く
+        $chunkSize = max(1, intdiv(self::MAX_PLACEHOLDERS, count($rows[0])));
+        foreach (array_chunk($rows, $chunkSize) as $chunk) {
+            DB::table($table)->upsert($chunk, [$uniqueBy], $columns === [] ? [$uniqueBy] : $columns);
+        }
     }
 }
