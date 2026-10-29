@@ -28,6 +28,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // dedoc/scramble は require-dev なので、composer install --no-dev の本番には無い
+        if (! class_exists(Scramble::class)) {
+            return;
+        }
+
         // 条件検索の本文は、mode によって category_ids か category_groups のどちらかが要る(条件付きの必須だけ)ので、
         // Scramble は本文を任意と判断する。本文が無いと必ず 422 になるので、OpenAPI では必須にする(#164)
         Scramble::configure()->withOperationTransformers(function (Operation $operation, RouteInfo $routeInfo): void {
