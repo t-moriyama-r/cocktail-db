@@ -45,10 +45,9 @@ for (const path of [
   '/detail/brand/999999',
   '/dictionary/999999',
 ]) {
-  test(`TC-111-19: ${path} は 404 の状態で返り、404 の画面が出る`, async ({ page }) => {
+  test(`TC-111-19: ${path} は 404 の状態で返る(404 の画面は詳細の画面の issue で出す)`, async ({ page }) => {
     const response = await page.goto(path)
     expect(response?.status()).toBe(404)
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
   })
 }
 
