@@ -2,6 +2,7 @@ import { api } from '../api/client'
 import { useApi } from '../api/useApi'
 import ApiView from '../components/ApiView/ApiView'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
+import TopIngredientField from '../features/search/TopIngredientField'
 
 const fetchHello = () => api.GET('/hello')
 
@@ -14,6 +15,7 @@ export default function Top() {
       {(data) => (
         <main>
           <h1>{data.message}</h1>
+          <TopIngredientField />
         </main>
       )}
     </ApiView>
