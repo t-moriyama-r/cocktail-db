@@ -8,7 +8,7 @@
 #   Actions では仕上げられないものは、何が足りないかをコメントし、判断が要るなら needs-human、修正前後の証跡が要る
 #   (この環境では撮れない)だけなら needs-local(見回り待ち。PC を開いたときに手元の見回りが撮る)、人が手を動かさないと進まない
 #   作業(Secret の設定など)だけなら needs-manual(手元の作業待ち)を付ける
-# - notify: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
+# - notify: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)
@@ -233,12 +233,12 @@ jobs:
       # 候補は needs-human・needs-local・needs-manual の付いていない PR だけなので、引き継いだ PR にいま付いていれば、引き継いだ Claude Code が付けたもの。
       # recover で見送った PR(pick の後に人が needs-human を付けたなど)は、付けた側が知らせているので知らせない。
       # matrix のジョブの output は 1 つしか残らないので、引き継いだかは recover が付ける目印のコメントで見分ける
-      - name: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせ、状態のラベルを付け替えさせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替えさせる
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json labels,comments)
           recovered=$(jq --arg mark "<!-- ai-dev:draft-sweep sha=$PICKED_HEAD -->" 'any(.comments[]; .body | contains($mark))' <<<"$pr")
           labels=$(jq -r '[.labels[].name] | join(",")' <<<"$pr")
-          for label in needs-human needs-local needs-manual; do
+          for label in needs-human needs-manual; do
             if [ "$recovered" = true ] && [[ ",$labels," == *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
