@@ -70,6 +70,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/brands/{brand}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 銘柄の詳細を返す。基本情報・所属ノードの根からのパンくずと、銘柄の一覧 2 つ。
+         * @description 銘柄の一覧は、同じノードのほかの銘柄と、親ノードの配下で別のノードに所属する銘柄(docs/decisions/public-detail.md の決まったこと 2)。
+         *     無い銘柄は 404(旧は 500 だった。docs/decisions/brand-detail.md)。
+         */
+        get: operations["brandDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categories/{category}": {
         parameters: {
             query?: never;
@@ -687,6 +708,42 @@ export interface components {
             name_eng: string | null;
             is_draft: boolean;
             updated_at: string | null;
+        };
+        /** BrandDetailResource */
+        BrandDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%) */
+            strength: number;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            is_major: boolean;
+            is_like: boolean;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description 根が先頭で、所属ノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+            same_node_brands: components["schemas"]["BrandSummaryResource"][];
+            parent_subtree_brands: components["schemas"]["BrandSummaryResource"][];
         };
         /** BrandListItemResource */
         BrandListItemResource: {
@@ -1410,6 +1467,31 @@ export interface operations {
             };
             404: components["responses"]["ModelNotFoundException"];
             422: components["responses"]["ValidationException"];
+        };
+    };
+    brandDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brand: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `BrandDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     categoryDetail: {
