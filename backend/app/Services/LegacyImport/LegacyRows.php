@@ -88,4 +88,14 @@ final class LegacyRows
             ? $row[$column]
             : throw new UnexpectedValueException("{$table} の {$column} が文字列でない");
     }
+
+    /**
+     * @param  array<mixed>  $row
+     *
+     * @throws UnexpectedValueException 値が null でも文字列でもないとき
+     */
+    public static function nullableString(array $row, string $column, string $table): ?string
+    {
+        return ($row[$column] ?? null) === null ? null : self::string($row, $column, $table);
+    }
 }
