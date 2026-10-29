@@ -427,6 +427,11 @@ export interface paths {
          * @description 英数字だけの入力なら英名(name_eng)と検索用の名前(name_search)、それ以外は検索用の名前を部分一致で探す。
          *     空白(半角・全角)で分けた語は、どれかに当たれば一致(旧と同じ OR)。語は検索用の名前と同じ形にそろえてから
          *     探す。下書きのカクテルと、木の根(旧の種別)は返さない。種類ごとに ID の順で、ページに分けない(旧と同じ)。
+         *
+         *     ingredient_matches は、語を材料に使うカクテル(旧のインテリジェンスサーチ。#173)。語ごとに、名前が語そのものか
+         *     語に「リキュール」(英数字だけの入力なら英名で、語に liqueur)を付けたものと完全一致するノード・銘柄を探し、
+         *     ノードならそのノードと一致する材料(配下と、根を除く祖先)を、銘柄ならその銘柄を使うカクテルを返す。
+         *     語の間は AND で、どれかの語で何も見つからなければ 0 件。
          */
         get: operations["nameSearch"];
         put?: never;
@@ -2000,6 +2005,7 @@ export interface operations {
                         cocktails: components["schemas"]["CocktailSummaryResource"][];
                         nodes: components["schemas"]["NameSearchNodeResource"][];
                         brands: components["schemas"]["NameSearchBrandResource"][];
+                        ingredient_matches: components["schemas"]["CocktailSummaryResource"][];
                     };
                 };
             };
