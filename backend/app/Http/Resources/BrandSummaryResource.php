@@ -10,7 +10,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use LogicException;
 
 /**
- * ノードの詳細の銘柄の一覧(#42)に出す銘柄 1 つ。
+ * ノードの詳細(#42)・銘柄の詳細(#43)の銘柄の一覧に出す銘柄 1 つ。
  *
  * 旧の銘柄の表(Results/Tables/Brands.vue。旧 BrandResource)が出していた項目。旧は所属をカテゴリ・ミドルの 2 段の
  * 項目で返していたが、木の深さは決まっていないので、所属ノードの根からのパンくずで返す(カクテルの詳細の材料と同じ)。

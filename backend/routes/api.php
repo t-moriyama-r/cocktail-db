@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\PasskeyController;
 use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
+use App\Http\Controllers\BrandDetailController;
 use App\Http\Controllers\CategoryDetailController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailListController;
@@ -52,6 +53,8 @@ Route::get('/search', NameSearchController::class);
 // ID は int に収まる桁数に縛る(超える数字は経路に合わず 404。TypeError の 500 にしない)
 Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
 Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
+
+Route::get('/brands/{brand}', BrandDetailController::class)->where('brand', '[0-9]{1,18}');
 
 // 別のカクテル(旧の「ランダムカクテル」。#174)。カクテルを起点にする形と、ノード・銘柄・ベース・技法・グラスを起点にする形
 Route::get('/cocktails/{cocktail}/related', CocktailRelatedController::class)->where('cocktail', '[0-9]{1,18}');
