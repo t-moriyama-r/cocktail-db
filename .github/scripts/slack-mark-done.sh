@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 人に頼んだ Slack の通知(needs-human・needs-local・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足して、
+# 人に頼んだ Slack の通知(needs-human・needs-local・needs-manual・needs-decision・needs-approval)のうち、片付いたものに ✅ を付け、本文の先頭に「【済】」を足して、
 # 残りを打ち消し線にする。DM を見返したときに、もう見なくてよい通知を読み飛ばせるようにするため。
 #
 # 頼んだ通知は、notify-needs-human.yml が bot で送るときに、どの PR・issue のどのラベルかをメッセージのメタデータ

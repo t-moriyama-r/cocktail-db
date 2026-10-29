@@ -33,6 +33,7 @@ main() {
 	check TC-232-09 '向き先が develop でない(積んでいる途中)' "$(pr '.baseRefName = "issue-1-base"')" '[]' ''
 	check TC-232-10 'needs-human が付いている' "$(pr '.labels = [{name: "needs-human"}]')" '[]' ''
 	check TC-456-05 'needs-local が付いている' "$(pr '.labels = [{name: "needs-local"}]')" '[]' ''
+	check TC-496-06 'needs-manual が付いている' "$(pr '.labels = [{name: "needs-manual"}]')" '[]' ''
 	check TC-232-11 'needs-decision が付いている' "$(pr '.labels = [{name: "needs-decision"}]')" '[]' ''
 	check TC-232-12 'ai-in-actions が付いている(Actions が対応中)' "$(pr '.labels = [{name: "ai-in-actions"}]')" '[]' ''
 	check TC-232-13 '最後のコミットから 59 分' "$(pr)" '[]' '' 2026-10-25T11:01:00Z
