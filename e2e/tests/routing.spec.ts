@@ -35,3 +35,28 @@ test('TC-97-23: 404 の画面の「トップへ戻る」でトップの画面に
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
 })
+
+// 詳細ページ(#111): 無い ID・下書きは、サーバーが SPA の HTML を 404 の状態で返し、画面は 404 の画面を出す。
+// 下書きのカクテル(ID 2)は E2eSeeder が入れる
+for (const path of [
+  '/detail/cocktail/999999',
+  '/detail/cocktail/2',
+  '/category/999999',
+  '/detail/brand/999999',
+  '/dictionary/999999',
+]) {
+  test(`TC-111-19: ${path} は 404 の状態で返り、404 の画面が出る`, async ({ page }) => {
+    const response = await page.goto(path)
+    expect(response?.status()).toBe(404)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
+  })
+}
+
+test('TC-111-20: 詳細ページの HTML(JS を動かす前)に、名前の title・description・canonical が入る', async ({ request }) => {
+  const response = await request.get('/detail/cocktail/1')
+  expect(response.status()).toBe(200)
+  const html = await response.text()
+  expect(html).toContain('<title>ジン・トニック(Gin and Tonic) ｜ 宅飲みカクテルデータベース(RC)</title>')
+  expect(html).toContain('<meta name="description" content="ジンをトニックウォーターで割った、すっきりした一杯。">')
+  expect(html).toMatch(/<link rel="canonical" href="[^"]*\/detail\/cocktail\/1">/)
+})
