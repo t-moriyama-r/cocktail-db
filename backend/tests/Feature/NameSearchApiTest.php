@@ -3,6 +3,7 @@
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
 use App\Models\Method;
 use App\Services\CategoryTree;
 use App\Support\NameNormalizer;
@@ -256,4 +257,163 @@ it('TC-172-13: 1 件ごとに、一覧に出す項目を返す', function () {
             'youtube' => 'abc123',
             'category' => ['id' => $dryGin->id, 'name' => 'ドライ・ジン', 'name_eng' => 'Dry Gin'],
         ]]);
+});
+
+// 材料名からカクテルを探す欄(ingredient_matches。#173)。
+// 期待値は、旧の CocktailFactory::intelligenceSearch の挙動から置く。
+// 旧と変えたところは docs/decisions/name-search.md の「旧との差分」(#173 の節)。
+
+/**
+ * カクテルに材料を 1 行足す。$use がノードなら銘柄を決めない材料、銘柄なら銘柄の所属ノードでその銘柄を決めた材料。
+ */
+function nameSearchUses(Cocktail $cocktail, Category|Brand $use, bool $optional = false): Cocktail
+{
+    $position = CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->count() + 1;
+    $factory = CocktailIngredient::factory();
+    $factory = $use instanceof Brand ? $factory->forBrand($use) : $factory->state(['category_id' => $use->id]);
+    $factory->create(['cocktail_id' => $cocktail->id, 'position' => $position, 'is_optional' => $optional]);
+
+    return $cocktail;
+}
+
+/**
+ * ingredient_matches の ID を、返った順で確かめる。
+ *
+ * @param  list<Cocktail>  $cocktails
+ * @param  TestResponse<JsonResponse>  $response
+ */
+function assertIngredientMatches(TestResponse $response, array $cocktails): void
+{
+    $response->assertOk()->assertJsonPath('ingredient_matches.*.id', nameSearchIds($cocktails));
+}
+
+/**
+ * 洋酒(根) > リキュール > フルーツ系 > メロンリキュール > 緑のメロンリキュール の木と、レモン(ソフトドリンクの根の下)を作る。
+ *
+ * @return array<string, Category>
+ */
+function ingredientSearchTree(): array
+{
+    $liquor = nameSearchNode(null, '洋酒', 'Liquor');
+    $liqueur = nameSearchNode($liquor, 'リキュール', 'Liqueur');
+    $fruit = nameSearchNode($liqueur, 'フルーツ系', 'Fruit');
+    $melon = nameSearchNode($fruit, 'メロンリキュール', 'Melonliqueur');
+    $green = nameSearchNode($melon, '緑のメロンリキュール', 'Green Melon');
+    $peach = nameSearchNode($fruit, 'ピーチリキュール', 'Peach Liqueur');
+    $soft = nameSearchNode(null, 'ソフトドリンク', 'Soft Drink');
+    $lemon = nameSearchNode($soft, 'レモン', 'Lemon');
+
+    return compact('liquor', 'liqueur', 'fruit', 'melon', 'green', 'peach', 'soft', 'lemon');
+}
+
+it('TC-173-01: 語に「リキュール」を付けた名前のノードに当たり、そのノードを材料に使うカクテルを返す', function () {
+    $tree = ingredientSearchTree();
+    $uses = nameSearchUses(nameSearchCocktail('ミドリ・サワー', 'Midori Sour'), $tree['melon']);
+    nameSearchUses(nameSearchCocktail('ピーチ・ウーロン', 'Peach Oolong'), $tree['peach']);
+
+    assertIngredientMatches(nameSearch($this, 'メロン'), [$uses]);
+    // 名前そのもの(語にリキュールを付けない)でも当たる
+    assertIngredientMatches(nameSearch($this, 'メロンリキュール'), [$uses]);
+    // 名前の一部だけ(部分一致)では当たらない(旧と同じく完全一致)
+    assertIngredientMatches(nameSearch($this, 'メロ'), []);
+});
+
+it('TC-173-02: 当たったノードの配下(深いノード)と、根を除く祖先を材料に使うカクテルも返す', function () {
+    $tree = ingredientSearchTree();
+    $usesGreen = nameSearchUses(nameSearchCocktail('グリーン・スプラッシュ', 'Green Splash'), $tree['green']);
+    $usesFruit = nameSearchUses(nameSearchCocktail('フルーツ・パンチ', 'Fruit Punch'), $tree['fruit']);
+    $usesLiqueur = nameSearchUses(nameSearchCocktail('リキュール・トニック', 'Liqueur Tonic'), $tree['liqueur']);
+    nameSearchUses(nameSearchCocktail('ピーチ・ウーロン', 'Peach Oolong'), $tree['peach']);
+
+    // 配下の緑のメロンリキュールと、祖先のフルーツ系・リキュール(根の洋酒は除く)。兄弟のピーチリキュールは返さない
+    assertIngredientMatches(nameSearch($this, 'メロン'), [$usesGreen, $usesFruit, $usesLiqueur]);
+    // 4 段目のノードの名前でも探せる。配下は無く、祖先はメロンリキュール・フルーツ系・リキュール
+    assertIngredientMatches(nameSearch($this, '緑のメロン'), [$usesGreen, $usesFruit, $usesLiqueur]);
+});
+
+it('TC-173-03: 銘柄の名前に当たったら、その銘柄を指定した材料を持つカクテルだけを返す', function () {
+    $tree = ingredientSearchTree();
+    $midori = nameSearchBrand('ミドリ', 'Midori', ['category_id' => $tree['melon']->id]);
+    $other = nameSearchBrand('ボルス・メロン', 'Bols Melon', ['category_id' => $tree['melon']->id]);
+    $usesMidori = nameSearchUses(nameSearchCocktail('ミドリ・サワー', 'Midori Sour'), $midori);
+    nameSearchUses(nameSearchCocktail('メロン・ボール', 'Melon Ball'), $other);
+    nameSearchUses(nameSearchCocktail('メロン・ソーダ', 'Melon Soda'), $tree['melon']);
+
+    // 同じノードでも、別の銘柄や銘柄を指定していない材料は当たらない(旧と同じ)
+    assertIngredientMatches(nameSearch($this, 'ミドリ'), [$usesMidori]);
+});
+
+it('TC-173-04: 空白で分けた 2 語は、両方の語の材料を使うカクテルだけを返す(AND)', function () {
+    $tree = ingredientSearchTree();
+    $both = nameSearchUses(nameSearchUses(nameSearchCocktail('メロン・サワー', 'Melon Sour'), $tree['melon']), $tree['lemon']);
+    nameSearchUses(nameSearchCocktail('メロン・ソーダ', 'Melon Soda'), $tree['melon']);
+    nameSearchUses(nameSearchCocktail('レモネード', 'Lemonade'), $tree['lemon']);
+
+    // 半角・全角の空白のどちらでも分ける
+    assertIngredientMatches(nameSearch($this, 'メロン レモン'), [$both]);
+    assertIngredientMatches(nameSearch($this, 'メロン　レモン'), [$both]);
+});
+
+it('TC-173-05: どれかの語でノードにも銘柄にも当たらなければ、0 件', function () {
+    $tree = ingredientSearchTree();
+    nameSearchUses(nameSearchUses(nameSearchCocktail('メロン・サワー', 'Melon Sour'), $tree['melon']), $tree['lemon']);
+
+    assertIngredientMatches(nameSearch($this, 'メロン ドラゴンフルーツ'), []);
+    assertIngredientMatches(nameSearch($this, 'ドラゴンフルーツ'), []);
+});
+
+it('TC-173-06: 1 つの語でノードと銘柄の両方に当たったら、どちらかを使うカクテルを返す', function () {
+    $tree = ingredientSearchTree();
+    $cassisNode = nameSearchNode($tree['fruit'], 'カシス', 'Cassis');
+    $cassisBrand = nameSearchBrand('カシスリキュール', 'Cassis Brand', ['category_id' => $tree['peach']->id]);
+    $usesNode = nameSearchUses(nameSearchCocktail('カシス・ソーダ', 'Cassis Soda'), $cassisNode);
+    $usesBrand = nameSearchUses(nameSearchCocktail('カシス・ウーロン', 'Cassis Oolong'), $cassisBrand);
+    nameSearchUses(nameSearchCocktail('ピーチ・ウーロン', 'Peach Oolong'), $tree['peach']);
+
+    // 語そのもの(カシス)でノードに、語＋リキュール(カシスリキュール)で銘柄に当たる
+    assertIngredientMatches(nameSearch($this, 'カシス'), [$usesNode, $usesBrand]);
+});
+
+it('TC-173-07: 英数字だけの入力は、英名だけで完全一致を探し(大文字小文字は問わない)、付けるのは空白なしの liqueur', function () {
+    $tree = ingredientSearchTree();
+    $midori = nameSearchBrand('ミドリ', 'Midori', ['category_id' => $tree['melon']->id]);
+    $usesMelon = nameSearchUses(nameSearchCocktail('メロン・ソーダ', 'Melon Soda'), $tree['melon']);
+    $usesMidori = nameSearchUses(nameSearchCocktail('ミドリ・サワー', 'Midori Sour'), $midori);
+    nameSearchUses(nameSearchCocktail('ピーチ・ウーロン', 'Peach Oolong'), $tree['peach']);
+
+    // メロンリキュールの英名は Melonliqueur。melon に liqueur を付けて当たる。銘柄ミドリを指定した材料も、
+    // 材料のノードはメロンリキュールなので、ミドリ・サワーも返る
+    assertIngredientMatches(nameSearch($this, 'melon'), [$usesMelon, $usesMidori]);
+    assertIngredientMatches(nameSearch($this, 'MIDORI'), [$usesMidori]);
+    // ピーチリキュールの英名は Peach Liqueur(空白あり)。peach に liqueur を空白なしで付けるので当たらない(旧と同じ)
+    assertIngredientMatches(nameSearch($this, 'peach'), []);
+    // 英数字だけの入力は検索用の名前を見ない。ノード「ABC」の英名が別なら当たらない
+    $abc = nameSearchNode($tree['fruit'], 'ABC', 'Another');
+    nameSearchUses(nameSearchCocktail('エー・ビー・シー', 'A.B.C.'), $abc);
+    assertIngredientMatches(nameSearch($this, 'ABC'), []);
+});
+
+it('TC-173-08: 下書きのカクテルは返さず、根(旧の種別)の名前に当たっても材料の検索には使わない', function () {
+    $tree = ingredientSearchTree();
+    $published = nameSearchUses(nameSearchCocktail('メロン・ソーダ', 'Melon Soda'), $tree['melon']);
+    nameSearchUses(nameSearchCocktail('メロン・ボール', 'Melon Ball', ['is_draft' => true]), $tree['melon']);
+
+    assertIngredientMatches(nameSearch($this, 'メロン'), [$published]);
+    // 「洋酒」は根の名前にだけ当たる。根は探さないので、見つからない語と同じく 0 件
+    assertIngredientMatches(nameSearch($this, '洋酒'), []);
+});
+
+it('TC-173-09: 任意の材料も対象にし、ID の順で、一覧と同じ項目を返す', function () {
+    $tree = ingredientSearchTree();
+    $second = nameSearchUses(nameSearchCocktail('メロン・ボール', 'Melon Ball'), $tree['melon'], optional: true);
+    $first = nameSearchUses(nameSearchCocktail('メロン・ソーダ', 'Melon Soda', ['base_category_id' => $tree['melon']->id]), $tree['melon']);
+    expect($first->id)->toBeGreaterThan($second->id);
+
+    nameSearch($this, 'メロン')->assertOk()
+        ->assertJsonPath('ingredient_matches.*.id', [$second->id, $first->id])
+        ->assertJsonPath('ingredient_matches.1.name', 'メロン・ソーダ')
+        ->assertJsonPath('ingredient_matches.1.base', ['id' => $tree['melon']->id, 'name' => 'メロンリキュール', 'name_eng' => 'Melonliqueur'])
+        ->assertJsonStructure(['ingredient_matches' => [[
+            'id', 'name', 'name_eng', 'is_major', 'base', 'method', 'recipe_count', 'strength', 'sweet_degree', 'rate', 'youtube', 'updated_at',
+        ]]]);
 });
