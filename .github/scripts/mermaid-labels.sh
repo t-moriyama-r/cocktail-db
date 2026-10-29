@@ -9,19 +9,22 @@
 # GitHub の Mermaid は、ラベルの文字の幅を測ってから箱の大きさを決める。矢印のラベルは箱が文字の幅ちょうどで余白が無く、
 # 端末のフォントが測ったときより少しでも広いと末尾が切れる(切れる幅はラベルの長さに比例する)。ノードは幅 120px で折り返し、
 # 行が埋まっているほど 1 行増えて下が切れやすい。#478 で GitHub に描いて確かめ、矢印は全角 6 字、ノードは全角 12 字までにした。
+# <br> で折ったノードは、1 行ずつが箱の幅(全角 7 字ほど)に収まらないとはみ出すので、1 行を全角 7 字までにする
+# (文字を広げて描くと、7.5 字の行ははみ出し、7 字の行は収まった)。
 # 字数は全角を 1、半角を 0.5 と数え、<br> で折ったラベルはいちばん長い行で数える(行ごとに幅が決まるため)。
 # HTML のタグ・#quot; などの実体参照・ラベルを囲む引用符は数えない(実体参照は 1 文字として数える)。
 set -euo pipefail
 
 NODE_MAX=12
+NODE_LINE_MAX=7
 EDGE_MAX=6
 
 mermaid_labels() {
   local file=${1:--} report over
   if [ "$file" = - ]; then
-    report=$(jq -R -s -r --argjson node "$NODE_MAX" --argjson edge "$EDGE_MAX" "$(jq_program)")
+    report=$(jq -R -s -r --argjson node "$NODE_MAX" --argjson nodeline "$NODE_LINE_MAX" --argjson edge "$EDGE_MAX" "$(jq_program)")
   else
-    report=$(jq -R -s -r --argjson node "$NODE_MAX" --argjson edge "$EDGE_MAX" "$(jq_program)" "$file")
+    report=$(jq -R -s -r --argjson node "$NODE_MAX" --argjson nodeline "$NODE_LINE_MAX" --argjson edge "$EDGE_MAX" "$(jq_program)" "$file")
   fi
   # Windows の jq は CRLF で出すことがあるので、CR を落としてから数える
   report=$(tr -d '\r' <<<"$report")
@@ -47,7 +50,9 @@ def clean:
   | split("\n") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""));
 
 def to_label($kind): clean as $lines | select($lines | length > 0)
-  | {kind: $kind, text: ($lines | join("<br>")), width: ($lines | map(text_width) | max)};
+  | {kind: $kind, text: ($lines | join("<br>")), width: ($lines | map(text_width) | max)}
+  | .limit = (if .kind == "edge" then $edge elif ($lines | length) > 1 then $nodeline else $node end)
+  | .unit = (if .kind == "node" and ($lines | length) > 1 then "<br> で折った 1 行の上限" else "上限" end);
 
 # 矢印のラベル: -->|x|・---|x|・-.->|x|・==>|x| と、-- x -->・-. x .->・== x ==>
 def edge_re: "<?(?:-{2,}|-\\.+-|={2,})[>ox]?\\s*\\|([^|]*)\\||(?<![-.=<\\w])(?:--|-\\.|==)\\s+([^|>]*?)\\s+(?:-{2,}|\\.+-|={2,})[>ox]?";
@@ -80,8 +85,8 @@ blocks | to_entries[] | (.key + 1) as $n | (.value | body_lines) as $lines
 | ($lines[0] // "" | gsub("^\\s+"; "") | split(" ")[0]) as $type
 | if ($type | test("^(flowchart|graph)$")) then
     $lines[1:][] | select(test(skip_re) | not) | sub(";\\s*$"; "") | line_labels[]
-    | select(.width > (if .kind == "edge" then $edge else $node end))
-    | "図\($n) \(if .kind == "edge" then "矢印のラベル" else "ノード" end)「\(.text)」: 全角 \(.width) 字(上限 \(if .kind == "edge" then $edge else $node end) 字)"
+    | select(.width > .limit)
+    | "図\($n) \(if .kind == "edge" then "矢印のラベル" else "ノード" end)「\(.text)」: 全角 \(.width) 字(\(.unit) \(.limit) 字)"
   else
     "図\($n) は \($type) なので数えない(数えるのは flowchart・graph だけ)"
   end
