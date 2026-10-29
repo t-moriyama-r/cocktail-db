@@ -218,16 +218,16 @@ it('TC-174-08: グラスを起点にすると、そのグラスのカクテル�
         ->toBe(relatedExpected([$inGlass]));
 });
 
-it('TC-174-09: カクテルを起点にすると、最初の 2 つの材料のどちらかを使うカクテル(自分を含む)から返す', function () {
+it('TC-174-09: カクテルを起点にすると、最初の 2 つの材料のどちらかを使うカクテル(自分は除く)から返す', function () {
     $n = relatedTree();
     $target = relatedCocktail([$n['ジン'], $n['コーラ'], $n['ライム']]);
     $gin = relatedCocktail([$n['ドライジン']]);
     $cola = relatedCocktail([$n['コーラ'], $n['ソーダ']]);
     relatedCocktail([$n['ライム']]);
 
-    // 最初の 2 つで 3 件そろうので、3 つめのライムは足さない
-    expect(relatedIds($this->getJson("/api/cocktails/{$target->id}/related?limit=3")))
-        ->toBe(relatedExpected([$target, $gin, $cola]));
+    // 最初の 2 つで 2 件そろうので、3 つめのライムは足さない
+    expect(relatedIds($this->getJson("/api/cocktails/{$target->id}/related?limit=2")))
+        ->toBe(relatedExpected([$gin, $cola]));
 });
 
 it('TC-174-10: カクテルを起点にして足りなければ、材料を順に足し、limit 件に届いたところで止める', function (int $limit, array $expected) {
@@ -242,10 +242,10 @@ it('TC-174-10: カクテルを起点にして足りなければ、材料を順�
     expect(relatedIds($this->getJson("/api/cocktails/{$c['起点']->id}/related?limit={$limit}")))
         ->toBe(relatedExpected(array_map(fn (string $name): Cocktail => $c[$name], $expected)));
 })->with([
-    '2 つで足りる(2 件)' => [2, ['起点', 'ジン']],
-    '3 つめを足す(3 件)' => [3, ['起点', 'ジン', 'ライム']],
-    '4 つめまで足す(4 件)' => [4, ['起点', 'ジン', 'ライム', 'ソーダ']],
-    '全部足しても足りない(50 件)' => [50, ['起点', 'ジン', 'ライム', 'ソーダ']],
+    '2 つで足りる(1 件)' => [1, ['ジン']],
+    '3 つめを足す(2 件)' => [2, ['ジン', 'ライム']],
+    '4 つめまで足す(3 件)' => [3, ['ジン', 'ライム', 'ソーダ']],
+    '全部足しても足りない(50 件)' => [50, ['ジン', 'ライム', 'ソーダ']],
 ]);
 
 it('TC-174-11: カクテルを起点にすると、銘柄つきの材料は、その銘柄か銘柄を指定していない材料にだけ一致させる', function () {
@@ -256,7 +256,7 @@ it('TC-174-11: カクテルを起点にすると、銘柄つきの材料は、�
     relatedCocktail([$n['熟成ホワイト']]);
 
     expect(relatedIds($this->getJson("/api/cocktails/{$target->id}/related?limit=50")))
-        ->toBe(relatedExpected([$target, $white]));
+        ->toBe(relatedExpected([$white]));
 });
 
 it('TC-174-12: 任意の材料も、一致する材料として扱い、カクテルを起点にするときの最初の 2 つにも数える', function () {
@@ -268,7 +268,7 @@ it('TC-174-12: 任意の材料も、一致する材料として扱い、カク�
     expect(relatedIds($this->getJson("/api/cocktails/random?category_id={$n['ラム']->id}&limit=50")))
         ->toBe(relatedExpected([$optionalRum]))
         ->and(relatedIds($this->getJson("/api/cocktails/{$target->id}/related?limit=2")))
-        ->toBe(relatedExpected([$target, $gin]));
+        ->toBe(relatedExpected([$gin]));
 });
 
 it('TC-174-13: 下書きのカクテルは、どの起点でも返さない', function (string $origin) {
@@ -381,7 +381,7 @@ it('TC-174-21: 材料が 1 つ・0 個のカクテルを起点にしても、あ
     $empty = relatedCocktail([]);
 
     expect(relatedIds($this->getJson("/api/cocktails/{$single->id}/related?limit=50")))
-        ->toBe(relatedExpected([$single, $rum]))
+        ->toBe(relatedExpected([$rum]))
         ->and(relatedIds($this->getJson("/api/cocktails/{$empty->id}/related?limit=50")))
         ->toBe([]);
 });

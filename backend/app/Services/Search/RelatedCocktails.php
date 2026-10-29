@@ -65,8 +65,8 @@ class RelatedCocktails
      * カクテルを起点にする(旧の cocktail。旧 RandomByCocktail)。
      *
      * 最初の 2 つの材料のどちらかに一致する材料を使うカクテル(和集合)から選ぶ。それで $limit 件に足りなければ、
-     * 3 つめから材料を 1 つずつ順に足し、$limit 件以上になったところで止める。起点のカクテル自身も、自分の材料を
-     * 使うので当たる(旧と同じ)。
+     * 3 つめから材料を 1 つずつ順に足し、$limit 件以上になったところで止める。起点のカクテル自身は、候補にも
+     * 件数にも数えない(旧は自分も返していた。差分は docs/decisions/related-cocktails.md)。
      *
      * @return Collection<int, Cocktail>
      */
@@ -78,24 +78,24 @@ class RelatedCocktails
         }
 
         $used = min(self::FIRST_INGREDIENTS, $ingredients->count());
-        $candidates = $this->usingAnyOf($ingredients->take($used));
+        $candidates = $this->usingAnyOf($ingredients->take($used), $cocktail);
         while ($used < $ingredients->count() && $candidates->clone()->published()->count() < $limit) {
             $used++;
-            $candidates = $this->usingAnyOf($ingredients->take($used));
+            $candidates = $this->usingAnyOf($ingredients->take($used), $cocktail);
         }
 
         return $this->pick($candidates, $limit);
     }
 
     /**
-     * 材料の行のどれかと一致する材料を使うカクテル(旧 getCocktailIds に材料のカテゴリ・ミドル・銘柄を渡していた)。
+     * 材料の行のどれかと一致する材料を使うカクテル($except は除く。旧 getCocktailIds に材料のカテゴリ・ミドル・銘柄を渡していた)。
      *
      * @param  Collection<int, CocktailIngredient>  $ingredients
      * @return Builder<Cocktail>
      */
-    private function usingAnyOf(Collection $ingredients): Builder
+    private function usingAnyOf(Collection $ingredients, Cocktail $except): Builder
     {
-        return Cocktail::query()->whereHas('ingredients', function (Builder $rows) use ($ingredients): void {
+        return Cocktail::query()->whereKeyNot($except->getKey())->whereHas('ingredients', function (Builder $rows) use ($ingredients): void {
             $rows->where(function (Builder $any) use ($ingredients): void {
                 foreach ($ingredients as $ingredient) {
                     $any->orWhere(fn (Builder $row) => $this->whereMatches($row, $ingredient->category_id, $ingredient->brand_id));
