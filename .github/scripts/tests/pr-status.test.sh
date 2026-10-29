@@ -66,12 +66,19 @@ main() {
 	check TC-385-15 'staging 向けで、指摘に返信が済み未解決のスレッドがある' '.baseRefName = "staging" | .unresolvedThreads = 2 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-16 'staging 向けで、返信待ちの指摘があり未解決' '.baseRefName = "staging" | .unansweredThreads = 1 | .unresolvedThreads = 1 | .mergeStateStatus = "BLOCKED"' '状態:指摘の解決待ち'
 	check TC-385-17 'release 向けで、必須のチェックが付いていない' '.baseRefName = "release" | .mergeStateStatus = "BLOCKED"' '状態:CI未実行'
-	check TC-456-01 'needs-local は手元の作業待ち' '.labels = ["needs-local"] | .failedChecks = 1' '状態:手元の作業待ち'
-	check TC-456-02 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
-	check TC-456-03 '手元の作業待ちは、下書きより先' '.isDraft = true | .labels = ["needs-local"]' '状態:手元の作業待ち'
+	check TC-456-01 'needs-local は見回り待ち(#496 で手元の作業待ちから分けた)' '.labels = ["needs-local"] | .failedChecks = 1' '状態:見回り待ち(証跡など)'
+	check TC-456-02 '人の判断待ちは、見回り待ちより先' '.labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'
+	check TC-456-03 '見回り待ちは、下書きより先' '.isDraft = true | .labels = ["needs-local"]' '状態:見回り待ち(証跡など)'
 
-	# 下書きでも、人の判断待ち・手元の作業待ちのラベルがあれば、それを出す(#471)
-	check TC-471-01 '下書きで needs-local' '.isDraft = true | .labels = ["needs-local"] | .failedChecks = 1' '状態:手元の作業待ち'
+	# 人が手を動かさないと進まない作業(needs-manual)は手元の作業待ち。見回りが片付ける needs-local と分ける(#496)
+	check TC-496-01 'needs-manual は手元の作業待ち' '.labels = ["needs-manual"] | .failedChecks = 1' '状態:手元の作業待ち'
+	check TC-496-02 'needs-manual と needs-local の両方なら、待っていても進まない手元の作業待ち' '.labels = ["needs-local", "needs-manual"]' '状態:手元の作業待ち'
+	check TC-496-03 '人の判断待ちは、手元の作業待ちより先' '.labels = ["needs-manual", "needs-human"]' '状態:人の判断待ち'
+	check TC-496-04 '下書きで needs-manual' '.isDraft = true | .labels = ["needs-manual"]' '状態:手元の作業待ち'
+	check TC-496-05 '閉じた PR は、needs-manual があってもラベルなし' '.state = "CLOSED" | .labels = ["needs-manual"]' ''
+
+	# 下書きでも、人の判断待ち・手元の作業待ち・見回り待ちのラベルがあれば、それを出す(#471)
+	check TC-471-01 '下書きで needs-local' '.isDraft = true | .labels = ["needs-local"] | .failedChecks = 1' '状態:見回り待ち(証跡など)'
 	check TC-471-02 '下書きで needs-human' '.isDraft = true | .labels = ["needs-human"] | .failedChecks = 1' '状態:人の判断待ち'
 	check TC-471-03 '下書きで needs-decision' '.isDraft = true | .labels = ["task", "needs-decision"]' '状態:人の判断待ち'
 	check TC-471-04 '下書きで needs-local と needs-human の両方' '.isDraft = true | .labels = ["needs-local", "needs-human"]' '状態:人の判断待ち'

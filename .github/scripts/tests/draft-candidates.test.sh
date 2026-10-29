@@ -35,7 +35,8 @@ main() {
 	check TC-236-16 '境界: 2 回目の引き継ぎはする' '.round = 2' 'pick'
 	check TC-236-17 '境界: 3 回目の引き継ぎはしない' '.round = 3' 'skip: 引き継ぎが 2 回に達した'
 	check TC-236-18 '人の判断待ちは、CI の途中より先に理由に出る' '.labels = ["needs-human"] | .checksPending = true' 'skip: ラベル needs-human'
-	check TC-456-04 '手元の作業待ち(needs-local)は引き継がない' '.labels = ["needs-local"]' 'skip: ラベル needs-local'
+	check TC-456-04 '見回り待ち(needs-local)は引き継がない' '.labels = ["needs-local"]' 'skip: ラベル needs-local'
+	check TC-496-07 '手元の作業待ち(needs-manual)は引き継がない' '.labels = ["needs-manual"]' 'skip: ラベル needs-manual'
 
 	collect TC-469-02 'コメントの合計が 200KB を超える PR でも落ちずに、事実を集めて選ぶ' \
 		'[{"number":7,"head":"abc","branch":"issue-7-x","round":1}]|0'

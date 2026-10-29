@@ -26,7 +26,7 @@ main() {
   case "$(jq -r .baseRefName <<<"$pr")" in
     staging | release) echo "#$number 見送り: 昇格の PR(手元の Claude がレビューする)"; return ;;
   esac
-  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-approval"))] | join(",")' <<<"$pr")
+  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-approval"))] | join(",")' <<<"$pr")
   if [ -n "$label" ]; then echo "#$number 見送り: ラベル $label(人か手元の番)"; return; fi
 
   state=$(bash "$here/review-request-state.sh" "$repo" "$number")

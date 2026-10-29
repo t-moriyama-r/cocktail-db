@@ -784,16 +784,27 @@ export interface components {
          */
         CocktailSearchRequest: {
             /**
-             * @description 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
-             *     OR 検索の結果を黙って返してしまう
+             * @description 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は、受ける形を
+             *     決めてから足す。それまで受けると、OR 検索の結果を黙って返してしまう
              * @enum {string|null}
              */
-            mode?: "or" | null;
+            mode?: "or" | "having" | null;
             /**
-             * @description 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+             * @description 選んだノード(or では探す材料、having では手持ちの材料)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
              */
             category_ids: number[];
+            /**
+             * @description 技法(#166)。カクテルの技法がこの中にあるものに絞る。省く・null・空の配列なら、すべての技法として扱う
+             *     (旧は 1 つ以上が必須だった。docs/decisions/search-screen.md の 6)。無い技法の ID は弾かず、何にも一致しない
+             *     (旧と同じ)。件数の上限は category_ids と同じ理由
+             */
+            method_ids?: number[] | null;
+            /**
+             * @description かんたん検索(#166)。真なら、材料の数(recipe_count。docs/decisions/recipe-count.md)が 3 以下のものに絞る。
+             *     省くと絞らない(旧の画面の既定と同じ)。受ける値は旧と同じ Laravel の boolean(true・false・1・0・"1"・"0")
+             */
+            is_easy?: boolean | null;
             /**
              * @description 並べ替える列(#167)。省くと ID の順
              * @enum {string|null}

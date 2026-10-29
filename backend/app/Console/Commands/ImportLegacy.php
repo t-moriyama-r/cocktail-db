@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\LegacyImport\BrandImporter;
 use App\Services\LegacyImport\CategoryImporter;
+use App\Services\LegacyImport\CocktailImporter;
 use App\Services\LegacyImport\LegacyImporter;
 use App\Services\LegacyImport\MiscImporter;
 use Illuminate\Console\Command;
@@ -25,6 +26,7 @@ final class ImportLegacy extends Command
         'misc' => MiscImporter::class,
         'categories' => CategoryImporter::class,
         'brands' => BrandImporter::class,
+        'cocktails' => CocktailImporter::class,
     ];
 
     public function handle(): int

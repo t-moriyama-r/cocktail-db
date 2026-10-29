@@ -13,7 +13,7 @@
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
 # - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
-# - ラベル needs-human / needs-local / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
+# - ラベル needs-human / needs-local / needs-manual / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml。昇格の PR では手元の Claude)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
@@ -76,7 +76,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
-        || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
+        || contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
       || (github.event_name == 'pull_request_review' && (github.event.review.user.login == 'coderabbitai[bot]'
         || (github.event.review.user.login == github.repository_owner && contains(github.event.review.body, 'ai-dev:local-review'))))
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
@@ -106,7 +106,7 @@ jobs:
       - name: 条件を確かめて、マージするか人に知らせる
         env:
           EVENT_ACTION: ${{ github.event.action }}
-          # needs-local が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
+          # needs-local・needs-manual が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
           CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           skip() { echo "見送り: $*"; exit 0; }
@@ -159,7 +159,7 @@ jobs:
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$NUMBER はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$NUMBER を作ったのがオーナーではない"
 
-          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
+          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
           [ -z "$held" ] || skip "#$NUMBER にラベル $held が付いている"
           # AI のワークフローは PR・issue のコメントを読み、書き込みのできる権限で動く。オーナー・コラボレーター・決まった bot 以外の人が
           # 書いたものがある PR は、その指示で変わったかもしれないので自動ではマージせず、needs-human で人に確かめてもらう(決め方は untrusted-hold.sh。#494)
@@ -188,7 +188,7 @@ jobs:
           pushed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date) || skip "いまのコミット ${head:0:7} の日時を読めない"
           reviewed=$(bash .ai-dev/.github/scripts/head-reviewed.sh "$REPO" "$NUMBER") || skip "#$NUMBER のレビューを読めない"
           if [ "$reviewed" != true ]; then
-            # needs-local の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
+            # needs-local・needs-manual の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
             # (出さないと次の ai-review-sweep.yml まで最大 2 時間待つ)。依頼済みなら request-review.sh が見送る
             if [ "$EVENT_ACTION" = unlabeled ]; then
               bash .ai-dev/.github/scripts/request-review.sh "$REPO" "$NUMBER"                 || echo "::warning::レビューの依頼を出せなかった(ai-review-sweep.yml が拾う)"

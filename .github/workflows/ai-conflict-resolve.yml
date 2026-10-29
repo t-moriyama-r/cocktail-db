@@ -4,14 +4,14 @@
 # - pick: シェルで候補を絞る(.github/scripts/conflict-candidates.sh。見送った理由はジョブのログに出す)
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
-#   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(手元の作業待ち)を付ける。
+#   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(見回り待ち。PC を開いたときに手元の見回りが片付ける)を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
 #   test.yml の backend・frontend と同じ準備(PHP 8.4・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
-#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local は Slack に知らせ、状態のラベルを付け替える
+#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local・needs-manual は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
@@ -565,7 +565,7 @@ jobs:
             MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
             # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
             # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
-            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision"))] | join(",")' <<<"$pr")
+            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-decision"))] | join(",")' <<<"$pr")
             if [ "$(jq -r .isDraft <<<"$pr")" = false ] && [ -z "$held" ]; then
               gh workflow run ai-claude-review.yml -R "$REPO" -f number="$PR" -f reason=conflict-resolve
             fi
@@ -578,8 +578,8 @@ jobs:
           develop(${BASE:0:7})の取り込みを試したが、コンフリクトを解消できないまま止まった。develop が進んだときに試し直す。急ぐときは手元で develop を取り込んで push してほしい。"
           fi
 
-          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local が付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
-          for label in needs-human needs-local; do
+          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local・needs-manual のどれかが付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
+          for label in needs-human needs-local needs-manual; do
             if jq -e --arg l "$label" '.labels | any(.name == $l)' <<<"$pr" >/dev/null \
               && grep -F "$mark" <<<"$comments" | grep -qF "ai-dev:$label"; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
