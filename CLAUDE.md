@@ -43,7 +43,7 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` がそれに `branch-flow` を足したもの、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` が `branch-flow` だけ、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。`staging`・`release` は「マージ前にブランチを最新にする」(`strict`)も求めない。昇格の PR の head は `develop`(`staging`)そのもので常に先へ進み、CI の必須のチェックや `strict` があると、進むたびに CI の待ちでマージが止まるため(中身は `develop` に入る前に PR ごとに CI を通っている。#506)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 
@@ -163,9 +163,13 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
      - MINOR: 機能を足したとき
      - PATCH: 不具合の修正・見た目の調整だけのとき
    - `release` 向けの PR をマージすると、`release-tag.yml` がタイトルの版でマージコミットにタグ(`v1.2.0`)を打ち、GitHub Release(本文は自動生成のリリースノート)を作る。デプロイ(`deploy.yml`)とは別のワークフローで、デプロイの成否とは関係なく作る
-   - 昇格の PR は必ず手元のエージェントが作る。**レビューは CodeRabbit ではなく、作った手元の Claude がする**(#479)。PR を作ったら、`base...head` の差分を読み、`gh pr review <番号> --comment` で、本文の先頭に `<!-- ai-dev:agent --> <!-- ai-dev:local-review -->` を付けたレビューを書く(指摘が無くても書く。指摘は本文に並べる)。Actions(`request-review.sh`)は昇格の PR に CodeRabbit・代わりの Claude のレビューを頼まず、`ai-auto-merge.yml` はいまのコミットに付いたこの目印のレビューだけをレビュー済みとみなす(`head-reviewed.sh`)。head の `develop`・`staging` に後からコミットが入ったら、レビュー済みでなくなるので、手元でもう一度レビューする
-   - この PR(昇格の PR)の中身は、`develop` に入る前に PR ごとにレビュー済み。指摘が残ってもマージは止めず、Actions の Claude Code は直さない(head が保護されたブランチ(`develop`・`staging`)なので直せない)。`needs-human` も付かない。直したい指摘は、`develop` への PR で直す
-   - CI が緑で、いまのコミットを手元の Claude がレビューし終えると、`ai-auto-merge.yml` が `needs-approval` を付けて Slack に知らせる。残っている指摘の件数も PR にコメントされる。人は差分と指摘を見て、マージするか決める
+   - 昇格の PR は必ず手元のエージェントが作る。**レビューは CodeRabbit ではなく、作った手元の Claude がする**(#479)。PR を作ったら、`base...head` の差分を読み、`gh pr review <番号> --comment` で、本文の先頭に `<!-- ai-dev:agent --> <!-- ai-dev:local-review -->` を付けたレビューを書く(指摘が無くても書く。指摘は本文に並べる)。Actions(`request-review.sh`)は昇格の PR に CodeRabbit・代わりの Claude のレビューを頼まず、`ai-auto-merge.yml` はこの目印のレビューだけをレビュー済みとみなす(`head-reviewed.sh`)。head は `develop`(`staging`)そのもので常に先へ進むので、head に後からコミットが入ってもレビューし直さない(増えた分は `develop` に入る前に PR ごとにレビュー済み。`head-reviewed.sh` も、いまのコミットへのものでなくても目印のレビューが 1 つあればレビュー済みとみなす。#506)
+   - この PR(昇格の PR)の中身は、`develop` に入る前に PR ごとにレビュー済み。指摘が残ってもマージは止めず、Actions の Claude Code は直さない(head が保護されたブランチ(`develop`・`staging`)なので直せない)。`needs-human` も付かない
+   - **指摘は昇格の PR では直さない**(head は保護されたブランチで、直すと `develop` との差分ができる)。レビューを書いた手元のエージェントが、次のように片付ける(#506)
+     - 妥当な指摘は、1 件ずつ `develop` で直す issue にする
+     - レビューの後に、指摘ごとの issue の URL を並べたコメント(先頭に `<!-- ai-dev:agent -->`)を昇格の PR に書いて、指摘を閉じる。妥当でない指摘は、妥当でない理由をそのコメントに書く
+     - 公開できない指摘(セキュリティの穴)は issue にせず、下書きの security advisory にする(このリポジトリは public なので、issue・コメントに中身を書かない)
+   - CI が緑で、手元の Claude がレビューし終えると、`ai-auto-merge.yml` が `needs-approval` を付けて Slack に知らせる。残っている指摘の件数も PR にコメントされる。人は差分と指摘を見て、マージするか決める
 
 ラベルの意味の詳しい説明は `docs/labels.md` を見る。
 
