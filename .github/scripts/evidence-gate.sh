@@ -70,7 +70,7 @@ check_viewports() {
 }
 
 # 本文の「気づいたこと」の見出し(## 〜 ######)の下にある箇条書きの項目のうち、issue の参照が無いものを 1 項目 1 行で出す。
-# 字下げした続きの行は、その項目に含める。PR のひな形の HTML コメントは数えない
+# 字下げした続きの行は、その項目に含める。PR のひな形の HTML コメントと、「- なし」だけの項目は数えない
 findings_without_issue() {
 	perl -0pe 's/<!--.*?-->//gs' <<<"$body" | awk '
 		/^#+[[:space:]]/ {
@@ -87,7 +87,7 @@ findings_without_issue() {
 		}
 		item != "" && /^[[:space:]]+[^[:space:]]/ { item = item " " $0 }
 		END { if (item != "") print item }
-	' | grep -vE '#[0-9]+|/issues/[0-9]+' || true
+	' | grep -vE '#[0-9]+|/issues/[0-9]+|^([-*]|[0-9]+\.)[[:space:]]*(なし|無し)[。.]?[[:space:]]*$' || true
 }
 
 problems=()
