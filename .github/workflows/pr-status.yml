@@ -1,8 +1,10 @@
 # PR に、いま誰の番かを表す状態のラベル(状態:レビュー待ち・状態:レビュー対応中 など)を 1 つだけ付ける。決め方は .github/scripts/pr-status.sh
 #
-# 状態が変わりうるとき(PR の動き・CodeRabbit のレビューとコメント・CI の終わり)に、その PR を事実から出し直して付け替える。
-# GITHUB_TOKEN で付けたラベルやマージはワークフローを起こさないので、AI のワークフロー(ai-review-loop.yml・ai-claude-review.yml・
-# ai-auto-merge.yml)は、状態を変えた後でこのワークフローを番号付きで呼ぶ。開いている PR のすべての出し直しは、見回り
+# 状態が変わりうるとき(PR の動き・CI の終わり)に、その PR を事実から出し直して付け替える。
+# ai-auto-merge.yml も起動するきっかけ(CodeRabbit のレビューの終わり・CI の成功・ready にした・マージを止めるラベルが外れた)では、
+# ai-auto-merge.yml のジョブが最後に状態のラベルを出し直すので、ここでは動かさない(同じきっかけで数秒のジョブを 2 つ課金しない。#534)。
+# GITHUB_TOKEN で付けたラベルやマージはワークフローを起こさないので、AI のワークフロー(ai-review-loop.yml・ai-draft-sweep.yml)は、
+# 状態を変えた後でこのワークフローを番号付きで呼ぶ(ai-auto-merge.yml も呼ぶときは、そちらに任せて呼ばない)。開いている PR のすべての出し直しは、見回り
 # (ai-review-sweep.yml)が定期的に行うので、途中で止まったジョブが古いラベルを残しても、そこで直る。
 # 1 回に PR 1 件あたり 10 回ほど API を呼ぶ。GITHUB_TOKEN の上限(1 時間に 1,000 回)をほかの AI のワークフローと分け合うので、
 # すべての PR を出し直すのは見回りと手動のときだけにし、ほかのきっかけでは、その PR だけを出し直す。
@@ -14,11 +16,6 @@ name: PR の状態のラベル
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, labeled, unlabeled]
-  pull_request_review:
-    types: [submitted]
-  issue_comment:
-    # CodeRabbit は依頼への返信を「Review triggered」で作ってから「Review finished」に書き換えるので、書き換えでも起動する
-    types: [created, edited]
   workflow_run:
     workflows: [test]   # CI のワークフロー名に合わせる
     types: [completed]
@@ -31,19 +28,26 @@ on:
 permissions: {}
 
 # 同じ PR の回を 1 列に並べる。取り消しはしない: concurrency はジョブの if より前に効くので、取り消すと、if で飛ばされる起動
-# (人のコメントなど)が、AI のワークフローから呼ばれた回を止めてしまう。何度動かしても同じ結果になるので、待たせても害は無い
+# (関係のないラベルの付け外しなど)が、AI のワークフローから呼ばれた回を止めてしまう。何度動かしても同じ結果になるので、待たせても害は無い。
+# ai-auto-merge.yml に任せて必ず飛ばすきっかけ(CI の成功・ready にした・マージを止めるラベルが外れた)は、PR ごとのグループで待っている
+# 回を押し出さないよう、実行ごとのグループに逃がす(docs/review-checklist.md の RC-03)
 concurrency:
-  group: pr-status-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.number || github.event_name }}
+  group: >-
+    ${{ ((github.event_name == 'workflow_run' && contains(fromJSON('["success","skipped"]'), github.event.workflow_run.conclusion))
+      || (github.event_name == 'pull_request_target' && (github.event.action == 'ready_for_review'
+        || (github.event.action == 'unlabeled'
+          && contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions"]'), github.event.label.name)))))
+      && format('pr-status-run-{0}', github.run_id)
+      || format('pr-status-{0}', github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || inputs.number || github.event_name) }}
   cancel-in-progress: false
 
 jobs:
   label:
-    # レビュー・コメントは CodeRabbit のものだけ(人のコメントでは状態は変わらない。状態を変える AI のワークフローは、終わりにこちらを呼ぶ)。
-    # CodeRabbit のコメントのうち状態に効くのは、レビューの終わりを表すもの(head-reviewed.sh が見る文言)だけ。
-    # CodeRabbit はサマリーのコメントを何度も書き換えるので、ほかのコメントでは動かさない。
+    # CodeRabbit のレビューの終わり・CI の成功・ready にした・マージを止めるラベル(待ちのラベルと ai-in-actions)が外れたときは、
+    # ai-auto-merge.yml のジョブが最後に状態のラベルを出し直すので、ここでは動かさない(#534)。
     # ラベルの付け外しは、状態の決め方(pr-status.sh)が見る制御用のラベルと、状態のラベルのときだけ。
     # 人が状態のラベルを手で付け替えたときは動いて、事実どおりに戻す。
-    # CI は PR に結び付いた回だけ。このジョブが付け替えたラベルは GITHUB_TOKEN なので、ここへは戻ってこない。
+    # CI は PR に結び付いた回で、成功しなかったときだけ。このジョブが付け替えたラベルは GITHUB_TOKEN なので、ここへは戻ってこない。
     # draft の状態は、作業中か、待ちのラベル(needs-human・needs-decision・needs-manual・needs-local)による人の判断待ち・手元の作業待ち・見回り待ちなので、
     # draft では開いた・draft に戻した・閉じた・待ちのラベルの付け外しのときだけ動かす。
     # CI は draft で全ジョブを飛ばす(test.yml)ので、飛ばした回では動かさない
@@ -51,19 +55,17 @@ jobs:
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && github.event.pull_request.draft
         && (contains(fromJSON('["opened","reopened","converted_to_draft","closed"]'), github.event.action)
-          || ((github.event.action == 'labeled' || github.event.action == 'unlabeled')
+          || (github.event.action == 'labeled'
             && (startsWith(github.event.label.name, '状態:')
-              || contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision"]'), github.event.label.name)))))
+              || contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision"]'), github.event.label.name)))
+          || (github.event.action == 'unlabeled' && startsWith(github.event.label.name, '状態:'))))
       || (github.event_name == 'pull_request_target' && !github.event.pull_request.draft && (
-        (github.event.action != 'labeled' && github.event.action != 'unlabeled')
+        (github.event.action != 'labeled' && github.event.action != 'unlabeled' && github.event.action != 'ready_for_review')
         || startsWith(github.event.label.name, '状態:')
-        || contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions"]'), github.event.label.name)))
-      || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
-      || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
-        && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
-          || contains(github.event.comment.body, 'LGTM')))
+        || (github.event.action == 'labeled'
+          && contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions"]'), github.event.label.name))))
       || (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number
-        && github.event.workflow_run.conclusion != 'skipped')
+        && !contains(fromJSON('["success","skipped"]'), github.event.workflow_run.conclusion))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -74,7 +76,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
-      NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.number }}
+      NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || inputs.number }}
     steps:
       - uses: actions/checkout@v6
         with:

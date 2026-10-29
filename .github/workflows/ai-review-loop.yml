@@ -591,8 +591,8 @@ jobs:
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
           done
+          # 状態のラベルは、ai-auto-merge.yml のジョブが最後に出し直す(pr-status.yml は呼ばない。#534)
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
-          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
 
       # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
       # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。
