@@ -1092,7 +1092,17 @@ export interface components {
             kind: "method" | "glass" | "other";
             /** @description 技法の用語なら、その技法の ID(技法から探すカクテルの条件に使う)。技法でなければ null */
             method_id: number | null;
-            description: string;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
             youtube: string | null;
             youtube_start_seconds: number | null;
             image: string | null;
