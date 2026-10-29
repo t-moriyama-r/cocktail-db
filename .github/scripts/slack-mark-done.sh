@@ -86,7 +86,7 @@ read_asks() {
 			| select(.metadata.event_payload.repo == $repo)
 			| {ts, text, number: (.metadata.event_payload.number | tostring), label: .metadata.event_payload.label,
 				done: (.metadata.event_type == "ai_dev_done")})
-		| map(. + {unstruck: (.done and (.text | startswith("【済】")) and (.text | startswith("【済】~") | not))})
+		| map(. + {unstruck: (.done and (.text | startswith("【済】")) and (.text | contains("~") | not))})
 		| . as $all
 		| map(. as $a | . + {superseded: any($all[]; .number == $a.number and .label == $a.label
 			and (.ts | tonumber) > ($a.ts | tonumber))})' <<<"$messages"
