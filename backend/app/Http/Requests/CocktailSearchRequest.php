@@ -55,7 +55,8 @@ class CocktailSearchRequest extends FormRequest
             // and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
             'category_groups' => ['required_if:mode,and', 'prohibited_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             // 空のまとまりは、どのカクテルも満たせない条件になるので弾く(画面は空のまとまりを送らない)
-            'category_groups.*' => ['required', 'array', 'list'],
+            // 1 つのまとまりの件数にも上限を掛け、after の総数の上限の前に巨大な配列を検証しないようにする
+            'category_groups.*' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             'category_groups.*.*' => ['required', 'integer', self::notBoolOrFloat(...)],
             // 並べ替える列(#167)。省くと ID の順
             'sort' => ['nullable', 'string', Rule::in(CocktailSearchSort::SORTS)],
