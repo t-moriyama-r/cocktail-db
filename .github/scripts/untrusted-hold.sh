@@ -19,7 +19,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 MARK='<!-- ai-dev:untrusted -->'
 
 untrusted_hold() {
-  local repo=${1:-} n=${2:-} numbers found body
+  local repo=${1:-} n=${2:-} numbers found body marked
   if [ -z "$repo" ] || [ -z "$n" ]; then
     echo "$USAGE" >&2
     return 2
@@ -39,8 +39,9 @@ untrusted_hold() {
   echo "$found"
   body=$(hold_body "$found")
   # 同じものを前の回でもう頼んでいれば書かない(目印の付いたコメントに、いちばん新しい信頼しないものの URL があるか)
-  if ! gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[].body | select(contains(\"$MARK\"))" \
-    | grep -qF "$(tail -1 <<<"$found" | awk '{print $1}') "; then
+  # (パイプに直接つなぐと、grep -q が先に終わったときに gh が SIGPIPE で落ち、pipefail で「無い」と読まれるので、変数に受ける)
+  marked=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[].body | select(contains(\"$MARK\"))")
+  if ! grep -qF "$(tail -1 <<<"$found" | awk '{print $1}') " <<<"$marked"; then
     gh api "repos/$repo/issues/$n/comments" -f body="$body" >/dev/null
   fi
   gh api -X POST "repos/$repo/issues/$n/labels" -f "labels[]=needs-human" >/dev/null
