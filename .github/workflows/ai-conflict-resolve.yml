@@ -11,7 +11,7 @@
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
-#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local・needs-manual は Slack に知らせ、状態のラベルを付け替える
+#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-manual は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
@@ -572,8 +572,8 @@ jobs:
           develop(${BASE:0:7})の取り込みを試したが、コンフリクトを解消できないまま止まった。develop が進んだときに試し直す。急ぐときは手元で develop を取り込んで push してほしい。"
           fi
 
-          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local・needs-manual のどれかが付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
-          for label in needs-human needs-local needs-manual; do
+          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local・needs-manual のどれかが付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ(needs-local は人がすることが無いので知らせない。#516)
+          for label in needs-human needs-manual; do
             if jq -e --arg l "$label" '.labels | any(.name == $l)' <<<"$pr" >/dev/null \
               && grep -F "$mark" <<<"$comments" | grep -qF "ai-dev:$label"; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"

@@ -514,6 +514,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/random-walk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 行き先の種類を 1 つ選び、その中からランダムに 1 件の ID を返す。
+         * @description - cocktail: 公開しているカクテル(下書きは選ばない。旧も is_draft = 0 で絞っていた)
+         *     - category: 根でないノード。旧の行き先はカテゴリとミドルで、根(旧の種別)は選ばれなかった
+         *     - brand: すべての銘柄
+         *
+         *     選んだ種類に 1 件も無ければ 404。
+         */
+        get: operations["randomWalk"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search-form": {
         parameters: {
             query?: never;
@@ -2063,6 +2087,30 @@ export interface operations {
                 };
             };
             422: components["responses"]["InvalidPasskeyException"];
+        };
+    };
+    randomWalk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        type: "cocktail" | "category" | "brand";
+                        id: number;
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     searchForm: {
