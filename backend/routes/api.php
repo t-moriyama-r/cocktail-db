@@ -19,6 +19,7 @@ use App\Http\Controllers\DictionaryDetailController;
 use App\Http\Controllers\DictionaryIndexController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
+use App\Http\Controllers\RandomWalkController;
 use App\Http\Controllers\SearchFormController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,9 @@ Route::get('/cocktails/latest-video', [CocktailListController::class, 'latestVid
 Route::post('/cocktails/search', CocktailSearchController::class);
 
 Route::get('/affiliates', AffiliateController::class);
+
+// ランダムウォーク(#45)。ヘッダーの「現在の登録数」のリンク先を、カクテル・ノード・銘柄から 1 件選ぶ
+Route::get('/random-walk', RandomWalkController::class);
 
 // 旧サイトが保存した検索条件を直す(#290)。ID が数百になりうるので、GET ではなく本文で受ける
 Route::post('/legacy/search-condition', LegacySearchConditionController::class);

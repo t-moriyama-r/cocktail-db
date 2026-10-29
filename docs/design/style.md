@@ -88,7 +88,7 @@ npm run dev
 
 ## 幅の区切り
 
-旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。例外は、カクテルの一覧の表のベースの列を 700px 未満で隠す `max-width: 699px` だけ(旧と同じ見た目にするため。#298。テストに許す値として書いてある)。
+旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。例外は、カクテルの一覧の表のベースの列(#298)と、銘柄の一覧の表の所属するノードの段(#299)を 700px 未満で隠す `max-width: 699px` だけ(旧と同じ見た目にするため。テストに許す値として、ファイルごとに書いてある)。
 
 | 名前 | 幅 | 変わるもの(試作) | 証跡を撮る幅 |
 |---|---|---|---|

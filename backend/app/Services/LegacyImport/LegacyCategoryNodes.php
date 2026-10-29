@@ -63,7 +63,17 @@ final class LegacyCategoryNodes
      */
     public function nodeId(string $legacyTable, int $legacyId, string $context): int
     {
-        return $this->nodeIds[$legacyTable][$legacyId]
+        return $this->find($legacyTable, $legacyId)
             ?? throw new UnexpectedValueException("{$context} が指す {$legacyTable} の id {$legacyId} を移した先のノードが無い(カテゴリ木を先に移す)");
+    }
+
+    /**
+     * 旧のカテゴリ・ミドルの ID から、移した先のノードの ID を引く。対応が無ければ null(旧で消えた行を指していたときなど)。
+     *
+     * @param  self::LEGACY_CATEGORY|self::LEGACY_MIDDLE  $legacyTable
+     */
+    public function find(string $legacyTable, int $legacyId): ?int
+    {
+        return $this->nodeIds[$legacyTable][$legacyId] ?? null;
     }
 }
