@@ -101,6 +101,7 @@ jobs:
       # Claude Code は作業ディレクトリのファイルを書き換えられるので、字数を数えるスクリプトは既定のブランチから取り直す
       - uses: actions/checkout@v6
         if: always() && steps.live.outputs.open == 'true'
+        continue-on-error: true   # 字数を数えるためだけの取り直しなので、落ちても本来の仕事を止めない
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev

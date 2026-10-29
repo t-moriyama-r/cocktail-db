@@ -182,6 +182,7 @@ jobs:
       # PR のブランチの checkout が .ai-dev を消し、Claude Code は作業ディレクトリのファイルを書き換えられるので、既定のブランチのスクリプトを取り直す
       - uses: actions/checkout@v6
         if: always() && steps.start.outputs.at
+        continue-on-error: true   # 字数を数えるためだけの取り直しなので、落ちても本来の仕事を止めない
         with:
           path: .ai-dev
           sparse-checkout: .github/scripts

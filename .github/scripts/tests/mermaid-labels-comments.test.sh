@@ -68,6 +68,13 @@ main() {
 		"$(warnings)" '::warning title=Mermaid のラベルが長い::https://example.test/c1 図1 矢印のラベル「50%25を超える文」: 全角 6.5 字(上限 6 字)'
 
 	reset
+	comments "o|$LONG"
+	touch "$FAKE/count-fails"
+	run
+	expect TC-478-33 '字数を数えられなかった(mermaid-labels.sh が 0・1 以外で終わった)ら、超えたもの無しと取り違えずに警告する' \
+		"$(warnings)|$RC" '::warning title=Mermaid のラベルを数えられなかった::https://example.test/c1 (mermaid-labels.sh の終了コード 5)|0'
+
+	reset
 	touch "$FAKE/api-fails"
 	run
 	expect TC-478-28 'GitHub を読めなかったら、無かったと取り違えずに失敗で終わる' "$(warnings)|$([ "$RC" -ne 0 ] && echo failed)" '|failed'
@@ -95,10 +102,18 @@ case "$*" in
 esac
 SH
 	chmod +x "$FAKE/bin/gh"
+	# mermaid-labels.sh だけが使う jq -R -s を、count-fails があるときに落とす(ほかの jq はそのまま本物に渡す)
+	REAL_JQ=$(command -v jq)
+	cat >"$FAKE/bin/jq" <<SH
+#!/usr/bin/env bash
+if [ -f "\$FAKE/count-fails" ] && [ "\${1:-}" = -R ]; then echo "jq: error" >&2; exit 5; fi
+exec "$REAL_JQ" "\$@"
+SH
+	chmod +x "$FAKE/bin/jq"
 }
 
 reset() {
-	rm -f "$FAKE"/calls "$FAKE"/api-fails "$FAKE"/out
+	rm -f "$FAKE"/calls "$FAKE"/api-fails "$FAKE"/count-fails "$FAKE"/out
 	comments
 	issue_body '' 2026-10-28T00:00:00Z
 }

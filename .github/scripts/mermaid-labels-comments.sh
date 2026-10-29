@@ -16,7 +16,7 @@ mermaid_labels_comments() {
   local repo=${1:?owner/repo}
   local number=${2:?番号}
   local since=${3:?時刻}
-  local owner=${repo%%/*} work comments issue count=0 n i url report line
+  local owner=${repo%%/*} work comments issue count=0 n i url report line rc
   work=$(mktemp -d)
   trap 'rm -rf "$work"' RETURN
 
@@ -35,7 +35,13 @@ mermaid_labels_comments() {
   for ((i = 0; i < n; i++)); do
     url=$(jq -r ".[$i].url" "$work/all.json")
     jq -r ".[$i].body" "$work/all.json" >"$work/body.md"
-    report=$(bash "$HERE/mermaid-labels.sh" "$work/body.md" || true)
+    # 0: 超えたもの無し、1: 超えたものあり。それ以外は数えられなかったので、超えたもの無しと取り違えないよう警告する
+    rc=0
+    report=$(bash "$HERE/mermaid-labels.sh" "$work/body.md") || rc=$?
+    if [ "$rc" -gt 1 ]; then
+      echo "::warning title=Mermaid のラベルを数えられなかった::$url (mermaid-labels.sh の終了コード $rc)"
+      continue
+    fi
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       if [[ "$line" == *上限* ]]; then
