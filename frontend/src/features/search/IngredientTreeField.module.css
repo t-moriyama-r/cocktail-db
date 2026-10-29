@@ -1,4 +1,6 @@
 .field {
+  /* 色の地(水色・灰色)の上で名前のリンクが 4.5:1 を満たすよう、欄の中だけリンクの色を濃くする(#23527c で 6.91:1・7.04:1。#298 と同じ) */
+  --color-link: var(--color-link-hover);
   min-width: 0;
   margin: 0;
   padding: 0;
