@@ -1,13 +1,13 @@
 <?php
 
 use App\Models\Affiliate;
-use App\Models\LegacyIdMap;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\PendingCommand;
 use Tests\Support\LegacyFixture;
 use Tests\Support\LegacyImportCommand;
+use Tests\Support\LegacyNodeMap;
 use Tests\TestCase;
 
 // legacy:import --only=affiliates(アフィリエイトを移す。#32)。旧 DB を使うので db グループ
@@ -26,19 +26,6 @@ function importLegacyAffiliates(TestCase $test): PendingCommand
     LegacyImportCommand::run($test, ['--only' => 'brands'])->assertExitCode(0)->run();
 
     return LegacyImportCommand::run($test, ['--only' => 'affiliates']);
-}
-
-/**
- * 旧の表と ID から、移した先のノードの ID を legacy_id_maps で引く。
- */
-function affiliateNodeId(string $legacyTable, int $legacyId): int
-{
-    return LegacyIdMap::query()
-        ->where('legacy_table', $legacyTable)
-        ->where('legacy_id', $legacyId)
-        ->where('new_table', 'categories')
-        ->sole()
-        ->new_id;
 }
 
 /**
@@ -105,21 +92,21 @@ it('TC-32-02: ミドルも銘柄も 0 の行は、カテゴリのノードの行
     importLegacyAffiliates($this)->assertExitCode(0)->run();
 
     $affiliate = Affiliate::query()->whereNull('brand_id')->sole();
-    expect($affiliate->category_id)->toBe(affiliateNodeId('m_category', 4));
+    expect($affiliate->category_id)->toBe(LegacyNodeMap::id('m_category', 4));
 });
 
 it('TC-32-03: ミドルの下の銘柄の行は、その銘柄の行にし、ノードは銘柄の所属ノードにする', function () {
     importLegacyAffiliates($this)->assertExitCode(0)->run();
 
     $affiliate = Affiliate::query()->where('brand_id', 2)->sole();
-    expect($affiliate->category_id)->toBe(affiliateNodeId('m_middle', 3))
+    expect($affiliate->category_id)->toBe(LegacyNodeMap::id('m_middle', 3))
         ->and($affiliate->category_id)->toBe(DB::table('brands')->where('id', 2)->value('category_id'));
 });
 
 it('TC-32-04: ミドルが 0 の銘柄の行は、その銘柄の行にし、ノードは銘柄の所属ノード(カテゴリ)にする', function () {
     importLegacyAffiliates($this)->assertExitCode(0)->run();
 
-    expect(Affiliate::query()->where('brand_id', 1)->sole()->category_id)->toBe(affiliateNodeId('m_category', 1));
+    expect(Affiliate::query()->where('brand_id', 1)->sole()->category_id)->toBe(LegacyNodeMap::id('m_category', 1));
 });
 
 it('TC-32-05: ミドルの親とカテゴリが合わない銘柄の行は、カテゴリの列を見ずに銘柄の所属ノード(ミドル)にする(#28)', function () {
@@ -128,7 +115,7 @@ it('TC-32-05: ミドルの親とカテゴリが合わない銘柄の行は、カ
 
     importLegacyAffiliates($this)->assertExitCode(0)->run();
 
-    expect(Affiliate::query()->where('brand_id', 4)->sole()->category_id)->toBe(affiliateNodeId('m_middle', 3));
+    expect(Affiliate::query()->where('brand_id', 4)->sole()->category_id)->toBe(LegacyNodeMap::id('m_middle', 3));
 });
 
 it('TC-32-06: 銘柄が 0 でミドルのある行は、ミドルのノードの行にする', function () {
@@ -136,7 +123,7 @@ it('TC-32-06: 銘柄が 0 でミドルのある行は、ミドルのノードの
 
     importLegacyAffiliates($this)->assertExitCode(0)->run();
 
-    expect(Affiliate::query()->whereNull('brand_id')->where('category_id', affiliateNodeId('m_middle', 1))->count())->toBe(1);
+    expect(Affiliate::query()->whereNull('brand_id')->where('category_id', LegacyNodeMap::id('m_middle', 1))->count())->toBe(1);
 });
 
 it('TC-32-07: 値の列と手で入れた列(human_*)、作成・更新日時を旧からそのまま移す', function () {
@@ -260,7 +247,7 @@ it('TC-32-13: 2 回目の前に旧が変わっていたら、ID を変えずに�
 
     $affiliate = Affiliate::query()->where('brand_id', 1)->sole();
     expect($affiliate->id)->toBe($brand1Id)
-        ->and($affiliate->category_id)->toBe(affiliateNodeId('m_middle', 3))
+        ->and($affiliate->category_id)->toBe(LegacyNodeMap::id('m_middle', 3))
         ->and($affiliate->human_title)->toBe('手で入れた商品名(変更)')
         ->and(Affiliate::query()->whereNull('brand_id')->count())->toBe(0)
         ->and(DB::table('affiliates')->count())->toBe(2);
@@ -305,7 +292,7 @@ it('TC-32-16: 移した旧の価格は期限切れなので、手で入れた値
     importLegacyAffiliates($this)->assertExitCode(0)->run();
     $this->travelTo(Carbon::parse('2026-10-29 12:00:00'));
 
-    $this->getJson('/api/affiliates?category_id='.affiliateNodeId('m_category', 4))
+    $this->getJson('/api/affiliates?category_id='.LegacyNodeMap::id('m_category', 4))
         ->assertOk()
         ->assertJsonPath('data.amazon.price', null)
         ->assertJsonPath('data.rakuten.price', null)

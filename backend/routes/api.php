@@ -14,6 +14,7 @@ use App\Http\Controllers\BrandDetailController;
 use App\Http\Controllers\CategoryDetailController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailListController;
+use App\Http\Controllers\CocktailRelatedController;
 use App\Http\Controllers\CocktailSameNameController;
 use App\Http\Controllers\CocktailSearchController;
 use App\Http\Controllers\DictionaryDetailController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\DictionaryIndexController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
 use App\Http\Controllers\NameSearchController;
+use App\Http\Controllers\RandomCocktailsController;
 use App\Http\Controllers\RandomWalkController;
 use App\Http\Controllers\SearchFormController;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +55,10 @@ Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('coc
 Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
 
 Route::get('/brands/{brand}', BrandDetailController::class)->where('brand', '[0-9]{1,18}');
+
+// 別のカクテル(旧の「ランダムカクテル」。#174)。カクテルを起点にする形と、ノード・銘柄・ベース・技法・グラスを起点にする形
+Route::get('/cocktails/{cocktail}/related', CocktailRelatedController::class)->where('cocktail', '[0-9]{1,18}');
+Route::get('/cocktails/random', RandomCocktailsController::class);
 
 // ノードの詳細(#42)。旧のカテゴリ・ミドルの詳細を、任意の深さのノードで 1 つにしたもの
 Route::get('/categories/{category}', CategoryDetailController::class)->where('category', '[0-9]{1,18}');
