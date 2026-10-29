@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, test } from 'vitest'
 import App from '../../App'
 import type { paths } from '../../api/schema'
+import { buildCocktailDetail } from '../../features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from '../../test/api'
 
 type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
@@ -22,6 +23,8 @@ describe('共通の枠(SiteLayout)', () => {
   beforeEach(() => {
     // トップの画面が GET /api/hello を呼ぶ
     mockApi('get', '/hello', 200, HELLO)
+    // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
+    mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
   })
 
   test('TC-296-01: フッターに著作の表示と、作者のサイトへのリンク(新しいタブ)がある', async () => {
@@ -54,7 +57,7 @@ describe('共通の枠(SiteLayout)', () => {
   test.each([
     ['/', 'Hello World from Laravel'],
     ['/helpme', '更新ボランティア募集'],
-    ['/detail/cocktail/1', 'カクテルの詳細'],
+    ['/detail/cocktail/1', 'マティーニ(Martini)'],
     ['/nope', 'ページが見つかりません'],
   ])('TC-296-04: %s でも、ヘッダーの場所とフッターの中に画面を出す', async (path, heading) => {
     renderAt(path)
