@@ -144,7 +144,7 @@ Basic 認証で閉じた確認用の環境が 2 つある。中身は `.github/w
 - **dev**: `develop` に push される(PR がマージされる)たびに出す。`ai-auto-merge.yml` のマージは `GITHUB_TOKEN` なので push のワークフローが起きず、マージの後に `ai-auto-merge.yml` が `deploy-dev.yml` を直接呼ぶ。マージされた変更を、ステージングに出す前に画面で確かめる
 - **stg**: `staging` にマージしたときに出す。`develop` から `staging` への PR を作り、その差分(前回ステージングに出したところからの変更)を見てマージする
 - **出し直したいとき**: Actions の「deploy-dev」「deploy-stg」→「Run workflow」(ブランチはそれぞれ `develop`・`staging`)、または `gh workflow run deploy-dev.yml --ref develop`・`gh workflow run deploy-stg.yml --ref staging`。前回出したコミット(サーバーの `~/<アプリ本体>/REVISION`)と同じなら出さないので、同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)。決まったブランチ以外からは出さない
-- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `storage:link` → `migrate` → `optimize` → 動作確認)。rsync は本番と同じく `public/storage`(`storage:link` が作る画像のリンク)を消さない。動作確認では、資格情報なしで 401 になることも確かめる
+- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `storage:link` → `migrate` → `optimize` → 動作確認)。ただし dev は、最初のテストを流さない(`deploy-dev.yml` の `run_tests: false`。develop に入るコミットは PR の CI で通しているため。#535)。rsync は本番と同じく `public/storage`(`storage:link` が作る画像のリンク)を消さない。動作確認では、資格情報なしで 401 になることも確かめる
 - `.env` はデプロイのたびに Secret から作り直す(手で直さない)。`APP_KEY` だけは初回にサーバーで作ったものを使い続ける
 - Basic 認証の資格情報は dev と stg で同じ。ユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`・`public_html/cocktail-db-stg`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
 
