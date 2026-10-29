@@ -36,30 +36,26 @@ final class CocktailImporter implements LegacyImporter
 
     private const INGREDIENT_TABLE = 'cocktail_ingredients';
 
-    /** カテゴリ木のノードを書いた新しい表 */
-    private const NODE_TABLE = 'categories';
-
-    private const LEGACY_CATEGORY = 'm_category';
-
-    private const LEGACY_MIDDLE = 'm_middle';
-
     private const LEGACY_BRAND = 'm_brand';
+
+    /** 銘柄を書いた新しい表 */
+    private const BRAND_TABLE = 'brands';
 
     /** 材料を一度に書く行数。プレースホルダの数の上限を超えないように分ける */
     private const INSERT_CHUNK = 1000;
 
-    /** @var array<string, array<int, int>> 旧の表 => (旧 ID => 新 ID) */
-    private array $newIds = [];
+    private LegacyCategoryNodes $nodes;
+
+    /** @var array<int, int> 旧の銘柄の ID => 新の銘柄の ID */
+    private array $brandIds = [];
 
     public function __construct(private readonly RecipeCounter $counter) {}
 
     public function import(): array
     {
         DB::transaction(function () {
-            foreach ([self::LEGACY_CATEGORY, self::LEGACY_MIDDLE] as $legacyTable) {
-                $this->newIds[$legacyTable] = LegacyIdMap::newIdsByLegacyId($legacyTable, self::NODE_TABLE);
-            }
-            $this->newIds[self::LEGACY_BRAND] = LegacyIdMap::newIdsByLegacyId(self::LEGACY_BRAND, 'brands');
+            $this->nodes = LegacyCategoryNodes::load();
+            $this->brandIds = LegacyIdMap::newIdsByLegacyId(self::LEGACY_BRAND, self::BRAND_TABLE);
 
             $cocktailIds = KeptIdCopier::copy(self::LEGACY_TABLE, self::NEW_TABLE, $this->cocktailAttrs(...));
             $this->replaceIngredients($cocktailIds);
@@ -88,7 +84,7 @@ final class CocktailImporter implements LegacyImporter
             'name' => $row['name'],
             'name_search' => $row['name_search'],
             'name_eng' => $row['name_eng'],
-            'base_category_id' => $this->newId(self::LEGACY_CATEGORY, LegacyRows::int($row, 'base', self::LEGACY_TABLE), "{$context} のベース"),
+            'base_category_id' => $this->nodes->nodeId(LegacyCategoryNodes::LEGACY_CATEGORY, LegacyRows::int($row, 'base', self::LEGACY_TABLE), "{$context} のベース"),
             'method_id' => LegacyRows::int($row, 'method', self::LEGACY_TABLE),
             'glass_dictionary_id' => LegacyRows::nullableId($row, 'glass', self::LEGACY_TABLE),
             'ice_id' => LegacyRows::nullableId($row, 'ice', self::LEGACY_TABLE),
@@ -130,11 +126,12 @@ final class CocktailImporter implements LegacyImporter
             }
 
             $ingredient = $this->ingredientAttrs($cocktailId, $row);
+            // 旧の列(カテゴリ・ミドル・銘柄・量・任意)で同じ行を見分ける。docs/migration-anomalies.md の 2 が旧の列で組を数えているため
             $sameRowKey = implode("\0", [
                 $cocktailId,
                 LegacyRows::int($row, 'category', self::LEGACY_RECIPE_TABLE),
                 LegacyRows::nullableId($row, 'middle_category', self::LEGACY_RECIPE_TABLE) ?? '',
-                LegacyRows::nullableId($row, 'brand', self::LEGACY_RECIPE_TABLE) ?? '',
+                $ingredient['brand_id'] ?? '',
                 $ingredient['amount'],
                 (int) $ingredient['is_optional'],
             ]);
@@ -163,27 +160,24 @@ final class CocktailImporter implements LegacyImporter
     private function ingredientAttrs(int $cocktailId, array $row): array
     {
         $context = self::LEGACY_RECIPE_TABLE." の cocktail_id {$cocktailId} の行";
-        $middleId = LegacyRows::nullableId($row, 'middle_category', self::LEGACY_RECIPE_TABLE);
         $brandId = LegacyRows::nullableId($row, 'brand', self::LEGACY_RECIPE_TABLE);
 
         return [
-            'category_id' => $middleId !== null
-                ? $this->newId(self::LEGACY_MIDDLE, $middleId, $context)
-                : $this->newId(self::LEGACY_CATEGORY, LegacyRows::int($row, 'category', self::LEGACY_RECIPE_TABLE), $context),
-            'brand_id' => $brandId === null ? null : $this->newId(self::LEGACY_BRAND, $brandId, $context),
+            'category_id' => $this->nodes->forRow($row, self::LEGACY_RECIPE_TABLE, $context),
+            'brand_id' => $brandId === null ? null : $this->brandId($brandId, $context),
             'amount' => LegacyRows::string($row, 'amount', self::LEGACY_RECIPE_TABLE),
             'is_optional' => (bool) $row['is_optional'],
         ];
     }
 
     /**
-     * 旧の表の ID から、先に移した先の新 ID を引く。カテゴリ木・銘柄をまだ移していなければ見つからない。
+     * 旧の銘柄の ID から、移した先の銘柄の ID を引く。銘柄をまだ移していなければ見つからない。
      *
      * @param  string  $context  見つからないときの例外に添える、どの行から引いたか
      */
-    private function newId(string $legacyTable, int $legacyId, string $context): int
+    private function brandId(int $legacyId, string $context): int
     {
-        return $this->newIds[$legacyTable][$legacyId]
-            ?? throw new UnexpectedValueException("{$context} が指す {$legacyTable} の id {$legacyId} を移した先が無い(カテゴリ木・銘柄を先に移す)");
+        return $this->brandIds[$legacyId]
+            ?? throw new UnexpectedValueException("{$context} が指す ".self::LEGACY_BRAND." の id {$legacyId} を移した先の銘柄が無い(銘柄を先に移す)");
     }
 }

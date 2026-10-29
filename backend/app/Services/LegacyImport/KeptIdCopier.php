@@ -54,7 +54,7 @@ final class KeptIdCopier
 
         // 更新する列を空にすると、upsert は重複を無視せずにただの INSERT になるので、キー自身を書き直す
         $columns = array_values(array_diff(array_keys($rows[0]), [$uniqueBy]));
-        // 1 文のプレースホルダは 65,535 個までなので、行 × 列がそれを超えないように分けて書く
+        // 行 × 列がプレースホルダの上限を超えないように分けて書く
         $chunkSize = max(1, intdiv(self::MAX_PLACEHOLDERS, count($rows[0])));
         foreach (array_chunk($rows, $chunkSize) as $chunk) {
             DB::table($table)->upsert($chunk, [$uniqueBy], $columns === [] ? [$uniqueBy] : $columns);
