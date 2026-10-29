@@ -212,6 +212,12 @@ main() {
 	expect TC-240-34 'RUN_URL が無ければ、この回のコメントを見分けられないので、何も変えずに失敗で終わる' "$(edited)$(commented)|$RC" '|1'
 
 	reset
+	pr 7 ai-in-actions
+	jq -n -c --arg a "$AGENT 実行の記録: $RUN" '[[range(0; 300) | {body: ("x" * 600), created_at: "2026-10-25T15:01:00Z", author_association: "OWNER", user: {type: "User"}}] + [{body: $a, created_at: "2026-10-25T15:01:00Z", author_association: "OWNER", user: {type: "User"}}]]' >"$FAKE/comments"
+	run resume true sha7 "$SINCE"
+	expect TC-240-35 'コメントが非常に多く、配列が引数の上限(128 KiB)を超えても、書いたかどうかを正しく判定する' "$(out)|$RC" 'ok|0'
+
+	reset
 	run bogus true
 	expect TC-240-25 '知らない使い方は失敗で終わる' "$RC" 2
 

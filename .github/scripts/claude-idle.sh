@@ -258,8 +258,9 @@ agent_wrote_since() {
   fi
   issue=$(trusted_comments "$repo" "$n") || return 2
   review=$(gh api --paginate --slurp "repos/$repo/pulls/$n/comments?per_page=100" | jq 'add // [] | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or .user.type == "Bot"))') || return 2
-  jq -e -n --argjson c "$issue" --argjson r "$review" --arg since "$since" --arg run "$RUN_URL" \
-    'any(($c + $r)[]; (.body // "" | contains("ai-dev:agent") and contains($run)) and (.created_at >= $since))' >/dev/null || rc=$?
+  # コメントの配列は大きくなりうるので、--argjson(引数。1 つ 128 KiB が上限)ではなく標準入力で渡す
+  printf '%s\n' "$issue" "$review" | jq -e -n --arg since "$since" --arg run "$RUN_URL" \
+    'input as $c | input as $r | any(($c + $r)[]; (.body // "" | contains("ai-dev:agent") and contains($run)) and (.created_at >= $since))' >/dev/null || rc=$?
   if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then return "$rc"; fi
   return 2
 }
