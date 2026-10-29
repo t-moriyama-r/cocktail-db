@@ -127,6 +127,9 @@ jobs:
 
             見るもの: 動かない・壊れる・危ないところ(バグ、境界の漏れ、失敗したときの後始末、権限・秘密・外から来る値の扱い)と、
             リポジトリの CLAUDE.md の決まりに反するところ。好みの問題や、確かめていない推測は書かない。
+            見つけたバグの挙動は、ふだんの利用者の操作・利用の条件で本当に起きるかを考え直してから書く。コードの上でだけ成り立つ仮説、
+            たどり着けない経路、ふだんの利用では成り立たない限られた条件のものは、利用者への影響を確かめられない限り指摘しない。
+            ただし、セキュリティ(権限・秘密・外から来る値)と、データ消失・破損につながるものは、ふだんの利用で起きなくても指摘する。
             `docs/review-checklist.md` のルール(レビューで繰り返し出た指摘)に当てはまる変更は、指摘の先頭にルールの ID(`RC-01` など)を書く。
 
             旧システムとの差分も見る(CLAUDE.md の「テストの書き方」の「旧との差分」)。向き先が develop の PR で、次に当てはまれば指摘する。
@@ -211,8 +214,8 @@ jobs:
         run: |
           # ai-review-loop.yml が CodeRabbit のレビューで動くときと同じく、人の判断・承認や手元の作業を待っている PR では呼ばない
           labels=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          if [[ ",$labels," != *",needs-human,"* && ",$labels," != *",needs-local,"* && ",$labels," != *",needs-approval,"* ]]; then
+          if [[ ",$labels," != *",needs-human,"* && ",$labels," != *",needs-local,"* && ",$labels," != *",needs-manual,"* && ",$labels," != *",needs-approval,"* ]]; then
             gh workflow run ai-review-loop.yml -R "$REPO" -f number="$PR"
           fi
+          # 状態のラベルは、ai-auto-merge.yml のジョブが最後に出し直す(pr-status.yml は呼ばない。#534)
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
-          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"

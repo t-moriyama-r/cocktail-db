@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# PR のいまのコミットを、AI レビュアー(CodeRabbit・代わりの Claude・昇格の PR では手元の Claude)がもう見たかを true / false で出す
+# PR のいまのコミットを、AI レビュアー(CodeRabbit・代わりの Claude)がもう見たか(昇格の PR では、手元の Claude がレビューしたか)を true / false で出す
 #
 # 使い方: head-reviewed.sh <owner/repo> <PR の番号>
 # 環境変数: OWNER(手元の Claude がレビューを書くアカウント。既定は owner/repo の owner)
 #
 # 昇格の PR(向き先が staging・release)は、必ず手元のエージェントが作り、そのエージェントが差分を読んでレビューする(#479)。
 # Actions は CodeRabbit にも代わりの Claude にも頼まないので、オーナーが目印 <!-- ai-dev:local-review --> を付けたレビューだけを数える。
+# 昇格の PR の head は develop(staging)そのもので、常に先へ進む。増えた分は develop に入る前に PR ごとにレビュー済みなので、
+# いまのコミットへのレビューでなくても、目印のレビューが 1 つあればレビュー済みとみなす(#506)
 #
 # CodeRabbit は指摘があればそのコミットへのレビューを付け、無ければ「Review finished」「No actionable comments」のコメントだけを付ける
 # (どちらか片方のこともあり、後から別のコメントが続くこともある)。上限で動かなかったときは、ai-claude-review.yml が
@@ -23,8 +25,8 @@ reviews=$(gh api --paginate --slurp "repos/$repo/pulls/$number/reviews?per_page=
 
 case "$(jq -r .baseRefName <<<"$pr")" in
   staging | release)
-    jq --arg head "$head" --arg owner "$owner" \
-      'any(.[]; .commit_id == $head and .user.login == $owner and (.body // "" | contains("<!-- ai-dev:local-review -->")))' <<<"$reviews"
+    jq --arg owner "$owner" \
+      'any(.[]; .user.login == $owner and (.body // "" | contains("<!-- ai-dev:local-review -->")))' <<<"$reviews"
     exit 0 ;;
 esac
 

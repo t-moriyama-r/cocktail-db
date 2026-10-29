@@ -10,6 +10,7 @@ import { rateStars } from './rateStars'
 import { sortCocktails } from './sortCocktails'
 import { strengthLabel } from './strengthLabel'
 import { sweetDegreeLabel } from './sweetDegreeLabel'
+import { youtubeWatchUrl } from '../../utils/youtubeWatchUrl'
 
 /**
  * カクテルの一覧の表(旧 Results/Tables/Cocktails.vue)。
@@ -104,9 +105,4 @@ function cocktailPath(id: number): string {
 
 function categoryPath(id: number): string {
   return `/category/${id}`
-}
-
-/** 動画は YouTube の動画の ID で持っていて、旧と同じく YouTube の動画のページを開く */
-function youtubeWatchUrl(videoId: string): string {
-  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`
 }

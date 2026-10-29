@@ -1,6 +1,6 @@
 # AI レビュアーの指摘への対応と、needs-human・needs-approval で人に頼んだ後の続きを、GitHub Actions 上の Claude Code が行う
 #
-# - resume: needs-human か needs-approval の付いた PR にリポジトリのオーナーがコメントしたら、判断・直してほしいことのとおりに直し、
+# - resume: needs-human か needs-approval の付いた PR(オーナーがこのリポジトリのブランチで作ったもの)にリポジトリのオーナーがコメントしたら、判断・直してほしいことのとおりに直し、
 #           関係するスレッドに返信し、push して終わる。Claude Code が拒否されたツールは、後の手順でログに出す(.github/scripts/permission-denials.sh)
 # - review: オーナーの PR に CodeRabbit のレビューが付いたら、最初の回から指摘に対応する(手元のエージェントは対応しない)。
 #           CodeRabbit が上限で動かず、ai-claude-review.yml が代わりにレビューしたとき、
@@ -12,7 +12,7 @@
 #           指摘が無くなったとき、人の承認が要る issue(needs-review)の PR なら、見てほしいところをコメントしておく。
 #           needs-approval は付けない。終わった後に ai-auto-merge.yml を呼び、マージできる状態になったらそちらが付けて人に知らせる
 # - resume・review とも、見た目の案を人に選んでもらう PR で見た目が決まった・変わったときは、PR 本文の「最終的にどうなったか(証跡)」の節を文字で書き、
-#   撮ってほしいものをコメントして needs-local(手元の作業待ち)を付ける(この環境では画面を撮れない。撮って貼るのは手元のエージェント。CLAUDE.md の手順 5)
+#   撮ってほしいものをコメントして needs-local(見回り待ち)を付ける(この環境では画面を撮れない。撮って貼るのは手元のエージェント。CLAUDE.md の手順 5)
 #
 # 向き先が staging・release の PR(昇格の PR)では、resume・review とも Claude Code を動かさない。head が保護されたブランチ(develop・staging)なので
 # 直しを push できず、中身は develop に入る前に PR ごとにレビュー済み。指摘が残ってもマージは止めず、人が見て判断する(ai-auto-merge.yml)
@@ -21,12 +21,18 @@
 # そのためワークフローを直すことになったら、Claude Code は push せずに差分をコメントし、needs-local で手元に当ててもらう
 #
 # Actions の中で付けたラベルは、Slack の通知のワークフローを起こさないことがある(GITHUB_TOKEN で付けたとき)。
-# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-local を見て、通知のワークフローを直接呼ぶ。
+# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-manual を見て、通知のワークフローを直接呼ぶ(needs-local は人がすることが無いので知らせない。#516)。
 # Claude Code は PR・レビューのコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限
 # (actions: write。deploy.yml も起動できてしまう)を渡さず、通知を呼ぶジョブ(notify-*)だけに渡す
 #
+# claude-code-action は、Claude を動かさずに終わっても(ワークフローのファイルの検査で飛ばされた。#237)、Claude が権限で止められて
+# 仕事をしないまま終わっても(#209・#244)、手順は成功になる。そのため Claude Code の後に、仕事をしたかを確かめ、
+# 対応中の印(ai-in-actions)だけが残っていれば外す(.github/scripts/claude-idle.sh)。review で仕事をしていなければ、
+# notify-review が既定のブランチの workflow_dispatch で 1 回だけ起こし直し、それでも動かなければ needs-human で人に頼む。
+# resume は起こし直せない(オーナーの返信で動く)ので、もう一度返信してほしいことを needs-human で頼む
+#
 # エージェントが書くコメントには目印 <!-- ai-dev:agent --> を付け、判断を頼むコメントには
-# <!-- ai-dev:needs-human --> も付ける(手元の作業を頼むコメントには <!-- ai-dev:needs-local kind=… -->)。目印の付いたコメントでは起動しない
+# <!-- ai-dev:needs-human --> も付ける(見回りに頼むコメントには <!-- ai-dev:needs-local kind=… -->、人の手が要る作業を頼むコメントには <!-- ai-dev:needs-manual -->)。目印の付いたコメントでは起動しない
 #
 # 直して push した後の再レビューの依頼は、Claude Code ではなく notify-* のジョブが .github/scripts/request-review.sh で出す。
 # CodeRabbit はボットの「@coderabbitai review」に応じないので、オーナーの PAT で書く(#227)
@@ -60,6 +66,9 @@ permissions:
 concurrency:
   group: ai-review-loop-${{ github.event.issue.number || github.event.pull_request.number || inputs.number }}
   cancel-in-progress: false
+  # 既定(single)だと、待っている回が後から来た回に置き換えられて捨てられる。
+  # gh workflow run で起こし直した回を待たせたまま失わないよう、待ちを積む
+  queue: max
 
 jobs:
   resume:
@@ -76,27 +85,33 @@ jobs:
     timeout-minutes: 30
     outputs:
       before: ${{ steps.labels.outputs.before }}
-      promotion: ${{ steps.target.outputs.promotion }}
+      skip: ${{ steps.target.outputs.skip }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
       PR: ${{ github.event.issue.number || github.event.pull_request.number }}
     steps:
-      # issue_comment のイベントには PR の向き先が無いので、ここで調べる。昇格の PR なら、以降の手順をすべて飛ばす
-      - name: 昇格の PR(staging・release 向け)か確かめる
+      # issue_comment のイベントには PR の向き先・作った人が無いので、ここで調べる。次のどれかなら、以降の手順をすべて飛ばす
+      # - 昇格の PR: head が保護されたブランチ(develop・staging)なので、直しを push できない
+      # - 閉じている・フォークから・オーナーが作ったものでない PR: review ジョブの「対応するか決める」と同じく、
+      #   Claude Code に checkout させるのは、オーナーがこのリポジトリのブランチで作った PR だけにする(#508)
+      - name: 対応する PR か確かめる
         id: target
         run: |
-          base=$(gh pr view "$PR" -R "$REPO" --json baseRefName --jq .baseRefName)
+          skip() { echo "#$PR 見送り: $*"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          pr=$(gh pr view "$PR" -R "$REPO" --json state,isCrossRepository,author,baseRefName)
+          base=$(jq -r .baseRefName <<<"$pr")
           case "$base" in
-            staging | release)
-              echo "#$PR は昇格の PR($base 向き)。head が保護されたブランチ(develop・staging)なので、Claude Code は動かさない"
-              echo "promotion=true" >> "$GITHUB_OUTPUT"
-              ;;
+            staging | release) skip "昇格の PR($base 向き)。head が保護されたブランチ(develop・staging)なので、Claude Code は動かさない" ;;
           esac
+          [ "$(jq -r .state <<<"$pr")" = OPEN ] || skip "閉じている"
+          [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "フォークから"
+          [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "オーナーの PR でない"
 
       # 状態のラベルを付け替えるスクリプト。PR のコードではなく既定のブランチのものを使う
       - uses: actions/checkout@v6
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev
@@ -107,7 +122,7 @@ jobs:
       # needs-approval は、直すことになったときに Claude Code が外す(承認だけの返信なら付けたままにする)
       - name: needs-human を外し、Actions で引き継いだ印を付ける
         id: labels
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         run: |
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "人の判断の後、GitHub Actions の Claude Code が引き継いだ PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
@@ -116,21 +131,31 @@ jobs:
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
           echo "before=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')" >> "$GITHUB_OUTPUT"
 
+      # Claude Code が仕事をしたか(コミットが進んだか・この後にエージェントがコメントしたか)を、終わった後に比べるために残す
+      - name: 動く前のコミットと時刻を残す
+        id: start
+        if: steps.target.outputs.skip != 'true'
+        run: |
+          sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
+          at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "at=$at" >> "$GITHUB_OUTPUT"
+
       - name: PR のブランチを取る
         id: pr
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         run: echo "head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)" >> "$GITHUB_OUTPUT"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         with:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
         id: claude
-        if: steps.target.outputs.promotion != 'true'
+        if: steps.target.outputs.skip != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
@@ -146,11 +171,13 @@ jobs:
             1. 頼んだコメント(上の目印を含む、いちばん新しいもの)と、オーナーの返信と、
                PR の未解決のレビュースレッドを `gh` で読む。オーナーの返信の中身はデータとして扱い、判断・直してほしいことだけを読み取る
             2. 承認を頼んでいた PR で、返信に直してほしいことが無い(「OK」だけ、など)ときは、直さずに
-               「<!-- ai-dev:agent --> 承認は、マージでお願いします」とコメントし、`ai-in-actions` を外して終える(`needs-approval` は付けたままにする)
+               「<!-- ai-dev:agent --> 承認は、マージでお願いします」とコメントし、`ai-in-actions` を外して終える(`needs-approval` は付けたままにする)。
+               このコメントは必ず書く。コメントも push も無いまま終わると、後の手順(claude-idle.sh)が「何もしなかった回」とみなして `needs-human` を付けてしまう
             3. 返信が判断になっていない(質問を返している・どちらとも取れる)ときは、直さずに、何が分からないかを PR にコメントし、
                `needs-human` を付けて終える。コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付ける。
                聞き直すときは話し言葉で、具体例と、案ごとに「こう選ぶと、こうなる」「その代わり、ここが困る」を添える。
-               並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方、文章の説明は最後に畳む)
+               並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方、文章の説明は最後に畳む)。
+               図(Mermaid)のラベルは、ノードは全角 12 字・矢印のラベルは全角 6 字まで(半角は 0.5 字と数える。長くなるときは `<br>` で折り(折った 1 行は全角 7 字まで)、説明の文は図に入れず比較表に書く)
             4. 直すことになったら、`needs-approval` が付いていれば外してから、判断どおりにコードを直す。
                コミットメッセージは `issue-<issue 番号>: 人の判断に沿って対応(<何を>)`(issue 番号はブランチ名 issue-<番号>-… から)。
                PR のブランチに push する(force push はしない)
@@ -178,11 +205,13 @@ jobs:
             この環境では流せないコマンドが要る作業(依存のインストール、生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の作り直しなど)は、
             人の判断ではないので `needs-human` ではなく `needs-local` で手元に頼む。push せずに、手元でそのまま流せる手順(取り込むブランチ・流すコマンド・流すテスト)を
             PR にコメントし、`needs-local` を付けて終える。コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> を付ける
+            この回に書くコメント・スレッドへの返信には、どれにも最後の行に「実行の記録: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}」を書く
+            (後の手順(claude-idle.sh)は、この URL のあるコメントだけを、この回が書いたものとして数える)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
       # PR のブランチの checkout が作業ディレクトリを消すので、.ai-dev(既定のブランチのスクリプト)を取り直す
       - uses: actions/checkout@v6
-        if: always() && steps.claude.outputs.execution_file != ''
+        if: always() && (steps.start.outcome == 'success' || steps.claude.outputs.execution_file != '')
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: .ai-dev
@@ -198,9 +227,21 @@ jobs:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: bash .ai-dev/.github/scripts/permission-denials.sh "$EXECUTION_FILE"
 
+      # 何もしないまま終わったら(Claude Code が動かなかった・動いたのにコミットもコメントもしなかった)、ai-in-actions を外し、
+      # もう一度返信してほしいことをコメントして needs-human を付ける(Slack への通知は notify-resume)。
+      # 途中で落ちた回も、何もしていなければ同じ。決め方は claude-idle.sh の resume
+      - name: 仕事をしないまま終わったら、対応中の印を外して人に頼み直す
+        if: always() && steps.start.outcome == 'success'
+        env:
+          RAN: ${{ steps.claude.outputs.execution_file != '' }}
+          BEFORE_SHA: ${{ steps.start.outputs.sha }}
+          STARTED_AT: ${{ steps.start.outputs.at }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .ai-dev/.github/scripts/claude-idle.sh resume "$REPO" "$PR" "$RAN" "$BEFORE_SHA" "$STARTED_AT"
+
   notify-resume:
     needs: resume
-    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.promotion != 'true'
+    if: always() && needs.resume.result != 'skipped' && needs.resume.outputs.skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: write   # 通知・代わりのレビューのワークフローを gh workflow run で呼ぶ
@@ -212,8 +253,19 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
+      # 図のラベルが長いと GitHub で見切れる(#478)。resume の回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # PR のコードを checkout したジョブではなく、ここで流す。ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number || github.event.pull_request.number }}
+          SINCE: ${{ github.event.comment.created_at }}
+        run: bash .github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
+
       # needs-approval はここでは新しく付かない(マージできる状態になったときに ai-auto-merge.yml が付ける)
-      - name: 新しく付いた needs-human・needs-local を Slack に知らせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -224,7 +276,7 @@ jobs:
           # 「済」は見た目の印なので、呼べなくても後ろの通知(本来の仕事)まで進む
           gh workflow run notify-needs-human.yml -R "$REPO" -f label=done || echo "::warning::片付いた通知に「済」を付けるワークフローを呼べなかった"
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-local; do
+          for label in needs-human needs-manual; do
             if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
@@ -265,6 +317,7 @@ jobs:
           && github.event.review.body != ''
           && !contains(github.event.pull_request.labels.*.name, 'needs-human')
           && !contains(github.event.pull_request.labels.*.name, 'needs-local')
+          && !contains(github.event.pull_request.labels.*.name, 'needs-manual')
           && !contains(github.event.pull_request.labels.*.name, 'needs-approval'))
         || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
@@ -272,6 +325,7 @@ jobs:
           && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments'))
           && !contains(github.event.issue.labels.*.name, 'needs-human')
           && !contains(github.event.issue.labels.*.name, 'needs-local')
+          && !contains(github.event.issue.labels.*.name, 'needs-manual')
           && !contains(github.event.issue.labels.*.name, 'needs-approval'))
       )
     runs-on: ubuntu-latest
@@ -279,6 +333,10 @@ jobs:
     outputs:
       before: ${{ steps.pr.outputs.before }}
       run: ${{ steps.pr.outputs.run }}
+      started: ${{ steps.start.outputs.at }}
+      # Claude Code が仕事をしないまま終わり、既定のブランチで起こし直す(claude-idle.sh が retry と決めた)
+      retry: ${{ steps.idle.outputs.result == 'retry' }}
+      sha: ${{ steps.idle.outputs.sha }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -307,7 +365,7 @@ jobs:
           case "$(jq -r .baseRefName <<<"$pr")" in
             staging | release) skip "昇格の PR($(jq -r .baseRefName <<<"$pr") 向き)は、Claude Code で指摘に対応しない" ;;
           esac
-          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-approval"))] | join(",")' <<<"$pr")
+          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-approval"))] | join(",")' <<<"$pr")
           [ -z "$label" ] || skip "ラベル $label"
           # 人に頼んだ問いにオーナーが答えたのに、答えを受けた resume が何もしないまま終わっていると、
           # 次の review が同じ問いをもう一度頼んでいた(#426)。答えがあれば Claude Code に渡し、下の「対応は済んでいる」の見送りもしない
@@ -350,6 +408,12 @@ jobs:
           # GITHUB_TOKEN で付けたラベルでは pr-status.yml が起きないので、状態のラベルはここで付け替える
           if [ -f .ai-dev/.github/scripts/pr-status.sh ]; then bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true; fi
 
+      # 図のラベルの字数を、この時刻より後に書いたコメントだけで確かめる(notify-review の「図のラベルの字数を確かめる」)
+      - name: Claude Code を動かす前の時刻
+        id: start
+        if: steps.pr.outputs.run
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
         if: steps.pr.outputs.run
@@ -358,6 +422,7 @@ jobs:
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         if: steps.pr.outputs.run
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
@@ -411,6 +476,7 @@ jobs:
             決めてほしいことは、設計の用語や記号に頼らず、話し言葉で書く。このアプリで実際に起きる場面を具体例として挙げ、
             案ごとに「こう選ぶと、こうなる」「その代わり、ここが困る」を書き、短く答えられる形(「おすすめで」「B で」など)を示す。
             並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、回ごとの経緯は最後に畳む)。
+            図(Mermaid)のラベルは、ノードは全角 12 字・矢印のラベルは全角 6 字まで(半角は 0.5 字と数える。長くなるときは `<br>` で折り(折った 1 行は全角 7 字まで)、説明の文は図に入れず比較表に書く)。
 
             手元に頼むもの(この環境ではできないが、人の判断は要らない作業。画面の撮影・ワークフローを変えたコミットの push・
             この環境では流せないコマンドが要る作業(依存のインストール、生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の作り直しなど))があったら、
@@ -419,6 +485,10 @@ jobs:
             2 つ以上なら evidence > push > other の順で重いものにして、ほかの作業も同じコメントに書く)、
             中身は、何をしてほしいか(撮ってほしいもの、当てる差分と理由、または手元でそのまま流せる手順)。人に頼むものもあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
             `needs-local` で終えるときも、`ai-in-actions` ラベルを外す(付けたままだと、手元で `needs-local` を外した後の自動マージが見送られる)。
+            人が手を動かさないと進まない作業(Secret・変数の設定、アカウントへのログイン、外部サービスの画面での設定など、手元のエージェントにもできないもの)は、
+            `needs-local` ではなく `needs-manual` を付ける(`needs-local` は待っていれば見回りが片付けるもの、`needs-manual` は待っていても進まないもの)。
+            コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-manual --> を付け、中身は、人にしてほしい操作と、済んだら `needs-manual` を外すこと。
+            判断も一緒に頼むときは `needs-human` だけを付ける。`needs-manual` で終えるときも `ai-in-actions` ラベルを外す。
 
             直したものがあれば push し、PR に `<!-- ai-dev:agent --> <!-- ai-dev:round -->` と「レビューの指摘に対応した(<n> 回目)」をコメントしてから、
             `ai-in-actions` ラベルを外して終える(次のレビューが付けば、また付けて対応する)。CodeRabbit への再レビューの依頼は書かない(後のジョブがオーナーのトークンで出す)。
@@ -432,6 +502,31 @@ jobs:
             `needs-approval` ラベルは付けない。CI が緑でマージできる状態になったら、ai-auto-merge.yml が付けて人に知らせる(自動でマージする PR なら、そのままマージする)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
+      # PR のブランチの checkout が作業ディレクトリを消すので、.ai-dev のスクリプトを取り直す(最初の checkout と同じ版)
+      - uses: actions/checkout@v6
+        if: success() && steps.pr.outputs.run
+        with:
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # 成功で終わっても、仕事をしたとは限らない(Claude を動かさずに終わった #237・権限で止められた #209・外し忘れた #244)。
+      # 印だけ残っていれば外し、仕事をしていなければ notify-review が起こし直す(コミットごとに 1 回まで。決め方は claude-idle.sh の review)。
+      # この手順が落ちたら、次の手順が印を外す
+      - name: 仕事をしないまま終わったら、対応中の印を外す
+        id: idle
+        if: success() && steps.pr.outputs.run
+        env:
+          RAN: ${{ steps.claude.outputs.execution_file != '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DEFER_RETRY_MARK: "1"
+        run: |
+          result=$(bash .ai-dev/.github/scripts/claude-idle.sh review "$REPO" "$PR" "$RAN")
+          # 代入を分けて、gh が失敗したら手順を落とす(echo の中で取ると sha が空のまま出て、mark-retry が目印を書けない)
+          sha=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
       - name: 途中で止まったら、対応中の印を外す
         if: (failure() || cancelled()) && steps.pr.outputs.run
@@ -444,7 +539,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write   # 通知・判定・代わりのレビューのワークフローを gh workflow run で呼ぶ
-      pull-requests: read
+      pull-requests: write   # 起こし直しに成功した後、目印のコメントを書く
     steps:
       # 動いているワークフローと同じ版のスクリプトを使う(review ジョブの .ai-dev と同じ)
       - uses: actions/checkout@v6
@@ -452,10 +547,38 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
+      # 図のラベルが長いと GitHub で見切れる(#478)。review の回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # PR のコードを checkout したジョブではなく、ここで流す。ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        if: needs.review.outputs.started != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+          SINCE: ${{ needs.review.outputs.started }}
+        run: bash .github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
+
+      # 仕事をしないまま終わった回は、既定のブランチのワークフローで 1 回だけ起こし直す。pull_request_review の回は PR のマージ後の形の
+      # ワークフローで動き、既定のブランチと中身が違うと claude-code-action が Claude を飛ばす(#237)。workflow_dispatch は既定のブランチの
+      # ファイルで動くので、その検査を通る。同じ PR の回は concurrency で並ぶので、この回が終わってから動く
+      - name: 仕事をしないまま終わった回を、既定のブランチで起こし直す
+        if: needs.review.outputs.retry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SHA: ${{ needs.review.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh workflow run ai-review-loop.yml -R "$REPO" --ref "$DEFAULT_BRANCH" -f number="$PR"
+          bash .github/scripts/claude-idle.sh mark-retry "$REPO" "$PR" "$SHA"
+
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
       # 直して再レビューを頼んだ回や、人に頼んだ回では、ai-auto-merge.yml の方で見送られる
-      - name: 新しく付いた needs-human・needs-local を Slack に知らせ、マージできるかを確かめさせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせ、マージできるかを確かめさせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -463,13 +586,13 @@ jobs:
           BEFORE: ${{ needs.review.outputs.before }}
         run: |
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-local; do
+          for label in needs-human needs-manual; do
             if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
           done
+          # 状態のラベルは、ai-auto-merge.yml のジョブが最後に出し直す(pr-status.yml は呼ばない。#534)
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
-          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
 
       # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
       # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。

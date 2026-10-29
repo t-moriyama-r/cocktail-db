@@ -26,6 +26,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 銘柄の一覧。名前の昇順で 1 ページずつ返す。
+         * @description 並びと絞り込みは管理画面のカクテルの一覧(#289)と同じ(旧の一覧の部品 ListComponent.vue を銘柄でも使っていた)。
+         *     名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順。
+         *     q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         */
+        get: operations["brand.index"];
+        put?: never;
+        /** 銘柄を作る。名前・英名がほかの銘柄と同じなら、保存したうえで warnings に入れて返す。 */
+        post: operations["brand.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/brands/{brand}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 編集で開く銘柄。 */
+        get: operations["brand.show"];
+        /**
+         * 銘柄を書き換える。所属を変えたときは、その銘柄を使う材料・アフィリエイトのノードもそろえる。
+         *     名前・英名がほかの銘柄と同じなら、保存したうえで warnings に入れて返す。
+         */
+        put: operations["brand.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/brands/{brand}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 銘柄の詳細を返す。基本情報・所属ノードの根からのパンくずと、銘柄の一覧 2 つ。
+         * @description 銘柄の一覧は、同じノードのほかの銘柄と、親ノードの配下で別のノードに所属する銘柄(docs/decisions/public-detail.md の決まったこと 2)。
+         *     無い銘柄は 404(旧は 500 だった。docs/decisions/brand-detail.md)。
+         */
+        get: operations["brandDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{category}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ノードの詳細を返す。基本情報・根からのパンくず・子のノード・有名な銘柄と、そのノードの配下すべて(自分を含む)の銘柄。
+         * @description 旧のカテゴリ(DetailController@category)とミドル(@middle)の詳細を、任意の深さのノードで 1 つにしたもの。
+         *     根(大元)も返す。無いノードは 404(旧は 500 だった。docs/decisions/category-detail.md)。
+         */
+        get: operations["categoryDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cocktails/{cocktail}": {
         parameters: {
             query?: never;
@@ -142,6 +228,27 @@ export interface paths {
          *     公開の詳細と同じ形で確かめられるよう、管理 API に置く。
          */
         get: operations["admin.cocktailPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/{cocktail}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 材料が似たカクテル(旧の「ランダムカクテル」のカクテルを起点にした形)を、ランダムの順で limit 件まで返す。
+         * @description 最初の 2 つの材料のどちらかと一致する材料を使うカクテルから選び、足りなければ材料を順に足す。下書きは返さず、
+         *     下書き・無いカクテルを指定したら 404(docs/decisions/related-cocktails.md)。
+         */
+        get: operations["cocktailRelated"];
         put?: never;
         post?: never;
         delete?: never;
@@ -308,6 +415,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 名前で、カクテル・ノード・銘柄を種類ごとに探す。
+         * @description 英数字だけの入力なら英名(name_eng)と検索用の名前(name_search)、それ以外は検索用の名前を部分一致で探す。
+         *     空白(半角・全角)で分けた語は、どれかに当たれば一致(旧と同じ OR)。語は検索用の名前と同じ形にそろえてから
+         *     探す。下書きのカクテルと、木の根(旧の種別)は返さない。種類ごとに ID の順で、ページに分けない(旧と同じ)。
+         *
+         *     ingredient_matches は、語を材料に使うカクテル(旧のインテリジェンスサーチ。#173)。語ごとに、名前が語そのものか
+         *     語に「リキュール」(英数字だけの入力なら英名で、語に liqueur)を付けたものと完全一致するノード・銘柄を探し、
+         *     ノードならそのノードと一致する材料(配下と、根を除く祖先)を、銘柄ならその銘柄を使うカクテルを返す。
+         *     語の間は AND で、どれかの語で何も見つからなければ 0 件。
+         */
+        get: operations["nameSearch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/paraphrases": {
         parameters: {
             query?: never;
@@ -449,6 +583,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cocktails/random": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ノード・銘柄・ベース・技法・グラスのどれか 1 つを起点にした別のカクテルを、ランダムの順で limit 件まで返す。
+         * @description 起点は category_id・brand_id・base_id・method_id・glass_id のうち、ちょうど 1 つを送る。0 個・2 個以上を送ったら 422。
+         *     起点の 1 つ 1 つは任意のクエリに見えるが、この組の制約は OpenAPI の構造では表せないので、ここに書く。
+         *
+         *     下書きは返さない。無いノード・銘柄・ベース・グラスを指定したら、当たるものが無いので空の配列(旧と同じ)。
+         *     何が当たるかは docs/decisions/related-cocktails.md。
+         */
+        get: operations["randomCocktails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/random-walk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 行き先の種類を 1 つ選び、その中からランダムに 1 件の ID を返す。
+         * @description - cocktail: 公開しているカクテル(下書きは選ばない。旧も is_draft = 0 で絞っていた)
+         *     - category: 根でないノード。旧の行き先はカテゴリとミドルで、根(旧の種別)は選ばれなかった
+         *     - brand: すべての銘柄
+         *
+         *     選んだ種類に 1 件も無ければ 404。
+         */
+        get: operations["randomWalk"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search-form": {
         parameters: {
             query?: never;
@@ -577,6 +759,134 @@ export interface components {
             is_draft: boolean;
             updated_at: string | null;
         };
+        /** BrandDetailResource */
+        BrandDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%) */
+            strength: number;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            is_major: boolean;
+            is_like: boolean;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description 根が先頭で、所属ノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+            same_node_brands: components["schemas"]["BrandSummaryResource"][];
+            parent_subtree_brands: components["schemas"]["BrandSummaryResource"][];
+        };
+        /** BrandListItemResource */
+        BrandListItemResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            category_path: {
+                id: number;
+                name: string;
+                name_eng: string;
+                is_famous_brand: boolean;
+            }[];
+            is_famous_brand: boolean;
+        };
+        /** BrandResource */
+        BrandResource: {
+            id: number;
+            category_id: number;
+            category_path: {
+                id: number;
+                name: string;
+                name_eng: string;
+                is_famous_brand: boolean;
+            }[];
+            is_famous_brand: boolean;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%) */
+            strength: number;
+            description: string | null;
+            /** @description 動画 ID */
+            youtube: string | null;
+            youtube_start_hour: number | null;
+            youtube_start_minute: number | null;
+            youtube_start_second: number | null;
+            /**
+             * Format: date-time
+             * @description 動画を入れた・変えた日時
+             */
+            youtube_created_at: string | null;
+            is_major: boolean;
+            is_like: boolean;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            updated_at: string | null;
+        };
+        /** BrandSummaryResource */
+        BrandSummaryResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%) */
+            strength: number;
+            youtube: string | null;
+            /** @description 根が先頭で、所属ノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+        };
+        /** CategoryDetailResource */
+        CategoryDetailResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            description: ({
+                /** @constant */
+                type: "text";
+                text: string;
+            } | {
+                /** @enum {string} */
+                type: "node" | "cocktail" | "brand" | "dictionary";
+                id: number;
+                text: string;
+                has_youtube: boolean;
+            })[] | null;
+            is_major: boolean;
+            is_like: boolean;
+            youtube: string | null;
+            /** Format: date-time */
+            youtube_created_at: string | null;
+            youtube_start_seconds: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description 根が先頭で、このノードが末尾 */
+            path: components["schemas"]["NodeRefResource"][];
+            children: components["schemas"]["NodeRefResource"][];
+            famous_brand: components["schemas"]["BrandSummaryResource"] | null;
+            brands: components["schemas"]["BrandSummaryResource"][];
+        };
         /**
          * CategoryRole
          * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
@@ -694,23 +1004,27 @@ export interface components {
          */
         CocktailSearchRequest: {
             /**
-             * @description 方式。省くと or。having(#165)は、受ける形を決めてから足す。それまで受けると、
-             *     OR 検索の結果を黙って返してしまう
+             * @description 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は、受ける形を
+             *     決めてから足す。それまで受けると、OR 検索の結果を黙って返してしまう
              * @enum {string|null}
              */
-            mode?: "or" | "and" | null;
+            mode?: "or" | "having" | null;
             /**
-             * @description 選んだノード(or)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+             * @description 選んだノード(or では探す材料、having では手持ちの材料)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
-             *     and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く(空の配列も弾くため、prohibited ではなく missing)
              */
-            category_ids?: number[];
+            category_ids: number[];
             /**
-             * @description 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
-             *     まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
-             *     and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
+             * @description 技法(#166)。カクテルの技法がこの中にあるものに絞る。省く・null・空の配列なら、すべての技法として扱う
+             *     (旧は 1 つ以上が必須だった。docs/decisions/search-screen.md の 6)。無い技法の ID は弾かず、何にも一致しない
+             *     (旧と同じ)。件数の上限は category_ids と同じ理由
              */
-            category_groups?: number[][];
+            method_ids?: number[] | null;
+            /**
+             * @description かんたん検索(#166)。真なら、材料の数(recipe_count。docs/decisions/recipe-count.md)が 3 以下のものに絞る。
+             *     省くと絞らない(旧の画面の既定と同じ)。受ける値は旧と同じ Laravel の boolean(true・false・1・0・"1"・"0")
+             */
+            is_easy?: boolean | null;
             /**
              * @description 並べ替える列(#167)。省くと ID の順
              * @enum {string|null}
@@ -812,6 +1126,22 @@ export interface components {
                 has_youtube: boolean;
             })[] | null;
         };
+        /** NameSearchBrandResource */
+        NameSearchBrandResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            volume: number;
+            youtube: string | null;
+            category: components["schemas"]["NodeRefResource"];
+        };
+        /** NameSearchNodeResource */
+        NameSearchNodeResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            parent: components["schemas"]["NodeRefResource"];
+        };
         /** NodeRefResource */
         NodeRefResource: {
             id: number;
@@ -871,6 +1201,40 @@ export interface components {
                 response: string[];
             };
             remember?: boolean;
+        };
+        /**
+         * SaveBrandRequest
+         * @description 銘柄の新規・更新(POST /api/admin/brands・PUT /api/admin/brands/{id}。#314)の入力。
+         *
+         *     旧の EditBrandValidate の規則に、長さの上限などを足したもの。画像を上げるときは multipart で送る
+         *     (PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+         */
+        SaveBrandRequest: {
+            /** @description 所属するノード。どの深さでもよいが、根(旧の種別)は選べない */
+            category_id: number;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%)。列(decimal(4,1))に入らない値を 500 にしないよう、0〜100 に絞る */
+            strength: number;
+            /** @description 説明。保存のときに記法へ変換する(DescriptionMarkup。#287) */
+            description: string;
+            /** @description YouTube の URL か動画 ID */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            is_major: boolean;
+            is_like: boolean;
+            /** @description 画像のリンクの文字と URL */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
         };
         /**
          * SaveParaphraseRequest
@@ -996,6 +1360,213 @@ export interface operations {
             };
             404: components["responses"]["ModelNotFoundException"];
             422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.index": {
+        parameters: {
+            query?: {
+                /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
+                q?: string | null;
+                page?: number | null;
+                per_page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `BrandListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandListItemResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description `BrandResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandResource"];
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brand: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `BrandResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "brand.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brand: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description `BrandResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandResource"];
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    brandDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brand: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `BrandDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    categoryDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CategoryDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryDetailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     cocktailDetail: {
@@ -1171,6 +1742,34 @@ export interface operations {
                 };
             };
             404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    cocktailRelated: {
+        parameters: {
+            query: {
+                /** @description 旧と同じく必須。旧の画面は 5(材料が似たカクテル・同じベース・これを使ったカクテル)か 7(技法・グラス)を送っていた */
+                limit: number;
+            };
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     cocktailSameName: {
@@ -1384,6 +1983,33 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    nameSearch: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        cocktails: components["schemas"]["CocktailSummaryResource"][];
+                        nodes: components["schemas"]["NameSearchNodeResource"][];
+                        brands: components["schemas"]["NameSearchBrandResource"][];
+                        ingredient_matches: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "paraphrases.index": {
@@ -1685,6 +2311,60 @@ export interface operations {
                 };
             };
             422: components["responses"]["InvalidPasskeyException"];
+        };
+    };
+    randomCocktails: {
+        parameters: {
+            query: {
+                limit: number;
+                category_id?: number;
+                brand_id?: number;
+                base_id?: number;
+                method_id?: number;
+                glass_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    randomWalk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        type: "cocktail" | "category" | "brand";
+                        id: number;
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     searchForm: {

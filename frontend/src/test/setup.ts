@@ -15,6 +15,10 @@ vi.mock('../api/client', async () => {
   }
 })
 
+// jsdom は画面を描かないのでスクロールを持たず、window.scrollTo は「未実装」と出力するだけになる。
+// 出力で結果が埋もれないよう何もしない関数にする(スクロールの位置は E2E で確かめる)
+window.scrollTo = () => {}
+
 afterEach(() => {
   // globals を使わない設定では Testing Library の自動の後片付けが動かないので、テストごとに描画を消す
   cleanup()

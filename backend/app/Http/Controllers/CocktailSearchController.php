@@ -22,10 +22,12 @@ class CocktailSearchController extends Controller
      */
     public function __invoke(CocktailSearchRequest $request, CocktailSearch $search, CocktailSearchSort $sort): AnonymousResourceCollection
     {
-        // 方式は検証で or・and だけを受けている
-        $query = $request->isAnd()
-            ? $search->queryEach($request->categoryGroups())
-            : $search->query($request->categoryIds());
+        // 方式は検証で or・and・having だけを受けている
+        $query = match (true) {
+            $request->isAnd() => $search->queryEach($request->categoryGroups(), $request->methodIds(), $request->isEasy()),
+            $request->isHaving() => $search->queryMakeable($request->categoryIds(), $request->methodIds(), $request->isEasy()),
+            default => $search->query($request->categoryIds(), $request->methodIds(), $request->isEasy()),
+        };
         $ids = $sort->sortedIds($query, $request->sort(), $request->order());
 
         $page = $request->page();

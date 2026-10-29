@@ -12,7 +12,7 @@
 set -euo pipefail
 
 MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-60}
-# 引き継いでも仕上がらないまま、同じ PR を何度も引き継がない。上限に達したものは、引き継いだ Claude Code が needs-human か needs-local を付けている
+# 引き継いでも仕上がらないまま、同じ PR を何度も引き継がない。上限に達したものは、引き継いだ Claude Code が needs-human・needs-local・needs-manual のどれかを付けている
 MAX_ROUNDS=${MAX_ROUNDS:-2}
 MARK="ai-dev:draft-sweep"
 
@@ -42,7 +42,7 @@ main() {
 decide() {
   jq -r --argjson minIdle "$MIN_IDLE_MINUTES" --argjson maxRounds "$MAX_ROUNDS" '
     (.labels // []) as $l
-    | ([$l[] | select(IN("needs-human","needs-local","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")) as $held
+    | ([$l[] | select(IN("needs-human","needs-local","needs-manual","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")) as $held
     | if .state != "OPEN" then "skip: 開いていない"
       elif .isDraft | not then "skip: draft でない"
       elif .isCrossRepository then "skip: フォークから"

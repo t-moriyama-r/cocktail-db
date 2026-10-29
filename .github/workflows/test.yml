@@ -7,7 +7,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [develop]
-  # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする
+  # deploy.yml・deploy-env.yml から呼び、テストが通ったときだけデプロイする(dev へのデプロイは呼ばない。deploy-dev.yml の run_tests)
   workflow_call:
   # 手で PR のブランチを試すとき。この回のチェックはブランチ保護の必須のチェックに数えられないので、PR を通すには pull_request の回を走らせる(ci-rerun.yml。#389)
   workflow_dispatch:
@@ -65,7 +65,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
@@ -109,7 +109,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           tools: composer:v2
           coverage: none
 
@@ -327,7 +327,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none

@@ -3,6 +3,7 @@
 namespace App\Services\Search;
 
 use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
 use App\Services\CategoryTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -11,8 +12,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * 選んだノードの集合と、レシピの材料が「一致する」かを、閉包表で判定する(docs/search.md の「新しい木での意味」。#161)。
  *
- * 材料のノードは cocktail_ingredients.category_id で見る。銘柄は条件に使わない(旧と同じ)ので、銘柄つきの材料も
- * 材料のノードで一致する。
+ * 材料のノードは cocktail_ingredients.category_id で見る。条件検索は銘柄を条件に使わない(旧と同じ)ので、銘柄つきの材料も
+ * 材料のノードで一致する。銘柄を条件に使うのは、別のカクテルの銘柄を起点にするときだけ(whereMatchesBrand。#174)。
  */
 class IngredientMatch
 {
@@ -34,13 +35,41 @@ class IngredientMatch
             ->select('descendant_id as id')
             ->whereIn('ancestor_id', $nodeIds);
 
-        $nonRootAncestors = DB::table('category_closures as closure')
-            ->select('closure.ancestor_id as id')
-            ->whereIn('closure.descendant_id', $nodeIds)
-            ->where('closure.depth', '>', 0)
-            ->whereNotIn('closure.ancestor_id', $this->tree->rootIds());
+        return $descendants->union($this->nonRootAncestorIds($nodeIds));
+    }
 
-        return $descendants->union($nonRootAncestors);
+    /**
+     * 選んだノードの集合 S の各ノード自身と、その祖先(根を除く)の ID を、列 id のサブクエリで返す。配下は含めない。
+     *
+     * 銘柄を起点にした別のカクテル(#174)で使う。旧 getCocktailIds は銘柄を指定すると、銘柄のミドルか、
+     * ミドルを指定していない(カテゴリだけの)材料にだけ一致させ、銘柄と関係ないミドル(配下)の材料を混ぜなかった。
+     *
+     * @param  list<int>  $nodeIds
+     */
+    public function selfAndNonRootAncestorIds(array $nodeIds): QueryBuilder
+    {
+        $selves = DB::table('category_closures')
+            ->select('descendant_id as id')
+            ->whereIn('descendant_id', $nodeIds)
+            ->where('depth', 0);
+
+        return $selves->union($this->nonRootAncestorIds($nodeIds));
+    }
+
+    /**
+     * 銘柄 $brandId(所属するノード $nodeId)と一致する材料に絞る(#174 の「銘柄を起点にするとき」)。
+     *
+     * 材料のノードが銘柄のノードか、その祖先(根を除く)で、銘柄がその銘柄か、銘柄を指定していないもの(旧 getCocktailIds)。
+     * 同じノードでも別の銘柄を指定した材料は一致しない。
+     *
+     * @param  Builder<CocktailIngredient>  $ingredients
+     * @return Builder<CocktailIngredient>
+     */
+    public function whereMatchesBrand(Builder $ingredients, int $nodeId, int $brandId): Builder
+    {
+        return $ingredients
+            ->whereIn('category_id', $this->selfAndNonRootAncestorIds([$nodeId]))
+            ->where(fn (Builder $brand) => $brand->where('brand_id', $brandId)->orWhereNull('brand_id'));
     }
 
     /**
@@ -93,5 +122,19 @@ class IngredientMatch
             ->where('is_optional', false)
             ->whereNotIn('category_id', $this->matchingNodeIds($nodeIds))
             ->whereNotIn('category_id', $this->tree->otherNodeIds()));
+    }
+
+    /**
+     * S の各ノードの祖先(自分を除く)のうち、根でないものの ID。根は種別にあたり、材料に使わない(#153)ので除く。
+     *
+     * @param  list<int>  $nodeIds
+     */
+    private function nonRootAncestorIds(array $nodeIds): QueryBuilder
+    {
+        return DB::table('category_closures as closure')
+            ->select('closure.ancestor_id as id')
+            ->whereIn('closure.descendant_id', $nodeIds)
+            ->where('closure.depth', '>', 0)
+            ->whereNotIn('closure.ancestor_id', $this->tree->rootIds());
     }
 }
