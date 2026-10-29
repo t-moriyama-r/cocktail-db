@@ -364,8 +364,6 @@ jobs:
         if: steps.need.outputs.head
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: work/frontend/package-lock.json
 
       # CLAUDE.md の「API を変えたら」と同じ手順(Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す)
       - name: 生成ファイルを作り直す

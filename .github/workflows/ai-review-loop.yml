@@ -638,8 +638,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: work/frontend/package-lock.json
 
       # CLAUDE.md の「API を変えたら」と同じ手順
       - name: 生成ファイルを作り直す
