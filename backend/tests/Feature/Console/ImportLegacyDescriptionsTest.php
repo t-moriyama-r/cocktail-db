@@ -169,7 +169,7 @@ it('TC-285-07: 2 回流しても、説明文と出力する件数は変わらな
     expect(descriptionSnapshot())->toBe($first);
 });
 
-it('TC-285-08: 参照の記法の形でないものは書き換えない', function (?string $text) {
+it('TC-285-08: 参照の記法の形でないものは、参照として書き換えない(記法の外の @ は取り除く。#393)', function (?string $text, ?string $expected) {
     setLegacyDescription('t_cocktails', 1, ['description' => $text]);
 
     LegacyImportCommand::run($this, [])
@@ -178,16 +178,16 @@ it('TC-285-08: 参照の記法の形でないものは書き換えない', funct
         ->assertExitCode(0)
         ->run();
 
-    expect(newDescription('cocktails', 1))->toBe($text);
+    expect(newDescription('cocktails', 1))->toBe($expected);
 })->with([
-    'null' => [null],
-    '空の文字列' => [''],
-    '記法の無い文' => ['ジンをトニックで割る。'],
-    'ID の無い記法(旧の決め打ちの名前のノードが無かったもの)' => ['@p@と@m@'],
-    '0 で始まる ID' => ['@p0@・@m01@'],
-    '閉じていない記法' => ['前に@p12'],
-    '種類がほかの英字' => ['@x12@・@n3@'],
-    'メールアドレス' => ['admin@example.com'],
+    'null' => [null, null],
+    '空の文字列' => ['', ''],
+    '記法の無い文' => ['ジンをトニックで割る。', 'ジンをトニックで割る。'],
+    'ID の無い記法(旧の決め打ちの名前のノードが無かったもの)' => ['@p@と@m@', 'pとm'],
+    '0 で始まる ID' => ['@p0@・@m01@', 'p0・m01'],
+    '閉じていない記法' => ['前に@p12', '前にp12'],
+    '種類がほかの英字' => ['@x12@・@n3@', 'x12・n3'],
+    'メールアドレス' => ['admin@example.com', 'adminexample.com'],
 ]);
 
 it('TC-285-09: 移した先の行が無い(ほかの部分をまだ移していない)ときは、どの行かを添えて止め、何も書かない', function () {
