@@ -1,5 +1,5 @@
-/* 旧は「span.is_youtube a { color: #FF6600 !important }」で、指したときも色を変えなかった */
+/* 旧は「span.is_youtube a { color: #FF6600 !important }」で、指したときも色を変えなかった。色は一覧の表と同じ */
 .description .hasMovie,
 .description .hasMovie:hover {
-  color: var(--color-movie-link);
+  color: var(--color-has-movie);
 }
