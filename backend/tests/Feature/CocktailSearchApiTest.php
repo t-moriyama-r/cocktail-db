@@ -261,9 +261,11 @@ describe('AND 検索の結果', function () {
             Category::factory()->make(['name' => 'テキーラ'])->getAttributes(),
         );
 
+        // #167 でページングを足し、応答に件数(meta)が付いた(TC-163-16 と同じ確かめ方)
         cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [[$this->n['ラム']->id], [$unused->id]]])
             ->assertOk()
-            ->assertExactJson(['data' => []]);
+            ->assertJsonPath('data', [])
+            ->assertJsonPath('meta.total', 0);
     });
 
     it('TC-164-05: まとまりごとには当たるカクテルがあっても、全部を同時に満たすものが無ければ空', function () {
