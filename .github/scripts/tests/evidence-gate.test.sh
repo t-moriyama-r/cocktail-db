@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-gate.sh のテスト(TC-380-01〜15・TC-432-01〜11・TC-518-01〜09)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# evidence-gate.sh のテスト(TC-380-01〜15・TC-432-01〜11・TC-518-01〜12)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/evidence-gate.test.sh
 
@@ -103,6 +103,10 @@ main() {
 		"$(body "$(fe_body "### 気づいたこと" "<!--" "- ひな形の例" "-->")" "## 確かめたこと" "- テストを流した")" 0
 	check TC-518-10 '「- なし」だけの箇条書きは、参照が無くても通る' "$CODE" \
 		"$(fe_body "### 気づいたこと" "" "- なし")" 0
+	check TC-518-11 '字下げした箇条書きの項目も、参照が無ければ落とす' "$CODE" \
+		"$(fe_body "### 気づいたこと" "" "  - 横スクロールが出る")" 1 '「気づいたこと」に、issue の参照'
+	check TC-518-12 '色コード(#337ab7)は issue の参照として数えない' "$CODE" \
+		"$(fe_body "### 気づいたこと" "" "- #337ab7 の文字が見づらい")" 1 '「気づいたこと」に、issue の参照'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
