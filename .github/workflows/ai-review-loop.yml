@@ -325,8 +325,10 @@ jobs:
           if [ "$unanswered" = 0 ] && [ -z "$answered" ]; then
             comments=$(gh api --paginate --slurp "repos/$REPO/issues/$PR/comments?per_page=100" | jq 'add // []')
             reviews=$(gh api --paginate --slurp "repos/$REPO/pulls/$PR/reviews?per_page=100" | jq 'add // []')
-            reviewed_at=$(jq -rn --argjson c "$comments" --argjson r "$reviews" '
-              [ ($r[] | select((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
+            # コメントの多い PR では JSON が 1 引数の上限(Linux は 128KB)を超えるので、jq には引数ではなく標準入力で渡す(#469)
+            reviewed_at=$(printf '%s\n' "$comments" "$reviews" | jq -rn '
+              input as $c | input as $r
+              | [ ($r[] | select((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
                   or (.user.login == "github-actions[bot]" and (.body | contains("ai-dev:claude-review")))) | .submitted_at),
                 ($c[] | select(.user.login == "coderabbitai[bot]" and (.body // "" | test("Review finished|No actionable comments|LGTM"))) | .updated_at)
               ] | max // ""')

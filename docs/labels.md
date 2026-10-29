@@ -61,7 +61,7 @@ issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(�
 
 ## PR のマージ(ai-auto-merge.yml が読む)
 
-CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑(付いたチェックに失敗が無く、ブランチの保護で必須にしたチェックがすべて成功している。CI が承認待ちで走っていないコミットは緑とみなさない)で、コンフリクトの無い PR を、`ai-auto-merge.yml` がマージできる状態とみなし、自動でマージする。
+CodeRabbit の指摘への対応が終わり(最新のコミットを見ていて、未解決のスレッドが 0 件)、CI が緑(付いた CI のチェックがすべて終わって失敗が無く(状態のラベル・通知など、PR の上で動く開発の仕組みのジョブは数えない)、ブランチの保護で必須にしたチェックがすべて成功している。CI が承認待ちで走っていないコミットは緑とみなさない)で、コンフリクトの無い PR を、`ai-auto-merge.yml` がマージできる状態とみなし、自動でマージする。
 
 いまのコミットで CI が動いていない(必須のチェックが揃っていない・CI の `pull_request` の回が成功していない)PR は、`gh pr merge` を呼ばずに見送り、`ci-rerun.yml` にその PR の CI を流し直させる(`.github/scripts/ci-rerun-request.sh`。#268)。流し直した CI が緑で終わると、`ai-auto-merge.yml` が呼び直されてマージに進む。
 
@@ -71,7 +71,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 自動でマージする PR でも、条件を満たして `gh pr merge` まで進んだのに GitHub に断られることがある(ワークフローを書き換える PR で `workflows` の権限が無い・base branch policy で断られる、など)。そのときは、断られた理由(エラーの 1 行)を PR にコメントし(目印 `<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->`)、`needs-approval` を付けて Slack に知らせ、状態のラベルを付け直す(#218)。もう `needs-approval` が付いていれば知らせない。`needs-approval` の付いた PR は見回り(`ai-review-sweep.yml`)も見送るので、同じ失敗を繰り返さない。
 
-向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。AI レビューは流すが、指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを AI がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
+向き先が `staging`・`release` の PR(昇格の PR)は、自動ではマージしない。デプロイになるので、必ず人がマージする。レビューは CodeRabbit ではなく、PR を作った手元の Claude が目印(`ai-dev:local-review`)付きで書く(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。指摘が残ってもマージを止めず(`needs-human` も付けず、Actions の Claude Code も動かさない。head が保護されたブランチ(`develop`・`staging`)なので直せない)、CI が緑で、いまのコミットを手元の Claude がレビューし終えたら、`needs-approval` を付けて Slack に知らせる。残っている指摘の件数は PR にコメントする。
 
 `ai-in-actions`・`needs-human`・`needs-local`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
 
@@ -107,13 +107,13 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 ## PR の状態(表示用)
 
-開いている PR には、いま誰の番かを表す `状態:…` のラベルが 1 つだけ付く。`.github/scripts/pr-status.sh` が、下書きか・上のラベル・コンフリクト・必須のチェック・レビュー・返信待ちと未解決の指摘・GitHub がマージを許すか(`mergeStateStatus`)から毎回出し直して付け替える。上から見て最初に当てはまったものになる。`状態:マージ待ち`・`状態:人のマージ待ち` は、GitHub が実際にマージを許す PR(`mergeStateStatus` が `CLEAN`・`HAS_HOOKS`・`UNSTABLE`)にだけ付き、マージを止めている理由はそれぞれ別のラベルになる。
+開いている PR には、いま誰の番かを表す `状態:…` のラベルが 1 つだけ付く。`.github/scripts/pr-status.sh` が、下書きか・上のラベル・コンフリクト・必須のチェック・レビュー・返信待ちと未解決の指摘・GitHub がマージを許すか(`mergeStateStatus`)から毎回出し直して付け替える。上から見て最初に当てはまったものになる。`状態:マージ待ち`・`状態:人のマージ待ち`・`状態:ベースブランチ待ち` は、GitHub が実際にマージを許す PR(`mergeStateStatus` が `CLEAN`・`HAS_HOOKS`・`UNSTABLE`)にだけ付き、マージを止めている理由はそれぞれ別のラベルになる。人の判断待ち・手元の作業待ちは、下書きより先に見る(クラウドのルーチンや Actions は、判断や証跡を待つ PR を下書きのまま止めるため。#471)。下書きの PR では、`pr-status.yml` は開いた・draft に戻した・閉じた・待ちのラベル(`needs-human`・`needs-decision`・`needs-local`)の付け外しのときに動くので、下書きにこれらを付けた・外したことはすぐ反映される(Actions の `GITHUB_TOKEN` が付けたラベルでは動かないが、付けたワークフローが呼ぶ出し直しや見回りの `ai-review-sweep.yml` で反映される)。
 
 | ラベル | いつ | 次に動くもの |
 |---|---|---|
-| `状態:作業中` | 下書き | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
-| `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている | 人が PR にコメントで答える |
-| `状態:手元の作業待ち` | `needs-local` が付いている(下書きは `状態:作業中` のまま) | 手元のエージェント(`pr-patrol`・`daily-start`)が証跡を撮る・push する |
+| `状態:人の判断待ち` | `needs-human`・`needs-decision` が付いている(下書きでも) | 人が PR にコメントで答える |
+| `状態:手元の作業待ち` | `needs-local` が付いている(下書きでも) | 手元のエージェント(`pr-patrol`・`daily-start`)が証跡を撮る・push する |
+| `状態:作業中` | 下書きで、`needs-human`・`needs-decision`・`needs-local` のどれも付いていない | PR を作ったエージェントが ready にする(途中で落ちたものは `ai-draft-sweep.yml` が引き継いで仕上げる) |
 | `状態:コンフリクト` | `develop` とコンフリクトしている | `ai-conflict-resolve.yml` の Claude Code が `develop` を取り込んで直す(1 時間ごと。draft は選ばない)。生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の衝突は、人に頼まずに同じワークフローが作り直して push する。直せない衝突は `needs-human` で人に頼む。`package-lock.json` の衝突や作り直せなかった生成ファイルなど、判断は要らないがこの環境では片付けられないものは `needs-local` で手元に頼む |
 | `状態:CI失敗` | ブランチ保護で必須にしたチェックが失敗している | 自動では直らない。人かエージェントが直す |
 | `状態:レビュー対応中` | `ai-in-actions` が付いている、か、AI レビュアーの指摘に返信していないものがある(向き先が `staging`・`release` の PR と、`needs-approval` の PR は除く) | `ai-review-loop.yml` の Claude Code(止まっていれば `ai-review-sweep.yml` が呼び直す) |
@@ -124,6 +124,7 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 | `状態:確認中` | GitHub がマージできるかをまだ計算している(`UNKNOWN`) | 次の出し直しで決まる |
 | `状態:マージ不可` | GitHub がマージを止めていて、上のどのラベルでもない(`BEHIND` など) | 人が GitHub の PR の画面で理由を確かめる |
 | `状態:人のマージ待ち` | マージできる。`needs-approval` が付いているか、向き先が `staging`・`release` で、いまのコミットを AI がレビューし終えている | 人が確かめてマージする |
+| `状態:ベースブランチ待ち` | GitHub がマージを許すが、向き先が `develop`・`staging`・`release` 以外(土台の PR のブランチに向けた積み上げの PR)。`ai-auto-merge.yml` は見送り、`test.yml` も流れない(向き先に保護が無いので、GitHub の `CLEAN` はテストが通ったことを表さない)。#460 | 土台の PR がマージされると、GitHub が向き先を `develop` に付け替え、`ci-rerun.yml` が CI を流す。その後はこれまでどおりに決まる |
 | `状態:マージ待ち` | マージできる。上のどれでもない(レビューの対応が済み、指摘が解決され、必須のチェックが成功している) | `ai-auto-merge.yml` |
 
 - 付け替えるのは `pr-status.yml`。PR の動き・レビュー・CodeRabbit のコメント・CI と AI のワークフローの終わりで動く。スレッドの解決では動かない(GitHub Actions はスレッドの解決をきっかけに起動できない)。開いている PR のすべての出し直しは、`ai-review-sweep.yml` が 2 時間ごと(PR に動きのある日は `patrol-kick.yml` が起こすので 1 時間ごと)に行う。ジョブが途中で止まって古いラベルが残っても、そこで直る。手で付け替えても、事実どおりに戻る

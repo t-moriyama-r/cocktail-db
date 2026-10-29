@@ -11,7 +11,7 @@
 # 作業しているかは外から分からないので、最後の動き(コミット・コメント)から MIN_IDLE_MINUTES 分たったかで決める
 set -euo pipefail
 
-MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-180}
+MIN_IDLE_MINUTES=${MIN_IDLE_MINUTES:-60}
 # 引き継いでも仕上がらないまま、同じ PR を何度も引き継がない。上限に達したものは、引き継いだ Claude Code が needs-human か needs-local を付けている
 MAX_ROUNDS=${MAX_ROUNDS:-2}
 MARK="ai-dev:draft-sweep"
@@ -66,9 +66,11 @@ facts() {
   committed=$(gh api "repos/$repo/commits/$head" --jq .commit.committer.date)
   comments=$(gh api --paginate --slurp "repos/$repo/issues/$n/comments?per_page=100" | jq 'add // []')
   last=$(jq -r --arg c "$committed" '[$c, (.[].created_at)] | max' <<<"$comments")
-  jq -c --arg owner "${repo%/*}" --arg default "$default" --argjson now "$now" --arg last "$last" \
-    --arg mark "$MARK" --argjson comments "$comments" '
-    [$comments[] | select(.user.type == "Bot") | .body | select(contains($mark))] as $marks
+  # コメントの多い PR では JSON が 1 引数の上限(Linux は 128KB)を超えるので、jq には引数ではなく標準入力で渡す(#469)
+  printf '%s\n' "$pr" "$comments" | jq -c -n --arg owner "${repo%/*}" --arg default "$default" --argjson now "$now" \
+    --arg last "$last" --arg mark "$MARK" '
+    input as $pr | input as $comments | $pr
+    | [$comments[] | select(.user.type == "Bot") | .body | select(contains($mark))] as $marks
     | .headRefOid as $head
     | {
         state, isDraft, isCrossRepository, baseRefName,
@@ -80,7 +82,7 @@ facts() {
         idleMinutes: (($now - ($last | fromdateiso8601)) / 60 | floor),
         handledHead: any($marks[]; contains("\($mark) sha=\($head)")),
         round: (($marks | length) + 1)
-      }' <<<"$pr"
+      }'
 }
 
 main "$@"

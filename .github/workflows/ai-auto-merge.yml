@@ -8,15 +8,17 @@
 # 向き先が staging・release の PR(昇格の PR)は、自動ではマージしない。マージはデプロイになるので、必ず人がする。
 # 中身は develop に入る前に PR ごとにレビュー済みで、head が保護されたブランチ(develop・staging)なので Actions の Claude Code が指摘を直せない。
 # そのため、AI レビューの指摘が残っていてもマージを止めず(残っている件数をコメントに書く)、CI が緑で、いまのコミットを
-# AI がレビューし終えたら、needs-approval を付けて人に知らせる
+# AI がレビューし終えたら、needs-approval を付けて人に知らせる。昇格の PR は必ず手元のエージェントが作るので、レビューも
+# CodeRabbit ではなく、作った手元の Claude が目印 <!-- ai-dev:local-review --> を付けて書く(#479。.github/scripts/head-reviewed.sh)
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
 # - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
 # - ラベル needs-human / needs-local / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
-# - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml)が最新のコミットをまだ見ていない・指摘が残っている。
+# - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml。昇格の PR では手元の Claude)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
-# - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)
+# - チェックが 1 つも無い・終わっていない・失敗している・コンフリクトしている(コンフリクトなら ai-conflict-resolve.yml を呼ぶ)。
+#   見るのは CI のチェックだけで、PR の上で動く開発の仕組みのジョブ(label・notify など)は数えない(.github/scripts/ci-check-runs.sh)
 # - いまのコミットに必須のチェックが揃っていない・CI の pull_request の回が成功していない(CI が動いていない。gh pr merge を呼ばずに見送り、
 #   ci-rerun.yml に流し直させる。.github/scripts/ci-rerun-request.sh。#268)
 #
@@ -27,6 +29,7 @@
 #
 # マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
+# ブランチを消す前に、そのブランチに積んだ開いた PR の向き先をこの PR の向き先に付け替え、その PR の CI を流し直す(GitHub の自動削除と同じ。#463)
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
 # 同じ理由で、ワークフローを変えた PR をマージしたら notify-workflow-merged.yml を、develop にマージしたら deploy-dev.yml を直接呼ぶ
 #
@@ -74,7 +77,8 @@ jobs:
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
         || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
-      || (github.event_name == 'pull_request_review' && github.event.review.user.login == 'coderabbitai[bot]')
+      || (github.event_name == 'pull_request_review' && (github.event.review.user.login == 'coderabbitai[bot]'
+        || (github.event.review.user.login == github.repository_owner && contains(github.event.review.body, 'ai-dev:local-review'))))
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
         && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments')
           || contains(github.event.comment.body, 'LGTM')))
@@ -171,24 +175,17 @@ jobs:
           # 昇格の PR は、ほかの理由(no-auto-merge・needs-review)より、デプロイになることを理由にする
           if [ "$promotion" = true ]; then human="向き先が $base なので、マージはデプロイになる(人がマージする)"; fi
 
-          # CodeRabbit が最新のコミットを見たか。指摘があればそのコミットへのレビューが付き、
-          # 無ければ「Review finished」「No actionable comments」のコメントだけが付く(どちらか片方のこともあり、後から別のコメントが続くこともある)。
-          # CodeRabbit が上限で動かなかったときは、ai-claude-review.yml が目印付きのレビューをそのコミットに付ける。
-          # CodeRabbit はスレッドへの返信のたびに本文が空のレビューを最新のコミットに付けるので、本文の無いレビューは数えない
+          # AI レビュアーが最新のコミットを見たか(CodeRabbit・代わりの Claude、昇格の PR では手元の Claude。決め方は head-reviewed.sh)
           # --json commits は先頭 100 件までなので(RC-06)、いまのコミットの日時を直接取る
           pushed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date) || skip "いまのコミット ${head:0:7} の日時を読めない"
-          reviewed=$(gh api --paginate --slurp "repos/$REPO/pulls/$NUMBER/reviews?per_page=100" \
-            | jq --arg head "$head" 'add // [] | any(.commit_id == $head and ((.user.login == "coderabbitai[bot]" and (.body // "" | length) > 0)
-                or (.user.login == "github-actions[bot]" and (.body | contains("<!-- ai-dev:claude-review -->")))))')
-          finished=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" \
-            | jq --arg since "$pushed" 'add // [] | map(select(.user.login == "coderabbitai[bot]" and .created_at > $since))
-                | any(.body // "" | test("Review finished|No actionable comments|LGTM"))')
-          if [ "$reviewed" != true ] && [ "$finished" != true ]; then
+          reviewed=$(bash .ai-dev/.github/scripts/head-reviewed.sh "$REPO" "$NUMBER") || skip "#$NUMBER のレビューを読めない"
+          if [ "$reviewed" != true ]; then
             # needs-local の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
             # (出さないと次の ai-review-sweep.yml まで最大 2 時間待つ)。依頼済みなら request-review.sh が見送る
             if [ "$EVENT_ACTION" = unlabeled ]; then
               bash .ai-dev/.github/scripts/request-review.sh "$REPO" "$NUMBER"                 || echo "::warning::レビューの依頼を出せなかった(ai-review-sweep.yml が拾う)"
             fi
+            if [ "$promotion" = true ]; then skip "手元の Claude が最新のコミット ${head:0:7} をまだレビューしていない(昇格の PR。目印 ai-dev:local-review)"; fi
             skip "CodeRabbit(か代わりの Claude)が最新のコミット ${head:0:7} をまだ見ていない"
           fi
 
@@ -208,9 +205,9 @@ jobs:
             [ "$waiting" = 0 ] || skip "#$NUMBER に返信待ちの指摘が $waiting 件ある(未解決は $unresolved 件)"
           fi
 
-          # このワークフロー自身のジョブは除く
-          checks=$(gh api --paginate --slurp "repos/$REPO/commits/$head/check-runs?per_page=100" \
-            | jq '[.[].check_runs[] | select(.name != "auto-merge")]')
+          # CI のチェックだけを見る。このワークフロー自身のジョブと、PR の上で動く開発の仕組みのジョブ(pr-status.yml の label など)は、
+          # 終わった後にここを呼び直さないので、実行中を理由に見送ると止まったままになる(#367)
+          checks=$(bash .ai-dev/.github/scripts/ci-check-runs.sh "$REPO" "$head") || skip "${head:0:7} のチェックを読めない"
           # 走らなかったワークフロー(bot の push で承認待ちになった CI など)のチェックは付かないので、必須のチェックが揃っているかも見る(#360)
           missing=$(bash .ai-dev/.github/scripts/required-checks-missing.sh "$REPO" "$base" "$head") || skip "必須のチェックを確かめられない"
           if [ -n "$missing" ]; then
@@ -314,20 +311,18 @@ jobs:
             if gh issue close "$issue" -R "$REPO" --reason completed --comment "<!-- ai-dev:agent -->
           #$NUMBER のマージで完了。"; then echo "#$issue を閉じた"; else echo "::warning::#$issue を閉じられなかった"; fi
           done
-          # GitHub のブランチの自動削除と同じく、保護されたブランチと、ほかの開いた PR が使っているブランチは消さない
-          branch=$(gh pr view "$NUMBER" -R "$REPO" --json headRefName --jq .headRefName)
-          protected=$(gh api "repos/$REPO/branches/$branch" --jq .protected 2>/dev/null) || protected=unknown
-          others=$( (gh pr list -R "$REPO" --state open --head "$branch" --json number --jq '.[].number'
-            gh pr list -R "$REPO" --state open --base "$branch" --json number --jq '.[].number') | paste -sd, - || true)
-          if [ "$protected" != false ]; then
-            echo "ブランチ $branch は消さない(保護: $protected)"
-          elif [ -n "$others" ]; then
-            echo "ブランチ $branch は消さない(開いた PR #$others が使っている)"
-          elif gh api -X DELETE "repos/$REPO/git/refs/heads/$branch" >/dev/null; then
-            echo "ブランチ $branch を消した"
-          else
-            echo "::warning::ブランチ $branch を消せなかった"
-          fi
+          # GitHub のブランチの自動削除と同じく、保護されたブランチと、ほかの開いた PR が --head に使っているブランチは消さない。
+          # --base に使っている開いた PR(積み上げの PR)は、この PR の向き先に付け替えてから消す(.github/scripts/branch-cleanup.sh。#463)
+          retargeted=$(bash .ai-dev/.github/scripts/branch-cleanup.sh "$REPO" "$NUMBER") \
+            || echo "::warning::#$NUMBER のブランチを片付けられなかった(ログを見る)"
+          # 付け替えは GITHUB_TOKEN なので、CI(test.yml)も ci-rerun.yml の edited も起きない。1 時間ごとの ci-rerun.yml を待たずに、
+          # ここで ci-rerun.sh に CI の pull_request の回を走らせる(回が無いので、オーナーの PAT で PR を閉じて開き直す)。
+          # 付け替えは push ではないので、push 直後の待ちはしない。流した CI が緑で終わると、workflow_run でここが呼ばれて積み上げの PR もマージに進む
+          for stacked in $retargeted; do
+            PR_REOPEN_TOKEN=$CODERABBIT_REQUEST_TOKEN MIN_AGE_MINUTES=0 bash .ai-dev/.github/scripts/ci-rerun.sh "$REPO" "$stacked" \
+              || echo "::warning::#$stacked の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
+            gh workflow run pr-status.yml -R "$REPO" -f number="$stacked" || echo "::warning::#$stacked の状態のラベルを付け替えられなかった"
+          done
 
           gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent -->
           AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"

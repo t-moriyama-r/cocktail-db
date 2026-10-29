@@ -29,11 +29,13 @@ owner_answered() {
   fi
   issue=$(gh api --paginate --slurp "repos/$repo/issues/$n/comments?per_page=100")
   review=$(gh api --paginate --slurp "repos/$repo/pulls/$n/comments?per_page=100")
-  jq -r -n --argjson issue "$issue" --argjson review "$review" --arg owner "${repo%%/*}" '
+  # コメントの多い PR では JSON が 1 引数の上限(Linux は 128KB)を超えるので、jq には引数ではなく標準入力で渡す(#469)
+  printf '%s\n' "$issue" "$review" | jq -r -n --arg owner "${repo%%/*}" '
     def agent: .body // "" | contains("ai-dev:agent");
     def trusted: .user.login == $owner or .user.type == "Bot";
     def reply: .user.login == $owner and (agent | not) and (.body // "" | startswith("@coderabbitai") | not);
-    ($issue | add // []) + ($review | add // []) | sort_by(.created_at) as $all
+    input as $issue | input as $review
+    | ($issue | add // []) + ($review | add // []) | sort_by(.created_at) as $all
     | ($all | map(select(trusted and (.body // "" | contains("ai-dev:needs-human")))) | last) as $q
     | if $q == null then empty else
         ($all | map(select(.created_at > $q.created_at))) as $after

@@ -84,20 +84,21 @@ jobs:
           LABEL: ${{ inputs.label || github.event.label.name }}
           SENDER: ${{ github.event_name != 'workflow_dispatch' && github.event.sender.login || '' }}
         run: |
+          # 本文やコメントは長い PR だと引数の長さの上限を超えるので、jq にはファイルで渡す(#469)
           # issue の API は PR も返す(PR なら pull_request が付く)
-          target=$(gh api "repos/$REPO/issues/$NUMBER" \
-            | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}')
-          comments=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" | jq 'add // []')
+          gh api "repos/$REPO/issues/$NUMBER" \
+            | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}' > target.json
+          gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" | jq 'add // []' > comments.json
           # PR なら、本文の Closes #N などで結び付いた issue
-          if [ "$(jq -r .kind <<<"$target")" = PR ]; then
-            issues=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
+          if [ "$(jq -r .kind target.json)" = PR ]; then
+            gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
               query($owner: String!, $name: String!, $number: Int!) {
                 repository(owner: $owner, name: $name) {
                   pullRequest(number: $number) { closingIssuesReferences(first: 20) { nodes { number title url } } }
                 }
-              }' | jq '.data.repository.pullRequest.closingIssuesReferences.nodes')
+              }' | jq '.data.repository.pullRequest.closingIssuesReferences.nodes' > issues.json
           else
-            issues='[]'
+            echo '[]' > issues.json
           fi
 
           cat > message.jq <<'JQ'
@@ -113,7 +114,9 @@ jobs:
           def section: ((gsub("\r"; "") | capture("(^|\n)#{2,3} 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n#{2,3} |$)") | .s) // "")
             | if test("^\\s*_No response_\\s*$") then "" else . end;
 
-          {
+          # --slurpfile で受けるので、ファイルの中身は 1 要素の配列に入っている
+          $target[0] as $target | $comments[0] as $comments | $issues[0] as $issues
+          | {
             "needs-human":    {head: ":raising_hand: *人の判断が必要です*", ask: "判断してほしいこと", act: "コメントを開いて返信する"},
             "needs-local":    {head: ":camera: *手元の作業(証跡の撮影など)を待っています*", ask: "手元でしてほしいこと", act: "頼むコメントを開く"},
             "needs-decision": {head: ":thinking_face: *着手する前に決めてほしいことがあります*", ask: "決めてほしいこと", act: "issue を開いてコメントで答える"},
@@ -160,7 +163,7 @@ jobs:
 
           message=$(jq -n -f message.jq \
             --arg repo "$REPO" --arg number "$NUMBER" --arg label "$LABEL" --arg sender "$SENDER" \
-            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues")
+            --slurpfile target target.json --slurpfile comments comments.json --slurpfile issues issues.json)
           if [ -z "$message" ]; then
             echo "#$NUMBER に $LABEL で頼む中身(目印 ai-dev:$LABEL のコメントなど)が見つからなかったので、Slack に送らなかった"
             exit 0
