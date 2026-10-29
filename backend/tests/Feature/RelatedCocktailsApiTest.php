@@ -287,7 +287,10 @@ it('TC-174-13: 下書きのカクテルは、どの起点でも返さない', fu
         'glass_id' => "glass_id={$glass->id}",
         default => null,
     };
-    $url = $query === null ? "/api/cocktails/{$published->id}/related?limit=50" : "/api/cocktails/random?{$query}&limit=50";
+    // カクテルを起点にするときは、起点のカクテル自身は返らない(決まったこと 6)ので、同じ材料の別の公開のカクテルを起点にする
+    $url = $query === null
+        ? '/api/cocktails/'.relatedCocktail([$n['バカルディ']])->id.'/related?limit=50'
+        : "/api/cocktails/random?{$query}&limit=50";
 
     expect(relatedIds($this->getJson($url)))->toBe(relatedExpected([$published]));
 })->with(['category_id', 'brand_id', 'base_id', 'method_id', 'glass_id', 'cocktail']);
