@@ -75,7 +75,7 @@ daily_backup() {
     fi
   fi
 
-  local archive_args=("$env_file") archive_out archive_status=0 offsite_failed=0
+  local archive_args=("$env_file") archive_out archive archive_status=0 offsite_failed=0
   [[ -z $storage_dir ]] || archive_args+=("$storage_dir")
   archive_out=$(bash "$HERE/archive-storage.sh" "${archive_args[@]}") || archive_status=$?
   [[ -z $archive_out ]] || printf '%s\n' "$archive_out"
@@ -83,8 +83,10 @@ daily_backup() {
     log "画像の退避に失敗した(終了コード $archive_status)"
     ((status != 0)) || status=$archive_status
   else
-    if check_archive_dir "$archive_out" "$backup_dir"; then
-      [[ -z $offsite_config ]] || send_offsite "$offsite_config" "$dump" "$archive_out" || offsite_failed=1
+    # archive-storage.sh は「archive: <パス>」の行で書いた先を出す
+    archive=$(sed -n 's/^archive: //p' <<<"$archive_out" | tail -n 1)
+    if check_archive_dir "$archive" "$backup_dir"; then
+      [[ -z $offsite_config ]] || send_offsite "$offsite_config" "$dump" "$archive" || offsite_failed=1
     else
       ((status != 0)) || status=1
     fi
@@ -127,10 +129,8 @@ require_value() {
   [[ $# -ge 2 && -n $2 && $2 != -* ]] || die "$1 に値を渡す"
 }
 
-# archive-storage.sh は「archive: <パス>」の行で書いた先を出す
 check_archive_dir() {
-  local out=$1 backup_dir=$2 archive
-  archive=$(sed -n 's/^archive: //p' <<<"$out" | tail -n 1)
+  local archive=$1 backup_dir=$2
   if [[ -z $archive ]]; then
     log "archive-storage.sh の出力に archive: の行が無い"
     return 1
@@ -145,8 +145,7 @@ check_archive_dir() {
 }
 
 send_offsite() {
-  local config=$1 dump=$2 out=$3 archive
-  archive=$(sed -n 's/^archive: //p' <<<"$out" | tail -n 1)
+  local config=$1 dump=$2 archive=$3
   if bash "$HERE/offsite-upload.sh" "$config" "$dump" "$archive"; then
     log "B2 に送った"
   else
