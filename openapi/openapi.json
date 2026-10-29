@@ -1348,6 +1348,67 @@
                 }
             }
         },
+        "/search": {
+            "get": {
+                "operationId": "nameSearch",
+                "description": "\u82f1\u6570\u5b57\u3060\u3051\u306e\u5165\u529b\u306a\u3089\u82f1\u540d(name_eng)\u3068\u691c\u7d22\u7528\u306e\u540d\u524d(name_search)\u3001\u305d\u308c\u4ee5\u5916\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3092\u90e8\u5206\u4e00\u81f4\u3067\u63a2\u3059\u3002\n\u7a7a\u767d(\u534a\u89d2\u30fb\u5168\u89d2)\u3067\u5206\u3051\u305f\u8a9e\u306f\u3001\u3069\u308c\u304b\u306b\u5f53\u305f\u308c\u3070\u4e00\u81f4(\u65e7\u3068\u540c\u3058 OR)\u3002\u8a9e\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3068\u540c\u3058\u5f62\u306b\u305d\u308d\u3048\u3066\u304b\u3089\n\u63a2\u3059\u3002\u4e0b\u66f8\u304d\u306e\u30ab\u30af\u30c6\u30eb\u3068\u3001\u6728\u306e\u6839(\u65e7\u306e\u7a2e\u5225)\u306f\u8fd4\u3055\u306a\u3044\u3002\u7a2e\u985e\u3054\u3068\u306b ID \u306e\u9806\u3067\u3001\u30da\u30fc\u30b8\u306b\u5206\u3051\u306a\u3044(\u65e7\u3068\u540c\u3058)\u3002",
+                "summary": "\u540d\u524d\u3067\u3001\u30ab\u30af\u30c6\u30eb\u30fb\u30ce\u30fc\u30c9\u30fb\u9298\u67c4\u3092\u7a2e\u985e\u3054\u3068\u306b\u63a2\u3059\u3002",
+                "tags": [
+                    "NameSearch"
+                ],
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "cocktails": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CocktailSummaryResource"
+                                            }
+                                        },
+                                        "nodes": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/NameSearchNodeResource"
+                                            }
+                                        },
+                                        "brands": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/NameSearchBrandResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "cocktails",
+                                        "nodes",
+                                        "brands"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/paraphrases": {
             "get": {
                 "operationId": "paraphrases.index",
@@ -3812,6 +3873,65 @@
                     "description"
                 ],
                 "title": "LatestVideoCocktailResource"
+            },
+            "NameSearchBrandResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "volume": {
+                        "type": "number"
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "category": {
+                        "$ref": "#/components/schemas/NodeRefResource"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "volume",
+                    "youtube",
+                    "category"
+                ],
+                "title": "NameSearchBrandResource"
+            },
+            "NameSearchNodeResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "parent": {
+                        "$ref": "#/components/schemas/NodeRefResource"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "parent"
+                ],
+                "title": "NameSearchNodeResource"
             },
             "NodeRefResource": {
                 "type": "object",

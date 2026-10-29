@@ -373,6 +373,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 名前で、カクテル・ノード・銘柄を種類ごとに探す。
+         * @description 英数字だけの入力なら英名(name_eng)と検索用の名前(name_search)、それ以外は検索用の名前を部分一致で探す。
+         *     空白(半角・全角)で分けた語は、どれかに当たれば一致(旧と同じ OR)。語は検索用の名前と同じ形にそろえてから
+         *     探す。下書きのカクテルと、木の根(旧の種別)は返さない。種類ごとに ID の順で、ページに分けない(旧と同じ)。
+         */
+        get: operations["nameSearch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/paraphrases": {
         parameters: {
             query?: never;
@@ -996,6 +1018,22 @@ export interface components {
                 text: string;
                 has_youtube: boolean;
             })[] | null;
+        };
+        /** NameSearchBrandResource */
+        NameSearchBrandResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            volume: number;
+            youtube: string | null;
+            category: components["schemas"]["NodeRefResource"];
+        };
+        /** NameSearchNodeResource */
+        NameSearchNodeResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            parent: components["schemas"]["NodeRefResource"];
         };
         /** NodeRefResource */
         NodeRefResource: {
@@ -1785,6 +1823,32 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    nameSearch: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        cocktails: components["schemas"]["CocktailSummaryResource"][];
+                        nodes: components["schemas"]["NameSearchNodeResource"][];
+                        brands: components["schemas"]["NameSearchBrandResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "paraphrases.index": {
