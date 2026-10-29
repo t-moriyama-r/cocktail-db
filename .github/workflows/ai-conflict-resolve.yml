@@ -349,12 +349,12 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      # この回は既定のブランチの文脈(schedule・workflow_dispatch)で PR のコードを動かす。ここで保存したキャッシュは既定のブランチの分として
+      # デプロイ(deploy.yml・deploy-env.yml)にも読まれるので、キャッシュは使わない(cache を書かない。#508)
       - uses: actions/setup-node@v7
         if: steps.need.outputs.head
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: work/frontend/package-lock.json
 
       # CLAUDE.md の「API を変えたら」と同じ手順。Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す
       - name: openapi.json を作り直す
