@@ -188,7 +188,7 @@ dev → stg → 本番の順に、1 つずつ切り替えて確かめる。
    ```
 
 2. **CLI**: デプロイのワークフロー(本番は `deploy.yml`、dev・stg は `deploy-env.yml`)のサーバーで流す `php artisan` を、版の付いたコマンド(`/usr/local/bin/ea-php85 artisan`)にし、同じワークフローの `setup-php` の `php-version` も `'8.5'` にする。`deploy-env.yml` は dev と stg で共通なので、環境ごとに切り替えるには版を入力で渡せるようにする。これはワークフローを変える PR で行う
-3. **確かめる**: その環境を出し直し(「dev 環境・stg 環境」の「出し直したいとき」)、デプロイの動作確認が通ること、画面と API に不具合が無いこと、`~/public_html/cocktail-db*/error_log` と `storage/logs/laravel.log` に新しいエラーが無いことを見る。Web の版は、`<?php echo PHP_VERSION;` だけのファイルをアプリ本体の `public/` に一時的に置いて開き、確かめたらすぐ消す(次のデプロイでも消える)
+3. **確かめる**: その環境を出し直し(「dev 環境・stg 環境」の「出し直したいとき」)、デプロイの動作確認が通ること、画面と API に不具合が無いこと、`~/public_html/cocktail-db*/error_log` と `storage/logs/laravel.log` に新しいエラーや deprecation(非推奨の警告)が無いことを見る。デプロイの `composer install` は 8.4 のままなので、8.4 で入れた `vendor` を 8.5 の Web が読む状態になり、CI(`vendor` も 8.5 で入れる)では確かめられない。8.5 で変わった挙動が `vendor` 側にあっても、ここで初めて出るので、dev で先にログを見てから stg・本番に進む。Web の版は、`<?php echo PHP_VERSION;` だけのファイルをアプリ本体の `public/` に一時的に置いて開き、確かめたらすぐ消す(次のデプロイでも消える)
 4. 問題が無ければ、次の環境に進む
 
 切り戻すときは、その環境の 1 のブロックの `ea-php85` を `ea-php84` に書き換え、2 のコマンドと `php-version` を 8.4 に戻して出し直す。Web の指定は書き換えたときから効く。
