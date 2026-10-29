@@ -12,7 +12,7 @@
 #           指摘が無くなったとき、人の承認が要る issue(needs-review)の PR なら、見てほしいところをコメントしておく。
 #           needs-approval は付けない。終わった後に ai-auto-merge.yml を呼び、マージできる状態になったらそちらが付けて人に知らせる
 # - resume・review とも、見た目の案を人に選んでもらう PR で見た目が決まった・変わったときは、PR 本文の「最終的にどうなったか(証跡)」の節を文字で書き、
-#   撮ってほしいものをコメントして needs-local(手元の作業待ち)を付ける(この環境では画面を撮れない。撮って貼るのは手元のエージェント。CLAUDE.md の手順 5)
+#   撮ってほしいものをコメントして needs-local(見回り待ち)を付ける(この環境では画面を撮れない。撮って貼るのは手元のエージェント。CLAUDE.md の手順 5)
 #
 # 向き先が staging・release の PR(昇格の PR)では、resume・review とも Claude Code を動かさない。head が保護されたブランチ(develop・staging)なので
 # 直しを push できず、中身は develop に入る前に PR ごとにレビュー済み。指摘が残ってもマージは止めず、人が見て判断する(ai-auto-merge.yml)
@@ -21,7 +21,7 @@
 # そのためワークフローを直すことになったら、Claude Code は push せずに差分をコメントし、needs-local で手元に当ててもらう
 #
 # Actions の中で付けたラベルは、Slack の通知のワークフローを起こさないことがある(GITHUB_TOKEN で付けたとき)。
-# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-local を見て、通知のワークフローを直接呼ぶ。
+# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-local・needs-manual を見て、通知のワークフローを直接呼ぶ。
 # Claude Code は PR・レビューのコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限
 # (actions: write。deploy.yml も起動できてしまう)を渡さず、通知を呼ぶジョブ(notify-*)だけに渡す
 #
@@ -32,7 +32,7 @@
 # resume は起こし直せない(オーナーの返信で動く)ので、もう一度返信してほしいことを needs-human で頼む
 #
 # エージェントが書くコメントには目印 <!-- ai-dev:agent --> を付け、判断を頼むコメントには
-# <!-- ai-dev:needs-human --> も付ける(手元の作業を頼むコメントには <!-- ai-dev:needs-local kind=… -->)。目印の付いたコメントでは起動しない
+# <!-- ai-dev:needs-human --> も付ける(見回りに頼むコメントには <!-- ai-dev:needs-local kind=… -->、人の手が要る作業を頼むコメントには <!-- ai-dev:needs-manual -->)。目印の付いたコメントでは起動しない
 #
 # 直して push した後の再レビューの依頼は、Claude Code ではなく notify-* のジョブが .github/scripts/request-review.sh で出す。
 # CodeRabbit はボットの「@coderabbitai review」に応じないので、オーナーの PAT で書く(#227)
@@ -259,7 +259,7 @@ jobs:
         run: bash .github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
 
       # needs-approval はここでは新しく付かない(マージできる状態になったときに ai-auto-merge.yml が付ける)
-      - name: 新しく付いた needs-human・needs-local を Slack に知らせる
+      - name: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -270,7 +270,7 @@ jobs:
           # 「済」は見た目の印なので、呼べなくても後ろの通知(本来の仕事)まで進む
           gh workflow run notify-needs-human.yml -R "$REPO" -f label=done || echo "::warning::片付いた通知に「済」を付けるワークフローを呼べなかった"
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-local; do
+          for label in needs-human needs-local needs-manual; do
             if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
@@ -311,6 +311,7 @@ jobs:
           && github.event.review.body != ''
           && !contains(github.event.pull_request.labels.*.name, 'needs-human')
           && !contains(github.event.pull_request.labels.*.name, 'needs-local')
+          && !contains(github.event.pull_request.labels.*.name, 'needs-manual')
           && !contains(github.event.pull_request.labels.*.name, 'needs-approval'))
         || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
@@ -318,6 +319,7 @@ jobs:
           && (contains(github.event.comment.body, 'Review finished') || contains(github.event.comment.body, 'No actionable comments'))
           && !contains(github.event.issue.labels.*.name, 'needs-human')
           && !contains(github.event.issue.labels.*.name, 'needs-local')
+          && !contains(github.event.issue.labels.*.name, 'needs-manual')
           && !contains(github.event.issue.labels.*.name, 'needs-approval'))
       )
     runs-on: ubuntu-latest
@@ -357,7 +359,7 @@ jobs:
           case "$(jq -r .baseRefName <<<"$pr")" in
             staging | release) skip "昇格の PR($(jq -r .baseRefName <<<"$pr") 向き)は、Claude Code で指摘に対応しない" ;;
           esac
-          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-approval"))] | join(",")' <<<"$pr")
+          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-approval"))] | join(",")' <<<"$pr")
           [ -z "$label" ] || skip "ラベル $label"
           # 人に頼んだ問いにオーナーが答えたのに、答えを受けた resume が何もしないまま終わっていると、
           # 次の review が同じ問いをもう一度頼んでいた(#426)。答えがあれば Claude Code に渡し、下の「対応は済んでいる」の見送りもしない
@@ -477,6 +479,10 @@ jobs:
             2 つ以上なら evidence > push > other の順で重いものにして、ほかの作業も同じコメントに書く)、
             中身は、何をしてほしいか(撮ってほしいもの、当てる差分と理由、または手元でそのまま流せる手順)。人に頼むものもあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
             `needs-local` で終えるときも、`ai-in-actions` ラベルを外す(付けたままだと、手元で `needs-local` を外した後の自動マージが見送られる)。
+            人が手を動かさないと進まない作業(Secret・変数の設定、アカウントへのログイン、外部サービスの画面での設定など、手元のエージェントにもできないもの)は、
+            `needs-local` ではなく `needs-manual` を付ける(`needs-local` は待っていれば見回りが片付けるもの、`needs-manual` は待っていても進まないもの)。
+            コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-manual --> を付け、中身は、人にしてほしい操作と、済んだら `needs-manual` を外すこと。
+            判断も一緒に頼むときは `needs-human` だけを付ける。`needs-manual` で終えるときも `ai-in-actions` ラベルを外す。
 
             直したものがあれば push し、PR に `<!-- ai-dev:agent --> <!-- ai-dev:round -->` と「レビューの指摘に対応した(<n> 回目)」をコメントしてから、
             `ai-in-actions` ラベルを外して終える(次のレビューが付けば、また付けて対応する)。CodeRabbit への再レビューの依頼は書かない(後のジョブがオーナーのトークンで出す)。
@@ -566,7 +572,7 @@ jobs:
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
       # 直して再レビューを頼んだ回や、人に頼んだ回では、ai-auto-merge.yml の方で見送られる
-      - name: 新しく付いた needs-human・needs-local を Slack に知らせ、マージできるかを確かめさせる
+      - name: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせ、マージできるかを確かめさせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -574,7 +580,7 @@ jobs:
           BEFORE: ${{ needs.review.outputs.before }}
         run: |
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-local; do
+          for label in needs-human needs-local needs-manual; do
             if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi

@@ -33,9 +33,13 @@ main() {
 # 上から見て最初に当てはまったものにする。誰の番かが変わるところで分け、レビューの流れが止まるもの(コンフリクト・CI の失敗)は
 # 人が気づけるよう別にする。mergeable が UNKNOWN(push の直後に GitHub が計算している間)はコンフリクトとみなさない
 #
-# 人の判断待ち(needs-human・needs-decision)と手元の作業待ち(needs-local)は、下書きより先に見る。クラウドのルーチンや Actions は、
-# 判断や証跡を待つ PR を下書きのまま止めるので、下書きを先に見ると、止まっている PR が一覧でみな作業中に見える(#471)。
+# 人の判断待ち(needs-human・needs-decision)・手元の作業待ち(needs-manual)・見回り待ち(needs-local)は、下書きより先に見る。
+# クラウドのルーチンや Actions は、判断や証跡を待つ PR を下書きのまま止めるので、下書きを先に見ると、止まっている PR が一覧でみな作業中に見える(#471)。
 # 下書きでこれらのラベルが無いものは作業中
+#
+# needs-local(証跡の撮影・workflow の push など)は、PC を開いたときに手元の見回り(pr-patrol・daily-start)が片付けるので、
+# 待っていれば進む。needs-manual(Secret の設定・ログインなど)は人が手を動かさないと進まない。一覧で見分けられるよう分け、
+# 両方付いていれば待っていても進まないほうを出す(#496)
 #
 # 向き先が staging・release の PR(昇格の PR)は、中身が develop に入る前にレビュー済みで、head が保護されたブランチ(develop・staging)なので
 # Actions の Claude Code が指摘を直せない。指摘が残っていてもレビュー対応の番にはしない。needs-approval の PR は、ai-auto-merge.yml が
@@ -60,7 +64,8 @@ decide() {
     | ($l | index("needs-approval") != null) as $approval
     | if .state != "OPEN" then ""
       elif ($l | index("needs-human") or index("needs-decision")) then $p + "人の判断待ち"
-      elif ($l | index("needs-local")) then $p + "手元の作業待ち"
+      elif ($l | index("needs-manual")) then $p + "手元の作業待ち"
+      elif ($l | index("needs-local")) then $p + "見回り待ち(証跡など)"
       elif .isDraft then $p + "作業中"
       elif .mergeable == "CONFLICTING" then $p + "コンフリクト"
       elif (.failedChecks // 0) > 0 then $p + "CI失敗"
@@ -155,11 +160,12 @@ apply() {
 ensure_label() {
   local repo=$1 name=$2 color description
   case "${name#"$PREFIX"}" in
-    作業中) color=ededed description="下書き。まだレビューに出していない(人の判断待ち・手元の作業待ちのラベルは無い)" ;;
+    作業中) color=ededed description="下書き。まだレビューに出していない(人の判断待ち・手元の作業待ち・見回り待ちのラベルは無い)" ;;
     レビュー待ち) color=c5def5 description="AI レビュアーがいまのコミットを見るのを待っている" ;;
     レビュー対応中) color=0e8a16 description="レビューの指摘に、Actions の Claude Code が対応する番" ;;
     人の判断待ち) color=d93f0b description="人の判断を待っている(needs-human・needs-decision)" ;;
-    手元の作業待ち) color=c2e0c6 description="証跡の撮影など、手元のエージェントの作業を待っている(needs-local)。人の判断は要らない" ;;
+    手元の作業待ち) color=e99695 description="人が手を動かさないと進まない作業(Secret の設定・ログインなど)を待っている(needs-manual)。待っていても進まない" ;;
+    "見回り待ち(証跡など)") color=c2e0c6 description="証跡の撮影など、PC を開いたときに手元の見回りが片付ける作業を待っている(needs-local)。人の判断も手も要らない" ;;
     人のマージ待ち) color=fbca04 description="マージできる。人の確認とマージを待っている(needs-approval・staging/release 向けの PR)" ;;
     コンフリクト) color=b60205 description="develop とコンフリクトしている。Actions の Claude Code が取り込んで直す" ;;
     CI失敗) color=b60205 description="必須のチェックが失敗している" ;;

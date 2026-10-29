@@ -26,6 +26,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 銘柄の一覧。名前の昇順で 1 ページずつ返す。
+         * @description 並びと絞り込みは管理画面のカクテルの一覧(#289)と同じ(旧の一覧の部品 ListComponent.vue を銘柄でも使っていた)。
+         *     名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順。
+         *     q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         */
+        get: operations["brand.index"];
+        put?: never;
+        /** 銘柄を作る。名前・英名がほかの銘柄と同じなら、保存したうえで warnings に入れて返す。 */
+        post: operations["brand.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/brands/{brand}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 編集で開く銘柄。 */
+        get: operations["brand.show"];
+        /**
+         * 銘柄を書き換える。所属を変えたときは、その銘柄を使う材料・アフィリエイトのノードもそろえる。
+         *     名前・英名がほかの銘柄と同じなら、保存したうえで warnings に入れて返す。
+         */
+        put: operations["brand.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cocktails/{cocktail}": {
         parameters: {
             query?: never;
@@ -577,6 +621,52 @@ export interface components {
             is_draft: boolean;
             updated_at: string | null;
         };
+        /** BrandListItemResource */
+        BrandListItemResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            category_path: {
+                id: number;
+                name: string;
+                name_eng: string;
+                is_famous_brand: boolean;
+            }[];
+            is_famous_brand: boolean;
+        };
+        /** BrandResource */
+        BrandResource: {
+            id: number;
+            category_id: number;
+            category_path: {
+                id: number;
+                name: string;
+                name_eng: string;
+                is_famous_brand: boolean;
+            }[];
+            is_famous_brand: boolean;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%) */
+            strength: number;
+            description: string | null;
+            /** @description 動画 ID */
+            youtube: string | null;
+            youtube_start_hour: number | null;
+            youtube_start_minute: number | null;
+            youtube_start_second: number | null;
+            /**
+             * Format: date-time
+             * @description 動画を入れた・変えた日時
+             */
+            youtube_created_at: string | null;
+            is_major: boolean;
+            is_like: boolean;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            updated_at: string | null;
+        };
         /**
          * CategoryRole
          * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
@@ -704,6 +794,17 @@ export interface components {
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
              */
             category_ids: number[];
+            /**
+             * @description 技法(#166)。カクテルの技法がこの中にあるものに絞る。省く・null・空の配列なら、すべての技法として扱う
+             *     (旧は 1 つ以上が必須だった。docs/decisions/search-screen.md の 6)。無い技法の ID は弾かず、何にも一致しない
+             *     (旧と同じ)。件数の上限は category_ids と同じ理由
+             */
+            method_ids?: number[] | null;
+            /**
+             * @description かんたん検索(#166)。真なら、材料の数(recipe_count。docs/decisions/recipe-count.md)が 3 以下のものに絞る。
+             *     省くと絞らない(旧の画面の既定と同じ)。受ける値は旧と同じ Laravel の boolean(true・false・1・0・"1"・"0")
+             */
+            is_easy?: boolean | null;
             /**
              * @description 並べ替える列(#167)。省くと ID の順
              * @enum {string|null}
@@ -866,6 +967,40 @@ export interface components {
             remember?: boolean;
         };
         /**
+         * SaveBrandRequest
+         * @description 銘柄の新規・更新(POST /api/admin/brands・PUT /api/admin/brands/{id}。#314)の入力。
+         *
+         *     旧の EditBrandValidate の規則に、長さの上限などを足したもの。画像を上げるときは multipart で送る
+         *     (PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+         */
+        SaveBrandRequest: {
+            /** @description 所属するノード。どの深さでもよいが、根(旧の種別)は選べない */
+            category_id: number;
+            name: string;
+            name_eng: string;
+            /** @description 度数(%)。列(decimal(4,1))に入らない値を 500 にしないよう、0〜100 に絞る */
+            strength: number;
+            /** @description 説明。保存のときに記法へ変換する(DescriptionMarkup。#287) */
+            description: string;
+            /** @description YouTube の URL か動画 ID */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            is_major: boolean;
+            is_like: boolean;
+            /** @description 画像のリンクの文字と URL */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
+        };
+        /**
          * SaveParaphraseRequest
          * @description 言い換え辞書の 1 語の追加・更新(POST /api/admin/paraphrases・PUT /api/admin/paraphrases/{id}。#316)。
          */
@@ -984,6 +1119,163 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["AffiliateResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.index": {
+        parameters: {
+            query?: {
+                /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
+                q?: string | null;
+                page?: number | null;
+                per_page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `BrandListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandListItemResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description `BrandResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandResource"];
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brand: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `BrandResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "brand.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                brand: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description `BrandResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandResource"];
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
                     };
                 };
             };

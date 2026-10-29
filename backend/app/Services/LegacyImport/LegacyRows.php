@@ -29,6 +29,24 @@ final class LegacyRows
     }
 
     /**
+     * $table の行を、ORDER BY を付けずに読む。
+     *
+     * 主キーの無い InnoDB の表は、ORDER BY を付けずに読むと内部の行 ID の順(入れた順)で返る。その順を
+     * 崩さないよう、絞り込みも結合も付けない(条件を付けると、どの索引で読むかによって返る順が変わりうる)。
+     *
+     * @return list<array<mixed>>
+     */
+    public static function inStoredOrder(string $table): array
+    {
+        $rows = [];
+        foreach (DB::connection('legacy')->table($table)->get() as $row) {
+            $rows[] = (array) $row;
+        }
+
+        return $rows;
+    }
+
+    /**
      * @param  array<mixed>  $row
      *
      * @throws UnexpectedValueException 値が数でないとき

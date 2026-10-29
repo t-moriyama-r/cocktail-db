@@ -24,8 +24,8 @@ class CocktailSearchController extends Controller
     {
         // 方式は検証で or・having だけを受けている
         $query = $request->isHaving()
-            ? $search->queryMakeable($request->categoryIds())
-            : $search->query($request->categoryIds());
+            ? $search->queryMakeable($request->categoryIds(), $request->methodIds(), $request->isEasy())
+            : $search->query($request->categoryIds(), $request->methodIds(), $request->isEasy());
         $ids = $sort->sortedIds($query, $request->sort(), $request->order());
 
         $page = $request->page();
