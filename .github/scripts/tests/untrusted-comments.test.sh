@@ -57,6 +57,13 @@ main() {
 	run 7
 	expect TC-494-07 '先頭の HTML コメントの後の宛名も見る' "$(out)|$RC" 'https://example.test/r1 coderabbitai[bot] NONE|0'
 
+	reset
+	review_comments 'bot:<!-- This is an auto-generated reply
+by CodeRabbit -->
+@someone 了解しました'
+	run 7
+	expect TC-494-15 '複数行の HTML コメントの後の宛名も見る' "$(out)|$RC" 'https://example.test/r1 coderabbitai[bot] NONE|0'
+
 	# --- 信頼する人(いまのオーナーの PR に出てくる書き手) ---
 
 	reset

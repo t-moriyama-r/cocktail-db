@@ -39,7 +39,7 @@ untrusted_comments() {
     printf '%s\n' "$item" "$issue" "$review" "$reviews" | jq -r -n --arg owner "${repo%%/*}" --argjson bots "$TRUSTED_BOTS" '
       def person: .author_association | IN("OWNER", "MEMBER", "COLLABORATOR");
       def bot: .user.login as $l | $bots | index($l);
-      def addressed: .body // "" | capture("^\\s*(<!--.*?-->\\s*)*@(?<to>[A-Za-z0-9-]+)")?.to // null
+      def addressed: .body // "" | capture("^\\s*(<!--[\\s\\S]*?-->\\s*)*@(?<to>[A-Za-z0-9-]+)")?.to // null
         | . != null and . != $owner;
       def trusted: person or (bot and (addressed | not));
       input as $item | input as $issue | input as $review | input as $reviews
