@@ -338,6 +338,19 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `last_used_at` | `timestamp` | ○ | 最後にログインに使った時刻。登録しただけなら null |
 | `created_at`・`updated_at` | `timestamps()` | ○ | `created_at` が登録した日時 |
 
+## 説明文の参照の記法
+
+説明文(`categories`・`methods`・`dictionaries`・`brands`・`cocktails` の `description` と、`cocktails.note`)には、ほかのページへの参照を `@<種類><ID>@` の記法で埋め込む(#285。決めたことは [description-references.md](decisions/description-references.md))。ID は 0 で始まらない数字。大文字(`@N12@` など)も小文字と同じ意味。
+
+| 種類 | 指す先 | ID | 旧の記法 |
+|---|---|---|---|
+| `n` | ノード(`categories`) | ノードの ID | `@p<カテゴリの旧 ID>@`・`@m<ミドルの旧 ID>@`。移行(`legacy:import --only=descriptions`)で legacy_id_maps を引いて `@n` にする。対応の無い ID は記法を取り除く |
+| `c` | カクテル | 旧 ID のまま | `@c`(大文字の `@C` は移行で小文字にする。`b`・`d` も同じ) |
+| `b` | 銘柄 | 旧 ID のまま | `@b` |
+| `d` | 用語(`dictionaries`) | 旧 ID のまま | `@d` |
+
+画面に出すときの区切り方は [description-segments.md](decisions/description-segments.md)(#286)、管理画面で保存するときの変換は [description-markup.md](decisions/description-markup.md)(#287)。指す先が無い参照と、旧の記法の残りは、`data:verify` が見つける。
+
 ## YouTube の開始位置
 
 旧の `y_hour`・`y_minute`・`y_second` を、秒の 1 列 `youtube_start_seconds` にまとめる(#19 のコメントで決めた)。管理画面では時・分・秒で入力し、保存のときに秒にする。対象は `categories`・`brands`・`cocktails`・`dictionaries`。
