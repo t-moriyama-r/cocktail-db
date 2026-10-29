@@ -181,17 +181,17 @@ it('TC-43-09: 親ノードの配下の銘柄には、所属ノードの子孫の
         ->assertJsonPath('data.parent_subtree_brands.*.id', [$deep->id, $sibling->id]);
 });
 
-it('TC-43-10: いちばん上の段の銘柄では、親は大元なので、大元の配下のほかのノードの銘柄が入る', function () {
+it('TC-43-10: いちばん上の段の銘柄では、親は大元なので、自分のノードの配下の銘柄だけが入り、ジンなど大元の配下のほかの銘柄は入らない', function () {
     $n = brandDetailTree();
     $brand = brandDetailBrand($n['ラム'], 'ラムの銘柄');
     $same = brandDetailBrand($n['ラム'], 'ラムの銘柄 2');
     $white = brandDetailBrand($n['ホワイトラム'], 'バカルディ');
-    $gin = brandDetailBrand($n['ジン'], 'ビーフィーター');
+    brandDetailBrand($n['ジン'], 'ビーフィーター');
 
     $this->getJson("/api/brands/{$brand->id}")
         ->assertOk()
         ->assertJsonPath('data.same_node_brands.*.id', [$same->id])
-        ->assertJsonPath('data.parent_subtree_brands.*.id', [$white->id, $gin->id]);
+        ->assertJsonPath('data.parent_subtree_brands.*.id', [$white->id]);
 });
 
 it('TC-43-11: 根(大元)に所属する銘柄では、親が無いので親ノードの配下の銘柄は空', function () {

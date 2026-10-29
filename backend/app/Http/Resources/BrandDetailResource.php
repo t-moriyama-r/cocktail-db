@@ -19,7 +19,7 @@ use LogicException;
  *   (docs/decisions/public-detail.md の決まったこと 2)。どちらも ID の順
  *   - same_node_brands: 所属ノードに直接ぶら下がる、ほかの銘柄(自分を除く)
  *   - parent_subtree_brands: 所属ノードの親と、親の配下すべてのノードのうち、所属ノードでないノードに所属する銘柄。
- *     所属ノードが根なら親が無いので空
+ *     所属ノードが根なら親が無いので空。親が根(大元)のときは、大元の配下すべてではなく、所属ノードの配下だけ(オーナーの判断。#43)
  *
  * 「これを使ったカクテル」は返さない。画面が #174 の銘柄起点の API で取る(ノードの詳細と同じ)。アフィリエイトも返さない。
  * 画面が GET /api/affiliates(#47)に銘柄の ID を渡して取る。
@@ -46,10 +46,13 @@ class BrandDetailResource extends JsonResource
             ->orderBy('id')
             ->get();
 
-        $parentSubtreeBrands = $parent === null
+        // 親が根(大元)のときは、大元の配下すべてではなく、所属ノードの配下だけにする(旧のミドルの無い銘柄と同じ)
+        $scope = $parent === null ? null : ($parent->parent === null ? $node : $parent);
+
+        $parentSubtreeBrands = $scope === null
             ? collect()
             : BrandSummaryResource::withPath(Brand::query())
-                ->whereIn('category_id', CategoryClosure::query()->select('descendant_id')->where('ancestor_id', $parent->id))
+                ->whereIn('category_id', CategoryClosure::query()->select('descendant_id')->where('ancestor_id', $scope->id))
                 ->where('category_id', '<>', $node->id)
                 ->orderBy('id')
                 ->get();
