@@ -12,7 +12,8 @@ const pages = [
   { path: '/detail/brand/1', heading: '銘柄の詳細' },
   { path: '/detail/cocktail/1', heading: 'カクテルの詳細' },
   { path: '/dictionary', heading: '用語辞典' },
-  { path: '/dictionary/1', heading: '用語の詳細' },
+  // E2eSeeder の用語辞典で ID 1 の用語(#56)
+  { path: '/dictionary/1', heading: 'カクテル・グラス(Cocktail glass)' },
 ]
 
 for (const { path, heading } of pages) {
