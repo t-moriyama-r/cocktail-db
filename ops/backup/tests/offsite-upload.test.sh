@@ -160,8 +160,7 @@ tc_auth_failure() {
 tc_retry_then_success() {
   local case_dir ok=1
   case_dir=$(new_case)
-  FAKE_UPLOAD_FAILS=1 run_upload "$case_dir"
-  [[ $? -eq 0 ]] || ok=0
+  FAKE_UPLOAD_FAILS=1 run_upload "$case_dir" || ok=0
   [[ $(stored "$case_dir" | wc -l) -eq 6 ]] || ok=0
   grep -q '送り直す(1 回目が失敗' "$case_dir/out.log" || ok=0
   # 送り直すときは、送り先の URL を取り直している(6 ファイル + 送り直しの 1 回)

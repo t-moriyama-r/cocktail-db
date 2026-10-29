@@ -47,6 +47,7 @@ offsite_upload() {
   [[ -f $config && -r $config ]] || die "設定ファイルが読めない: $config"
   [[ $dump == *.sql.gz && -f $dump ]] || die "ダンプ(.sql.gz)が無い: $dump"
   [[ $archive == *.tar.gz && -f $archive ]] || die "画像のアーカイブ(.tar.gz)が無い: $archive"
+  perl -MJSON::PP -e 1 2>/dev/null || die "perl の JSON::PP が無い(B2 の応答を読むのに使う)"
 
   local key_id app_key bucket_id public_key prefix
   key_id=$(require_config "$config" B2_KEY_ID) || exit 1
