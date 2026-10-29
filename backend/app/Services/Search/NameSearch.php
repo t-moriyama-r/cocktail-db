@@ -55,8 +55,8 @@ class NameSearch
     /**
      * $columns のどれかに、$words のどれかを部分一致で含むものに絞り、ID の順に並べる。
      *
-     * 語が 1 つも無い(区切りの文字だけの入力)ときは、旧と同じく名前では絞らない。語の % と _ は、旧と同じく
-     * エスケープせず、LIKE の特別な文字のまま効かせる(docs/decisions/name-search.md の決まったこと 2)。
+     * 語の % と _ は、ふつうの文字として探す(LIKE の特別な文字にしない。docs/decisions/name-search.md の決まったこと 2)。
+     * 語が 1 つも無い入力は、NameSearchRequest が 422 にするので、ここには来ない。
      *
      * @template TModel of Model
      *
@@ -71,7 +71,7 @@ class NameSearch
             ->where(function (Builder $match) use ($words, $columns) {
                 foreach ($columns as $column) {
                     foreach ($words as $word) {
-                        $match->orWhere($match->qualifyColumn($column), 'like', "%{$word}%");
+                        $match->orWhere($match->qualifyColumn($column), 'like', '%'.addcslashes($word, '\\%_').'%');
                     }
                 }
             })

@@ -175,17 +175,19 @@ it('TC-172-08: 入力が無い・空・空白だけなら 422', function (?strin
     '全角の空白だけ' => ['　'],
 ]);
 
-it('TC-172-09: 記号を含む入力も受け付け、% と _ は LIKE の特別な文字のまま効く(旧と同じ)', function () {
+it('TC-172-09: 記号を含む入力も受け付け、% と _ はふつうの文字として探す', function () {
     $abc = nameSearchCocktail('ABC', 'A.B.C.');
     $gordon = nameSearchCocktail("Gordon's", 'Gordon');
-    $martini = nameSearchCocktail('マティーニ', 'Martini');
+    nameSearchCocktail('マティーニ', 'Martini');
 
     // ピリオドは語をそろえるときに消える(ABC)。英数字だけではないので検索用の名前だけを探す
     assertNameSearch(nameSearch($this, 'A.B.C'), [$abc], [], []);
     assertNameSearch(nameSearch($this, "Gordon's"), [$gordon], [], []);
-    // 旧は語を LIKE に入れるときに % と _ をエスケープしていなかったので、すべてに当たる
-    assertNameSearch(nameSearch($this, '%'), [$abc, $gordon, $martini], [], []);
-    assertNameSearch(nameSearch($this, '_'), [$abc, $gordon, $martini], [], []);
+    // 旧は % と _ がすべてに当たった。新はふつうの文字なので、名前に含むものだけに当たる
+    $percent = nameSearchCocktail('100%ジュース', 'Hundred');
+    $under = nameSearchCocktail('ア_イ', 'A_I');
+    assertNameSearch(nameSearch($this, '%'), [$percent], [], []);
+    assertNameSearch(nameSearch($this, '_'), [$under], [], []);
 });
 
 it('TC-172-10: 255 文字までは受け付け、256 文字は 422', function () {
@@ -193,14 +195,10 @@ it('TC-172-10: 255 文字までは受け付け、256 文字は 422', function ()
     nameSearch($this, str_repeat('あ', 256))->assertUnprocessable()->assertJsonValidationErrors('q');
 });
 
-it('TC-172-11: 中黒だけの入力は、語が無くなり、絞らずにすべてを返す(旧と同じ)', function () {
-    $liquor = nameSearchNode(null, '蒸留酒', 'Spirits');
-    $gin = nameSearchNode($liquor, 'ジン', 'Gin');
-    $cocktail = nameSearchCocktail('マティーニ', 'Martini');
-    nameSearchCocktail('下書き', 'Draft', ['is_draft' => true]);
-    $brand = nameSearchBrand('ゴードン', 'Gordon', ['category_id' => $gin->id]);
+it('TC-172-11: 中黒だけの入力は、語が無くなるので 422(旧は絞らずにすべてを返した)', function () {
+    nameSearchCocktail('マティーニ', 'Martini');
 
-    assertNameSearch(nameSearch($this, '・'), [$cocktail], [$gin], [$brand]);
+    nameSearch($this, '・')->assertUnprocessable()->assertJsonValidationErrors('q');
 });
 
 it('TC-172-12: 種類ごとに ID の順で返す', function () {
