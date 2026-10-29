@@ -38,6 +38,24 @@ class CocktailSearch
     }
 
     /**
+     * 手持ちの材料(選んだノード)だけで作れるカクテル(あるもの検索)を、ID の昇順で引くクエリ。
+     *
+     * 持っていなくてよい材料(任意・「その他」)の判定は IngredientMatch::whereMakeableWith に任せる。下書き・並び・
+     * 技法とかんたん検索の絞り込みは OR 検索と同じ。旧はカクテル ID を 1 から件数までしか見ておらず、ID が件数を
+     * 超えるカクテルが出なかったが、その不具合は再現しない(docs/search-expected-diffs.md の「[#165] で再現しないもの」)。
+     *
+     * @param  list<int>  $nodeIds
+     * @param  list<int>|null  $methodIds
+     * @return Builder<Cocktail>
+     */
+    public function queryMakeable(array $nodeIds, ?array $methodIds = null, bool $easy = false): Builder
+    {
+        return $this->match
+            ->whereMakeableWith($this->narrow(Cocktail::query()->published(), $methodIds, $easy), $nodeIds)
+            ->orderBy('id');
+    }
+
+    /**
      * 方式によらない絞り込み(#166)。旧も、材料で選んだカクテルを最後に同じ条件で絞っていた。
      *
      * - 技法: カクテルの技法が $methodIds のどれかであるもの。null ならすべての技法(絞らない)。

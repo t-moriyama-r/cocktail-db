@@ -46,10 +46,10 @@ class CocktailSearchRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
-            // OR 検索の結果を黙って返してしまう
-            'mode' => ['nullable', 'string', Rule::in(['or'])],
-            // 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+            // 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は、受ける形を
+            // 決めてから足す。それまで受けると、OR 検索の結果を黙って返してしまう
+            'mode' => ['nullable', 'string', Rule::in(['or', 'having'])],
+            // 選んだノード(or では探す材料、having では手持ちの材料)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
             // 件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
             'category_ids' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             // `integer` は PHP の整数フィルターなので、true や 1.0 も 1 として通る。JSON の整数と数字の文字だけを受ける
@@ -105,6 +105,14 @@ class CocktailSearchRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /**
+     * あるもの検索(手持ちの材料で作れるカクテル)か。
+     */
+    public function isHaving(): bool
+    {
+        return $this->validated('mode') === 'having';
     }
 
     /**
