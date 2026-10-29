@@ -41,6 +41,15 @@ class CocktailSearch
      */
     public function queryEach(array $groups): Builder
     {
+        // 同じ内容のまとまりを何度 AND しても結果は変わらないので、重複を除いて条件の数を減らす
+        $groups = array_map(static function (array $group): array {
+            $group = array_values(array_unique($group));
+            sort($group);
+
+            return $group;
+        }, $groups);
+        $groups = array_values(array_unique($groups, SORT_REGULAR));
+
         return $this->match
             ->whereUsesEach(Cocktail::query()->published(), $groups)
             ->orderBy('id');

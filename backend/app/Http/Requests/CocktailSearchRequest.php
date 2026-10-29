@@ -46,14 +46,14 @@ class CocktailSearchRequest extends FormRequest
             'mode' => ['nullable', 'string', Rule::in(['or', 'and'])],
             // 選んだノード(or)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
             // 件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
-            // and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く
-            'category_ids' => ['required_unless:mode,and', 'prohibited_if:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
+            // and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く(空の配列も弾くため、prohibited ではなく missing)
+            'category_ids' => ['required_unless:mode,and', 'missing_if:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             // `integer` は PHP の整数フィルターなので、true や 1.0 も 1 として通る。JSON の整数と数字の文字だけを受ける
             'category_ids.*' => ['required', 'integer', self::notBoolOrFloat(...)],
             // 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
             // まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
             // and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
-            'category_groups' => ['required_if:mode,and', 'prohibited_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
+            'category_groups' => ['required_if:mode,and', 'missing_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             // 空のまとまりは、どのカクテルも満たせない条件になるので弾く(画面は空のまとまりを送らない)
             // 1 つのまとまりの件数にも上限を掛け、after の総数の上限の前に巨大な配列を検証しないようにする
             'category_groups.*' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],

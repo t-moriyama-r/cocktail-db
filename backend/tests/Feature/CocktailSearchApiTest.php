@@ -330,6 +330,15 @@ describe('AND 検索の条件の検証', function () {
             ->assertOnlyJsonValidationErrors(['category_ids']);
     });
 
+    it('TC-164-19: 方式に合わない項目は、空の配列でも 422', function () {
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [cocktailSearchIds($this->n, 'ラム')], 'category_ids' => []])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_ids']);
+        cocktailSearchPost($this, ['category_ids' => cocktailSearchIds($this->n, 'ラム'), 'category_groups' => []])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+    });
+
     it('TC-164-13: or(mode を省いたときも)で category_groups を送ると 422', function (?string $mode) {
         $body = [
             'category_ids' => cocktailSearchIds($this->n, 'ラム'),
