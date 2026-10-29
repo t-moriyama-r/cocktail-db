@@ -5,6 +5,8 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
+use App\Models\Dictionary;
+use App\Models\Method;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -249,4 +251,69 @@ it('TC-157-13: 調べるだけで、データを書き換えない', function ()
         DB::table('affiliates')->orderBy('id')->get()->toArray(),
         DB::table('categories')->orderBy('id')->get()->toArray(),
     ])->toEqual($before);
+});
+
+it('TC-285-12: 説明文の参照(大文字を含む)がすべて指す先のあるものなら、問題なしで 0 で終わる', function () {
+    $data = verifyDataFixture();
+    $n = $data['nodes'];
+    $rumSoda = $data['cocktails']['ラムソーダ'];
+    $dictionary = Dictionary::factory()->create(['description' => '@n'.$n['ラム']->id.'@']);
+    $method = Method::factory()->create(['description' => '@D'.$dictionary->id.'@']);
+    $n['ジン']->update(['description' => "@n{$n['ラム']->id}@と@c{$rumSoda->id}@"]);
+    $data['brands']['バカルディ']->update(['description' => "@N{$n['ホワイトラム']->id}@"]);
+    $rumSoda->update(['description' => "@b{$data['brands']['ビーフィーター']->id}@", 'note' => "@d{$dictionary->id}@・@m@・a@example.com"]);
+    expect($method->description)->toBe("@D{$dictionary->id}@");
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('問題なし');
+});
+
+it('TC-285-13: 説明文の参照の指す先が無いと、どの表のどの行の列か・どの参照かを挙げて失敗する', function (string $table, string $column, string $label) {
+    $data = verifyDataFixture();
+    $row = match ($table) {
+        'categories' => $data['nodes']['ジン'],
+        'brands' => $data['brands']['バカルディ'],
+        'cocktails' => $data['cocktails']['ラムソーダ'],
+        'methods' => Method::factory()->create(),
+        default => Dictionary::factory()->create(),
+    };
+    DB::table($table)->where('id', $row->id)->update([$column => '前@n999@・@C998@・@b997@・@d996@後']);
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('整合性が破れている(4 件)')
+        ->and($output)->toContain('説明文の参照の指す先が無い')
+        ->and($output)->toContain("{$label} #{$row->id} {$row->name} の {$column}")
+        ->and($output)->toContain('@n999@ の指す先のノード #999 が無い')
+        ->and($output)->toContain('@C998@ の指す先のカクテル #998 が無い')
+        ->and($output)->toContain('@b997@ の指す先の銘柄 #997 が無い')
+        ->and($output)->toContain('@d996@ の指す先の用語 #996 が無い');
+})->with([
+    'ノードの説明' => ['categories', 'description', 'ノード'],
+    '技法の説明' => ['methods', 'description', '技法'],
+    '用語の説明' => ['dictionaries', 'description', '用語'],
+    '銘柄の説明' => ['brands', 'description', '銘柄'],
+    'カクテルの説明' => ['cocktails', 'description', 'カクテル'],
+    'カクテルの補足' => ['cocktails', 'note', 'カクテル'],
+]);
+
+it('TC-285-14: 説明文に旧の記法(@p・@m)が残っていると、その記法を挙げて失敗する', function () {
+    $data = verifyDataFixture();
+    $rumSoda = $data['cocktails']['ラムソーダ'];
+    // @c と @p が @ を 1 つ分け合う形(旧は 2 つの参照として読んでいた)も、@p が残ったものとして見つける
+    $rumSoda->update(['description' => '@p1@と@M2@', 'note' => "@c{$rumSoda->id}@p3@"]);
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('整合性が破れている(3 件)')
+        ->and($output)->toContain('説明文に旧の記法')
+        ->and($output)->toContain("カクテル #{$rumSoda->id} ラムソーダ の description")
+        ->and($output)->toContain('旧の記法 @p1@ が残っている')
+        ->and($output)->toContain('旧の記法 @M2@ が残っている')
+        ->and($output)->toContain("カクテル #{$rumSoda->id} ラムソーダ の note")
+        ->and($output)->toContain('旧の記法 @p3@ が残っている');
 });
