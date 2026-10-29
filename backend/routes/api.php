@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\PasskeyController;
 use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
+use App\Http\Controllers\CategoryDetailController;
 use App\Http\Controllers\CocktailDetailController;
 use App\Http\Controllers\CocktailListController;
 use App\Http\Controllers\CocktailSameNameController;
@@ -40,6 +41,9 @@ Route::post('/legacy/search-condition', LegacySearchConditionController::class);
 // ID は int に収まる桁数に縛る(超える数字は経路に合わず 404。TypeError の 500 にしない)
 Route::get('/cocktails/{cocktail}', CocktailDetailController::class)->where('cocktail', '[0-9]{1,18}');
 Route::get('/cocktails/{cocktail}/same-name', CocktailSameNameController::class)->where('cocktail', '[0-9]{1,18}');
+
+// ノードの詳細(#42)。旧のカテゴリ・ミドルの詳細を、任意の深さのノードで 1 つにしたもの
+Route::get('/categories/{category}', CategoryDetailController::class)->where('category', '[0-9]{1,18}');
 
 Route::get('/dictionaries', DictionaryIndexController::class);
 Route::get('/dictionaries/{dictionary}', DictionaryDetailController::class)->where('dictionary', '[0-9]{1,18}');

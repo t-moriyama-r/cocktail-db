@@ -478,6 +478,49 @@
                 }
             }
         },
+        "/categories/{category}": {
+            "get": {
+                "operationId": "categoryDetail",
+                "description": "\u65e7\u306e\u30ab\u30c6\u30b4\u30ea(DetailController@category)\u3068\u30df\u30c9\u30eb(@middle)\u306e\u8a73\u7d30\u3092\u3001\u4efb\u610f\u306e\u6df1\u3055\u306e\u30ce\u30fc\u30c9\u3067 1 \u3064\u306b\u3057\u305f\u3082\u306e\u3002\n\u6839(\u5927\u5143)\u3082\u8fd4\u3059\u3002\u7121\u3044\u30ce\u30fc\u30c9\u306f 404(\u65e7\u306f 500 \u3060\u3063\u305f\u3002docs/decisions/category-detail.md)\u3002",
+                "summary": "\u30ce\u30fc\u30c9\u306e\u8a73\u7d30\u3092\u8fd4\u3059\u3002\u57fa\u672c\u60c5\u5831\u30fb\u6839\u304b\u3089\u306e\u30d1\u30f3\u304f\u305a\u30fb\u5b50\u306e\u30ce\u30fc\u30c9\u30fb\u6709\u540d\u306a\u9298\u67c4\u3068\u3001\u305d\u306e\u30ce\u30fc\u30c9\u306e\u914d\u4e0b\u3059\u3079\u3066(\u81ea\u5206\u3092\u542b\u3080)\u306e\u9298\u67c4\u3002",
+                "tags": [
+                    "CategoryDetail"
+                ],
+                "parameters": [
+                    {
+                        "name": "category",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CategoryDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CategoryDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            }
+        },
         "/cocktails/{cocktail}": {
             "get": {
                 "operationId": "cocktailDetail",
@@ -2595,6 +2638,222 @@
                     "updated_at"
                 ],
                 "title": "BrandResource"
+            },
+            "BrandSummaryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "strength": {
+                        "type": "number",
+                        "description": "\u5ea6\u6570(%)"
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "path": {
+                        "type": "array",
+                        "description": "\u6839\u304c\u5148\u982d\u3067\u3001\u6240\u5c5e\u30ce\u30fc\u30c9\u304c\u672b\u5c3e",
+                        "items": {
+                            "$ref": "#/components/schemas/NodeRefResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "strength",
+                    "youtube",
+                    "path"
+                ],
+                "title": "BrandSummaryResource"
+            },
+            "CategoryDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "const": "text"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "type",
+                                        "text"
+                                    ]
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "node",
+                                                "cocktail",
+                                                "brand",
+                                                "dictionary"
+                                            ]
+                                        },
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        },
+                                        "has_youtube": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "type",
+                                        "id",
+                                        "text",
+                                        "has_youtube"
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "is_like": {
+                        "type": "boolean"
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube_created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "youtube_start_seconds": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "path": {
+                        "type": "array",
+                        "description": "\u6839\u304c\u5148\u982d\u3067\u3001\u3053\u306e\u30ce\u30fc\u30c9\u304c\u672b\u5c3e",
+                        "items": {
+                            "$ref": "#/components/schemas/NodeRefResource"
+                        }
+                    },
+                    "children": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/NodeRefResource"
+                        }
+                    },
+                    "famous_brand": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/BrandSummaryResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "brands": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BrandSummaryResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "description",
+                    "is_major",
+                    "is_like",
+                    "youtube",
+                    "youtube_created_at",
+                    "youtube_start_seconds",
+                    "image",
+                    "image_txt",
+                    "image_url",
+                    "created_at",
+                    "updated_at",
+                    "path",
+                    "children",
+                    "famous_brand",
+                    "brands"
+                ],
+                "title": "CategoryDetailResource"
             },
             "CategoryRole": {
                 "type": "string",
