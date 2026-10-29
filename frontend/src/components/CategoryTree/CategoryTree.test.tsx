@@ -183,7 +183,7 @@ describe('CategoryTree', () => {
     expect(screen.getByRole('checkbox', { name: 'ラム' })).toBeInTheDocument()
   })
 
-  test('TC-305-10: 見出しのノードは、単一選択でも複数選択でも選ぶ入力と名前のボタンを出さず、開閉はできる', () => {
+  test('TC-305-09: 見出しのノードは、単一選択でも複数選択でも選ぶ入力と名前のボタンを出さず、開閉はできる', () => {
     const isHeading = (node: CategoryTreeNode) => node.id === 1
     const { unmount } = render(
       <CategoryTree
@@ -215,7 +215,7 @@ describe('CategoryTree', () => {
     expect(screen.queryByRole('checkbox', { name: 'ラム' })).not.toBeInTheDocument()
   })
 
-  test('TC-305-11: 行に足すクラスと、名前の後ろの注記を、ノードごとに外から渡せる', () => {
+  test('TC-305-10: 行に足すクラスと、名前の後ろの注記を、ノードごとに外から渡せる', () => {
     render(
       <CategoryTree
         label="カテゴリ"

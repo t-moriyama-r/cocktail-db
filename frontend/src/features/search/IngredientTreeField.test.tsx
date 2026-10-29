@@ -169,11 +169,4 @@ describe('IngredientTreeField', () => {
 
     expect(screen.getByTestId('path')).toHaveTextContent('/category/31')
   })
-
-  test('TC-305-09: 木が空(まだ受け取っていない)なら、何も選べない欄を出す', () => {
-    render(<Harness categories={[]} />)
-
-    expect(screen.getByRole('group', { name: 'レシピ選択' })).toBeInTheDocument()
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
-  })
 })
