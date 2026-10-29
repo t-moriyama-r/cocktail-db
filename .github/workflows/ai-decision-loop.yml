@@ -82,7 +82,8 @@ jobs:
                改めて判断を頼むときは、設計の用語や記号に頼らず、話し言葉で書く。問いごとに、このアプリで実際に起きる場面を具体例として挙げ、
                案ごとに「こう選ぶと、こうなる」「その代わり、ここが困る」を並べ、おすすめと理由を添える。
                最後に、短く答えられる形(「全部おすすめで」「2 だけ B で」など)を示す。
-               並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、文章の説明は最後に畳む)
+               並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、文章の説明は最後に畳む)。
+               図(Mermaid)のラベルは、ノードは全角 12 字・矢印のラベルは全角 6 字まで(半角は 0.5 字と数える。長くなるときは `<br>` で折り、説明の文は図に入れず比較表に書く)
                - 判断になっていない(質問を返している・どちらとも取れる・決めることの一部にしか答えていない)
                - 判断の結果、人にしかできない作業が要る(アカウントを作る・費用の承認・外部への問い合わせなど)
                - 判断の結果、issue を分ける・新しく作る・依存(Blocked by)を変える必要がある。issue は自分では作らず、どう変えるとよいかを書く
@@ -96,6 +97,24 @@ jobs:
             4. issue に「<!-- ai-dev:agent --> 決まったことを本文に反映した: <1〜3 行の要約>」とコメントする
             5. 最後に `gh issue edit ${{ env.ISSUE }} --remove-label needs-decision` でラベルを外す(外すと、着手できる issue に並ぶ)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。
+
+      # Claude Code は作業ディレクトリのファイルを書き換えられるので、字数を数えるスクリプトは既定のブランチから取り直す
+      - uses: actions/checkout@v6
+        if: always() && steps.live.outputs.open == 'true'
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # 図のラベルが長いと GitHub で見切れる(#478)。この回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        if: always() && steps.live.outputs.open == 'true'
+        continue-on-error: true
+        env:
+          SINCE: ${{ github.event.comment.created_at }}
+        run: bash .ai-dev/.github/scripts/mermaid-labels-comments.sh "$REPO" "$ISSUE" "$SINCE"
 
       # 人の返信は読まれないまま残る。気づけるように issue に書いておく(目印付きなので、このワークフローは起動しない)
       - name: Claude Code が動かなかったことを issue に書く

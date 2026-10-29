@@ -129,6 +129,12 @@ jobs:
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
           echo "go=true" >> "$GITHUB_OUTPUT"
 
+      # 図のラベルの字数を、この時刻より後に書いたコメントだけで確かめる(後ろの「図のラベルの字数を確かめる」)
+      - name: Claude Code を動かす前の時刻
+        id: start
+        if: steps.live.outputs.go
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
         if: steps.live.outputs.go
@@ -203,7 +209,8 @@ jobs:
             中身は、どのファイルのどこで、PR 側と develop 側がそれぞれ何をしようとしてぶつかったかと、決めてほしいことを選択肢 2〜3 個で
             (それぞれ「こう選ぶと、こうなる」「その代わり、ここが困る」、おすすめと理由)。設計の用語や記号に頼らず話し言葉で書き、
             短く答えられる形(「おすすめで」「B で」など)を示す。並びと形は CLAUDE.md の「人に判断を頼むとき」に従う
-            (1 行目に何を決めてほしいか、両側の変更と案ごとの混ぜ方の図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、ぶつかった箇所の細かい説明は最後に畳む)。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
+            (1 行目に何を決めてほしいか、両側の変更と案ごとの混ぜ方の図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、ぶつかった箇所の細かい説明は最後に畳む)。
+            図(Mermaid)のラベルは、ノードは全角 12 字・矢印のラベルは全角 6 字まで(半角は 0.5 字と数える。長くなるときは `<br>` で折り、説明の文は図に入れず比較表に書く)。オーナーが返信すると、ai-review-loop.yml の Claude Code がそのとおりに取り込む。
 
             手元に頼むとき(`package-lock.json` の衝突など、判断は要らないがこの環境では片付けられない)は、push せずに `git merge --abort` で取り込みを取り消し、
             PR にコメントを書いてから `gh pr edit ${{ env.PR }} --add-label needs-local` で `needs-local` を付けて終える(PC を開いたときに手元の見回りが片付ける)。
@@ -211,6 +218,24 @@ jobs:
             中身は、手元でそのまま流せる手順(develop の取り込み・衝突したファイルごとの混ぜ方・作り直すコマンド(CLAUDE.md の「API を変えたら」など)・流すテスト)。
             人に頼む衝突もあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
+
+      # PR のブランチの checkout が .ai-dev を消し、Claude Code は作業ディレクトリのファイルを書き換えられるので、既定のブランチのスクリプトを取り直す
+      - uses: actions/checkout@v6
+        if: always() && steps.start.outputs.at
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # 図のラベルが長いと GitHub で見切れる(#478)。この回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        if: always() && steps.start.outputs.at
+        continue-on-error: true
+        env:
+          SINCE: ${{ steps.start.outputs.at }}
+        run: bash .ai-dev/.github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
 
       # after は PR ごとに、この回で取り込みを試したかを知る必要がある(matrix のジョブの outputs は PR ごとに分けられない)。
       # Claude Code の push が拒否された後に人が push しても、head は進む。この回の Claude Code が push した head だけを解消したものとして渡す
