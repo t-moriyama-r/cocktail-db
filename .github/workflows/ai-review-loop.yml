@@ -610,3 +610,27 @@ jobs:
           PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
           CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: bash .github/scripts/request-review.sh "$REPO" "$PR"
+
+  # untrusted-hold.sh が止めた回は、notify-resume・notify-review が動かない(マージの確かめ・レビューの依頼もしない)。
+  # GITHUB_TOKEN で付けた needs-human では Slack の通知が起きないので、通知だけをここから呼ぶ(決め方は untrusted-notify.sh。#494)
+  notify-untrusted:
+    needs: [resume, review]
+    if: always() && (needs.resume.result != 'skipped' || needs.review.result != 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write   # 通知のワークフローを gh workflow run で呼ぶ。この回の開始時刻を読む
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.number }}
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$PR" "$since" || echo "::warning::#$PR を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"

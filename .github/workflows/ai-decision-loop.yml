@@ -159,3 +159,14 @@ jobs:
           if [ -n "$asked" ]; then
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$ISSUE" -f label=needs-decision
           fi
+
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # decide で untrusted-hold.sh が止めた issue は needs-human が付くが、GITHUB_TOKEN で付けたので通知が起きない(決め方は untrusted-notify.sh。#494)
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$ISSUE" "$since" || echo "::warning::#$ISSUE を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"

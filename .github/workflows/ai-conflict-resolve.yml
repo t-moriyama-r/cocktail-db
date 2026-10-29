@@ -590,3 +590,10 @@ jobs:
       - name: 状態のラベルを付け替える
         if: always() && steps.tried.outcome == 'success'
         run: bash .github/scripts/pr-status.sh "$REPO" "$PR" || true
+
+      # resolve で untrusted-hold.sh が止めた PR は、試した印が無いので上の手順が動かない(決め方は untrusted-notify.sh。#494)
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        if: always()
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$PR" "$since" || echo "::warning::#$PR を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"

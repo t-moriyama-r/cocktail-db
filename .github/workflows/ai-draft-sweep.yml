@@ -244,6 +244,12 @@ jobs:
           done
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
 
+      # recover で untrusted-hold.sh が止めた PR は、引き継いだ目印が無いので上では知らせない(決め方は untrusted-notify.sh。#494)
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$PR" "$since" || echo "::warning::#$PR を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"
+
       # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
       # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。
       # GITHUB_TOKEN で ready にした回は ready_for_review の CI が起きず、draft のときに飛ばした回しか無い(#410)ので、ci-rerun.yml が開き直して流す。
