@@ -21,7 +21,7 @@
 # そのためワークフローを直すことになったら、Claude Code は push せずに差分をコメントし、needs-local で手元に当ててもらう
 #
 # Actions の中で付けたラベルは、Slack の通知のワークフローを起こさないことがある(GITHUB_TOKEN で付けたとき)。
-# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-local・needs-manual を見て、通知のワークフローを直接呼ぶ。
+# そのため Claude Code が終わった後に、新しく付いた needs-human・needs-manual を見て、通知のワークフローを直接呼ぶ(needs-local は人がすることが無いので知らせない。#516)。
 # Claude Code は PR・レビューのコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限
 # (actions: write。deploy.yml も起動できてしまう)を渡さず、通知を呼ぶジョブ(notify-*)だけに渡す
 #
@@ -259,7 +259,7 @@ jobs:
         run: bash .github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
 
       # needs-approval はここでは新しく付かない(マージできる状態になったときに ai-auto-merge.yml が付ける)
-      - name: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -270,7 +270,7 @@ jobs:
           # 「済」は見た目の印なので、呼べなくても後ろの通知(本来の仕事)まで進む
           gh workflow run notify-needs-human.yml -R "$REPO" -f label=done || echo "::warning::片付いた通知に「済」を付けるワークフローを呼べなかった"
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-local needs-manual; do
+          for label in needs-human needs-manual; do
             if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
@@ -572,7 +572,7 @@ jobs:
       # 指摘への対応が終わったら、マージできる状態か(CI・コンフリクト)を ai-auto-merge.yml に確かめさせる。
       # Claude Code が外した ai-in-actions は、GITHUB_TOKEN で外したときは ai-auto-merge.yml を起こさないので、直接呼ぶ。
       # 直して再レビューを頼んだ回や、人に頼んだ回では、ai-auto-merge.yml の方で見送られる
-      - name: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせ、マージできるかを確かめさせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせ、マージできるかを確かめさせる
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -580,7 +580,7 @@ jobs:
           BEFORE: ${{ needs.review.outputs.before }}
         run: |
           after=$(gh pr view "$PR" -R "$REPO" --json labels --jq '[.labels[].name] | join(",")')
-          for label in needs-human needs-local needs-manual; do
+          for label in needs-human needs-manual; do
             if [[ ",$after," == *",$label,"* && ",$BEFORE," != *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
