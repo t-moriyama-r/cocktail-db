@@ -26,6 +26,8 @@
 # - 送るのは B2 の native API(b2_authorize_account・b2_get_upload_url・b2_upload_file)。サーバーには aws コマンドも
 #   rclone も無く、curl の --aws-sigv4 はサーバーの版(7.76)ではアップロードの署名の扱いが確かめられないため、
 #   署名の要らない native API を curl で呼ぶ。JSON は perl の JSON::PP で読む(サーバーに jq が無い)
+# - API は v4 で呼ぶ。今の b2 CLI でバケットを限定して作ったキーは、v3 以前の b2_authorize_account では
+#   bad_request で断られ、v4 でだけ認証できるため
 # - キーの値とトークンはコマンドラインに出さない(ps で見えるため)。curl の設定として標準入力から渡す
 # - キーに消す権限(deleteFiles・bypassGovernance)や保持期間を変える権限があれば、送らずに 1 で止まる。
 #   サーバーが乗っ取られたときに、B2 の写しまで消されないようにするため。古い写しは B2 のライフサイクルと
@@ -94,7 +96,7 @@ CURL=${OFFSITE_CURL:-curl}
 GPG=${OFFSITE_GPG:-gpg}
 ATTEMPTS=${OFFSITE_ATTEMPTS:-3}
 RETRY_WAIT=${OFFSITE_RETRY_WAIT:-10}
-AUTH_URL=https://api.backblazeb2.com/b2api/v3/b2_authorize_account
+AUTH_URL=https://api.backblazeb2.com/b2api/v4/b2_authorize_account
 WORK_DIR=''
 API_URL=''
 API_TOKEN=''
@@ -149,7 +151,7 @@ upload_with_retry() {
 # 送るたびに送り先の URL を取り直す(B2 の決まり。失敗した URL は使い回さない)
 upload_once() {
   local bucket_id=$1 file=$2 b2_name=$3 sha1=$4 resp=$WORK_DIR/response.json code
-  code=$(b2_curl "$resp" "$API_URL/b2api/v3/b2_get_upload_url" -X POST \
+  code=$(b2_curl "$resp" "$API_URL/b2api/v4/b2_get_upload_url" -X POST \
     -H 'Content-Type: application/json' --data "{\"bucketId\":\"$bucket_id\"}" \
     <<<"header = \"Authorization: $API_TOKEN\"") || code=000
   if [[ $code != 200 ]]; then

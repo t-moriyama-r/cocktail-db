@@ -107,7 +107,7 @@ B2 に送れなかった日は、古い世代を**消す**(終了コード 3 で
 
 `daily-backup.sh` に `--offsite <設定ファイル>` を付けると、その日の組ができた後に `offsite-upload.sh` が、組の 6 つのファイル(`db/` のダンプ・`.counts.tsv`・`.sha256`、`storage/` のアーカイブ・`.check.tsv`・`.tar.gz.sha256`)を 1 つずつ gpg の公開鍵で暗号化し、`<B2_PREFIX>db/<名前>.gpg`・`<B2_PREFIX>storage/<名前>.gpg` の名前で B2 に送る。`.sha256` を最後に送るので、B2 に `.sha256.gpg` がある組は、ほかのファイルも送り終えている。
 
-- 送るのは B2 の native API(`b2_authorize_account`・`b2_get_upload_url`・`b2_upload_file`)を curl で呼ぶ。サーバーには `aws` コマンドも rclone も無く、curl の `--aws-sigv4` はサーバーの版(7.76)ではアップロードの署名の扱いを確かめられないため。native API は署名が要らず、curl と sha1sum と perl(JSON を読む)だけで送れる。1 つのファイルは 5GB まで(今は 1 組 50MB ほど)
+- 送るのは B2 の native API(`b2_authorize_account`・`b2_get_upload_url`・`b2_upload_file`)を curl で呼ぶ。サーバーには `aws` コマンドも rclone も無く、curl の `--aws-sigv4` はサーバーの版(7.76)ではアップロードの署名の扱いを確かめられないため。native API は署名が要らず、curl と sha1sum と perl(JSON を読む)だけで送れる。1 つのファイルは 5GB まで(今は 1 組 160MB ほど)
 - 暗号化は gpg(サーバーにある。age は無い)。鍵束は使い捨ての一時ディレクトリに作り、`--recipient-file` で公開鍵のファイルを直接使う
 - キーに消す権限・保持期間を変える権限(`deleteFiles`・`bypassGovernance`・`writeFileRetentions`・`writeBucketRetentions`)があると、送らずに止まる。公開鍵のファイルに秘密鍵が入っていても止まる
 - 送るのに失敗すると、1 つのファイルにつき 3 回まで送り直す。それでも送れなければ、`daily-backup.sh` は古い世代を消したうえで終了コード 3 で終わり、cron のメールに「daily-backup が失敗した(終了コード 3)」が届く。ログに、どのファイルで、HTTP のステータスと B2 のエラーが何だったかが出る
@@ -120,7 +120,7 @@ B2 に送れなかった日は、古い世代を**消す**(終了コード 3 で
 3. バケットの設定で、保持期間を決める
    - **Object Lock の Default Retention**: モードは **Governance**、期間は **35 日**。Governance は、`bypassGovernance` の権限を持つキー(マスターのキー)だけが期限の前に消せる。サーバーに置くキーには付けないので、サーバーが乗っ取られても消せない。間違えて送ったものは人がマスターのキーで消せる
    - **Lifecycle Settings**: 送る名前の先頭(`B2_PREFIX`。例: `cocktail/`)に、`Days till hide` を **35**、`Days till delete` を **1** で付ける(日付で数える。保持期間の切れた 36 日目に消える)
-   - 35 日にするのは、サーバーの世代(日次 7・週次 4。およそ 4〜5 週戻れる)に合わせるため。B2 には毎日の組を全部残すので、今の量(1 組 50MB ほど)で 1.8GB ほど。無料の 10GB に収まる
+   - 35 日にするのは、サーバーの世代(日次 7・週次 4。およそ 4〜5 週戻れる)に合わせるため。B2 には毎日の組を全部残すので、今の量(1 組 160MB ほど。2026-10 に測った)で 5.7GB ほど。無料の 10GB に収まる
 4. サーバーに置くキーを作る。権限は **`listFiles`・`writeFiles` だけ**、対象はこのバケットだけにする。Web の画面ではほかの権限が付くことがあるので、手元の PC で B2 の CLI(`b2`)から作る
 
    ```bash

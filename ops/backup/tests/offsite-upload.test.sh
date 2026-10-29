@@ -238,8 +238,8 @@ case $url in
     caps=$(printf '"%s",' ${FAKE_CAPS:-listFiles writeFiles}); caps=${caps%,}
     respond 200 "{\"accountId\":\"a\",\"authorizationToken\":\"fake-account-token\",\"apiInfo\":{\"storageApi\":{\"apiUrl\":\"https://api.fake\",\"allowed\":{\"buckets\":[{\"id\":\"bucket-1\",\"name\":\"b\"}],\"capabilities\":[$caps]}}}}"
     ;;
-  https://api.fake/b2api/v3/b2_get_upload_url)
-    respond 200 '{"bucketId":"bucket-1","uploadUrl":"https://upload.fake/b2api/v3/b2_upload_file/bucket-1/x","authorizationToken":"fake-upload-token"}'
+  https://api.fake/b2api/v4/b2_get_upload_url)
+    respond 200 '{"bucketId":"bucket-1","uploadUrl":"https://upload.fake/b2api/v4/b2_upload_file/bucket-1/x","authorizationToken":"fake-upload-token"}'
     ;;
   https://upload.fake/*)
     n=$(($(cat "$FAKE_DIR/upload-count" 2>/dev/null || echo 0) + 1))
