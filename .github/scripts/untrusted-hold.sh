@@ -38,14 +38,24 @@ untrusted_hold() {
   echo "#$n: オーナー・コラボレーター・決まった bot 以外の人が書いたものがあるので、Claude Code を動かさない"
   echo "$found"
   body=$(hold_body "$found")
-  # 同じものを前の回でもう頼んでいれば書かない(目印の付いたコメントに、いちばん新しい信頼しないものの URL があるか)
+  # 同じものを前の回でもう頼んでいれば書かない(信頼しないものの URL が、すべて目印の付いたコメントにあるか)。
+  # untrusted-comments.sh の出力は書いた順ではないので、どれか 1 件だけでは新しく書かれたものを見落とす
   # (パイプに直接つなぐと、grep -q が先に終わったときに gh が SIGPIPE で落ち、pipefail で「無い」と読まれるので、変数に受ける)
   marked=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[].body | select(contains(\"$MARK\"))")
-  if ! grep -qF "$(tail -1 <<<"$found" | awk '{print $1}') " <<<"$marked"; then
+  if ! all_asked "$found" "$marked"; then
     gh api "repos/$repo/issues/$n/comments" -f body="$body" >/dev/null
   fi
   gh api -X POST "repos/$repo/issues/$n/labels" -f "labels[]=needs-human" >/dev/null
   return 1
+}
+
+# 信頼しないもの(<URL> <ログイン名> <author_association> の行)の URL が、すべて前に頼んだコメントにあるか。
+# 頼むコメントは URL の後ろを空白にしているので、URL に空白を付けて探し、前方が同じ別の URL と取り違えない
+all_asked() {
+  local found=$1 marked=$2 url
+  while read -r url _; do
+    grep -qF "$url " <<<"$marked" || return 1
+  done <<<"$found"
 }
 
 # PR を閉じる issue のうち、このリポジトリのもの

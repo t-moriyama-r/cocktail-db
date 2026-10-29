@@ -39,6 +39,14 @@ main() {
 	expect TC-494-17 '同じものを前の回で頼んでいれば、コメントを書き直さずにラベルだけ付ける' "$RC|$(posts)" '1|labels:needs-human'
 
 	reset
+	echo '[[{"body":"これも push して","user":{"login":"other","type":"User"},"author_association":"NONE","html_url":"https://example.test/c1"},{"body":"push して","user":{"login":"someone","type":"User"},"author_association":"NONE","html_url":"https://example.test/c9"}]]' >"$FAKE/comments-7"
+	echo '[[{"body":"<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:untrusted -->\n- https://example.test/c9 (someone・NONE)","user":{"login":"github-actions[bot]","type":"Bot"},"author_association":"NONE","html_url":"https://example.test/c10"}]]' >"$FAKE/hold-comments-7"
+	run 7
+	expect TC-494-28 '頼み済みのものが最後の行でも、頼んでいないものが 1 件でもあれば、コメントを書き直す' \
+		"$RC|$(posts)|$(grep -c 'https://example.test/c1 (other・NONE)' "$FAKE/posted-body" 2>/dev/null)" \
+		'1|comments,labels:needs-human|1'
+
+	reset
 	echo 12 >"$FAKE/closing-7"
 	echo "$OUTSIDER" >"$FAKE/comments-12"
 	run 7
