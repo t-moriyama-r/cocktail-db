@@ -64,6 +64,20 @@ main() {
 	run 7
 	expect TC-494-20 'issue でも同じく止める(閉じる issue は探さない)' "$RC|$(posts)|$(grep -c 'pr view' "$FAKE/calls")" '1|comments,labels:needs-human|0'
 
+	reset
+	echo 12 >"$FAKE/closing-7"
+	echo "$OUTSIDER" >"$FAKE/comments-12"
+	touch "$FAKE/kind-fails"
+	run 7
+	expect TC-494-29 'PR か issue かを読めなかったら、閉じる issue を見ないまま動かさずに止める(1)。何も書かない' "$RC|$(posts)" '1|'
+
+	reset
+	echo 12 >"$FAKE/closing-7"
+	echo "$OUTSIDER" >"$FAKE/comments-12"
+	touch "$FAKE/pr-view-fails"
+	run 7
+	expect TC-494-30 '閉じる issue を読めなかったら、PR だけ見て動かさずに止める(1)。何も書かない' "$RC|$(posts)" '1|'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -75,6 +89,8 @@ setup_fake_gh() {
 #!/usr/bin/env bash
 echo "gh $*" >>"$FAKE/calls"
 if [ -f "$FAKE/api-fails" ] && [[ "$*" == *"/comments?"* ]]; then echo "HTTP 502: api failed" >&2; exit 1; fi
+if [ -f "$FAKE/kind-fails" ] && [[ "$*" == *"has(\"pull_request\")"* ]]; then echo "HTTP 502: api failed" >&2; exit 1; fi
+if [ -f "$FAKE/pr-view-fails" ] && [[ "$*" == "pr view "* ]]; then echo "GraphQL: rate limited" >&2; exit 1; fi
 num() { local p=${1#*/issues/}; p=${p#*/pulls/}; echo "${p%%[/?]*}"; }
 case "$*" in
 	"api repos/o/r/issues/"*"/comments -f body="*)
@@ -100,7 +116,7 @@ SH
 }
 
 reset() {
-	rm -f "$FAKE"/calls "$FAKE"/api-fails "$FAKE"/out "$FAKE"/err "$FAKE"/posts "$FAKE"/posted-body \
+	rm -f "$FAKE"/calls "$FAKE"/api-fails "$FAKE"/kind-fails "$FAKE"/pr-view-fails "$FAKE"/out "$FAKE"/err "$FAKE"/posts "$FAKE"/posted-body \
 		"$FAKE"/comments-* "$FAKE"/hold-comments-* "$FAKE"/closing-* "$FAKE"/issue-only-*
 	: >"$FAKE/calls"
 }

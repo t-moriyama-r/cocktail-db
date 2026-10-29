@@ -19,14 +19,23 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 MARK='<!-- ai-dev:untrusted -->'
 
 untrusted_hold() {
-  local repo=${1:-} n=${2:-} numbers found body marked
+  local repo=${1:-} n=${2:-} numbers is_pr closing found body marked
   if [ -z "$repo" ] || [ -z "$n" ]; then
     echo "$USAGE" >&2
     return 2
   fi
   numbers=$n
-  if gh api "repos/$repo/issues/$n" --jq 'has("pull_request")' | grep -qx true; then
-    numbers="$n $(closing_issues "$repo" "$n")"
+  # PR かどうか・閉じる issue を読めなかったときに、閉じる issue を見ないまま「動かしてよい」にしない
+  if ! is_pr=$(gh api "repos/$repo/issues/$n" --jq 'has("pull_request")'); then
+    echo "#$n: PR か issue かを確かめられなかったので、Claude Code を動かさない(次の回で確かめ直す)"
+    return 1
+  fi
+  if [ "$is_pr" = true ]; then
+    if ! closing=$(closing_issues "$repo" "$n"); then
+      echo "#$n: 閉じる issue を確かめられなかったので、Claude Code を動かさない(次の回で確かめ直す)"
+      return 1
+    fi
+    numbers="$n $closing"
   fi
   # shellcheck disable=SC2086 # 番号を 1 つずつの引数にする
   if ! found=$(bash "$HERE/untrusted-comments.sh" "$repo" $numbers); then
