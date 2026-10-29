@@ -45,6 +45,7 @@ const hits = (cocktails: number, nodes = 0, brands = 0): NameSearchResponse => (
   cocktails: Array.from({ length: cocktails }, (_, i) => cocktail(i + 1)),
   nodes: Array.from({ length: nodes }, (_, i) => nodeHit(i + 1)),
   brands: Array.from({ length: brands }, (_, i) => brandHit(i + 1)),
+  ingredient_matches: [],
 })
 
 /** 今の URL を出す(移った先を確かめるため) */
