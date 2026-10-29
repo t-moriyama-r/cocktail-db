@@ -36,6 +36,11 @@
   --color-danger: #c62828; /* 文字は --color-on-accent(5.62:1) */
   /* モーダル(#99 の条件検索)の後ろを暗くする色(旧の Vuetify の v-overlay と同じ濃さ) */
   --color-overlay: rgb(33 33 33 / 46%);
+  /* 用語辞典(#56)の一覧の分類の見出しの線(旧 Dictionary/index.vue と同じ値。ほかの見出しの --color-heading-line とは旧でも違った) */
+  --color-dictionary-category-line: #006699;
+  /* 用語辞典の詳細(#56)の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(旧 Dictionary/detail.vue と同じ値) */
+  --color-dictionary-method-line: #3399ff;
+  --color-dictionary-glass-line: #1f0d85;
 
   /* 余白。段階は共通にし、案ごとには倍率だけを変える */
   --space-scale: 1;
