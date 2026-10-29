@@ -6,8 +6,9 @@
 # - pick: .github/scripts/draft-candidates.sh で候補を絞る(条件はスクリプトの先頭)。理由はジョブのログに出す
 # - recover: 候補ごとに Claude Code が PR のブランチで仕上げる。仕上げたら ready にし、
 #   Actions では仕上げられないものは、何が足りないかをコメントし、判断が要るなら needs-human、修正前後の証跡が要る
-#   (この環境では撮れない)だけなら needs-local(手元の作業待ち。PC を開いたときに手元の見回りが撮る)を付ける
-# - notify: 新しく付いた needs-human・needs-local を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
+#   (この環境では撮れない)だけなら needs-local(見回り待ち。PC を開いたときに手元の見回りが撮る)、人が手を動かさないと進まない
+#   作業(Secret の設定など)だけなら needs-manual(手元の作業待ち)を付ける
+# - notify: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)
@@ -92,7 +93,7 @@ jobs:
         id: live
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json isDraft,state,headRefOid,labels)
-          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")' <<<"$pr")
+          label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-decision","ai-in-actions","no-auto-merge"))] | join(",")' <<<"$pr")
           if [ "$(jq -r '.state + (.isDraft | tostring)' <<<"$pr")" != OPENtrue ]; then
             echo "#$PR はもう draft ではない・閉じている"
           elif [ "$(jq -r .headRefOid <<<"$pr")" != "$PICKED_HEAD" ]; then
@@ -113,6 +114,12 @@ jobs:
           gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:draft-sweep sha=$PICKED_HEAD --> draft のまま止まっていたので、Actions の Claude Code が引き継ぐ($ROUND 回目)"
           bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$PR" || true
 
+      # 図のラベルの字数を、この時刻より後に書いたコメントだけで確かめる(後ろの「図のラベルの字数を確かめる」)
+      - name: Claude Code を動かす前の時刻
+        id: start
+        if: steps.live.outputs.run
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
         if: steps.live.outputs.run
@@ -129,7 +136,7 @@ jobs:
             workflows: write
           claude_args: |
             --max-turns 80
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push),Bash(git push origin HEAD),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr checks ${{ env.PR }}:*),Bash(gh pr ready ${{ env.PR }}),Bash(gh pr comment ${{ env.PR }} --body:*),Bash(gh pr edit ${{ env.PR }} --body-file:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions),Bash(gh issue view:*),Bash(gh run view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push),Bash(git push origin HEAD),Bash(gh pr view ${{ env.PR }}:*),Bash(gh pr diff ${{ env.PR }}:*),Bash(gh pr checks ${{ env.PR }}:*),Bash(gh pr ready ${{ env.PR }}),Bash(gh pr comment ${{ env.PR }} --body:*),Bash(gh pr edit ${{ env.PR }} --body-file:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh pr edit ${{ env.PR }} --add-label needs-manual),Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions),Bash(gh issue view:*),Bash(gh run view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} は draft のまま止まっている。実装したエージェントが、ready にする前に途中で落ちたとみられる。
             これを引き継いで仕上げ、ready にしてレビューに回してほしい。今回は ${{ env.ROUND }} 回目の引き継ぎ。
@@ -157,20 +164,43 @@ jobs:
                決めてほしいことは選択肢 2〜3 個で(それぞれの良い点・悪い点、おすすめと理由)、設計の用語や記号に頼らず話し言葉で、
                案ごとに「こう選ぶと、こうなる」「その代わり、ここが困る」を書き、短く答えられる形(「おすすめで」「B で」など)を示す。
                並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、引き継いでしたことは最後に畳む)。
+               図(Mermaid)のラベルは、ノードは全角 12 字・矢印のラベルは全角 6 字まで(半角は 0.5 字と数える。長くなるときは `<br>` で折り(折った 1 行は全角 7 字まで)、説明の文は図に入れず比較表に書く)。
             6. FE・BE のコードを変えていて、証跡(修正前後の比較画像・動画。画面の無い BE は応答の変化)がまだ貼られていない(この環境では撮れない)ときは、
                ready にせず draft のまま、手元のエージェントに撮影を頼む。撮影は人の判断ではないので、5 に当たるものが無ければ `needs-human` ではなく
                `needs-local` を付ける(PC を開いたときに手元の見回りが撮って貼り、ready にする)。PR にコメントを書いてから `needs-local` ラベルを付け、
                `ai-in-actions` ラベルを外して終える。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence --> を付け、
                中身は、引き継いでしたことと、撮ってほしいもの(画面・幅・操作、画面の無い BE ならリクエスト。比べる 2 つのコミット)。
                5 に当たるものもあるときは、5 の頼むコメントに撮ってほしいものも書き足して `needs-human` だけを付ける
+            7. 判断は要らないが、人が手を動かさないと進まない作業(Secret・変数の設定、アカウントへのログイン、外部サービスの画面での設定など、
+               手元のエージェントにもできないもの)が残るときは、ready にせず、`needs-local` ではなく `needs-manual` を付ける(待っていても進まないため)。
+               PR にコメントを書いてから `needs-manual` ラベルを付け、`ai-in-actions` ラベルを外して終える。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-manual --> を付け、
+               中身は、引き継いでしたことと、人にしてほしい操作と、済んだら `needs-manual` を外すこと。5 に当たるものもあるときは 5 のコメントに書き足して `needs-human` だけを付ける
 
             ワークフロー(`.github/workflows/`)のファイルを変えるときは、次に従う。
             - 変えてよいのは、閉じる issue をリポジトリのオーナー(${{ github.repository_owner }})が書いていて、その「やること」がワークフローの変更のときだけ
             - それでも、セキュリティに関わる変更(permissions・secret の扱い・起動のきっかけ(on)・外部への送信・外部のアクションの追加や版の変更・
               Claude Code に渡す権限やツールを広げる)になるときは、変えずに上の「人に頼む」で、何をどう変えるかと懸念を書いて許可を求める
             使えるコマンドは絞ってある(git は status・diff・log・show・add・commit と、`git push`・`git push origin HEAD`。gh は PR #${{ env.PR }} の view・diff・checks・ready・
-            `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --remove-label ai-in-actions` と、`gh issue view`・`gh run view`)。この形のまま使う。
+            `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --add-label needs-manual`・`edit --remove-label ai-in-actions` と、`gh issue view`・`gh run view`)。この形のまま使う。
             返信・コメントの先頭には <!-- ai-dev:agent --> を付ける。決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
+
+      # PR のブランチの checkout が .ai-dev を消し、Claude Code は作業ディレクトリのファイルを書き換えられるので、既定のブランチのスクリプトを取り直す
+      - uses: actions/checkout@v6
+        if: always() && steps.start.outputs.at
+        continue-on-error: true   # 字数を数えるためだけの取り直しなので、落ちても本来の仕事を止めない
+        with:
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      # 図のラベルが長いと GitHub で見切れる(#478)。この回に書いた頼むコメントと本文の図を数え、上限を超えたラベルを ::warning:: で出す。
+      # ログに出すだけなので、失敗しても止めない
+      - name: 図のラベルの字数を確かめる
+        if: always() && steps.start.outputs.at
+        continue-on-error: true
+        env:
+          SINCE: ${{ steps.start.outputs.at }}
+        run: bash .ai-dev/.github/scripts/mermaid-labels-comments.sh "$REPO" "$PR" "$SINCE"
 
       # 印が残ると、ほかの見回り・自動マージが対応中とみなして動かない。Claude Code が外さずに成功扱いで終わること
       # (--max-turns に達したなど)もあるので、成功・失敗に関わらず最後に外す
@@ -200,15 +230,15 @@ jobs:
           sparse-checkout: .github/scripts
           persist-credentials: false
 
-      # 候補は needs-human・needs-local の付いていない PR だけなので、引き継いだ PR にいま付いていれば、引き継いだ Claude Code が付けたもの。
+      # 候補は needs-human・needs-local・needs-manual の付いていない PR だけなので、引き継いだ PR にいま付いていれば、引き継いだ Claude Code が付けたもの。
       # recover で見送った PR(pick の後に人が needs-human を付けたなど)は、付けた側が知らせているので知らせない。
       # matrix のジョブの output は 1 つしか残らないので、引き継いだかは recover が付ける目印のコメントで見分ける
-      - name: 新しく付いた needs-human・needs-local を Slack に知らせ、状態のラベルを付け替えさせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替えさせる
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json labels,comments)
           recovered=$(jq --arg mark "<!-- ai-dev:draft-sweep sha=$PICKED_HEAD -->" 'any(.comments[]; .body | contains($mark))' <<<"$pr")
           labels=$(jq -r '[.labels[].name] | join(",")' <<<"$pr")
-          for label in needs-human needs-local; do
+          for label in needs-human needs-manual; do
             if [ "$recovered" = true ] && [[ ",$labels," == *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi
@@ -222,7 +252,7 @@ jobs:
       - name: 承認待ちで止まった CI を流し直させる
         run: gh workflow run ci-rerun.yml -R "$REPO" -f number="$PR" || echo "::warning::ci-rerun.yml を呼べなかった(1 時間ごとの見回りで拾う)"
 
-      # 引き継いで ready にした PR だけ。draft のまま・人や手元の番(needs-human・needs-local)の PR は request-review.sh が見送る
+      # 引き継いで ready にした PR だけ。draft のまま・人や手元の番(needs-human・needs-local・needs-manual)の PR は request-review.sh が見送る
       - name: ready にした PR のレビューを CodeRabbit に頼む
         env:
           CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}

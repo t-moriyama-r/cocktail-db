@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Services\LegacyImport\AffiliateImporter;
 use App\Services\LegacyImport\BrandImporter;
 use App\Services\LegacyImport\CategoryImporter;
+use App\Services\LegacyImport\CocktailImporter;
+use App\Services\LegacyImport\DescriptionImporter;
 use App\Services\LegacyImport\LegacyImporter;
 use App\Services\LegacyImport\MiscImporter;
 use Illuminate\Console\Command;
@@ -13,7 +15,8 @@ use Illuminate\Console\Command;
  * 旧 DB(接続 legacy)のデータを新しい DB に移す。--only で部分を選ぶと、その部分だけを移す。
  *
  * 部分によっては、先に移した部分の行を外部キーで指す(カクテルは技法・氷・用語辞典を、銘柄はカテゴリ木のノードを指す)ため、
- * --only を付けないときは PARTS に書いた順に流す。
+ * --only を付けないときは PARTS に書いた順に流す。説明文の参照の記法(descriptions。#285)は、指す先をすべて移してから
+ * 直すので最後に流す。
  */
 final class ImportLegacy extends Command
 {
@@ -27,6 +30,8 @@ final class ImportLegacy extends Command
         'categories' => CategoryImporter::class,
         'brands' => BrandImporter::class,
         'affiliates' => AffiliateImporter::class,
+        'cocktails' => CocktailImporter::class,
+        'descriptions' => DescriptionImporter::class,
     ];
 
     public function handle(): int

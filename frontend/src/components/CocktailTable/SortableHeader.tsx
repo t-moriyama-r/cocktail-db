@@ -1,19 +1,19 @@
 import styles from './CocktailTable.module.css'
-import type { CocktailSort, CocktailSortKey } from './CocktailTable.types'
 
 /**
  * 並べ替えられる列の見出し。押せることがキーボード・読み上げでも分かるよう、見出しの中をボタンにする。
- * いま並べ替えている列には、向きの印と aria-sort を付ける
+ * いま並べ替えている列には、向きの印と aria-sort を付ける。
+ * カクテルの一覧の表と銘柄の一覧の表(BrandTable)で使うので、列の名前の型は使う表が決める
  */
-type Props = {
-  sortKey: CocktailSortKey
-  current: CocktailSort | null
+type Props<K extends string> = {
+  sortKey: K
+  current: { key: K; isAsc: boolean } | null
   className: string
-  onSort: (key: CocktailSortKey) => void
+  onSort: (key: K) => void
   children: string
 }
 
-export default function SortableHeader({ sortKey, current, className, onSort, children }: Props) {
+export default function SortableHeader<K extends string>({ sortKey, current, className, onSort, children }: Props<K>) {
   const isSorted = current?.key === sortKey
   const ariaSort = isSorted ? (current.isAsc ? 'ascending' : 'descending') : undefined
   return (

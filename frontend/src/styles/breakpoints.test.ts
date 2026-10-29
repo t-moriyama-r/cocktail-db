@@ -12,9 +12,10 @@ const cssFiles = Object.fromEntries(
 const allowedMinWidths = Object.values(breakpoints).map((px) => `${px}px`)
 const allowedMaxWidths = Object.values(breakpoints).map((px) => `${px - 1}px`)
 
-// 旧が 700px で切っていた、ベースの列だけの例外(docs/design/style.md の「幅の区切り」)
+// 旧が 700px で切っていた、カクテルの表のベースの列と、銘柄の表の所属するノードの段だけの例外(docs/design/style.md の「幅の区切り」)
 const extraMaxWidths: Record<string, string[]> = {
   '../components/CocktailTable/CocktailTable.module.css': ['699px'],
+  '../components/BrandTable/BrandTable.module.css': ['699px'],
 }
 
 /** CSS のメディアクエリに出てくる min-width・max-width の値を、ファイルごとに抜き出す */

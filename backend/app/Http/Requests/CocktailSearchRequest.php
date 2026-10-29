@@ -23,6 +23,11 @@ class CocktailSearchRequest extends FormRequest
     public const MAX_CATEGORY_IDS = 1000;
 
     /**
+     * `method_ids` の件数の上限(#166)。技法の数(旧は 6 つ)を十分に超える大きさ。`category_ids` と同じ理由で置く。
+     */
+    public const MAX_METHOD_IDS = 1000;
+
+    /**
      * 1 ページの件数の既定と上限(#167。画面は 1 ページ 50 件。docs/decisions/search-screen.md の 5)。
      */
     public const PER_PAGE = 50;
@@ -41,14 +46,22 @@ class CocktailSearchRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 方式。省くと or。and(#164)・having(#165)は、受ける形を決めてから足す。それまで受けると、
-            // OR 検索の結果を黙って返してしまう
-            'mode' => ['nullable', 'string', Rule::in(['or'])],
-            // 選んだノード。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
+            // 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は、受ける形を
+            // 決めてから足す。それまで受けると、OR 検索の結果を黙って返してしまう
+            'mode' => ['nullable', 'string', Rule::in(['or', 'having'])],
+            // 選んだノード(or では探す材料、having では手持ちの材料)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
             // 件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
             'category_ids' => ['required', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
             // `integer` は PHP の整数フィルターなので、true や 1.0 も 1 として通る。JSON の整数と数字の文字だけを受ける
             'category_ids.*' => ['required', 'integer', self::notBoolOrFloat(...)],
+            // 技法(#166)。カクテルの技法がこの中にあるものに絞る。省く・null・空の配列なら、すべての技法として扱う
+            // (旧は 1 つ以上が必須だった。docs/decisions/search-screen.md の 6)。無い技法の ID は弾かず、何にも一致しない
+            // (旧と同じ)。件数の上限は category_ids と同じ理由
+            'method_ids' => ['nullable', 'array', 'list', 'max:'.self::MAX_METHOD_IDS],
+            'method_ids.*' => ['required', 'integer', self::notBoolOrFloat(...)],
+            // かんたん検索(#166)。真なら、材料の数(recipe_count。docs/decisions/recipe-count.md)が 3 以下のものに絞る。
+            // 省くと絞らない(旧の画面の既定と同じ)。受ける値は旧と同じ Laravel の boolean(true・false・1・0・"1"・"0")
+            'is_easy' => ['nullable', 'boolean'],
             // 並べ替える列(#167)。省くと ID の順
             'sort' => ['nullable', 'string', Rule::in(CocktailSearchSort::SORTS)],
             // 向き。省くと、列ごとに旧の画面で見出しを最初に押したときの向き(甘さ・評価・度数・動画は降順、ほかは昇順)
@@ -95,6 +108,14 @@ class CocktailSearchRequest extends FormRequest
     }
 
     /**
+     * あるもの検索(手持ちの材料で作れるカクテル)か。
+     */
+    public function isHaving(): bool
+    {
+        return $this->validated('mode') === 'having';
+    }
+
+    /**
      * 選んだノードの ID。
      *
      * @return list<int>
@@ -102,6 +123,26 @@ class CocktailSearchRequest extends FormRequest
     public function categoryIds(): array
     {
         return self::integers($this->validated('category_ids'));
+    }
+
+    /**
+     * 絞り込む技法の ID。省く・null・空の配列なら null(すべての技法)。
+     *
+     * @return list<int>|null
+     */
+    public function methodIds(): ?array
+    {
+        $ids = self::integers($this->validated('method_ids'));
+
+        return $ids === [] ? null : $ids;
+    }
+
+    /**
+     * かんたん検索(材料の数が 3 以下に絞る)か。省くと絞らない。
+     */
+    public function isEasy(): bool
+    {
+        return $this->boolean('is_easy');
     }
 
     /**
