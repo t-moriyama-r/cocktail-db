@@ -176,9 +176,9 @@ jobs:
       - name: Test copy-storage.sh
         run: ops/migrate/tests/copy-storage.test.sh
 
-      # バックアップの世代管理・毎日のバックアップ・手元への取り込み(ops/backup)。DB を使わない
+      # バックアップの世代管理・毎日のバックアップ・手元への取り込み・B2 への送信(ops/backup)。DB を使わない
       - name: ShellCheck (backup rotation)
-        run: shellcheck ops/backup/prune-backups.sh ops/backup/daily-backup.sh ops/backup/pull-backups.sh ops/backup/tests/prune-backups.test.sh ops/backup/tests/daily-backup.test.sh ops/backup/tests/pull-backups.test.sh
+        run: shellcheck ops/backup/prune-backups.sh ops/backup/daily-backup.sh ops/backup/pull-backups.sh ops/backup/offsite-upload.sh ops/backup/tests/prune-backups.test.sh ops/backup/tests/daily-backup.test.sh ops/backup/tests/pull-backups.test.sh ops/backup/tests/offsite-upload.test.sh
 
       - name: Test backup rotation
         env:
@@ -187,6 +187,7 @@ jobs:
           bash ops/backup/tests/prune-backups.test.sh
           bash ops/backup/tests/daily-backup.test.sh
           bash ops/backup/tests/pull-backups.test.sh
+          bash ops/backup/tests/offsite-upload.test.sh
 
   # MariaDB を使う運用スクリプト(ops/backup・ops/migrate)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
   ops-db:
