@@ -5,7 +5,7 @@
 - 公開先(開発中): https://cocktail-next.trc-vlackhistory.net/ (`release`)
 - dev 環境: https://cocktail-dev.trc-vlackhistory.net/ (`develop`。Basic 認証で閉じている。下の「dev 環境・stg 環境」)
 - stg 環境(ステージング): https://cocktail-stg.trc-vlackhistory.net/ (`staging`。同上)
-- BE: Laravel 13(PHP 8.4)。`/api/*` が API、それ以外のパスは React の SPA を返す
+- BE: Laravel 13(PHP。CI は 8.5、サーバーは下の「サーバーの PHP の版」)。`/api/*` が API、それ以外のパスは React の SPA を返す
 - FE: React + Vite(TypeScript)。ビルド結果は `backend/public/spa` に出力し、Laravel の `resources/views/spa.blade.php` がマニフェストを読んで HTML を組み立てる
 - スタイル: CSS Modules + CSS 変数(下の「画面のスタイル」)
 - 型の共有: Laravel のコードから Scramble で `openapi/openapi.json` を出力し、FE は openapi-typescript で型を生成して openapi-fetch で呼ぶ
@@ -106,7 +106,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
 - `staging`・`release` への PR のタイトルは、`staging` 向けが作った日(`【運用】staging 2026-10-26`)、`release` 向けが本番に出す版(`【運用】release v1.2.0`。SemVer)。`release` にマージすると、その版のタグと GitHub Release ができる(`release-tag.yml`)。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9
-- `staging`・`release` への PR は、自動ではマージしない。CI が緑で AI レビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
+- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み。指摘は昇格の PR では直さず、妥当なものは 1 件ずつ `develop` で直す issue にし、妥当でないものは理由を書き、公開できないセキュリティ指摘は issue やコメントに内容を書かず、下書きの security advisory にする)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 
 ## デプロイ
@@ -159,6 +159,39 @@ GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
 | Variable | `STG_APP_URL` | `https://cocktail-stg.trc-vlackhistory.net` |
 
 Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは、デプロイの最初の check で止まる。
+
+## サーバーの PHP の版
+
+サーバーでは、画面と API のリクエストを処理する PHP(Web)と、デプロイが SSH で流す `php artisan`(CLI)の版が、別の仕組みで決まる。
+
+- **Web**: `.htaccess` の `AddHandler application/x-httpd-ea-php85 .php .php8 .phtml` のような行で決まる。ドキュメントルートから上へたどって、最初に見つかった指定が効く。どの環境のディレクトリにも指定が無いときは、`~/public_html/.htaccess`(アカウント全体の既定。cPanel の MultiPHP Manager が書く)の版になる
+- **CLI**: `php`(cPanel の `/usr/local/bin/php`)は、今いるディレクトリから上へたどってドメインのドキュメントルートに当たればそのドメインの版、当たらなければサーバー全体の既定の版で動く。アプリ本体の `~/cocktail-db*` は `public_html` の外にあるので、サーバー全体の既定になる(アカウントでは変えられない)。版を決めて動かすには、`/usr/local/bin/ea-php85` のような版の付いたコマンドを使う
+- CI(`test.yml`)は PHP 8.5 でテストする。デプロイの `composer install`(`deploy.yml`・`deploy-env.yml` の `setup-php`)は、サーバーの CLI と同じ 8.4 のままにしている
+
+2026-10-29 に確かめたときの版:
+
+| 環境 | Web | CLI(`php artisan`) |
+|---|---|---|
+| dev・stg・本番 | 8.5(どの環境にも指定が無く、`~/public_html/.htaccess` の ea-php85 になっている) | 8.4(サーバー全体の既定) |
+
+### 切り替えと切り戻し
+
+dev → stg → 本番の順に、1 つずつ切り替えて確かめる。
+
+1. **Web**: 環境のディレクトリの `.htaccess`(dev は `~/public_html/cocktail-db-dev/.htaccess`、stg は `~/public_html/cocktail-db-stg/.htaccess`、本番は `~/public_html/cocktail-db/.htaccess`。本番は無ければ作る)に、次のブロックを足す。Basic 認証と同じく、ドキュメントルート(`public` → アプリ本体の `public/`)の 1 つ上なので、デプロイで消えない。MultiPHP Manager でドメインごとに選ぶと、ドキュメントルートの `.htaccess`(アプリ本体の `public/.htaccess`)に書かれ、次のデプロイの `rsync --delete` で消えるので使わない
+
+   ```apache
+   # cocktail-db: この環境の PHP の版(README の「サーバーの PHP の版」)
+   <IfModule mime_module>
+     AddHandler application/x-httpd-ea-php85 .php .php8 .phtml
+   </IfModule>
+   ```
+
+2. **CLI**: デプロイのワークフロー(本番は `deploy.yml`、dev・stg は `deploy-env.yml`)のサーバーで流す `php artisan` を、版の付いたコマンド(`/usr/local/bin/ea-php85 artisan`)にし、同じワークフローの `setup-php` の `php-version` も `'8.5'` にする。`deploy-env.yml` は dev と stg で共通なので、環境ごとに切り替えるには版を入力で渡せるようにする。これはワークフローを変える PR で行う
+3. **確かめる**: その環境を出し直し(「dev 環境・stg 環境」の「出し直したいとき」)、デプロイの動作確認が通ること、画面と API に不具合が無いこと、`~/public_html/cocktail-db*/error_log` と `storage/logs/laravel.log` に新しいエラーや deprecation(非推奨の警告)が無いことを見る。デプロイの `composer install` は 8.4 のままなので、8.4 で入れた `vendor` を 8.5 の Web が読む状態になり、CI(`vendor` も 8.5 で入れる)では確かめられない。8.5 で変わった挙動が `vendor` 側にあっても、ここで初めて出るので、dev で先にログを見てから stg・本番に進む。Web の版は、`<?php echo PHP_VERSION;` だけのファイルをアプリ本体の `public/` に一時的に置いて開き、確かめたらすぐ消す(次のデプロイでも消える)
+4. 問題が無ければ、次の環境に進む
+
+切り戻すときは、その環境の 1 のブロックの `ea-php85` を `ea-php84` に書き換え、2 のコマンドと `php-version` を 8.4 に戻して出し直す。Web の指定は書き換えたときから効く。
 
 ## 撤去
 

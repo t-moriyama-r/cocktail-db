@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# head-reviewed.sh のテスト(TC-216-25〜・TC-355-01〜02)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# head-reviewed.sh のテスト(TC-216-25〜・TC-355-01〜02・TC-479-01・03〜07・TC-506-01〜05)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/head-reviewed.test.sh
 
@@ -52,6 +52,28 @@ main() {
 	check TC-355-02 '101 コミット以上の PR: いまのコミットより後の「Review finished」' \
 		'[]' "[$(comment coderabbitai[bot] $AFTER 'Review finished.')]" true
 
+	LOCAL='<!-- ai-dev:agent --> <!-- ai-dev:local-review --> 指摘 0 件'
+	set_pr_base staging
+	check TC-479-01 '昇格の PR: オーナーの目印付きのレビューがいまのコミットにある' 		"[$(review o $HEAD "$LOCAL")]" '[]' true
+	# TC-479-02(前のコミットへの目印付きのレビューは数えない)は、#506 で TC-506-01 に置き換えた(head が進んでもレビューし直さない)
+	check TC-506-01 '昇格の PR: head が進んだ後も、前のコミットへのオーナーの目印付きのレビューでレビュー済み' \
+		"[$(review o $OLD "$LOCAL")]" '[]' true
+	check TC-506-02 '昇格の PR: head が進んだ後も、前のコミットへのオーナー以外の目印付きのレビューは数えない' \
+		"[$(review someone $OLD "$LOCAL")]" '[]' false
+	check TC-506-03 '昇格の PR: head が進んだ後も、前のコミットへのオーナーの目印の無いレビューは数えない' \
+		"[$(review o $OLD 'LGTM')]" '[]' false
+	check TC-479-03 '昇格の PR: オーナー以外の目印付きのレビューは数えない' 		"[$(review someone $HEAD "$LOCAL")]" '[]' false
+	check TC-479-04 '昇格の PR: オーナーの目印の無いレビューは数えない' 		"[$(review o $HEAD 'LGTM')]" '[]' false
+	check TC-479-05 '昇格の PR: CodeRabbit のレビュー・「Review finished」は数えない' 		"[$(review coderabbitai[bot] $HEAD 'Actionable comments posted: 1')]" "[$(comment coderabbitai[bot] $AFTER 'Review finished.')]" false
+	set_pr_base release
+	check TC-479-06 'release 向けの昇格の PR も、オーナーの目印付きのレビューで数える' 		"[$(review o $HEAD "$LOCAL")]" '[]' true
+	check TC-506-04 'release 向けの昇格の PR も、head が進んだ後の前のコミットへの目印付きのレビューで数える' \
+		"[$(review o $OLD "$LOCAL")]" '[]' true
+	set_pr_base develop
+	check TC-479-07 'develop 向けの PR では、オーナーの目印付きのレビューを数えない' 		"[$(review o $HEAD "$LOCAL")]" '[]' false
+	check TC-506-05 'develop 向けの PR では、前のコミットへのオーナーの目印付きのレビューも数えない' \
+		"[$(review o $OLD "$LOCAL")]" '[]' false
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }
@@ -72,6 +94,11 @@ setup_fake_gh() {
 	chmod +x "$FAKE/gh"
 	jq -n --arg head "$HEAD" --arg pushed "$PUSHED" '{headRefOid: $head, commits: [{committedDate: $pushed}]}' >"$FAKE/pr.json"
 	jq -n --arg pushed "$PUSHED" '{commit: {committer: {date: $pushed}}}' >"$FAKE/commit-$HEAD.json"
+}
+
+# 向き先を変えた PR
+set_pr_base() {
+	jq -n --arg head "$HEAD" --arg base "$1" '{headRefOid: $head, baseRefName: $base}' >"$FAKE/pr.json"
 }
 
 # 101 コミット以上の PR。--json commits は先頭 100 件までしか返さないので、その最後(100 件目)は、いまのコミットより前の時刻になる

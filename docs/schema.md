@@ -225,7 +225,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `amazon_detail_url` | `text` | ○ | | `amazon_detail_url` |
 | `amazon_search_url` | `text` | ○ | | `amazon_search_url` |
 | `amazon_fetched_at` | `dateTime` | ○ | Amazon の値を取った時刻(#247) | `updated_at`(#32) |
-| `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url` から取る(取れるかは #32 で確かめる) |
+| `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url`(アフィリエイトの転送の URL)の `pc=` に入った商品のページ `item.rakuten.co.jp/<店舗>/<管理番号>/` から `<店舗>:<管理番号>` を取る(#32。旧の 450 行すべてで取れた。API の `itemCode` と同じ値かは、取り直し(#249)で呼ぶまで確かめていない) |
 | `rakuten_title` | `text` | ○ | | `rakuten_title` |
 | `rakuten_price` | `unsignedInteger` | ○ | | `rakuten_price` |
 | `rakuten_image_url` | `text` | ○ | | `rakuten_image_url` |
@@ -337,6 +337,19 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `credential` | `json` | | 公開鍵・署名の回数・AAGUID など(webauthn-lib の `CredentialRecord` の JSON)。MariaDB では `longtext` になる |
 | `last_used_at` | `timestamp` | ○ | 最後にログインに使った時刻。登録しただけなら null |
 | `created_at`・`updated_at` | `timestamps()` | ○ | `created_at` が登録した日時 |
+
+## 説明文の参照の記法
+
+説明文(`categories`・`methods`・`dictionaries`・`brands`・`cocktails` の `description` と、`cocktails.note`)には、ほかのページへの参照を `@<種類><ID>@` の記法で埋め込む(#285。決めたことは [description-references.md](decisions/description-references.md))。ID は 0 で始まらない数字。大文字(`@N12@` など)も小文字と同じ意味。
+
+| 種類 | 指す先 | ID | 旧の記法 |
+|---|---|---|---|
+| `n` | ノード(`categories`) | ノードの ID | `@p<カテゴリの旧 ID>@`・`@m<ミドルの旧 ID>@`。移行(`legacy:import --only=descriptions`)で legacy_id_maps を引いて `@n` にする。対応の無い ID は記法を取り除く |
+| `c` | カクテル | 旧 ID のまま | `@c`(大文字の `@C` は移行で小文字にする。`b`・`d` も同じ) |
+| `b` | 銘柄 | 旧 ID のまま | `@b` |
+| `d` | 用語(`dictionaries`) | 旧 ID のまま | `@d` |
+
+画面に出すときの区切り方は [description-segments.md](decisions/description-segments.md)(#286)、管理画面で保存するときの変換は [description-markup.md](decisions/description-markup.md)(#287)。指す先が無い参照と、旧の記法の残りは、`data:verify` が見つける。
 
 ## YouTube の開始位置
 

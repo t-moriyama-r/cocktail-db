@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # PR のいまのコミットのレビューを、まず CodeRabbit に頼み、CodeRabbit が動けないときだけ代わりの Claude(ai-claude-review.yml)を呼ぶ
+# 昇格の PR(向き先が staging・release)は、どちらにも頼まない(作った手元のエージェントがレビューする。#479)
 #
 # 使い方: request-review.sh <owner/repo> <PR の番号>
 # 環境変数:
@@ -18,10 +19,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 
 main() {
   local pr label state
-  pr=$(gh pr view "$number" -R "$repo" --json state,isDraft,labels)
+  pr=$(gh pr view "$number" -R "$repo" --json state,isDraft,labels,baseRefName)
   if [ "$(jq -r .state <<<"$pr")" != OPEN ]; then echo "#$number 見送り: 開いていない"; return; fi
   if [ "$(jq -r .isDraft <<<"$pr")" = true ]; then echo "#$number 見送り: draft"; return; fi
-  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-approval"))] | join(",")' <<<"$pr")
+  # 昇格の PR は、作った手元のエージェントがレビューする(#479)
+  case "$(jq -r .baseRefName <<<"$pr")" in
+    staging | release) echo "#$number 見送り: 昇格の PR(手元の Claude がレビューする)"; return ;;
+  esac
+  label=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-approval"))] | join(",")' <<<"$pr")
   if [ -n "$label" ]; then echo "#$number 見送り: ラベル $label(人か手元の番)"; return; fi
 
   state=$(bash "$here/review-request-state.sh" "$repo" "$number")

@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property Carbon|null $amazon_fetched_at
  * @property Carbon|null $rakuten_fetched_at
+ * @property Carbon|null $last_viewed_at
  * @property-read Category $category 外部キー(RESTRICT)で、いつもある
  */
 #[Fillable([
@@ -53,6 +54,25 @@ class Affiliate extends Model
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
+    }
+
+    /**
+     * 商品の欄が見られた時刻(last_viewed_at)を今の時刻にする(#250)。取り直し(#249)が、見られた新しい順に使う。
+     *
+     * 書き込みを減らすため、前に見られてから 1 日たっていなければ書かない。同時に呼ばれても 1 回だけ書くよう、
+     * 条件は UPDATE の WHERE に入れる。見られただけで行の中身は変わらないので、updated_at は変えない。
+     */
+    public function recordViewed(): void
+    {
+        $now = now();
+
+        static::query()
+            ->whereKey($this->getKey())
+            ->where(fn ($query) => $query
+                ->whereNull('last_viewed_at')
+                ->orWhere('last_viewed_at', '<=', $now->copy()->subDay()))
+            ->toBase()
+            ->update(['last_viewed_at' => $now]);
     }
 
     /**

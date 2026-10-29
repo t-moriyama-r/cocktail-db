@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\BrandController;
 use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\DictionaryIndexController;
 use App\Http\Controllers\HelloController;
 use App\Http\Controllers\LegacySearchConditionController;
 use App\Http\Controllers\RandomCocktailsController;
+use App\Http\Controllers\RandomWalkController;
 use App\Http\Controllers\SearchFormController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +36,9 @@ Route::get('/cocktails/latest-video', [CocktailListController::class, 'latestVid
 Route::post('/cocktails/search', CocktailSearchController::class);
 
 Route::get('/affiliates', AffiliateController::class);
+
+// ランダムウォーク(#45)。ヘッダーの「現在の登録数」のリンク先を、カクテル・ノード・銘柄から 1 件選ぶ
+Route::get('/random-walk', RandomWalkController::class);
 
 // 旧サイトが保存した検索条件を直す(#290)。ID が数百になりうるので、GET ではなく本文で受ける
 Route::post('/legacy/search-condition', LegacySearchConditionController::class);
@@ -68,4 +73,10 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
     Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}']);
     Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}']);
+
+    // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
+    Route::get('/brands', [BrandController::class, 'index']);
+    Route::post('/brands', [BrandController::class, 'store']);
+    Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
+    Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
 });
