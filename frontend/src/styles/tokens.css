@@ -31,6 +31,11 @@
   --color-ingredient-liquor-bg: #ddeeff; /* 役割なしの根(旧の蒸留酒・醸造酒・混成酒) */
   --color-ingredient-soft-drink-bg: #ffffff; /* ソフトドリンク */
   --color-ingredient-other-bg: #eeeeee; /* その他 */
+  /* ヘッダーの名前検索のボタン(#99)。押せないときの地と、禁止文字を含むときの「Error」の地。どちらも文字との差は 4.5:1 以上 */
+  --color-disabled-bg: #e0e0e0; /* 文字は --color-text-muted(4.69:1) */
+  --color-danger: #c62828; /* 文字は --color-on-accent(5.62:1) */
+  /* モーダル(#99 の条件検索)の後ろを暗くする色(旧の Vuetify の v-overlay と同じ濃さ) */
+  --color-overlay: rgb(33 33 33 / 46%);
 
   /* 余白。段階は共通にし、案ごとには倍率だけを変える */
   --space-scale: 1;
