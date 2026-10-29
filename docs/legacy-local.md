@@ -115,7 +115,7 @@ curl -s -o /dev/null -c "$JAR" http://127.0.0.1:8000/
 # 2. XSRF-TOKEN を取り出して URL デコードする(%3D → = など)
 token=$(awk '$6 == "XSRF-TOKEN" { print $7 }' "$JAR")
 token=$(printf '%b' "${token//%/\\x}")
-test -n "$token" || { echo "XSRF-TOKEN のクッキーが取れなかったため中止します。" >&2; exit 1; }
+[ -n "$token" ] || echo "XSRF-TOKEN のクッキーが取れなかった。次の curl は 419 になる。" >&2
 # 3. 同じクッキーを送り、トークンをヘッダーに付けて呼ぶ
 curl -si -b "$JAR" -c "$JAR" -H "X-XSRF-TOKEN: $token" \
   -H 'Accept: application/json' -H 'Content-Type: application/json' \
