@@ -106,7 +106,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
 - `staging`・`release` への PR のタイトルは、`staging` 向けが作った日(`【運用】staging 2026-10-26`)、`release` 向けが本番に出す版(`【運用】release v1.2.0`。SemVer)。`release` にマージすると、その版のタグと GitHub Release ができる(`release-tag.yml`)。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9
-- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み。指摘は昇格の PR では直さず、`develop` で直す issue にする)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
+- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み。指摘は昇格の PR では直さず、妥当なものは 1 件ずつ `develop` で直す issue にし、妥当でないものは理由を書き、公開できないセキュリティ指摘は issue やコメントに内容を書かず、下書きの security advisory にする)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 
 ## デプロイ
