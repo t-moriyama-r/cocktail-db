@@ -3,6 +3,7 @@
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\Ice;
@@ -10,6 +11,7 @@ use App\Models\Method;
 use App\Models\User;
 use App\Services\AdminLoginLinks;
 use App\Services\CategoryTree;
+use App\Services\RecipeSignature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -299,4 +301,101 @@ it('TC-286-11: 管理者のプレビューも、下書きのカクテルの説�
             ['type' => 'text', 'text' => 'を泡立てる'],
         ])
         ->assertJsonPath('data.note', null);
+});
+
+/**
+ * 材料を並べてカクテルを作り、recipe_signature を作り直す(材料を保存したときと同じ)。材料は [ノード, 量]。
+ *
+ * @param  list<array{Category, string}>  $rows
+ * @param  array<string, mixed>  $attrs
+ */
+function cocktailDetailRecipe(array $rows, array $attrs = []): Cocktail
+{
+    $cocktail = Cocktail::factory()->create($attrs);
+    foreach ($rows as $position => [$node, $amount]) {
+        CocktailIngredient::factory()->create([
+            'cocktail_id' => $cocktail->id, 'position' => $position + 1, 'category_id' => $node->id, 'amount' => $amount,
+        ]);
+    }
+    app(RecipeSignature::class)->rewrite([$cocktail->id]);
+
+    return $cocktail->refresh();
+}
+
+it('TC-82-20: 別名を、登録した順に ID と名前で返す', function () {
+    $cocktail = Cocktail::factory()->create(['name' => 'レゲエ・パンチ']);
+    $first = CocktailAlias::factory()->named('ピーチ・ウーロン')->create(['cocktail_id' => $cocktail->id]);
+    $second = CocktailAlias::factory()->named('ピーチ・ウーロン・ハイ')->create(['cocktail_id' => $cocktail->id]);
+    CocktailAlias::factory()->named('ほかのカクテルの別名')->create();
+
+    $this->getJson("/api/cocktails/{$cocktail->id}")
+        ->assertOk()
+        ->assertJsonPath('data.aliases', [
+            ['id' => $first->id, 'name' => 'ピーチ・ウーロン'],
+            ['id' => $second->id, 'name' => 'ピーチ・ウーロン・ハイ'],
+        ]);
+});
+
+it('TC-82-21: 材料の組がまったく同じ、ほかの公開しているカクテルを ID の順で same_recipe に返す(自分・下書き・違うレシピは返さない)', function () {
+    $n = cocktailDetailTree();
+    $recipe = [[$n['コーヒー・リキュール'], '45ml'], [$n['ソーダ'], '適量']];
+    $target = cocktailDetailRecipe($recipe, ['name' => 'コーラス・ガール']);
+    // 並び順が違っても同じレシピ
+    $same = cocktailDetailRecipe(array_reverse($recipe), ['name' => 'コーラス・レディ']);
+    $sameLater = cocktailDetailRecipe($recipe, ['name' => 'カルーア・ソーダ']);
+    cocktailDetailRecipe($recipe, ['name' => '下書き', 'is_draft' => true]);
+    cocktailDetailRecipe([[$n['コーヒー・リキュール'], '30ml'], [$n['ソーダ'], '適量']], ['name' => '量が違う']);
+    cocktailDetailRecipe([[$n['コーヒー・リキュール'], '45ml']], ['name' => '材料が足りない']);
+
+    $this->getJson("/api/cocktails/{$target->id}")
+        ->assertOk()
+        ->assertJsonPath('data.same_recipe.*.id', [$same->id, $sameLater->id])
+        ->assertJsonPath('data.same_recipe.0.name', 'コーラス・レディ')
+        ->assertJsonStructure(['data' => ['same_recipe' => [[
+            'id', 'name', 'name_eng', 'is_major', 'base', 'method', 'recipe_count', 'strength', 'sweet_degree', 'rate', 'youtube', 'updated_at',
+        ]]]]);
+});
+
+it('TC-82-22: 材料を変えて recipe_signature を作り直すと、同じレシピの一覧が変わる', function () {
+    $n = cocktailDetailTree();
+    $recipe = [[$n['コーヒー・リキュール'], '45ml'], [$n['ソーダ'], '適量']];
+    $a = cocktailDetailRecipe($recipe);
+    $b = cocktailDetailRecipe($recipe);
+    $c = cocktailDetailRecipe([[$n['コーヒー・リキュール'], '30ml'], [$n['ソーダ'], '適量']]);
+    $this->getJson("/api/cocktails/{$a->id}")->assertJsonPath('data.same_recipe.*.id', [$b->id]);
+    $before = $a->recipe_signature;
+
+    // a の量を c と同じにする
+    CocktailIngredient::query()->where('cocktail_id', $a->id)->where('position', 1)->update(['amount' => '30ml']);
+    app(RecipeSignature::class)->rewrite([$a->id]);
+
+    expect($a->refresh()->recipe_signature)->not->toBe($before)->toBe($c->refresh()->recipe_signature);
+    $this->getJson("/api/cocktails/{$a->id}")->assertJsonPath('data.same_recipe.*.id', [$c->id]);
+    $this->getJson("/api/cocktails/{$b->id}")->assertJsonPath('data.same_recipe', []);
+});
+
+it('TC-82-23: 別名が無く材料も無いカクテルは、aliases も same_recipe も空(材料の無いほかのカクテルとも同じにしない)', function () {
+    $n = cocktailDetailTree();
+    $cocktail = cocktailDetailRecipe([], ['base_category_id' => $n['日本酒']->id]);
+    cocktailDetailRecipe([], ['base_category_id' => $n['日本酒']->id]);
+
+    expect($cocktail->recipe_signature)->toBeNull();
+    $this->getJson("/api/cocktails/{$cocktail->id}")
+        ->assertOk()
+        ->assertJsonPath('data.aliases', [])
+        ->assertJsonPath('data.same_recipe', []);
+});
+
+it('TC-82-24: 管理者のプレビューでは、下書きのカクテルにも別名と同じレシピの公開しているカクテルを返す', function () {
+    $n = cocktailDetailTree();
+    $recipe = [[$n['コーヒー・リキュール'], '45ml']];
+    $draft = cocktailDetailRecipe($recipe, ['is_draft' => true]);
+    $published = cocktailDetailRecipe($recipe);
+    $alias = CocktailAlias::factory()->named('別名')->create(['cocktail_id' => $draft->id]);
+    actingAsCocktailAdmin($this);
+
+    $this->getJson("/api/admin/cocktails/{$draft->id}/preview")
+        ->assertOk()
+        ->assertJsonPath('data.aliases', [['id' => $alias->id, 'name' => '別名']])
+        ->assertJsonPath('data.same_recipe.*.id', [$published->id]);
 });

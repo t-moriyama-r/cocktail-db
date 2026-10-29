@@ -428,6 +428,9 @@ export interface paths {
          *     空白(半角・全角)で分けた語は、どれかに当たれば一致(旧と同じ OR)。語は検索用の名前と同じ形にそろえてから
          *     探す。下書きのカクテルと、木の根(旧の種別)は返さない。種類ごとに ID の順で、ページに分けない(旧と同じ)。
          *
+         *     カクテルは別名(#82。旧に無い)の検索用の名前でも探す。名前では当たらず別名で当たったカクテルは、当たった別名を
+         *     matched_alias に返す(2 つ以上当たれば先に登録した方。名前で当たったカクテルは null)。
+         *
          *     ingredient_matches は、語を材料に使うカクテル(旧のインテリジェンスサーチ。#173)。語ごとに、名前が語そのものか
          *     語に「リキュール」(英数字だけの入力なら英名で、語に liqueur)を付けたものと完全一致するノード・銘柄を探し、
          *     ノードならそのノードと一致する材料(配下と、根を除く祖先)を、銘柄ならその銘柄を使うカクテルを返す。
@@ -961,6 +964,13 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             ingredients: components["schemas"]["CocktailIngredientResource"][];
+            /** @description 別名。登録した順 */
+            aliases: {
+                id: number;
+                name: string;
+            }[];
+            /** @description 材料の組がまったく同じ、ほかの公開しているカクテル。ID の順。一覧の表と同じ項目 */
+            same_recipe: components["schemas"]["CocktailSummaryResource"][];
         };
         /** CocktailIngredientResource */
         CocktailIngredientResource: {
@@ -1134,6 +1144,26 @@ export interface components {
             volume: number;
             youtube: string | null;
             category: components["schemas"]["NodeRefResource"];
+        };
+        /** NameSearchCocktailResource */
+        NameSearchCocktailResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+            };
+            recipe_count: number;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            youtube: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            matched_alias: string | null;
         };
         /** NameSearchNodeResource */
         NameSearchNodeResource: {
@@ -2002,7 +2032,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        cocktails: components["schemas"]["CocktailSummaryResource"][];
+                        cocktails: components["schemas"]["NameSearchCocktailResource"][];
                         nodes: components["schemas"]["NameSearchNodeResource"][];
                         brands: components["schemas"]["NameSearchBrandResource"][];
                         ingredient_matches: components["schemas"]["CocktailSummaryResource"][];
