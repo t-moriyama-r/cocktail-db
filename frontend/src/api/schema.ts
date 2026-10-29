@@ -215,6 +215,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cocktails/{cocktail}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 材料が似たカクテル(旧の「ランダムカクテル」のカクテルを起点にした形)を、ランダムの順で limit 件まで返す。
+         * @description 最初の 2 つの材料のどちらかと一致する材料を使うカクテルから選び、足りなければ材料を順に足す。下書きは返さず、
+         *     下書き・無いカクテルを指定したら 404(docs/decisions/related-cocktails.md)。
+         */
+        get: operations["cocktailRelated"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cocktails/{cocktail}/same-name": {
         parameters: {
             query?: never;
@@ -530,6 +551,30 @@ export interface paths {
          * @description 登録されていない・消したパスキー、チャレンジやオリジンの合わない応答は 422(credential のエラー)。
          */
         post: operations["passkeyLogin.login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cocktails/random": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ノード・銘柄・ベース・技法・グラスのどれか 1 つを起点にした別のカクテルを、ランダムの順で limit 件まで返す。
+         * @description 起点は category_id・brand_id・base_id・method_id・glass_id のうち、ちょうど 1 つを送る。0 個・2 個以上を送ったら 422。
+         *     起点の 1 つ 1 つは任意のクエリに見えるが、この組の制約は OpenAPI の構造では表せないので、ここに書く。
+         *
+         *     下書きは返さない。無いノード・銘柄・ベース・グラスを指定したら、当たるものが無いので空の配列(旧と同じ)。
+         *     何が当たるかは docs/decisions/related-cocktails.md。
+         */
+        get: operations["randomCocktails"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1612,6 +1657,34 @@ export interface operations {
             404: components["responses"]["ModelNotFoundException"];
         };
     };
+    cocktailRelated: {
+        parameters: {
+            query: {
+                /** @description 旧と同じく必須。旧の画面は 5(材料が似たカクテル・同じベース・これを使ったカクテル)か 7(技法・グラス)を送っていた */
+                limit: number;
+            };
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
     cocktailSameName: {
         parameters: {
             query?: never;
@@ -2150,6 +2223,36 @@ export interface operations {
                 };
             };
             422: components["responses"]["InvalidPasskeyException"];
+        };
+    };
+    randomCocktails: {
+        parameters: {
+            query: {
+                limit: number;
+                category_id?: number;
+                brand_id?: number;
+                base_id?: number;
+                method_id?: number;
+                glass_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CocktailSummaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailSummaryResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     randomWalk: {
