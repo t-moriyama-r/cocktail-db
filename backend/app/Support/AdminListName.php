@@ -11,6 +11,8 @@ namespace App\Support;
  *
  * NameNormalizer(name_search の形)は区切りの文字を消し、カタカナとひらがなをそろえないので、旧の一覧の並びとは
  * 合わない。そのため使わない。
+ *
+ * 条件検索の結果の並べ替え(#167。CocktailSearchSort)も、旧の画面が同じ Helper.katakanaToHiragana でそろえていたので、fold を使う。
  */
 final class AdminListName
 {

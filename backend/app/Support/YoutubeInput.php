@@ -21,7 +21,7 @@ final class YoutubeInput
     /**
      * 入力(URL か動画 ID)を動画 ID にする。空なら null。
      *
-     * 旧と同じく、`http` を含まなければ動画 ID とみなしてそのまま返す。含めば URL とみなし、`youtu` を含まなければ
+     * `http` を含まなければ動画 ID とみなし、英数字・`_`・`-` だけならそのまま返す(旧は形を確かめず何でも保存した。新は止める)。含めば URL とみなし、`youtu` を含まなければ
      * YouTube の URL ではないとして止める。含めば `?v=` の後ろ(無ければ先頭)から、英数字・`_`・`-` が 10 文字以上
      * 続くところを動画 ID とする。
      *
@@ -33,6 +33,11 @@ final class YoutubeInput
             return null;
         }
         if (! str_contains($input, 'http')) {
+            // 旧は形を確かめず何でも保存した。新は動画 ID の形(英数字・_・-)だけを受ける
+            if (preg_match('/\A[a-zA-Z0-9_-]+\z/', $input) !== 1) {
+                throw new InvalidArgumentException('YouTube の動画 ID は英数字・_・- だけで入れてください');
+            }
+
             return $input;
         }
         if (! str_contains($input, 'youtu')) {

@@ -17,6 +17,12 @@ class DictionaryCategory extends Model
     /** @use HasFactory<DictionaryCategoryFactory> */
     use HasFactory;
 
+    /**
+     * 分類「グラス」の ID(旧 ID のまま。docs/schema.md の「dictionary_categories」)。カクテルのグラス
+     * (`cocktails.glass_dictionary_id`)は、この分類の用語を指す。
+     */
+    public const GLASS_ID = 2;
+
     public $timestamps = false;
 
     /**

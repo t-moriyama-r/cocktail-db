@@ -3,11 +3,13 @@
 # - needs-human(PR・issue): AI レビュアーの指摘などで、人に判断を頼んでいる
 # - needs-decision(issue): 着手する前に、人に決めてもらうことがある
 # - needs-approval(PR): 人の承認(マージ)を待っている
+# - needs-local(PR): 証跡の撮影・workflow の push など、手元のエージェントの作業を待っている。人の判断は要らない。
+#   PC を開いたときに手元の見回り(pr-patrol・daily-start)が片付けるが、開かなければ止まったままなので、判断の依頼とは見た目を分けて知らせる
 #
 # 送り先は、Slack App の bot(secret SLACK_BOT_TOKEN)と、変数 SLACK_NOTIFY_USER の人の DM。
 # bot が無いリポジトリでは secret SLACK_WEBHOOK_URL(Incoming Webhook)。どちらも無ければ何もせず警告だけ出す(.github/scripts/slack-post.sh)
 #
-# bot で送ったときは、頼んだラベルが外れるか PR・issue が閉じたら、その通知に ✅ を付けて本文の先頭に「【済】」を足す(mark-done ジョブ)。
+# bot で送ったときは、頼んだラベルが外れるか PR・issue が閉じたら、その通知に ✅ を付けて本文の先頭に「【済】」を足し、残りを打ち消し線にする(mark-done ジョブ)。
 # ラベルを外すのは Actions の中(GITHUB_TOKEN)のことが多く、そのときはイベントが起きないので、ラベルが外れた・閉じたときのイベントに加えて、
 # ラベルを外すワークフローの終わり(label を done にして呼ぶ)と毎朝の見回りでも動かす。何度動いても、片付いたものに 1 回付けるだけ
 #
@@ -18,7 +20,7 @@
 # - workflow_dispatch: Actions の中から `gh workflow run` で呼ぶ(GITHUB_TOKEN でも起こせる)。
 #   number を空にすると、開いている needs-decision の issue を 1 通にまとめる(issue を一度にたくさん作ったとき)
 #
-# 頼んだときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだ人の番になっているもの(上の 3 つのラベルが
+# 頼んだときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだ人の番になっているもの(上の 4 つのラベルが
 # 付いて開いている PR・issue)を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件なら送らない。
 # 手動では number を空、label を all にすると同じものを送る
 #
@@ -37,13 +39,13 @@ on:
   workflow_dispatch:
     inputs:
       number:
-        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る(label が all なら 3 つのラベルすべて。done なら番号は見ない)
+        description: PR か issue の番号。空なら、開いている needs-decision の issue をまとめて送る(label が all なら 4 つのラベルすべて。done なら番号は見ない)
         required: false
         default: ""
       label:
         description: 何を頼むか(all は number が空のときだけ)。done は、片付いた通知に「済」を付ける
         type: choice
-        options: [needs-human, needs-decision, needs-approval, all, done]
+        options: [needs-human, needs-local, needs-decision, needs-approval, all, done]
         default: needs-human
 
 permissions:
@@ -58,7 +60,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.number != '' && inputs.label != 'all' && inputs.label != 'done')
       || (github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
         && github.event.action == 'labeled'
-        && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name)
+        && contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval"]'), github.event.label.name)
         && github.event.sender.type != 'Bot'
         && !contains(github.event.issue.body, 'ai-dev:pending-body'))
     runs-on: ubuntu-latest
@@ -82,20 +84,21 @@ jobs:
           LABEL: ${{ inputs.label || github.event.label.name }}
           SENDER: ${{ github.event_name != 'workflow_dispatch' && github.event.sender.login || '' }}
         run: |
+          # 本文やコメントは長い PR だと引数の長さの上限を超えるので、jq にはファイルで渡す(#469)
           # issue の API は PR も返す(PR なら pull_request が付く)
-          target=$(gh api "repos/$REPO/issues/$NUMBER" \
-            | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}')
-          comments=$(gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" | jq 'add // []')
+          gh api "repos/$REPO/issues/$NUMBER" \
+            | jq '{title, url: .html_url, body: (.body // ""), kind: (if .pull_request then "PR" else "issue" end)}' > target.json
+          gh api --paginate --slurp "repos/$REPO/issues/$NUMBER/comments?per_page=100" | jq 'add // []' > comments.json
           # PR なら、本文の Closes #N などで結び付いた issue
-          if [ "$(jq -r .kind <<<"$target")" = PR ]; then
-            issues=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
+          if [ "$(jq -r .kind target.json)" = PR ]; then
+            gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" -f query='
               query($owner: String!, $name: String!, $number: Int!) {
                 repository(owner: $owner, name: $name) {
                   pullRequest(number: $number) { closingIssuesReferences(first: 20) { nodes { number title url } } }
                 }
-              }' | jq '.data.repository.pullRequest.closingIssuesReferences.nodes')
+              }' | jq '.data.repository.pullRequest.closingIssuesReferences.nodes' > issues.json
           else
-            issues='[]'
+            echo '[]' > issues.json
           fi
 
           cat > message.jq <<'JQ'
@@ -111,8 +114,11 @@ jobs:
           def section: ((gsub("\r"; "") | capture("(^|\n)#{2,3} 判断が要ること[^\n]*\n(?<s>[\\s\\S]*?)(\n#{2,3} |$)") | .s) // "")
             | if test("^\\s*_No response_\\s*$") then "" else . end;
 
-          {
+          # --slurpfile で受けるので、ファイルの中身は 1 要素の配列に入っている
+          $target[0] as $target | $comments[0] as $comments | $issues[0] as $issues
+          | {
             "needs-human":    {head: ":raising_hand: *人の判断が必要です*", ask: "判断してほしいこと", act: "コメントを開いて返信する"},
+            "needs-local":    {head: ":camera: *手元の作業(証跡の撮影など)を待っています*", ask: "手元でしてほしいこと", act: "頼むコメントを開く"},
             "needs-decision": {head: ":thinking_face: *着手する前に決めてほしいことがあります*", ask: "決めてほしいこと", act: "issue を開いてコメントで答える"},
             "needs-approval": {head: ":white_check_mark: *承認を待っています*", ask: "確かめてほしいこと", act: "PR を開いて確かめる"}
           }[$label] as $t
@@ -149,14 +155,15 @@ jobs:
                  else empty end),
                 (if $sender != "" then "*ラベルを付けた人*: \($sender)" else empty end),
                 "", "*\($t.ask)*", ($ask.text | quote), "", link($ask.url; $t.act),
-                (if $label == "needs-approval" then "問題が無ければ、マージすると承認になる。直してほしいことは PR にコメントする" else empty end)
+                (if $label == "needs-approval" then "問題が無ければ、マージすると承認になる。直してほしいことは PR にコメントする" else empty end),
+                (if $label == "needs-local" then "人の判断は要らない。PC を開くと手元の見回りが片付ける。急ぎなら手元で対応する" else empty end)
               ] | join("\n"))
             }
           JQ
 
           message=$(jq -n -f message.jq \
             --arg repo "$REPO" --arg number "$NUMBER" --arg label "$LABEL" --arg sender "$SENDER" \
-            --argjson target "$target" --argjson comments "$comments" --argjson issues "$issues")
+            --slurpfile target target.json --slurpfile comments comments.json --slurpfile issues issues.json)
           if [ -z "$message" ]; then
             echo "#$NUMBER に $LABEL で頼む中身(目印 ai-dev:$LABEL のコメントなど)が見つからなかったので、Slack に送らなかった"
             exit 0
@@ -186,7 +193,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          LABELS: ${{ (github.event_name == 'schedule' || inputs.label == 'all') && 'needs-human needs-decision needs-approval' || 'needs-decision' }}
+          LABELS: ${{ (github.event_name == 'schedule' || inputs.label == 'all') && 'needs-human needs-decision needs-approval needs-local' || 'needs-decision' }}
         run: |
           cat > item.jq <<'JQ'
           def clean: gsub("\r"; "") | gsub("<!--[\\s\\S]*?-->"; "") | gsub("```[\\s\\S]*?```"; "(図は GitHub で見る)")
@@ -247,7 +254,8 @@ jobs:
           {
             "needs-human":    {head: ":raising_hand: *人の判断が必要*(needs-human)", act: "頼むコメントに返信する"},
             "needs-decision": {head: ":thinking_face: *着手する前に決めてほしい*(needs-decision)", act: "issue にコメントで答えると、続きが進む"},
-            "needs-approval": {head: ":white_check_mark: *承認を待っている*(needs-approval)", act: "問題が無ければマージすると承認になる。直してほしいことは PR にコメントする"}
+            "needs-approval": {head: ":white_check_mark: *承認を待っている*(needs-approval)", act: "問題が無ければマージすると承認になる。直してほしいことは PR にコメントする"},
+            "needs-local":    {head: ":camera: *手元の作業を待っている*(needs-local)", act: "人の判断は要らない。PC を開くと手元の見回りが片付ける。急ぎなら手元で対応する"}
           } as $t
           | ($items | map(.url) | unique | length) as $count
           | {
@@ -255,7 +263,7 @@ jobs:
               text: ([
                 (if $labels == "needs-decision"
                   then ":thinking_face: *着手する前に決めてほしいことが \($count) 件あります*(\($repo))"
-                  else ":bell: *人の返事を待っているものが \($count) 件あります*(\($repo))" end),
+                  else ":bell: *人か手元の番になっているものが \($count) 件あります*(\($repo))" end),
                 ($labels | split(" ")[] as $label
                   | ($items | map(select(.label == $label)) | sort_by(-(.days // 0), .number)) as $list
                   | select($list | length > 0)
@@ -278,7 +286,7 @@ jobs:
       || (github.event_name == 'workflow_dispatch' && inputs.label == 'done')
       || github.event.action == 'closed'
       || (github.event.action == 'unlabeled'
-        && contains(fromJSON('["needs-human","needs-decision","needs-approval"]'), github.event.label.name))
+        && contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval"]'), github.event.label.name))
     runs-on: ubuntu-latest
     # 何度動いても同じ結果になるので、続けて起きたら待っている 1 回にまとめる
     concurrency:

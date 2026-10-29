@@ -5,8 +5,11 @@ name: branch-flow
 # release 向けの PR では、タイトルが「【運用】release vX.Y.Z」の形で、版が前のタグより大きいかも確かめる(#334。決まりは CLAUDE.md の手順 9)。
 # マージしたらその版のタグと GitHub Release を作る(release-tag.yml)。staging 向けの PR のタイトルは、文書の決まりだけで確かめない
 # staging・release の保護で、このジョブ(branch-flow)を必須のチェックにしている
+# pull_request_target で、PR の中の定義ではなく向き先のブランチ(staging・release)にあるこのファイルで動かす。
+# pull_request だと、PR の中でこのファイルを書き換えれば、決まった元でないブランチからの PR でも判定を通せてしまうため(#205)。
+# PR のコードは checkout も実行もしない(使うスクリプトも向き先のブランチから取る。RC-04)
 on:
-  pull_request:
+  pull_request_target:
     branches: [staging, release]
     # 向き先・タイトルを変えたときにも確かめ直す
     types: [opened, synchronize, reopened, edited]
@@ -37,9 +40,11 @@ jobs:
           fi
           echo "$BASE <- $expected"
 
+      # 向き先のブランチ(release)のスクリプトを取る。PR の head は取らない
       - uses: actions/checkout@v7
         if: github.base_ref == 'release'
         with:
+          ref: ${{ github.base_ref }}
           sparse-checkout: .github/scripts
           persist-credentials: false
 

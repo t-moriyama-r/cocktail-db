@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# patrol-kick.sh のテスト(TC-269-01〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
+# patrol-kick.sh のテスト(TC-269-01〜・TC-473-01〜02)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/patrol-kick.test.sh
 
@@ -60,14 +60,14 @@ main() {
 	expect TC-269-07 'develop への push で動いたコンフリクトの見回りは、見回りに数える' "$(dispatched)" ''
 
 	reset
-	ran ai-draft-sweep.yml schedule "$(ago $((23 * 60)))"
+	ran ai-draft-sweep.yml schedule "$(ago 59)"
 	run
-	expect TC-269-08 'draft の見回りは、前の回から 24 時間たっていなければ起こさない' "$(dispatched)" ''
+	expect TC-473-01 'draft の見回りは、前の回から 1 時間たっていなければ起こさない(境界: 59 分)' "$(dispatched)" ''
 
 	reset
-	ran ai-draft-sweep.yml schedule "$(ago $((25 * 60)))"
+	ran ai-draft-sweep.yml schedule "$(ago 60)"
 	run
-	expect TC-269-09 'draft の見回りは、前の回から 24 時間を過ぎていれば起こす' "$(dispatched)" 'ai-draft-sweep.yml -R o/r'
+	expect TC-473-02 'draft の見回りは、前の回から 1 時間たっていれば起こす(境界: 60 分)' "$(dispatched)" 'ai-draft-sweep.yml -R o/r'
 
 	reset
 	ran ai-review-sweep.yml schedule "$(ago 120)"

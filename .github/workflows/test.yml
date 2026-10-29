@@ -65,7 +65,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
@@ -109,7 +109,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           tools: composer:v2
           coverage: none
 
@@ -188,7 +188,7 @@ jobs:
           bash ops/backup/tests/daily-backup.test.sh
           bash ops/backup/tests/pull-backups.test.sh
 
-  # MariaDB を使う運用スクリプト(ops/backup)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
+  # MariaDB を使う運用スクリプト(ops/backup・ops/migrate)のテスト。1 つの MariaDB で順に流す(テストごとに別の DB 名を使う)。必須のチェックにはしていない
   ops-db:
     if: github.base_ref != 'release' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
@@ -245,6 +245,21 @@ jobs:
             -e VERIFY_TEST_DB_ROOT_PASSWORD=root \
             -e VERIFY_TEST_REQUIRE_DB=1 \
             mariadb:10.11 bash ops/backup/tests/verify-restore.test.sh
+
+      # 旧 DB のダンプの確かめ(ops/migrate/check-legacy-dump.sh)。旧 DB の DDL で作った DB を正しいダンプとして 0 で終わり、
+      # 表を消す・主な表を空にすると欠けたものを出して 0 以外で終わることを確かめる。上と同じく mariadb の image の中で動かす
+      - name: ShellCheck (check-legacy-dump)
+        run: shellcheck ops/migrate/check-legacy-dump.sh ops/migrate/tests/check-legacy-dump.test.sh
+
+      - name: Test check-legacy-dump.sh
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -w /w \
+            -e CHECK_TEST_DB_HOST=127.0.0.1 \
+            -e CHECK_TEST_DB_PORT=3306 \
+            -e CHECK_TEST_DB_ROOT_PASSWORD=root \
+            -e CHECK_TEST_REQUIRE_DB=1 \
+            mariadb:10.11 bash ops/migrate/tests/check-legacy-dump.test.sh
 
   frontend:
     if: ${{ !github.event.pull_request.draft }}
@@ -312,7 +327,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
