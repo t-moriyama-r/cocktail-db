@@ -442,7 +442,8 @@ describe('あるもの検索(mode=having)の結果', function () {
 
         cocktailSearchPost($this, ['mode' => 'having', 'category_ids' => cocktailSearchIds($this->n, 'ジン')])
             ->assertOk()
-            ->assertExactJson(['data' => []]);
+            ->assertJsonPath('data', [])
+            ->assertJsonPath('meta.total', 0);
     });
 });
 
