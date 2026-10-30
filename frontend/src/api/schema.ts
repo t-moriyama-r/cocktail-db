@@ -146,7 +146,7 @@ export interface paths {
         /** カクテルの基本情報を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。 */
         put: operations["cocktail.update"];
         post?: never;
-        /** カクテルを消す。材料・別名は外部キーの CASCADE で一緒に消える(旧は材料の行を残していた。docs/migration-anomalies.md の 1)。 */
+        /** カクテルを消す。材料・別名も一緒に消える(#130)。 */
         delete: operations["cocktail.destroy"];
         options?: never;
         head?: never;
