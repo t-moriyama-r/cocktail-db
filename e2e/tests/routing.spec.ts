@@ -37,3 +37,27 @@ test('TC-97-23: 404 の画面の「トップへ戻る」でトップの画面に
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
 })
+
+// 詳細ページ(#111): 無い ID・下書きは、サーバーが SPA の HTML を 404 の状態で返し、画面は 404 の画面を出す。
+// 下書きのカクテル(ID 2)は E2eSeeder が入れる
+for (const path of [
+  '/detail/cocktail/999999',
+  '/detail/cocktail/2',
+  '/category/999999',
+  '/detail/brand/999999',
+  '/dictionary/999999',
+]) {
+  test(`TC-111-19: ${path} は 404 の状態で返る(404 の画面は詳細の画面の issue で出す)`, async ({ page }) => {
+    const response = await page.goto(path)
+    expect(response?.status()).toBe(404)
+  })
+}
+
+test('TC-111-20: 詳細ページの HTML(JS を動かす前)に、名前の title・description・canonical が入る', async ({ request }) => {
+  const response = await request.get('/detail/cocktail/1')
+  expect(response.status()).toBe(200)
+  const html = await response.text()
+  expect(html).toContain('<title>ジントニック(Gin and Tonic) ｜ 宅飲みカクテルデータベース(RC)</title>')
+  expect(html).toContain('<meta name="description" content="定番のロングカクテル。">')
+  expect(html).toMatch(/<link rel="canonical" href="[^"]*\/detail\/cocktail\/1">/)
+})
