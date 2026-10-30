@@ -356,6 +356,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語辞典の一覧。分類を ID の順に、分類ごとの用語を名前の順で返す。
+         * @description 用語の無い分類も空の並びで返す(新規の画面で分類を選べるように。旧の一覧の画面は用語の無い分類を出さなかった)。
+         */
+        get: operations["dictionaries.index"];
+        put?: never;
+        /** 用語を作る。 */
+        post: operations["dictionaries.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/dictionaries/{dictionary}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 編集で開く用語。 */
+        get: operations["dictionaries.show"];
+        /** 用語を書き換える。 */
+        put: operations["dictionaries.update"];
+        post?: never;
+        /** 用語を消す。カクテルのグラスに使われている・技法を説明する用語になっているときは消さず、409 で理由を返す。 */
+        delete: operations["dictionaries.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dictionaries/{dictionary}": {
         parameters: {
             query?: never;
@@ -1196,11 +1236,40 @@ export interface components {
             image_txt: string | null;
             image_url: string | null;
         };
+        /** DictionaryListCategoryResource */
+        DictionaryListCategoryResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            dictionaries: {
+                id: number;
+                name: string;
+                name_eng: string;
+            }[];
+        };
         /** DictionaryRefResource */
         DictionaryRefResource: {
             id: number;
             name: string;
             name_eng: string;
+        };
+        /** DictionaryResource */
+        DictionaryResource: {
+            id: number;
+            /** @description 分類(製法・グラスなど) */
+            dictionary_category_id: number;
+            name: string;
+            name_eng: string;
+            description: string | null;
+            /** @description 動画 ID */
+            youtube: string | null;
+            youtube_start_hour: number | null;
+            youtube_start_minute: number | null;
+            youtube_start_second: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            updated_at: string | null;
         };
         /** FormOptionResource */
         FormOptionResource: {
@@ -1396,6 +1465,37 @@ export interface components {
             youtube_start_minute?: number | null;
             youtube_start_second?: number | null;
             /** @description 画像のリンクの文字と URL(#288) */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
+        };
+        /**
+         * SaveDictionaryRequest
+         * @description 用語の新規・更新(POST /api/admin/dictionaries・PUT /api/admin/dictionaries/{id}。#315)の入力。
+         *
+         *     旧は用語の保存を止めていた(旧 routes/web.php の「面倒なのでサポート切り」)ので、旧の規則は無い。列に合わせた
+         *     必須と長さの上限に、銘柄(#314)・カクテル(#291)と同じ YouTube・画像の規則を足したもの。
+         *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+         */
+        SaveDictionaryRequest: {
+            /** @description 分類(製法・グラスなど) */
+            dictionary_category_id: number;
+            name: string;
+            name_eng: string;
+            /** @description 説明。保存のときに記法へ変換する(DescriptionMarkup。#287) */
+            description: string;
+            /** @description YouTube の URL か動画 ID */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            /** @description 画像のリンクの文字と URL */
             image_txt?: string | null;
             /** Format: uri */
             image_url?: string | null;
@@ -2140,6 +2240,150 @@ export interface operations {
                     "application/json": {
                         id: number;
                         name: string;
+                    };
+                };
+            };
+        };
+    };
+    "dictionaries.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `DictionaryListCategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryListCategoryResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "dictionaries.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveDictionaryRequest"];
+            };
+        };
+        responses: {
+            /** @description `DictionaryResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "dictionaries.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary ID */
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DictionaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "dictionaries.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary ID */
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveDictionaryRequest"];
+            };
+        };
+        responses: {
+            /** @description `DictionaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "dictionaries.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary ID */
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        message: "この用語は消せません";
+                        reasons: {
+                            /** @enum {string} */
+                            code: "glass" | "method";
+                            message: string;
+                        }[];
                     };
                 };
             };
