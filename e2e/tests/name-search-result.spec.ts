@@ -1,15 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
 
 // 名前検索の結果の画面(#52)。E2eSeeder のデータを使う。
-// 「ジン」: カクテルのジントニック 1 件と、ノードのジン・ドライジン・ロンドンドライジン 3 件(材料名・銘柄では当たらない)
-// 「ミント」: 材料名で当たったカクテルのジントニック 1 件と、ノードのミント 1 件
-// 「ビーフィーター」: ノードのビーフィーター 1 件と、銘柄のビーフィーター 40度 1 件
+// ジントニックの材料はビーフィーター 40度(ジン > ドライジン > ロンドンドライジン > ビーフィーターの銘柄)とミント。
+// 「ジン」: 材料名で当たったジントニック 1 件、カクテルのジントニック 1 件、ノードのジン・ドライジン・ロンドンドライジン 3 件
+// 「ミント」: 材料名で当たったジントニック 1 件と、ノードのミント 1 件
+// 「ビーフィーター」: 材料名で当たったジントニック 1 件、ノードのビーフィーター 1 件、銘柄のビーフィーター 40度 1 件
 const resultPath = (word: string) => `/result/FromNameResult/${encodeURIComponent(word)}`
 
 const regionLabels = (page: Page) =>
   page.getByRole('main').getByRole('region').evaluateAll((regions) => regions.map((r) => r.getAttribute('aria-label')))
 
-test('TC-52-14: /result/FromNameResult/ジン を直に開くと、カクテルとカテゴリーの欄だけが出る', async ({ page }) => {
+test('TC-52-14: /result/FromNameResult/ジン を直に開くと、インテリジェンス・カクテル・カテゴリーの欄が出る', async ({ page }) => {
   await page.goto(resultPath('ジン'))
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('結果')
@@ -20,7 +21,7 @@ test('TC-52-14: /result/FromNameResult/ジン を直に開くと、カクテル�
   await expect(nodes).toContainText('カテゴリー検索結果 3件ヒットしました。(検索語句：ジン)')
   // ロンドンドライジン(蒸留酒 > ジン > ドライジン > ロンドンドライジン)の親は「ジン / ドライジン」
   await expect(nodes.getByRole('row').filter({ hasText: 'ロンドンドライジン' })).toContainText('ジン / ドライジン')
-  expect(await regionLabels(page)).toEqual(['カクテル検索結果', 'カテゴリー検索結果'])
+  expect(await regionLabels(page)).toEqual(['インテリジェンスサーチ結果', 'カクテル検索結果', 'カテゴリー検索結果'])
 })
 
 test('TC-52-15: /result/FromNameResultEx/ミント を開くと、材料名で当たったカクテルがインテリジェンスサーチの欄に出る', async ({
@@ -41,7 +42,7 @@ test('TC-52-16: 銘柄に当たると銘柄の欄が出て、銘柄の詳細へ�
   const brands = page.getByRole('region', { name: '銘柄検索結果' })
   await expect(brands).toContainText('銘柄検索結果 1件ヒットしました。(検索語句：ビーフィーター)')
   await expect(brands.getByRole('link', { name: 'ビーフィーター 40度' })).toHaveAttribute('href', /^\/detail\/brand\/\d+$/)
-  expect(await regionLabels(page)).toEqual(['カテゴリー検索結果', '銘柄検索結果'])
+  expect(await regionLabels(page)).toEqual(['インテリジェンスサーチ結果', 'カテゴリー検索結果', '銘柄検索結果'])
 })
 
 test('TC-52-17: どれにも当たらない語では、「結果」の見出しだけが出る', async ({ page }) => {
