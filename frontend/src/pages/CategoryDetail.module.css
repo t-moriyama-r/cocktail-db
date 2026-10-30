@@ -1,0 +1,119 @@
+/* カテゴリの詳細(旧 Detail/CategoryDetail.vue・MiddleDetail.vue と detail.scss) */
+.detail {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+/* 旧のタイトルは地の文の 2.5 倍だった。ページの題の大きさにそろえる */
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* 説明文・動画と、画像を並べる。960px 未満は画像を上にして縦に積む(旧の column-reverse) */
+.body {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.text,
+.media {
+  min-width: 0;
+}
+
+/* 旧の youtube_section */
+.youtube {
+  max-width: 550px;
+  margin: var(--space-4) auto 0;
+}
+
+/* 画像が無いときにアフィリエイトを出す場所(中身は #106)。旧と同じく 960px 未満では出さない */
+.affiliateInImage {
+  display: none;
+}
+
+/* 有名な銘柄と子のノードの欄(旧の famous_container) */
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* 旧の intro_container。960px 未満は左の太い線と下の細い線 */
+.introSection {
+  display: flex;
+  align-items: center;
+  padding-left: var(--space-1);
+  border-style: solid;
+  border-width: 0 0 1px 5px;
+}
+
+.famousSection {
+  border-color: var(--color-famous-line);
+}
+
+.childrenSection {
+  border-color: var(--color-children-line);
+}
+
+.childList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 旧の block_title。地の文と同じ大きさ・太さで、中身との間を空ける */
+.introHeading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin: 0;
+  padding-right: var(--space-2);
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+}
+
+.empty {
+  margin: 0;
+}
+
+@media (min-width: 960px) {
+  .title {
+    font-size: var(--font-size-title);
+  }
+
+  .body {
+    flex-direction: row;
+  }
+
+  .text,
+  .media {
+    flex: 1;
+  }
+
+  .youtube {
+    margin-left: 0;
+  }
+
+  .affiliateInImage {
+    display: block;
+  }
+
+  /* 2 つの欄を右に寄せて横に並べる(旧と同じ) */
+  .intro {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  /* 上の細い線と右の太い線に変える */
+  .introSection {
+    padding-right: var(--space-1);
+    padding-left: 0;
+    border-width: 2px 5px 0 0;
+  }
+}

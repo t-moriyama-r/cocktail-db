@@ -27,7 +27,13 @@
 # Slack に知らせる(.github/scripts/thread-handoff.sh。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、
 # 人がすべて解決したら、見回り(ai-review-sweep.yml)がその needs-human を外して、ここを呼び直す(#388)
 #
-# マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
+# マージは普通のマージ(マージコミット)。develop のルールセットは承認 1 件を求め、オーナー(リポジトリの admin)だけを除外している(#540)。
+# github-actions のボットは除外されないので、secret AUTO_MERGE_TOKEN(オーナーの fine-grained PAT。このリポジトリの Contents: write・
+# Pull requests: write。Workflows は付けないので、ワークフローを変える PR は下の #191 のとおり断られて人がマージする)があれば、マージだけをそれでする。
+# PAT でのマージは develop への push・PR の closed のイベントを起こすので、Closes #N の issue のクローズ、ブランチの自動削除と積んだ PR の付け替えは
+# GitHub が、dev 環境へのデプロイ・ワークフローを変えた通知・積んだ PR の CI の流し直しは、それぞれのワークフロー(deploy-dev.yml・
+# notify-workflow-merged.yml・ci-rerun.yml)がする。このワークフローではしない。
+# secret が無ければ GITHUB_TOKEN でマージする。そのときは、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
 # ブランチを消す前に、そのブランチに積んだ開いた PR の向き先をこの PR の向き先に付け替え、その PR の CI を流し直す(GitHub の自動削除と同じ。#463)
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
@@ -111,6 +117,8 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           # needs-local・needs-manual が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
           CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+          # マージだけに使う(ジョブの GH_TOKEN には入れない)
+          AUTO_MERGE_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
         run: |
           skip() { echo "見送り: $*"; exit 0; }
           # いまのコミットで CI が動いていないので見送るときは、CI の流し直し(ci-rerun.yml。#228)にこの PR を見させる(#268)。
@@ -290,7 +298,16 @@ jobs:
 
           # 昇格の PR は上で人の手でマージするものにしてあるので、ここへは来ない。それでも、デプロイになるマージは絶対にしない
           [ "$base" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH ではないので、自動ではマージしない"
-          if ! merged=$(gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head" 2>&1); then
+          # PAT では --admin を付ける。gh はルールセットの承認が足りない PR(mergeStateStatus が BLOCKED)を、API に送る前に自分で断るため。
+          # サーバー側の決まり(ブランチ保護の必須のチェックは admin にも効く。ルールセットの承認はオーナーを除外)はそのまま効く
+          if [ -n "${AUTO_MERGE_TOKEN:-}" ]; then
+            merge=(env GH_TOKEN="$AUTO_MERGE_TOKEN" gh pr merge --admin)
+          else
+            merge=(gh pr merge)
+          fi
+          merged_comment="<!-- ai-dev:agent -->
+          AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
+          if ! merged=$("${merge[@]}" "$NUMBER" -R "$REPO" --merge --match-head-commit "$head" 2>&1); then
             echo "$merged"
             # 断られている間に、人がマージした・閉じた・push した(新しいコミットで呼び直される)なら、知らせない(RC-07)
             now=$(gh pr view "$NUMBER" -R "$REPO" --json state,headRefOid --jq '.state + " " + .headRefOid') || skip "#$NUMBER のマージに失敗し、いまの状態も読めない"
@@ -307,6 +324,12 @@ jobs:
             exit 0
           fi
           echo "#$NUMBER をマージした"
+
+          # PAT でマージしたなら、後片付けは GitHub とイベントで動くワークフローがする(冒頭のコメント)
+          if [ -n "${AUTO_MERGE_TOKEN:-}" ]; then
+            gh pr comment "$NUMBER" -R "$REPO" --body "$merged_comment"
+            exit 0
+          fi
 
           # ワークフローを変えた PR なら、オーナーに知らせる(GITHUB_TOKEN のマージは notify-workflow-merged.yml を起こさないので直接呼ぶ)
           if [ "$(gh pr view "$NUMBER" -R "$REPO" --json files --jq 'any(.files[].path; startswith(".github/workflows/"))')" = true ]; then
@@ -337,8 +360,7 @@ jobs:
             gh workflow run pr-status.yml -R "$REPO" -f number="$stacked" || echo "::warning::#$stacked の状態のラベルを付け替えられなかった"
           done
 
-          gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent -->
-          AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
+          gh pr comment "$NUMBER" -R "$REPO" --body "$merged_comment"
           # GITHUB_TOKEN でマージしたので閉じた PR のイベントが起きない。状態のラベルは、次のステップで外す
 
       # 状態を変えた後(マージ・needs-approval・needs-human)も、見送ったときも、その PR の状態のラベルを事実から出し直す。
