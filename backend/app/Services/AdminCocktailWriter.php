@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Http\Requests\Admin\SaveCocktailRequest;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Support\NameNormalizer;
 use App\Support\YoutubeInput;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,8 @@ use Illuminate\Validation\ValidationException;
  * 材料と度数(volume)は、材料の保存(#292)が書く。新しく作るカクテルは材料がまだ無いので、度数を 0 にしておく(列が
  * NOT NULL のため)。材料の数(recipe_count)と材料の組のハッシュ(recipe_signature)は、保存のたびに、保存してある材料の行から
  * RecipeCounter・RecipeSignature で作り直す(#130)。
+ *
+ * 別名(#293)は、送ったときだけ、送った並びに置き換える。
  */
 class AdminCocktailWriter
 {
@@ -85,6 +88,11 @@ class AdminCocktailWriter
 
             $cocktail->save();
 
+            $aliases = $request->aliases();
+            if ($aliases !== null) {
+                $this->replaceAliases($cocktail, $aliases);
+            }
+
             // 数え直しは列だけを書き換えるので、返すモデルも読み直す
             $this->counter->recount([$cocktail->id]);
             $this->signature->rewrite([$cocktail->id]);
@@ -92,5 +100,56 @@ class AdminCocktailWriter
 
             return $cocktail;
         });
+    }
+
+    /**
+     * 別名の検索用の名前が、ほかのカクテルの名前か別名と同じものを返す(#293)。保存は止めない。
+     *
+     * 別名の並び(登録した順)ごとに、同じになったカクテルを ID の順に 1 件ずつ並べる。名前と別名の両方で同じなら、名前の方を返す。
+     *
+     * @return list<array{field: string, message: string, cocktail_id: int, cocktail_name: string}>
+     */
+    public function aliasWarnings(Cocktail $cocktail): array
+    {
+        $warnings = [];
+        foreach ($cocktail->aliases()->get() as $index => $alias) {
+            $others = Cocktail::query()
+                ->whereKeyNot($cocktail->id)
+                ->where(fn ($q) => $q
+                    ->where('name_search', $alias->name_search)
+                    ->orWhereHas('aliases', fn ($a) => $a->where('name_search', $alias->name_search)))
+                ->orderBy('id')
+                ->get(['id', 'name', 'name_search']);
+
+            foreach ($others as $other) {
+                $where = mb_strtolower($other->name_search) === mb_strtolower($alias->name_search) ? '名前' : '別名';
+                $warnings[] = [
+                    'field' => "aliases.{$index}",
+                    'message' => "「{$other->name}」の{$where}と同じです",
+                    /** @var int */
+                    'cocktail_id' => $other->id,
+                    'cocktail_name' => $other->name,
+                ];
+            }
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * $cocktail の別名を $names に置き換える。登録した順(ID の順)が送った並びになるよう、入れ直す。
+     *
+     * @param  list<string>  $names
+     */
+    private function replaceAliases(Cocktail $cocktail, array $names): void
+    {
+        CocktailAlias::query()->where('cocktail_id', $cocktail->id)->delete();
+        foreach ($names as $name) {
+            CocktailAlias::query()->create([
+                'cocktail_id' => $cocktail->id,
+                'name' => $name,
+                'name_search' => NameNormalizer::normalize($name),
+            ]);
+        }
     }
 }

@@ -3,9 +3,11 @@
 namespace App\Http\Requests\Admin;
 
 use App\Http\Requests\Admin\Concerns\AdminFormInput;
+use App\Models\CocktailAlias;
 use App\Models\DictionaryCategory;
 use App\Rules\NotRootCategory;
 use App\Services\AdminImageStore;
+use App\Support\NameNormalizer;
 use App\Support\YoutubeInput;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -15,6 +17,7 @@ use Illuminate\Validation\Validator;
  * カクテルの基本情報の新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。#291)の入力。
  *
  * 旧の EditCocktailValidate の規則に、長さの上限とベースの規則を足したもの。材料は #292 で足す。
+ * 別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
  * 画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
  */
 class SaveCocktailRequest extends FormRequest
@@ -65,7 +68,28 @@ class SaveCocktailRequest extends FormRequest
             'image_txt' => ['nullable', 'string', 'max:255'],
             'image_url' => ['nullable', 'url:http,https', 'max:2048'],
             ...AdminImageStore::rules(),
+            // 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
+            // 全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
+            'aliases' => ['nullable', 'array'],
+            'aliases.*' => ['required', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * 保存する別名の名前。送った並びのまま返す。aliases を送っていなければ null(今の別名を残す)。
+     *
+     * @return list<string>|null
+     */
+    public function aliases(): ?array
+    {
+        if (! $this->has('aliases')) {
+            return null;
+        }
+
+        /** @var array<array-key, string>|null $aliases */
+        $aliases = $this->input('aliases');
+
+        return array_values($aliases ?? []);
     }
 
     /**
@@ -75,7 +99,53 @@ class SaveCocktailRequest extends FormRequest
      */
     public function after(): array
     {
-        return [$this->youtubeValidation()];
+        return [$this->youtubeValidation(), $this->aliasesValidation()];
+    }
+
+    /**
+     * 別名の検索用の名前(NameNormalizer)が、ほかの別名やカクテル自身の名前と同じなら誤りにする(#293)。
+     *
+     * 同じカクテルに、検索用の名前が同じ別名は 2 つ置けない(cocktail_aliases の unique)。名前と同じ別名は、
+     * 名前の横断検索で何も足さないので受けない。別名を送らずに名前だけを変えたときも、今の別名と比べる。
+     *
+     * @return callable(Validator): void
+     */
+    private function aliasesValidation(): callable
+    {
+        return function (Validator $validator): void {
+            $errors = $validator->errors();
+            if ($errors->has('name') || $errors->has('aliases') || $errors->has('aliases.*')) {
+                return;
+            }
+            $nameSearch = NameNormalizer::normalize($this->string('name')->toString());
+            $aliases = $this->aliases();
+
+            if ($aliases === null) {
+                $id = $this->route('cocktail');
+                $sameAsName = $id !== null && CocktailAlias::query()
+                    ->where('cocktail_id', $id)
+                    ->where('name_search', $nameSearch)
+                    ->exists();
+                if ($sameAsName) {
+                    $errors->add('name', '別名と同じ名前です');
+                }
+
+                return;
+            }
+
+            $seen = [];
+            foreach ($aliases as $index => $alias) {
+                $aliasSearch = NameNormalizer::normalize($alias);
+                // DB の照合順序(utf8mb4_unicode_ci)は大文字小文字を区別しないので、unique に当たらないよう小文字にそろえて重複を見る
+                $foldedSearch = mb_strtolower($aliasSearch, 'UTF-8');
+                if ($aliasSearch === $nameSearch) {
+                    $errors->add("aliases.{$index}", 'カクテルの名前と同じ別名です');
+                } elseif (isset($seen[$foldedSearch])) {
+                    $errors->add("aliases.{$index}", '同じ別名がほかにあります');
+                }
+                $seen[$foldedSearch] = true;
+            }
+        };
     }
 
     /**

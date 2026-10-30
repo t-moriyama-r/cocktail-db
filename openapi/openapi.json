@@ -567,7 +567,7 @@
         "/admin/cocktails": {
             "post": {
                 "operationId": "cocktail.store",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u4f5c\u308b\u3002\u4e0b\u66f8\u304d\u304b\u516c\u958b\u304b\u306f is_draft \u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u4f5c\u308b\u3002\u4e0b\u66f8\u304d\u304b\u516c\u958b\u304b\u306f is_draft \u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -591,10 +591,37 @@
                                     "properties": {
                                         "data": {
                                             "$ref": "#/components/schemas/CocktailResource"
+                                        },
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "cocktail_id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "cocktail_name": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "message",
+                                                    "cocktail_id",
+                                                    "cocktail_name"
+                                                ]
+                                            }
                                         }
                                     },
                                     "required": [
-                                        "data"
+                                        "data",
+                                        "warnings"
                                     ]
                                 }
                             }
@@ -851,7 +878,7 @@
             },
             "put": {
                 "operationId": "cocktail.update",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u5ea6\u6570\u306f\u5909\u3048\u305a\u3001\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5\u306f\u4eca\u306e\u6750\u6599\u304b\u3089\u4f5c\u308a\u76f4\u3059(#130)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3068\u5225\u540d\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u5ea6\u6570\u306f\u5909\u3048\u305a\u3001\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5\u306f\u4eca\u306e\u6750\u6599\u304b\u3089\u4f5c\u308a\u76f4\u3059(#130)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -885,10 +912,37 @@
                                     "properties": {
                                         "data": {
                                             "$ref": "#/components/schemas/CocktailResource"
+                                        },
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "cocktail_id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "cocktail_name": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "message",
+                                                    "cocktail_id",
+                                                    "cocktail_name"
+                                                ]
+                                            }
                                         }
                                     },
                                     "required": [
-                                        "data"
+                                        "data",
+                                        "warnings"
                                     ]
                                 }
                             }
@@ -4377,6 +4431,12 @@
                             "null"
                         ]
                     },
+                    "aliases": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
                     "updated_at": {
                         "type": [
                             "string",
@@ -4407,6 +4467,7 @@
                     "image",
                     "image_txt",
                     "image_url",
+                    "aliases",
                     "updated_at"
                 ],
                 "title": "CocktailResource"
@@ -5584,7 +5645,7 @@
             },
             "SaveCocktailRequest": {
                 "type": "object",
-                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002#291)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u3068\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u6750\u6599\u306f #292 \u3067\u8db3\u3059\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
+                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002#291)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u3068\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u6750\u6599\u306f #292 \u3067\u8db3\u3059\u3002\n\u5225\u540d(aliases\u3002#293)\u306f\u65e7\u306b\u7121\u3044\u9805\u76ee\u3067\u3001\u9001\u3063\u305f\u3068\u304d\u3060\u3051\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b(\u4e0b\u306e aliases())\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
                 "properties": {
                     "base_category_id": {
                         "type": "integer",
@@ -5710,6 +5771,17 @@
                     },
                     "remove_image": {
                         "type": "boolean"
+                    },
+                    "aliases": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "\u5225\u540d(#293)\u3002\u540d\u524d\u306e\u914d\u5217\u3067\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b\u3002\u9001\u3089\u306a\u3051\u308c\u3070\u4eca\u306e\u5225\u540d\u3092\u6b8b\u3059\u3002\n\u5168\u90e8\u6d88\u3059\u3068\u304d\u306f\u7a7a\u306e\u914d\u5217(multipart \u3067\u306f\u7a7a\u306e\u5024\u306e aliases\u3002\u7a7a\u6587\u5b57\u306f null \u3067\u5c4a\u304f)\u3092\u9001\u308b",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
                     }
                 },
                 "required": [
