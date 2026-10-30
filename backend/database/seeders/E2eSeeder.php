@@ -6,6 +6,7 @@ use App\Enums\CategoryRole;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
@@ -37,6 +38,7 @@ class E2eSeeder extends Seeder
      * ジントニックは、カクテルの詳細(#108)の E2E にも使う。登録数を変えないよう、カクテルは足さずにこの 1 件に
      * グラス・氷・甘さ・評価・補足と、銘柄つきの材料・任意の材料を持たせる。
      * 技法(ビルド)とグラス(タンブラー)は用語辞典の用語に結び付け、用語の詳細(#56)の「これを使ったカクテル」に出す。
+     * 詳細の別名の欄(#109)のために、別名「G&T」を持たせる(名前検索「ジン」には当たらない名前にし、件数を変えない)。
      *
      * 銘柄はジンの有名な銘柄にもする(カテゴリの詳細の E2E(#105)で、有名な銘柄の欄が出るノードと出ないノードを作る)。
      */
@@ -75,6 +77,7 @@ class E2eSeeder extends Seeder
             'amount' => '適量',
             'is_optional' => true,
         ]);
+        CocktailAlias::factory()->named('G&T')->create(['cocktail_id' => $cocktail->id]);
         app(RecipeCounter::class)->recount([$cocktail->id]);
     }
 

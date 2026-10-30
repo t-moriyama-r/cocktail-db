@@ -1,10 +1,14 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import CocktailDetail from './CocktailDetail'
+import type { paths } from '../api/schema'
+import { buildCocktailRow as row } from '../components/CocktailTable/buildCocktailRow'
 import type { CocktailDetailData } from '../features/cocktail-detail/CocktailDetail.types'
 import { buildCocktailDetail as detail, buildIngredient as ingredient } from '../features/cocktail-detail/buildCocktailDetail'
 import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
+
+type CocktailList = paths['/cocktails/{cocktail}/same-name']['get']['responses'][200]['content']['application/json']
 
 const SPIRITS = { id: 1, name: '蒸留酒', name_eng: 'Spirits' }
 const RUM = { id: 7, name: 'ラム', name_eng: 'Rum' }
@@ -14,9 +18,22 @@ const SOFT_DRINK = { id: 2, name: 'ソフトドリンク', name_eng: 'Soft Drink
 const LIME = { id: 200, name: 'ライムジュース', name_eng: 'Lime Juice' }
 const BACARDI = { id: 501, name: 'バカルディ', name_eng: 'Bacardi' }
 
-/** /detail/cocktail/59 を開き、GET /api/cocktails/59 にこのカクテルを返す。見出しが出るまで待つ */
-const openDetail = async (cocktail: CocktailDetailData) => {
+/** 詳細の画面が詳細のほかに呼ぶ、同じ名前・材料が似た・同じベースのカクテルの API の応答。既定はどれも 0 件 */
+type ListResponses = {
+  sameName?: CocktailList
+  related?: CocktailList
+  sameBase?: CocktailList
+}
+
+/**
+ * /detail/cocktail/59 を開き、GET /api/cocktails/59 にこのカクテルを返す。見出しが出るまで待つ。
+ * 同じ名前(same-name)・材料が似た(related)・同じベース(random)のカクテルの API には lists の応答を返す
+ */
+const openDetail = async (cocktail: CocktailDetailData, lists: ListResponses = {}) => {
   mockApi('get', '/cocktails/{cocktail}', 200, { data: cocktail })
+  mockApi('get', '/cocktails/{cocktail}/same-name', 200, lists.sameName ?? { data: [] })
+  mockApi('get', '/cocktails/{cocktail}/related', 200, lists.related ?? { data: [] })
+  mockApi('get', '/cocktails/random', 200, lists.sameBase ?? { data: [] })
   render(
     <MemoryRouter initialEntries={[`/detail/cocktail/${cocktail.id}`]}>
       <Routes>
@@ -259,5 +276,166 @@ describe('カクテルの詳細の画面', () => {
     )
 
     expect(await screen.findByRole('heading', { level: 1, name: 'ページが見つかりません' })).toBeInTheDocument()
+  })
+})
+
+const SAME_NAME = '同じ名前のカクテルがあります！'
+const SAME_RECIPE = '同じレシピのカクテルがあります！'
+
+/** 送ったリクエストの、パスとクエリ(/api から後ろ) */
+const sentUrls = () =>
+  apiRequests().map((request) => {
+    const url = new URL(request.url)
+    return `${url.pathname.replace(/^\/api/, '')}${url.search}`
+  })
+
+/** 名前の付いた表の体の行の、名前の列の文字を上から順に */
+const cocktailNames = (tableName: string) =>
+  within(screen.getByRole('table', { name: tableName }))
+    .getAllByRole('row')
+    .slice(1)
+    .map((tr) => within(tr).getAllByRole('cell')[1].textContent)
+
+describe('カクテルの詳細の、同じ名前・別名・同じレシピ・材料が似た・同じベースのカクテル', () => {
+  test('TC-109-01: 同じ名前の API を呼び、1 件以上なら電球のアイコンと「同じ名前のカクテルがあります！」の下に、カクテルの表で出す', async () => {
+    await openDetail(detail({ id: 59, name: 'マティーニ', name_eng: 'Martini' }), {
+      sameName: { data: [row({ id: 60, name: 'マティーニ(ドライ)' }), row({ id: 61, name: 'マティーニ(スイート)' })] },
+    })
+
+    const section = await screen.findByRole('region', { name: SAME_NAME })
+    expect(within(section).getByRole('heading', { level: 2, name: SAME_NAME })).toBeInTheDocument()
+    expect(section.querySelector('svg[data-icon="lightbulb"]')).not.toBeNull()
+    expect(cocktailNames(SAME_NAME)).toEqual(['マティーニ(ドライ)', 'マティーニ(スイート)'])
+    expect(within(section).getByRole('link', { name: 'マティーニ(ドライ)' })).toHaveAttribute('href', '/detail/cocktail/60')
+    expect(sentUrls()).toContain('/cocktails/59/same-name')
+  })
+
+  test('TC-109-02: 同じ名前が 0 件なら、欄(文言・表)を出さない', async () => {
+    await openDetail(detail(), { sameName: { data: [] } })
+
+    // 同じ名前の応答が届いて、ほかの一覧が出たところで確かめる
+    await screen.findByRole('table', { name: '材料が似たカクテル' })
+    expect(screen.queryByText(SAME_NAME)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: SAME_NAME })).not.toBeInTheDocument()
+  })
+
+  test('TC-109-03: 同じ名前の API が失敗したら、エラーと「もう一度読み込む」を出し、押すと取り直して出す', async () => {
+    let failing = true
+    const cocktail = detail({ id: 59 })
+    mockApi('get', '/cocktails/{cocktail}', 200, { data: cocktail })
+    mockApi('get', '/cocktails/{cocktail}/related', 200, { data: [] })
+    mockApi('get', '/cocktails/random', 200, { data: [] })
+    mockApiHandler('get', '/cocktails/{cocktail}/same-name', () =>
+      failing
+        ? jsonResponse({ message: 'Server Error' }, 500)
+        : jsonResponse({ data: [row({ id: 60, name: 'マティーニ(ドライ)' })] } satisfies CocktailList, 200),
+    )
+    render(
+      <MemoryRouter initialEntries={['/detail/cocktail/59']}>
+        <Routes>
+          <Route path="/detail/cocktail/:id" element={<CocktailDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('データを読み込めませんでした(エラー 500)')
+    expect(screen.queryByText(SAME_NAME)).not.toBeInTheDocument()
+
+    failing = false
+    fireEvent.click(screen.getByRole('button', { name: 'もう一度読み込む' }))
+
+    expect(await screen.findByRole('region', { name: SAME_NAME })).toBeInTheDocument()
+    expect(cocktailNames(SAME_NAME)).toEqual(['マティーニ(ドライ)'])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  test('TC-109-04: 別名があれば、タグのアイコンと「別名:」の後ろに、登録した順(API の順)に「、」で区切って出す', async () => {
+    await openDetail(
+      detail({
+        aliases: [
+          { id: 2, name: 'ピーチウーロン' },
+          { id: 1, name: 'レゲエ・パンチ' },
+        ],
+      }),
+    )
+
+    const section = screen.getByRole('region', { name: '別名' })
+    expect(section).toHaveTextContent(/^別名: ピーチウーロン、レゲエ・パンチ$/)
+    expect(section.querySelector('svg[data-icon="tag"]')).not.toBeNull()
+  })
+
+  test('TC-109-05: 別名が 0 件なら、欄を出さない', async () => {
+    await openDetail(detail({ aliases: [] }))
+
+    expect(screen.queryByRole('region', { name: '別名' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/別名/)).not.toBeInTheDocument()
+  })
+
+  test('TC-109-06: 同じレシピのカクテルがあれば、電球のアイコンと「同じレシピのカクテルがあります！」の下に、API の順にカクテルの表で出す', async () => {
+    await openDetail(
+      detail({ same_recipe: [row({ id: 71, name: 'コーラス・ガール' }), row({ id: 72, name: 'コーラス・レディ' })] }),
+    )
+
+    const section = screen.getByRole('region', { name: SAME_RECIPE })
+    expect(within(section).getByRole('heading', { level: 2, name: SAME_RECIPE })).toBeInTheDocument()
+    expect(section.querySelector('svg[data-icon="lightbulb"]')).not.toBeNull()
+    expect(cocktailNames(SAME_RECIPE)).toEqual(['コーラス・ガール', 'コーラス・レディ'])
+    expect(within(section).getByRole('link', { name: 'コーラス・レディ' })).toHaveAttribute('href', '/detail/cocktail/72')
+  })
+
+  test('TC-109-07: 同じレシピのカクテルが 0 件なら、欄を出さない', async () => {
+    await openDetail(detail({ same_recipe: [] }))
+
+    expect(screen.queryByText(SAME_RECIPE)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: SAME_RECIPE })).not.toBeInTheDocument()
+  })
+
+  test('TC-109-08: 「材料が似たカクテル」は、このカクテルを起点に材料が似たカクテルの API を 5 件で呼んで出す', async () => {
+    await openDetail(detail({ id: 59 }), { related: { data: [row({ id: 3, name: 'ギムレット' })] } })
+
+    expect(await screen.findByRole('link', { name: 'ギムレット' })).toBeInTheDocument()
+    expect(cocktailNames('材料が似たカクテル')).toEqual(['ギムレット'])
+    expect(sentUrls()).toContain('/cocktails/59/related?limit=5')
+  })
+
+  test('TC-109-09: 「同じベースのカクテル」は、ベースのノードを起点にランダムの API を 5 件で呼んで出す', async () => {
+    await openDetail(detail({ base: { id: 10, name: 'ジン', name_eng: 'Gin' } }), {
+      sameBase: { data: [row({ id: 4, name: 'ジンライム' })] },
+    })
+
+    expect(await screen.findByRole('link', { name: 'ジンライム' })).toBeInTheDocument()
+    expect(cocktailNames('同じベースのカクテル')).toEqual(['ジンライム'])
+    expect(sentUrls()).toContain('/cocktails/random?limit=5&base_id=10')
+  })
+
+  test('TC-109-10: 材料が似た・同じベースのカクテルは、0 件でも見出しと「再取得」を出す', async () => {
+    await openDetail(detail(), { related: { data: [] }, sameBase: { data: [] } })
+
+    for (const name of ['材料が似たカクテル', '同じベースのカクテル']) {
+      const table = await screen.findByRole('table', { name })
+      expect(within(table).getAllByRole('row')).toHaveLength(1)
+      expect(screen.getByRole('heading', { level: 2, name })).toBeInTheDocument()
+    }
+    expect(screen.getAllByRole('button', { name: '再取得' })).toHaveLength(2)
+  })
+
+  test('TC-109-11: 欄は、材料の表の後に、同じ名前・別名・同じレシピ・材料が似た・同じベースの順に並ぶ', async () => {
+    await openDetail(
+      detail({ aliases: [{ id: 1, name: 'レゲエ・パンチ' }], same_recipe: [row({ id: 71, name: 'コーラス・ガール' })] }),
+      { sameName: { data: [row({ id: 60, name: 'マティーニ(ドライ)' })] } },
+    )
+    await screen.findByRole('region', { name: SAME_NAME })
+
+    const order = [
+      screen.getByRole('table', { name: '材料' }),
+      screen.getByRole('region', { name: SAME_NAME }),
+      screen.getByRole('region', { name: '別名' }),
+      screen.getByRole('region', { name: SAME_RECIPE }),
+      screen.getByRole('region', { name: '材料が似たカクテル' }),
+      screen.getByRole('region', { name: '同じベースのカクテル' }),
+    ]
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
   })
 })
