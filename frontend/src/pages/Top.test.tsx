@@ -166,7 +166,7 @@ describe('トップページの新着動画', () => {
 
     // 新着動画と 3 つの一覧(新着・おすすめ・ランダム)が、それぞれ読み込み中を出す
     const loading = screen.getAllByRole('status')
-    expect(loading.length).toBeGreaterThan(0)
+    expect(loading).toHaveLength(4)
     for (const el of loading) expect(el).toHaveTextContent('読み込み中…')
     // 500 の本文はスキーマに無いので型を当てない
     await act(async () => first.resolve(jsonResponse({ message: 'Server Error' }, 500)))

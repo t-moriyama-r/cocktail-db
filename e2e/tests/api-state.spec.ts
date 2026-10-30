@@ -56,6 +56,7 @@ test('TC-98-13: 応答が返るまでは読み込み中の表示を出す', asyn
 
   await page.goto('/')
   // 3 つの一覧の読み込み中が消えて、止めている新着動画の分だけが残る
+  await expect(page.getByRole('table')).toHaveCount(3)
   await expect(page.getByRole('status')).toHaveCount(1)
   await expect(page.getByRole('status')).toHaveText('読み込み中…')
 
