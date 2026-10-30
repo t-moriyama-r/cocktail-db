@@ -4,6 +4,7 @@ import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { collectCategoryTreeIds } from '../../components/CategoryTree/collectCategoryTreeIds'
+import { categoryPath } from '../../utils/detailPaths'
 import {
   buildSelectionTree,
   checkStates,
@@ -89,7 +90,7 @@ export default function IngredientTreeField({ categories, selection, onSelection
           onToggle: (node, checked) => onSelectionChange(toggleNode(tree, selection, node.id, checked)),
         }}
         onNameClick={(node) => {
-          navigate(`/category/${node.id}`)
+          navigate(categoryPath(node.id))
           onNavigate?.()
         }}
         appearance={appearance}

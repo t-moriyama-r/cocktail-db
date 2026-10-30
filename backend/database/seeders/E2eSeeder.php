@@ -125,6 +125,16 @@ class E2eSeeder extends Seeder
         ]);
         CocktailAlias::factory()->named('G&T')->create(['cocktail_id' => $cocktail->id]);
         app(RecipeCounter::class)->recount([$cocktail->id]);
+
+        // 詳細ページ(#111)の 404 の E2E 用の下書きのカクテル(ID 2)。公開ではないので登録数・名前検索には入らない
+        Cocktail::factory()->create([
+            'name' => '下書きのカクテル',
+            'name_search' => '下書きのカクテル',
+            'name_eng' => 'Draft',
+            'base_category_id' => $gin->id,
+            'method_id' => $cocktail->method_id,
+            'is_draft' => true,
+        ]);
     }
 
     /**

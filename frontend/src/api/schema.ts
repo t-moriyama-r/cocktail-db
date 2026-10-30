@@ -126,7 +126,10 @@ export interface paths {
          */
         get: operations["admin.cocktailIndex"];
         put?: never;
-        /** カクテルを作る。下書きか公開かは is_draft で決める(docs/decisions/admin-screens.md の 1)。 */
+        /**
+         * カクテルを作る。下書きか公開かは is_draft で決める(docs/decisions/admin-screens.md の 1)。
+         *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
+         */
         post: operations["cocktail.store"];
         delete?: never;
         options?: never;
@@ -143,10 +146,17 @@ export interface paths {
         };
         /** 編集で開くカクテル。下書きも返す。 */
         get: operations["cocktail.show"];
-        /** カクテルの基本情報と材料を書き換える。材料から作る値(度数・材料の数・材料の組のハッシュ)も作り直す。 */
+        /**
+         * カクテルの基本情報と別名を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。
+         *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
+         */
         put: operations["cocktail.update"];
         post?: never;
-        delete?: never;
+        /**
+         * カクテルを消す。材料・別名も一緒に消える(#130)。
+         * @description ほかのカクテル・ノード・技法・銘柄・用語の説明文から `@c<ID>@` で参照されているときは消さず、409 で理由と参照している行を返す(#579)。
+         */
+        delete: operations["cocktail.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -351,6 +361,46 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/dictionaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用語辞典の一覧。分類を ID の順に、分類ごとの用語を名前の順で返す。
+         * @description 用語の無い分類も空の並びで返す(新規の画面で分類を選べるように。旧の一覧の画面は用語の無い分類を出さなかった)。
+         */
+        get: operations["dictionaries.index"];
+        put?: never;
+        /** 用語を作る。 */
+        post: operations["dictionaries.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/dictionaries/{dictionary}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 編集で開く用語。 */
+        get: operations["dictionaries.show"];
+        /** 用語を書き換える。 */
+        put: operations["dictionaries.update"];
+        post?: never;
+        /** 用語を消す。カクテルのグラスに使われている・技法を説明する用語になっているときは消さず、409 で理由を返す。 */
+        delete: operations["dictionaries.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -793,17 +843,6 @@ export interface components {
                 amazon_search_url: string | null;
             };
         };
-        /** App.Http.Resources.Admin.CocktailIngredientResource */
-        "App.Http.Resources.Admin.CocktailIngredientResource": {
-            /** @description 材料のノード */
-            category_id: number;
-            /** @description 銘柄。銘柄を決めない材料では null */
-            brand_id: number | null;
-            /** @description 量(整えた後の値) */
-            amount: string;
-            /** @description 任意の材料か */
-            is_optional: boolean;
-        };
         /** App.Http.Resources.Admin.CocktailListItemResource */
         "App.Http.Resources.Admin.CocktailListItemResource": {
             id: number;
@@ -1084,8 +1123,7 @@ export interface components {
             image: string | null;
             image_txt: string | null;
             image_url: string | null;
-            /** @description 材料。レシピの順(position の昇順)で、保存のときに送る形(#292) */
-            ingredients: components["schemas"]["App.Http.Resources.Admin.CocktailIngredientResource"][];
+            aliases: string[];
             updated_at: string | null;
         };
         /**
@@ -1209,11 +1247,40 @@ export interface components {
             image_txt: string | null;
             image_url: string | null;
         };
+        /** DictionaryListCategoryResource */
+        DictionaryListCategoryResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            dictionaries: {
+                id: number;
+                name: string;
+                name_eng: string;
+            }[];
+        };
         /** DictionaryRefResource */
         DictionaryRefResource: {
             id: number;
             name: string;
             name_eng: string;
+        };
+        /** DictionaryResource */
+        DictionaryResource: {
+            id: number;
+            /** @description 分類(製法・グラスなど) */
+            dictionary_category_id: number;
+            name: string;
+            name_eng: string;
+            description: string | null;
+            /** @description 動画 ID */
+            youtube: string | null;
+            youtube_start_hour: number | null;
+            youtube_start_minute: number | null;
+            youtube_start_second: number | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            updated_at: string | null;
         };
         /** FormOptionResource */
         FormOptionResource: {
@@ -1377,9 +1444,10 @@ export interface components {
         };
         /**
          * SaveCocktailRequest
-         * @description カクテルの新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。基本情報は #291、材料は #292)の入力。
+         * @description カクテルの基本情報の新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。#291)の入力。
          *
-         *     旧の EditCocktailValidate の規則に、長さの上限・ベースの規則と、材料の件数の上限・ノードと銘柄の規則を足したもの。
+         *     旧の EditCocktailValidate の規則に、長さの上限とベースの規則を足したもの。材料は #292 で足す。
+         *     別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
          *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
          */
         SaveCocktailRequest: {
@@ -1418,20 +1486,42 @@ export interface components {
              */
             image?: string | null;
             remove_image?: boolean;
-            /** @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る */
-            ingredients: {
-                /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
-                category_id: number;
-                /** @description 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19) */
-                brand_id?: number | null;
-                /**
-                 * @description 量。書式は確かめず、保存のときに整える(docs/decisions/admin-screens.md の決まったこと 4。旧と同じ)。
-                 *     整えた後の長さ(列の長さ 20)は保存のときに確かめる
-                 */
-                amount: string;
-                /** @description 任意の材料か。送らなければ任意でない(旧と同じ) */
-                is_optional?: boolean;
-            }[];
+            /**
+             * @description 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
+             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
+             */
+            aliases?: string[] | null;
+        };
+        /**
+         * SaveDictionaryRequest
+         * @description 用語の新規・更新(POST /api/admin/dictionaries・PUT /api/admin/dictionaries/{id}。#315)の入力。
+         *
+         *     旧は用語の保存を止めていた(旧 routes/web.php の「面倒なのでサポート切り」)ので、旧の規則は無い。列に合わせた
+         *     必須と長さの上限に、銘柄(#314)・カクテル(#291)と同じ YouTube・画像の規則を足したもの。
+         *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+         */
+        SaveDictionaryRequest: {
+            /** @description 分類(製法・グラスなど) */
+            dictionary_category_id: number;
+            name: string;
+            name_eng: string;
+            /** @description 説明。保存のときに記法へ変換する(DescriptionMarkup。#287) */
+            description: string;
+            /** @description YouTube の URL か動画 ID */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            /** @description 画像のリンクの文字と URL */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
         };
         /**
          * SaveParaphraseRequest
@@ -1842,6 +1932,12 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["CocktailResource"];
+                        warnings: {
+                            field: string;
+                            message: string;
+                            cocktail_id: number;
+                            cocktail_name: string;
+                        }[];
                     };
                 };
             };
@@ -1896,11 +1992,58 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["CocktailResource"];
+                        warnings: {
+                            field: string;
+                            message: string;
+                            cocktail_id: number;
+                            cocktail_name: string;
+                        }[];
                     };
                 };
             };
             404: components["responses"]["ModelNotFoundException"];
             422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktail.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        message: "このカクテルは消せません";
+                        reasons: {
+                            /** @enum {string} */
+                            code: "cocktail" | "node" | "method" | "brand" | "dictionary";
+                            message: string;
+                            referrers: {
+                                id: number;
+                                name: string;
+                            }[];
+                        }[];
+                    };
+                };
+            };
         };
     };
     cocktailDetail: {
@@ -2167,6 +2310,150 @@ export interface operations {
                     "application/json": {
                         id: number;
                         name: string;
+                    };
+                };
+            };
+        };
+    };
+    "dictionaries.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `DictionaryListCategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryListCategoryResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "dictionaries.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveDictionaryRequest"];
+            };
+        };
+        responses: {
+            /** @description `DictionaryResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "dictionaries.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary ID */
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DictionaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "dictionaries.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary ID */
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveDictionaryRequest"];
+            };
+        };
+        responses: {
+            /** @description `DictionaryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DictionaryResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "dictionaries.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The dictionary ID */
+                dictionary: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        message: "この用語は消せません";
+                        reasons: {
+                            /** @enum {string} */
+                            code: "glass" | "method";
+                            message: string;
+                        }[];
                     };
                 };
             };

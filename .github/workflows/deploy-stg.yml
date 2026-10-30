@@ -43,3 +43,7 @@ jobs:
       AMAZON_CREDENTIAL_SECRET: ${{ secrets.STG_AMAZON_CREDENTIAL_SECRET }}
       AMAZON_PARTNER_TAG: ${{ secrets.STG_AMAZON_PARTNER_TAG }}
       RAKUTEN_AFFILIATE_ID: ${{ secrets.STG_RAKUTEN_AFFILIATE_ID }}
+      # 旧 DB の接続(#211)。stg で legacy:verify-images・legacy:import(#36)を流すときに入れる。Secret が無ければ .env に行を書かない
+      LEGACY_DB_DATABASE: ${{ secrets.STG_LEGACY_DB_DATABASE }}
+      LEGACY_DB_USERNAME: ${{ secrets.STG_LEGACY_DB_USERNAME }}
+      LEGACY_DB_PASSWORD: ${{ secrets.STG_LEGACY_DB_PASSWORD }}

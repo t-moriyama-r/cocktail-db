@@ -4,13 +4,22 @@
 # 使い方: evidence-gate.sh <owner/repo> <PR の番号>
 #
 # FE・BE のコード(文書・テスト・CI の設定・ロックファイル以外)を変えた PR は、何がどう変わったかを
-# 静止画(比較画像)と修正前・修正後の動画で見せる決まり(CLAUDE.md の「ブランチ・コミット・PR」の 5)。
+# 修正前後の静止画(比較画像)で見せる決まり(CLAUDE.md の「ブランチ・コミット・PR」の 5)。
 # 「撮れなかった」と書いて ready にした PR がレビューに回った(#368)ので、文章ではなく貼られたものを数える。
+# 動画は画面のコード(frontend/src/ の .tsx・.css)を変えた PR だけに求める。画面の無い BE の応答やテストの結果は止まった画面で、
+# 動画にしても静止画以上の情報が無いため(#604)。
 # 動画は GitHub が行だけの URL を再生できる形にするので、<img> に埋めていない行だけの user-attachments の URL を数える。
+# Actions で撮った証跡は、検査する PR のリポジトリの evidence ブランチ(https://raw.githubusercontent.com/<owner>/<repo>/evidence/ の下)に置く(#487)。
+# そこの画像(<img src>・![](…))は静止画、.mp4 への Markdown のリンクか行だけの URL は動画として数える(#598)。
 # コードを変えていない PR は撮らなくてよいが、書き忘れと区別するため、撮らない理由が書いてあることは確かめる
 # 画面のコード(frontend/src/ の .tsx・.css)を変えた PR は、幅の区切り(xs・sm・md・lg。docs/design/style.md の「幅の区切り」)の
-# どれかで崩れていても気づけるよう、区切りごとに撮る決まり(#432)。節に、4 つの区切りそれぞれに入る幅(<数字>px)が書かれているかを見る。
-# 画面に出ない FE の変更(純関数・型だけ)は、本文に <!-- ai-dev:no-viewport-evidence 理由 --> を書けばこの検査を飛ばす
+# どれかで崩れていても気づけるよう、区切りごとに撮る決まり(#432)。節に、撮るべき区切りそれぞれに入る幅(<数字>px)が書かれているかを見る。
+# 画面に出ない FE の変更(純関数・型だけ)は、本文に <!-- ai-dev:no-viewport-evidence 理由 --> を書けばこの検査を飛ばす。
+# .css を変えていない画面の変更(文言・リンク先・画像の src など)は、両端の xs と lg だけを求める。崩れは CSS の差分から出ることが
+# ほとんどで、間の幅まで撮る手間に見合わないため(#604)
+# 振る舞いを変えないリファクタは、本文に <!-- ai-dev:refactor-evidence 理由 --> を書けば、修正後の静止画 1 枚で通す。変わっていないことを
+# 修正前後で撮っても見る人が得るものが無く、担保は既存のテストを変えずに通ることで足りるため。その担保が崩れないよう、
+# 既存のテストのファイルを変えた・消した PR では印を認めない(#604)
 # 撮る途中で気づいて直さなかったことを本文の「気づいたこと」に書くだけでは、誰も拾わないままマージされた(#512 の 375px の横スクロール)。
 # 「気づいたこと」の見出しの下の項目は、issue の参照(#<番号> か issue の URL)が付くまで落とす(#518)
 set -euo pipefail
@@ -20,16 +29,17 @@ number=$2
 
 body=$(gh pr view "$number" -R "$repo" --json body --jq '.body // ""' | tr -d '\r')
 section=$(awk '/^## /{in_section = /^## 証跡/; next} in_section' <<<"$body")
-# gh pr view --json files は 100 件で切れるので、API をページ送りで読む
-files=$(gh api --paginate "repos/$repo/pulls/$number/files" --jq '.[].filename')
+# gh pr view --json files は 100 件で切れるので、API をページ送りで読む。行は「状態<TAB>パス」(状態は added・modified・removed など)
+changes=$(gh api --paginate "repos/$repo/pulls/$number/files" --jq '.[] | "\(.status)\t\(.filename)"')
+files=$(cut -f2 <<<"$changes")
+tests='(^|/)(tests?|__tests__)/|\.(test|spec)\.[cm]?[jt]sx?$|Test\.php$'
 code=$(grep -v '^$' <<<"$files" | grep -Ev \
 	-e '\.(md|txt)$' \
 	-e '^(docs|\.github|e2e|ops)/' \
-	-e '(^|/)(tests?|__tests__)/' \
-	-e '\.(test|spec)\.[cm]?[jt]sx?$' \
-	-e 'Test\.php$' \
+	-e "$tests" \
 	-e '(^|/)(package-lock\.json|composer\.lock)$' \
 	-e '(^|/)\.(coderabbit\.yaml|gitignore|editorconfig)$' || true)
+screen=$(grep -E '^frontend/src/.*\.(tsx|css)$' <<<"$code" || true)
 
 # 幅の区切り(名前 下限 上限 撮る幅 範囲の書き方)。値は frontend/src/styles/breakpoints.ts・docs/design/style.md の「幅の区切り」と同じ
 viewports=(
@@ -40,7 +50,8 @@ viewports=(
 )
 
 check_viewports() {
-	local marker widths missing=() entry name low high shot range w found
+	local marker widths missing=() entry name low high shot range w found needed=' xs sm md lg '
+	grep -q '\.css$' <<<"$screen" || needed=' xs lg '
 	marker=$(grep -oE '<!--[[:space:]]*ai-dev:no-viewport-evidence([[:space:]][^>]*)?-->' <<<"$body" | head -1 || true)
 	if [ -n "$marker" ]; then
 		# 理由の無い印では飛ばさない。何のために飛ばしたかを、レビューで確かめられるようにする
@@ -54,6 +65,7 @@ check_viewports() {
 	widths=$(perl -0pe 's/<!--.*?-->//gs' <<<"$section" | grep -oE '(^|[^0-9])[0-9]+px' | grep -oE '[0-9]+' | sort -un || true)
 	for entry in "${viewports[@]}"; do
 		read -r name low high shot range <<<"$entry"
+		[[ "$needed" == *" $name "* ]] || continue
 		found=
 		for w in $widths; do
 			if [ "$w" -ge "$low" ] && [ "$w" -le "$high" ]; then
@@ -65,7 +77,7 @@ check_viewports() {
 	done
 	if [ ${#missing[@]} -gt 0 ]; then
 		problems+=("画面のコードを変えた PR なのに、幅の区切りごとの証跡が足りない。足りない区切り: $(printf '%s / ' "${missing[@]}" | sed 's| / $||')")
-		problems+=('撮った幅を「## 証跡」に <数字>px で書く(xs 375px・sm 768px・md 1024px・lg 1440px。画面に出ない変更なら <!-- ai-dev:no-viewport-evidence 理由 -->)')
+		problems+=('撮った幅を「## 証跡」に <数字>px で書く(.css を変えたら xs 375px・sm 768px・md 1024px・lg 1440px、.tsx だけなら xs 375px・lg 1440px。画面に出ない変更なら <!-- ai-dev:no-viewport-evidence 理由 -->)')
 	fi
 }
 
@@ -91,6 +103,22 @@ findings_without_issue() {
 	' | grep -vE '(^|[^A-Za-z0-9_&])#[0-9]+([^A-Za-z0-9_]|$)|/issues/[0-9]+|^[[:space:]]*([-*]|[0-9]+\.)[[:space:]]*(なし|無し)([.]|。|、|\(|（|:|：|[[:space:]]|$)' || true
 }
 
+# 振る舞いを変えないリファクタの印。理由が無ければ印として認めない。既存のテストのファイルを変えた・消した PR でも認めない
+refactor_marker() {
+	local marker touched
+	marker=$(grep -oE '<!--[[:space:]]*ai-dev:refactor-evidence([[:space:]][^>]*)?-->' <<<"$body" | head -1 || true)
+	[ -n "$marker" ] || return 1
+	if [ -z "$(sed -E 's/^<!--[[:space:]]*ai-dev:refactor-evidence//; s/-->$//' <<<"$marker" | tr -d '[:space:]')" ]; then
+		problems+=('<!-- ai-dev:refactor-evidence --> に、振る舞いを変えないと言える理由が書かれていない(<!-- ai-dev:refactor-evidence 理由 --> の形で書く)')
+		return 1
+	fi
+	touched=$(grep -vE $'^added\t' <<<"$changes" | cut -f2 | grep -E "$tests" || true)
+	if [ -n "$touched" ]; then
+		problems+=("<!-- ai-dev:refactor-evidence --> の PR なのに、既存のテストのファイルを変えている(振る舞いを変えないリファクタは既存のテストを変えずに通す。テストを足すのはよい): $(head -3 <<<"$touched" | paste -sd, -)")
+		return 1
+	fi
+}
+
 problems=()
 if ! grep -q '^## 証跡' <<<"$body"; then
 	problems+=('本文に「## 証跡」の節が無い')
@@ -98,20 +126,33 @@ elif [ -z "$code" ]; then
 	[ -n "$(tr -d '[:space:]' <<<"$section")" ] || problems+=('コードを変えていない PR でも、「## 証跡」に撮らない理由(文書だけ・テストだけ など)を書く')
 else
 	images=$(grep -cE '<img [^>]*src="https://github\.com/user-attachments/|!\[[^]]*\]\(https://github\.com/user-attachments/' <<<"$section" || true)
-	# 同じ URL を何行書いても 1 本と数える
-	videos=$(grep -E '^[[:space:]]*https://github\.com/user-attachments/assets/[^[:space:]]+[[:space:]]*$' <<<"$section" | tr -d ' \t' | sort -u | wc -l || true)
+	# Actions で撮って evidence ブランチに置いた証跡(#487)も数える。検査する PR のリポジトリの evidence ブランチの下だけで、
+	# ほかのリポジトリ・ほかのブランチの raw.githubusercontent.com は数えない(#598)。リポジトリ名の . は正規表現で 1 文字に当たるので逃がす
+	evidence="https://raw\.githubusercontent\.com/${repo//./\\.}/evidence/"
+	evidence_images=$(grep -cE "<img [^>]*src=\"${evidence}|!\\[[^]]*\\]\\(${evidence}" <<<"$section" || true)
+	images=$((images + evidence_images))
+	# 同じ URL を何行書いても 1 本と数える。evidence ブランチの .mp4 は、行だけの URL か Markdown のリンク([…](….mp4)。![…](…) は除く)を数える
+	videos=$({
+		grep -E '^[[:space:]]*https://github\.com/user-attachments/assets/[^[:space:]]+[[:space:]]*$' <<<"$section" || true
+		grep -E "^[[:space:]]*${evidence}[^[:space:]]+\\.mp4[[:space:]]*\$" <<<"$section" || true
+		grep -oE "(^|[^!])\\[[^]]*\\]\\(${evidence}[^)[:space:]]+\\.mp4\\)" <<<"$section" | sed -E 's/^.*\]\(//; s/\)$//' || true
+	} | tr -d ' \t' | sort -u | wc -l)
 	# 説明の文中の「撮れず」では落とさない。行の頭(箇条書き・太字の記号の後)で宣言している行だけ見る
 	declared=$(grep -E '^[[:space:]]*([-*>]|[0-9]+\.)?[[:space:]]*(\*\*)?(未撮影|撮れなかった|撮れず)' <<<"$section" || true)
 	if [ -n "$declared" ]; then
 		problems+=('「未撮影」「撮れなかった」のまま。撮れない環境なら ready にせず、draft のまま needs-local で撮影を頼む' "該当の行: $(head -3 <<<"$declared" | paste -sd'/' -)")
 	fi
-	[ "$images" -ge 1 ] || problems+=('静止画(修正前後の比較画像)が貼られていない')
-	[ "$videos" -ge 2 ] || problems+=("動画が修正前・修正後の 2 本以上そろっていない(${videos} 本)")
-	if ! grep -q '修正前' <<<"$section" || ! grep -q '修正後' <<<"$section"; then
-		problems+=('修正前と修正後のどちらを見せているかが節に書かれていない')
-	fi
-	if grep -Eq '^frontend/src/.*\.(tsx|css)$' <<<"$code"; then
-		check_viewports
+	if refactor_marker; then
+		[ "$images" -ge 1 ] || problems+=('静止画(修正後の画面か、変えていない既存のテストが通った結果)が貼られていない')
+	else
+		[ "$images" -ge 1 ] || problems+=('静止画(修正前後の比較画像)が貼られていない')
+		if [ -n "$screen" ]; then
+			[ "$videos" -ge 2 ] || problems+=("動画が修正前・修正後の 2 本以上そろっていない(${videos} 本)")
+		fi
+		if ! grep -q '修正前' <<<"$section" || ! grep -q '修正後' <<<"$section"; then
+			problems+=('修正前と修正後のどちらを見せているかが節に書かれていない')
+		fi
+		[ -z "$screen" ] || check_viewports
 	fi
 fi
 unlinked=$(findings_without_issue)

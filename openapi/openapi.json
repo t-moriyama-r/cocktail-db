@@ -567,7 +567,7 @@
         "/admin/cocktails": {
             "post": {
                 "operationId": "cocktail.store",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u4f5c\u308b\u3002\u4e0b\u66f8\u304d\u304b\u516c\u958b\u304b\u306f is_draft \u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u4f5c\u308b\u3002\u4e0b\u66f8\u304d\u304b\u516c\u958b\u304b\u306f is_draft \u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -591,10 +591,37 @@
                                     "properties": {
                                         "data": {
                                             "$ref": "#/components/schemas/CocktailResource"
+                                        },
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "cocktail_id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "cocktail_name": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "message",
+                                                    "cocktail_id",
+                                                    "cocktail_name"
+                                                ]
+                                            }
                                         }
                                     },
                                     "required": [
-                                        "data"
+                                        "data",
+                                        "warnings"
                                     ]
                                 }
                             }
@@ -851,7 +878,7 @@
             },
             "put": {
                 "operationId": "cocktail.update",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3068\u6750\u6599\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u304b\u3089\u4f5c\u308b\u5024(\u5ea6\u6570\u30fb\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5)\u3082\u4f5c\u308a\u76f4\u3059\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3068\u5225\u540d\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u5ea6\u6570\u306f\u5909\u3048\u305a\u3001\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5\u306f\u4eca\u306e\u6750\u6599\u304b\u3089\u4f5c\u308a\u76f4\u3059(#130)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -885,10 +912,37 @@
                                     "properties": {
                                         "data": {
                                             "$ref": "#/components/schemas/CocktailResource"
+                                        },
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "cocktail_id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "cocktail_name": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "message",
+                                                    "cocktail_id",
+                                                    "cocktail_name"
+                                                ]
+                                            }
                                         }
                                     },
                                     "required": [
-                                        "data"
+                                        "data",
+                                        "warnings"
                                     ]
                                 }
                             }
@@ -899,6 +953,96 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "cocktail.destroy",
+                "description": "\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u30fb\u30ce\u30fc\u30c9\u30fb\u6280\u6cd5\u30fb\u9298\u67c4\u30fb\u7528\u8a9e\u306e\u8aac\u660e\u6587\u304b\u3089 `@c<ID>@` \u3067\u53c2\u7167\u3055\u308c\u3066\u3044\u308b\u3068\u304d\u306f\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3068\u53c2\u7167\u3057\u3066\u3044\u308b\u884c\u3092\u8fd4\u3059(#579)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u3082\u4e00\u7dd2\u306b\u6d88\u3048\u308b(#130)\u3002",
+                "tags": [
+                    "Cocktail"
+                ],
+                "parameters": [
+                    {
+                        "name": "cocktail",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "\u3053\u306e\u30ab\u30af\u30c6\u30eb\u306f\u6d88\u305b\u307e\u305b\u3093"
+                                        },
+                                        "reasons": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "code": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "cocktail",
+                                                            "node",
+                                                            "method",
+                                                            "brand",
+                                                            "dictionary"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "referrers": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "id",
+                                                                "name"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "required": [
+                                                    "code",
+                                                    "message",
+                                                    "referrers"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "reasons"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 }
             }
@@ -1449,6 +1593,244 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/admin/dictionaries": {
+            "get": {
+                "operationId": "dictionaries.index",
+                "description": "\u7528\u8a9e\u306e\u7121\u3044\u5206\u985e\u3082\u7a7a\u306e\u4e26\u3073\u3067\u8fd4\u3059(\u65b0\u898f\u306e\u753b\u9762\u3067\u5206\u985e\u3092\u9078\u3079\u308b\u3088\u3046\u306b\u3002\u65e7\u306e\u4e00\u89a7\u306e\u753b\u9762\u306f\u7528\u8a9e\u306e\u7121\u3044\u5206\u985e\u3092\u51fa\u3055\u306a\u304b\u3063\u305f)\u3002",
+                "summary": "\u7528\u8a9e\u8f9e\u5178\u306e\u4e00\u89a7\u3002\u5206\u985e\u3092 ID \u306e\u9806\u306b\u3001\u5206\u985e\u3054\u3068\u306e\u7528\u8a9e\u3092\u540d\u524d\u306e\u9806\u3067\u8fd4\u3059\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `DictionaryListCategoryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/DictionaryListCategoryResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "dictionaries.store",
+                "summary": "\u7528\u8a9e\u3092\u4f5c\u308b\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveDictionaryRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`DictionaryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DictionaryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/dictionaries/{dictionary}": {
+            "get": {
+                "operationId": "dictionaries.show",
+                "summary": "\u7de8\u96c6\u3067\u958b\u304f\u7528\u8a9e\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "parameters": [
+                    {
+                        "name": "dictionary",
+                        "in": "path",
+                        "required": true,
+                        "description": "The dictionary ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`DictionaryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DictionaryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "dictionaries.update",
+                "summary": "\u7528\u8a9e\u3092\u66f8\u304d\u63db\u3048\u308b\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "parameters": [
+                    {
+                        "name": "dictionary",
+                        "in": "path",
+                        "required": true,
+                        "description": "The dictionary ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveDictionaryRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DictionaryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DictionaryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "dictionaries.destroy",
+                "summary": "\u7528\u8a9e\u3092\u6d88\u3059\u3002\u30ab\u30af\u30c6\u30eb\u306e\u30b0\u30e9\u30b9\u306b\u4f7f\u308f\u308c\u3066\u3044\u308b\u30fb\u6280\u6cd5\u3092\u8aac\u660e\u3059\u308b\u7528\u8a9e\u306b\u306a\u3063\u3066\u3044\u308b\u3068\u304d\u306f\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "parameters": [
+                    {
+                        "name": "dictionary",
+                        "in": "path",
+                        "required": true,
+                        "description": "The dictionary ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "\u3053\u306e\u7528\u8a9e\u306f\u6d88\u305b\u307e\u305b\u3093"
+                                        },
+                                        "reasons": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "code": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "glass",
+                                                            "method"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "code",
+                                                    "message"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "reasons"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 }
             }
@@ -2893,37 +3275,6 @@
                 ],
                 "title": "AffiliateResource"
             },
-            "App.Http.Resources.Admin.CocktailIngredientResource": {
-                "type": "object",
-                "properties": {
-                    "category_id": {
-                        "type": "integer",
-                        "description": "\u6750\u6599\u306e\u30ce\u30fc\u30c9"
-                    },
-                    "brand_id": {
-                        "type": [
-                            "integer",
-                            "null"
-                        ],
-                        "description": "\u9298\u67c4\u3002\u9298\u67c4\u3092\u6c7a\u3081\u306a\u3044\u6750\u6599\u3067\u306f null"
-                    },
-                    "amount": {
-                        "type": "string",
-                        "description": "\u91cf(\u6574\u3048\u305f\u5f8c\u306e\u5024)"
-                    },
-                    "is_optional": {
-                        "type": "boolean",
-                        "description": "\u4efb\u610f\u306e\u6750\u6599\u304b"
-                    }
-                },
-                "required": [
-                    "category_id",
-                    "brand_id",
-                    "amount",
-                    "is_optional"
-                ],
-                "title": "App.Http.Resources.Admin.CocktailIngredientResource"
-            },
             "App.Http.Resources.Admin.CocktailListItemResource": {
                 "type": "object",
                 "properties": {
@@ -4145,11 +4496,10 @@
                             "null"
                         ]
                     },
-                    "ingredients": {
+                    "aliases": {
                         "type": "array",
-                        "description": "\u6750\u6599\u3002\u30ec\u30b7\u30d4\u306e\u9806(position \u306e\u6607\u9806)\u3067\u3001\u4fdd\u5b58\u306e\u3068\u304d\u306b\u9001\u308b\u5f62(#292)",
                         "items": {
-                            "$ref": "#/components/schemas/App.Http.Resources.Admin.CocktailIngredientResource"
+                            "type": "string"
                         }
                     },
                     "updated_at": {
@@ -4182,7 +4532,7 @@
                     "image",
                     "image_txt",
                     "image_url",
-                    "ingredients",
+                    "aliases",
                     "updated_at"
                 ],
                 "title": "CocktailResource"
@@ -4584,6 +4934,49 @@
                 ],
                 "title": "DictionaryDetailResource"
             },
+            "DictionaryListCategoryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "dictionaries": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "name_eng": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "name_eng"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "dictionaries"
+                ],
+                "title": "DictionaryListCategoryResource"
+            },
             "DictionaryRefResource": {
                 "type": "object",
                 "properties": {
@@ -4603,6 +4996,95 @@
                     "name_eng"
                 ],
                 "title": "DictionaryRefResource"
+            },
+            "DictionaryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "dictionary_category_id": {
+                        "type": "integer",
+                        "description": "\u5206\u985e(\u88fd\u6cd5\u30fb\u30b0\u30e9\u30b9\u306a\u3069)"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u52d5\u753b ID"
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "dictionary_category_id",
+                    "name",
+                    "name_eng",
+                    "description",
+                    "youtube",
+                    "youtube_start_hour",
+                    "youtube_start_minute",
+                    "youtube_start_second",
+                    "image",
+                    "image_txt",
+                    "image_url",
+                    "updated_at"
+                ],
+                "title": "DictionaryResource"
             },
             "FormOptionResource": {
                 "type": "object",
@@ -5228,7 +5710,7 @@
             },
             "SaveCocktailRequest": {
                 "type": "object",
-                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002\u57fa\u672c\u60c5\u5831\u306f #291\u3001\u6750\u6599\u306f #292)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u30fb\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3068\u3001\u6750\u6599\u306e\u4ef6\u6570\u306e\u4e0a\u9650\u30fb\u30ce\u30fc\u30c9\u3068\u9298\u67c4\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
+                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002#291)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u3068\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u6750\u6599\u306f #292 \u3067\u8db3\u3059\u3002\n\u5225\u540d(aliases\u3002#293)\u306f\u65e7\u306b\u7121\u3044\u9805\u76ee\u3067\u3001\u9001\u3063\u305f\u3068\u304d\u3060\u3051\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b(\u4e0b\u306e aliases())\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
                 "properties": {
                     "base_category_id": {
                         "type": "integer",
@@ -5355,40 +5837,16 @@
                     "remove_image": {
                         "type": "boolean"
                     },
-                    "ingredients": {
-                        "type": "array",
-                        "description": "\u6750\u6599\u306e\u884c(#292)\u3002\u4e26\u3073\u306f\u914d\u5217\u306e\u9806\u3067\u3001\u4fdd\u5b58\u306e\u3068\u304d\u306b position \u3092 1 \u304b\u3089\u632f\u308b",
+                    "aliases": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "\u5225\u540d(#293)\u3002\u540d\u524d\u306e\u914d\u5217\u3067\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b\u3002\u9001\u3089\u306a\u3051\u308c\u3070\u4eca\u306e\u5225\u540d\u3092\u6b8b\u3059\u3002\n\u5168\u90e8\u6d88\u3059\u3068\u304d\u306f\u7a7a\u306e\u914d\u5217(multipart \u3067\u306f\u7a7a\u306e\u5024\u306e aliases\u3002\u7a7a\u6587\u5b57\u306f null \u3067\u5c4a\u304f)\u3092\u9001\u308b",
                         "items": {
-                            "type": "object",
-                            "properties": {
-                                "category_id": {
-                                    "type": "integer",
-                                    "description": "\u6750\u6599\u306e\u30ce\u30fc\u30c9\u3002\u3069\u306e\u6df1\u3055\u306e\u30ce\u30fc\u30c9\u3067\u3082\u3088\u3044\u304c\u3001\u6839(\u65e7\u306e\u7a2e\u5225)\u306f\u9078\u3079\u306a\u3044(#153)"
-                                },
-                                "brand_id": {
-                                    "type": [
-                                        "integer",
-                                        "null"
-                                    ],
-                                    "description": "\u9298\u67c4\u3002\u6c7a\u3081\u306a\u3044\u6750\u6599\u3067\u306f\u7a7a\u3002\u9298\u67c4\u304c\u3042\u308c\u3070\u3001\u30ce\u30fc\u30c9\u306f\u9298\u67c4\u306e\u6240\u5c5e\u30ce\u30fc\u30c9\u306b\u3059\u308b(#19)"
-                                },
-                                "amount": {
-                                    "type": "string",
-                                    "description": "\u91cf\u3002\u66f8\u5f0f\u306f\u78ba\u304b\u3081\u305a\u3001\u4fdd\u5b58\u306e\u3068\u304d\u306b\u6574\u3048\u308b(docs/decisions/admin-screens.md \u306e\u6c7a\u307e\u3063\u305f\u3053\u3068 4\u3002\u65e7\u3068\u540c\u3058)\u3002\n\u6574\u3048\u305f\u5f8c\u306e\u9577\u3055(\u5217\u306e\u9577\u3055 20)\u306f\u4fdd\u5b58\u306e\u3068\u304d\u306b\u78ba\u304b\u3081\u308b",
-                                    "maxLength": 20
-                                },
-                                "is_optional": {
-                                    "type": "boolean",
-                                    "description": "\u4efb\u610f\u306e\u6750\u6599\u304b\u3002\u9001\u3089\u306a\u3051\u308c\u3070\u4efb\u610f\u3067\u306a\u3044(\u65e7\u3068\u540c\u3058)"
-                                }
-                            },
-                            "required": [
-                                "category_id",
-                                "amount"
-                            ]
-                        },
-                        "minItems": 2,
-                        "maxItems": 20
+                            "type": "string",
+                            "maxLength": 255
+                        }
                     }
                 },
                 "required": [
@@ -5397,10 +5855,98 @@
                     "name_eng",
                     "method_id",
                     "is_major",
-                    "is_draft",
-                    "ingredients"
+                    "is_draft"
                 ],
                 "title": "SaveCocktailRequest"
+            },
+            "SaveDictionaryRequest": {
+                "type": "object",
+                "description": "\u7528\u8a9e\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/dictionaries\u30fbPUT /api/admin/dictionaries/{id}\u3002#315)\u306e\u5165\u529b\u3002\n\n\u65e7\u306f\u7528\u8a9e\u306e\u4fdd\u5b58\u3092\u6b62\u3081\u3066\u3044\u305f(\u65e7 routes/web.php \u306e\u300c\u9762\u5012\u306a\u306e\u3067\u30b5\u30dd\u30fc\u30c8\u5207\u308a\u300d)\u306e\u3067\u3001\u65e7\u306e\u898f\u5247\u306f\u7121\u3044\u3002\u5217\u306b\u5408\u308f\u305b\u305f\n\u5fc5\u9808\u3068\u9577\u3055\u306e\u4e0a\u9650\u306b\u3001\u9298\u67c4(#314)\u30fb\u30ab\u30af\u30c6\u30eb(#291)\u3068\u540c\u3058 YouTube\u30fb\u753b\u50cf\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
+                "properties": {
+                    "dictionary_category_id": {
+                        "type": "integer",
+                        "description": "\u5206\u985e(\u88fd\u6cd5\u30fb\u30b0\u30e9\u30b9\u306a\u3069)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "name_eng": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "\u8aac\u660e\u3002\u4fdd\u5b58\u306e\u3068\u304d\u306b\u8a18\u6cd5\u3078\u5909\u63db\u3059\u308b(DescriptionMarkup\u3002#287)"
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "YouTube \u306e URL \u304b\u52d5\u753b ID",
+                        "maxLength": 255
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 99
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u753b\u50cf\u306e\u30ea\u30f3\u30af\u306e\u6587\u5b57\u3068 URL",
+                        "maxLength": 255
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 5120 kilobytes."
+                    },
+                    "remove_image": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "dictionary_category_id",
+                    "name",
+                    "name_eng",
+                    "description"
+                ],
+                "title": "SaveDictionaryRequest"
             },
             "SaveParaphraseRequest": {
                 "type": "object",

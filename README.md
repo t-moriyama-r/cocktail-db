@@ -23,7 +23,7 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
 .github/workflows/branch-flow.yml  staging・release への PR の元のブランチ(release 向けはタイトルの版も)を確かめる
 .github/workflows/release-tag.yml  release にマージした PR のタイトルの版で、タグと GitHub Release を作る
-.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画。画面を変えた PR は幅の区切りごと)があるかを確かめる。本文の「気づいたこと」が issue につながっているかは、コードを変えていない文書だけの PR でも確かめる
+.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画。画面を変えた PR は動画と、幅の区切りごとの静止画)があるかを確かめる。本文の「気づいたこと」が issue につながっているかは、コードを変えていない文書だけの PR でも確かめる
 ```
 
 サーバー上の配置:
@@ -159,12 +159,15 @@ GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
 | Secret | `DEV_AMAZON_CREDENTIAL_SECRET`・`STG_AMAZON_CREDENTIAL_SECRET` | dev・stg の `.env` の `AMAZON_CREDENTIAL_SECRET`(同じく、シークレット) |
 | Secret | `DEV_AMAZON_PARTNER_TAG`・`STG_AMAZON_PARTNER_TAG` | dev・stg の `.env` の `AMAZON_PARTNER_TAG`(Amazon のパートナータグ) |
 | Secret | `DEV_RAKUTEN_AFFILIATE_ID`・`STG_RAKUTEN_AFFILIATE_ID` | dev・stg の `.env` の `RAKUTEN_AFFILIATE_ID`(楽天アフィリエイトの ID) |
+| Secret | `STG_LEGACY_DB_DATABASE`・`STG_LEGACY_DB_USERNAME`・`STG_LEGACY_DB_PASSWORD` | stg の `.env` の `LEGACY_DB_*`(旧 DB の接続。stg で `legacy:verify-images`・`legacy:import` を流すときに入れる。#211・#36)。DB 名・ユーザー名には cPanel のユーザー名が頭に付く |
 | Variable | `DEV_APP_URL` | `https://cocktail-dev.trc-vlackhistory.net` |
 | Variable | `STG_APP_URL` | `https://cocktail-stg.trc-vlackhistory.net` |
 
 Amazon・楽天の 8 つ(`DEV_AMAZON_*`・`STG_AMAZON_*`・`DEV_RAKUTEN_AFFILIATE_ID`・`STG_RAKUTEN_AFFILIATE_ID`)は入れなくてよい。空なら `.env` にその行を書かず、デプロイは通る(鍵が無ければ Amazon に問い合わせず、設定は既定の値になるので、Amazon の情報が出ず、楽天のリンクに ID が付かない)。値に改行・復帰文字・単一引用符は使えない(入っているとデプロイの `.env` を書くところで止まる)。管理画面の設定で保存した値があれば、`.env` よりそちらが優先する。
 
-Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは(Amazon・楽天の 8 つを除き)、デプロイの最初の check で止まる。
+旧 DB の 3 つ(`STG_LEGACY_DB_*`)も入れなくてよい。`STG_LEGACY_DB_DATABASE` が空なら `.env` に `LEGACY_DB_*` の行を書かない。入っていれば、3 つの値と `LEGACY_DB_HOST=localhost`・`LEGACY_DB_PORT=3306` を書く(旧 DB は新の DB と同じサーバーにある)。値に改行・復帰文字・単一引用符は使えないのは同じ。dev には渡していない。`.env` はデプロイのたびに作り直し、設定もキャッシュするので、サーバーの `.env` に手で足しても効かない・次のデプロイで消える。入れた後は stg を `force` 付きで出し直す。
+
+Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは(Amazon・楽天の 8 つと旧 DB の 3 つを除き)、デプロイの最初の check で止まる。
 
 ## サーバーの PHP の版
 

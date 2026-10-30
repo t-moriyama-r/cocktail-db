@@ -180,7 +180,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 [recipe-count.md](decisions/recipe-count.md)(#154)のとおり。
 
 - **定義**: カクテルの材料のうち、任意でなく(`is_optional = false`)、役割が `other` の根の部分木に入っていないものの数。かんたん検索は `recipe_count <= 3`
-- **持ち方**: 列に持ち、**`RecipeCounter`(#156)だけが更新する**。更新のきっかけは、材料の保存(`AdminCocktailWriter`。#292)・部分木を根をまたいで移したとき(`CategoryTree::moveSubtree` が数え直す。#156・#122)・銘柄の所属を変えたとき(#64)・移行(#31)・数え直しのコマンド(`cocktails:recount`。#74)
+- **持ち方**: 列に持ち、**`RecipeCounter`(#156)だけが更新する**。更新のきっかけは、管理画面でのカクテルの保存(`AdminCocktailWriter`。材料も同じ保存で書き、保存のたびに数え直す。#130・#292)・部分木を根をまたいで移したとき(`CategoryTree::moveSubtree` が数え直す。#156・#122)・銘柄の所属を変えたとき(#64)・移行(#31)・数え直しのコマンド(`cocktails:recount`。#74)
 - 旧の値は使わない(旧は 2 つの数え方が混ざっている)。移行の後に数え直す
 
 #### `recipe_signature`
@@ -189,7 +189,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 
 - **中身**: 材料の行ごとの (`category_id`・`brand_id`・`amount`・`is_optional`) を並べたものの SHA-256(16 進 64 文字)。行の並び順(`position`)は見ない(行を並べ替えてから作る)。同じ行が 2 つあれば 2 つと数える。量は保存した文字のまま比べる(`30ml` と `30 ml` は違うレシピ)。材料の無いカクテルは null で、どのカクテルとも同じレシピにしない
 - **比べ方**: 同じレシピのカクテルは、この列が同じ公開しているカクテル(下書きを除く)。索引を張る
-- **持ち方**: 列に持ち、**`RecipeSignature`(`app/Services/RecipeSignature.php`)だけが更新する**。作り直すきっかけは、材料の保存(`AdminCocktailWriter`。#292)・銘柄の所属を変えたとき(材料のノードが変わる。`AdminBrandWriter`。#415 で決めた)・移行(#31)。列を足したマイグレーションは、今ある材料から値を入れる
+- **持ち方**: 列に持ち、**`RecipeSignature`(`app/Services/RecipeSignature.php`)だけが更新する**。作り直すきっかけは、管理画面でのカクテルの保存(`AdminCocktailWriter`。材料も同じ保存で書き、保存のたびに作り直す。#130・#292)・銘柄の所属を変えたとき(材料のノードが変わる。`AdminBrandWriter`。#415 で決めた)・移行(#31)。列を足したマイグレーションは、今ある材料から値を入れる
 - 作り直しを呼び忘れた書き換えは、`data:verify`(#157)が材料から作り直した値と比べて見つける
 
 ### `cocktail_ingredients`

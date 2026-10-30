@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-gate.sh のテスト(TC-380-01〜15・TC-432-01〜11・TC-518-01〜12)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# evidence-gate.sh のテスト(TC-380-01〜15・TC-432-01〜11・TC-518-01〜12・TC-598-01〜13・TC-604-01〜14)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/evidence-gate.test.sh
 
@@ -18,21 +18,29 @@ IMG='<img width="922" height="543" alt="compare" src="https://github.com/user-at
 MD_IMG='![compare](https://github.com/user-attachments/assets/22222222-bbbb)'
 VIDEO_BEFORE='https://github.com/user-attachments/assets/33333333-cccc'
 VIDEO_AFTER='https://github.com/user-attachments/assets/44444444-dddd'
+# Actions で撮って evidence ブランチに置いた証跡(#487・#598)。検査するリポジトリは o/r
+EV_ROOT='https://raw.githubusercontent.com/o/r/evidence'
+EV_IMG="<img width=\"922\" alt=\"compare\" src=\"$EV_ROOT/598/compare.png\" />"
+EV_MD_IMG="![compare]($EV_ROOT/598/compare.png)"
+EV_MP4_BEFORE="$EV_ROOT/598/before.mp4"
+EV_MP4_AFTER="$EV_ROOT/598/after.mp4"
 CODE='["backend/app/Http/Controllers/HelloController.php"]'
 FE='["frontend/src/components/DataTable.tsx","frontend/src/components/DataTable.module.css"]'
+# 画面のコードで .css を変えていない PR。動画と、xs・lg の幅が要る(#604)
+TSX='["frontend/src/components/DataTable.tsx"]'
 DOCS='["README.md","docs/design/style.md",".github/workflows/test.yml","backend/tests/Feature/HelloTest.php","frontend/src/App.test.tsx","e2e/tests/layout.spec.ts","frontend/package-lock.json"]'
 
 main() {
 	setup_fake_gh
 
-	check TC-380-01 'コードの PR に、静止画・修正前後の動画・修正前後の記載がそろっている' "$CODE" \
-		"$(body "## 証跡" "修正前と修正後の比較" "$IMG" "" "修正前" "" "$VIDEO_BEFORE" "" "修正後" "" "$VIDEO_AFTER")" 0
+	check TC-380-01 'コードの PR に、静止画・修正前後の動画・修正前後の記載がそろっている' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前と修正後の比較" "$IMG" "" "修正前" "" "$VIDEO_BEFORE" "" "修正後" "" "$VIDEO_AFTER")" 0
 	check TC-380-02 'コードの PR に「## 証跡」の節が無い' "$CODE" \
 		"$(body "## 何をしたか" "直した")" 1 '「## 証跡」の節が無い'
 	check TC-380-03 '「未撮影」が残っている(画像・動画はある)' "$CODE" \
 		"$(body "## 証跡" "未撮影のものがある。修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '未撮影'
-	check TC-380-04 '動画が 1 本だけ' "$CODE" \
-		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "$VIDEO_AFTER")" 1 '(1 本)'
+	check TC-380-04 '動画が 1 本だけ' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "" "$VIDEO_AFTER")" 1 '(1 本)'
 	check TC-380-05 '動画は 2 本あるが静止画が無い' "$CODE" \
 		"$(body "## 証跡" "修正前・修正後" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画'
 	check TC-380-06 '修正前・修正後の記載が無い' "$CODE" \
@@ -48,12 +56,12 @@ main() {
 		"$(body "## 証跡" "修正前・修正後" "$MD_IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
 	check TC-380-11 'ほかの節にある画像・動画は数えない' "$CODE" \
 		"$(body "## 何をしたか" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER" "## 証跡" "修正前・修正後は上" "## 確かめたこと" "CI")" 1 '静止画'
-	check TC-380-12 '<img> に埋めた URL は動画として数えない' "$CODE" \
-		"$(body "## 証跡" "修正前・修正後" "$IMG" "$IMG" "$IMG")" 1 '(0 本)'
+	check TC-380-12 '<img> に埋めた URL は動画として数えない' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "$IMG" "$IMG")" 1 '(0 本)'
 	check TC-380-13 'ops だけを変えた PR は、撮らない理由があれば通る' '["ops/backup/backup.sh","ops/migrate/run.sh"]' \
 		"$(body "## 証跡" "ops のシェルだけで画面も API も無いので撮らない")" 0
-	check TC-380-14 '同じ動画の URL を 2 行書いても 1 本と数える' "$CODE" \
-		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_BEFORE")" 1 '(1 本)'
+	check TC-380-14 '同じ動画の URL を 2 行書いても 1 本と数える' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_BEFORE")" 1 '(1 本)'
 	check TC-380-15 '文の途中の「撮れず」は宣言として扱わない' "$CODE" \
 		"$(body "## 証跡" "修正前・修正後。旧は動画が撮れず静止画で比べた" "$IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
 
@@ -108,17 +116,79 @@ main() {
 	check TC-518-12 '色コード(#337ab7)は issue の参照として数えない' "$CODE" \
 		"$(fe_body "### 気づいたこと" "" "- #337ab7 の文字が見づらい")" 1 '「気づいたこと」に、issue の参照'
 
+	# Actions で撮って evidence ブランチに置いた証跡も数える。検査する PR のリポジトリの evidence ブランチの下だけ(#598)
+	check TC-598-01 'evidence ブランチの画像を <img src> で貼ったら静止画と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
+	check TC-598-02 'evidence ブランチの画像を ![](…) で貼ったら静止画と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_MD_IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
+	check TC-598-03 'evidence ブランチの .mp4 の行だけの URL を、1 本ずつ動画と数える' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$EV_IMG" "" "$EV_MP4_BEFORE" "" "$EV_MP4_AFTER")" 0
+	check TC-598-04 'evidence ブランチの .mp4 への Markdown のリンクを、1 本ずつ動画と数える' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$EV_IMG" "" "- [修正前の動画]($EV_MP4_BEFORE)" "- [修正後の動画]($EV_MP4_AFTER)")" 0
+	check TC-598-05 '同じ .mp4 の URL を行だけの URL とリンクで 3 回書いても 1 本と数える' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$EV_IMG" "" "$EV_MP4_BEFORE" "" "  $EV_MP4_BEFORE  " "[修正前]($EV_MP4_BEFORE)")" 1 '(1 本)'
+	check TC-598-06 'ほかのリポジトリの evidence ブランチの画像は数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/x/r/evidence/598/compare.png" />' '![b](https://raw.githubusercontent.com/o/r2/evidence/598/compare.png)' "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画'
+	check TC-598-07 'ほかのリポジトリの evidence ブランチの .mp4 は数えない' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "" "https://raw.githubusercontent.com/x/r/evidence/598/before.mp4" "" "[修正後](https://raw.githubusercontent.com/o/r2/evidence/598/after.mp4)")" 1 '(0 本)'
+	check TC-598-08 'ほかのブランチ(main・evidence-old)の画像は数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/o/r/main/598/compare.png" />' '![b](https://raw.githubusercontent.com/o/r/evidence-old/598/compare.png)' "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画'
+	check TC-598-09 'ほかのブランチ(main・evidence-old)の .mp4 は数えない' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "" "https://raw.githubusercontent.com/o/r/main/598/before.mp4" "" "[修正後](https://raw.githubusercontent.com/o/r/evidence-old/598/after.mp4)")" 1 '(0 本)'
+	check TC-598-10 'リポジトリ名の . は 1 文字に当たらない(o/r.db の検査で o/rXdb の画像を数えない)' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/o/rXdb/evidence/598/compare.png" />' "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画' o/r.db
+	check TC-598-11 '. を含むリポジトリ名でも、そのリポジトリの evidence ブランチなら数える' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/o/r.db/evidence/598/compare.png" />' "" "https://raw.githubusercontent.com/o/r.db/evidence/598/before.mp4" "" "https://raw.githubusercontent.com/o/r.db/evidence/598/after.mp4")" 0 '' o/r.db
+	check TC-598-12 '![](….mp4) と、.mp4 でない行だけの URL は動画と数えない' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "" "![修正前]($EV_MP4_BEFORE)" "" "$EV_ROOT/598/after.png")" 1 '(0 本)'
+	check TC-598-13 'user-attachments の動画と evidence ブランチの .mp4 を 1 本ずつ合わせて 2 本と数える' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$EV_MP4_AFTER")" 0
+
+	# 動画は画面の PR だけ。.css を変えていない画面の PR は xs・lg だけ。リファクタは印で修正後の静止画 1 枚(#604)
+	check TC-604-01 '画面の無い BE の PR は、動画が無くても静止画と修正前後の記載があれば通る' "$CODE" \
+		"$(body "## 証跡" "修正前と修正後の応答の比較" "$IMG")" 0
+	check TC-604-02 '画面の無い BE の PR でも、静止画が無ければ落とす' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後")" 1 '静止画'
+	check TC-604-03 '画面の PR は、今までどおり動画が修正前・修正後の 2 本要る' "$TSX" \
+		"$(body "## 証跡" "xs 375px・lg 1440px" "修正前・修正後" "$IMG")" 1 '(0 本)'
+	check TC-604-04 '.tsx だけの PR は、xs と lg の幅があれば通る' "$TSX" \
+		"$(fe_body "xs 375px・lg 1440px")" 0
+	check TC-604-05 '.tsx だけの PR で lg が欠けていれば、lg だけを出して落とす' "$TSX" \
+		"$(fe_body "xs 375px・sm 768px・md 1024px")" 1 '足りない区切り: lg(1264px〜。撮る幅は 1440px)'
+	check TC-604-06 '.css を変えた PR は、xs・lg だけでは sm・md が足りない' "$FE" \
+		"$(fe_body "xs 375px・lg 1440px")" 1 '足りない区切り: sm(600〜959px。撮る幅は 768px) / md(960〜1263px。撮る幅は 1024px)'
+	check TC-604-07 'リファクタの印(理由つき)があれば、修正後の静止画 1 枚で通る(動画・修正前・幅は見ない)' "$TSX" \
+		"$(body "<!-- ai-dev:refactor-evidence リンク先を作る関数に寄せただけ -->" "## 証跡" "既存のテストが変えずに通った" "$IMG")" 0
+	check TC-604-08 'リファクタの印でも、静止画が無ければ落とす' "$TSX" \
+		"$(body "<!-- ai-dev:refactor-evidence 関数に寄せただけ -->" "## 証跡" "既存のテストが通った")" 1 '静止画(修正後の画面か'
+	check TC-604-09 'リファクタの印に理由が無ければ、印として認めず、ふだんの検査もする' "$TSX" \
+		"$(body "<!-- ai-dev:refactor-evidence -->" "## 証跡" "$IMG")" 1 '振る舞いを変えないと言える理由が書かれていない'
+	check TC-604-10 'リファクタの印で、既存のテストのファイルを変えていれば落とす' \
+		'["frontend/src/components/DataTable.tsx","frontend/src/components/DataTable.test.tsx"]' \
+		"$(body "<!-- ai-dev:refactor-evidence 関数に寄せただけ -->" "## 証跡" "$IMG")" 1 '既存のテストのファイルを変えている(振る舞いを変えないリファクタは既存のテストを変えずに通す。テストを足すのはよい): frontend/src/components/DataTable.test.tsx'
+	check TC-604-11 'リファクタの印で、テストのファイルを足すだけなら通る' \
+		'["frontend/src/components/DataTable.tsx","added:frontend/src/lib/paths.test.ts"]' \
+		"$(body "<!-- ai-dev:refactor-evidence 関数に寄せただけ -->" "## 証跡" "$IMG")" 0
+	check TC-604-12 'リファクタの印で、既存の BE のテスト(Test.php)を消していれば落とす' \
+		'["backend/app/Services/Foo.php","removed:backend/tests/Feature/FooTest.php"]' \
+		"$(body "<!-- ai-dev:refactor-evidence サービスに寄せただけ -->" "## 証跡" "$IMG")" 1 'backend/tests/Feature/FooTest.php'
+	check TC-604-13 '印の無い PR は、既存のテストを変えていても今までどおり(テストの変更では落とさない)' \
+		'["backend/app/Services/Foo.php","backend/tests/Feature/FooTest.php"]' \
+		"$(body "## 証跡" "修正前・修正後" "$IMG")" 0
+	check TC-604-14 'HTML コメントでない「ai-dev:refactor-evidence」の文字は印として数えない' "$TSX" \
+		"$(body "## 証跡" "ai-dev:refactor-evidence は使わない" "$IMG")" 1 '(0 本)'
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }
 
-# gh pr view に、$FAKE に置いた JSON を返す
+# gh pr view に、$FAKE に置いた JSON を返す。ファイルの一覧は「状態<TAB>パス」で返す
 setup_fake_gh() {
 	cat >"$FAKE/gh" <<-'EOF'
 		#!/usr/bin/env bash
 		case "$*" in
 		  "pr view"*) jq -r '.body' "$FAKE_DIR/pr.json" ;;
-		  "api --paginate"*) jq -r '.files[].path' "$FAKE_DIR/pr.json" ;;
+		  "api --paginate"*) jq -r '.files[] | "\(.status)\t\(.path)"' "$FAKE_DIR/pr.json" ;;
 		  *) echo "unexpected gh $*" >&2; exit 1 ;;
 		esac
 	EOF
@@ -134,9 +204,11 @@ fe_body() {
 body() { printf '%s\r\n' "$@"; }
 
 check() {
-	local id=$1 title=$2 files=$3 text=$4 expected=$5 message=${6:-} actual output
-	jq -n --argjson files "$files" --arg body "$text" '{body: $body, files: ($files | map({path: .}))}' >"$FAKE/pr.json"
-	output=$(PATH="$FAKE:$PATH" FAKE_DIR="$FAKE" bash "$SCRIPT" o/r 1 2>&1)
+	local id=$1 title=$2 files=$3 text=$4 expected=$5 message=${6:-} repo=${7:-o/r} actual output
+	# ファイルは既定で modified。「added:」「removed:」を頭に付けたものはその状態にする
+	jq -n --argjson files "$files" --arg body "$text" '{body: $body, files: ($files | map(
+		capture("^((?<status>added|removed):)?(?<path>.*)$") | {status: (.status // "modified"), path}))}' >"$FAKE/pr.json"
+	output=$(PATH="$FAKE:$PATH" FAKE_DIR="$FAKE" bash "$SCRIPT" "$repo" 1 2>&1)
 	actual=$?
 	if [ "$actual" -eq "$expected" ] && { [ -z "$message" ] || grep -qF -- "$message" <<<"$output"; }; then
 		PASSED=$((PASSED + 1))
