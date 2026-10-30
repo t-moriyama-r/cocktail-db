@@ -7,7 +7,7 @@
 # (.github/scripts/workflow-change-summary.sh。要注意の変更があるかと、権限・secret・トリガーなどに触れる行)を付ける
 #
 # きっかけは 2 つあり、1 件につきどちらか一方だけが 1 通送る
-# - pull_request_target(closed): 人がマージしたとき
+# - pull_request_target(closed): 人か、ai-auto-merge.yml が secret AUTO_MERGE_TOKEN(オーナーの PAT)でマージしたとき(#540)
 # - workflow_dispatch: ai-auto-merge.yml が GITHUB_TOKEN でマージしたとき(GITHUB_TOKEN のマージはイベントを起こさないので、直接呼ばれる)
 #
 # 送り先は notify-needs-human.yml と同じ(.github/scripts/slack-post.sh。bot か Webhook。どちらも無ければ何もせず警告だけ出す)
