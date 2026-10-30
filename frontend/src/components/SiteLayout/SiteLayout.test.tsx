@@ -21,8 +21,9 @@ const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
   beforeEach(() => {
-    // トップの画面が GET /api/hello を呼ぶ
+    // トップの画面が GET /api/hello を、用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
     mockApi('get', '/hello', 200, HELLO)
+    mockApi('get', '/dictionaries', 200, { data: [] })
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
   })

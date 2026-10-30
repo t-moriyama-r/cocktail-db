@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
+use App\Models\DictionaryCategory;
 use App\Models\Ice;
 use App\Models\Method;
 use App\Services\CategoryTree;
@@ -23,7 +24,8 @@ class E2eSeeder extends Seeder
     public function run(): void
     {
         $nodes = $this->seedIngredientTree(app(CategoryTree::class));
-        $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint']);
+        $terms = $this->seedDictionary();
+        $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
     }
 
     /**
@@ -33,11 +35,12 @@ class E2eSeeder extends Seeder
      * 材料にジンの配下の銘柄を使うジントニック(ingredient_matches)の 1 件の、合わせて 5 件に当たる(銘柄の名前にはジンを入れない)。
      *
      * ジントニックは、カクテルの詳細(#108)の E2E にも使う。登録数を変えないよう、カクテルは足さずにこの 1 件に
-     * グラス・氷・甘さ・評価・補足と、銘柄つきの材料・任意の材料を持たせる。技法のビルドは用語を持たない(製法をリンクにしない)。
+     * グラス・氷・甘さ・評価・補足と、銘柄つきの材料・任意の材料を持たせる。
+     * 技法(ビルド)とグラス(タンブラー)は用語辞典の用語に結び付け、用語の詳細(#56)の「これを使ったカクテル」に出す。
      *
      * 銘柄はジンの有名な銘柄にもする(カテゴリの詳細の E2E(#105)で、有名な銘柄の欄が出るノードと出ないノードを作る)。
      */
-    private function seedHeaderData(Category $gin, Category $beefeater, Category $mint): void
+    private function seedHeaderData(Category $gin, Category $beefeater, Category $mint, Dictionary $build, Dictionary $tumbler): void
     {
         $beefeater40 = Brand::factory()->create([
             'category_id' => $beefeater->id,
@@ -51,12 +54,8 @@ class E2eSeeder extends Seeder
             'name_search' => 'ジントニック',
             'name_eng' => 'Gin and Tonic',
             'base_category_id' => $gin->id,
-            'method_id' => Method::factory()->create(['name' => 'ビルド', 'name_eng' => 'Build'])->id,
-            'glass_dictionary_id' => Dictionary::factory()->create([
-                'name' => 'タンブラー',
-                'name_eng' => 'Tumbler',
-                'name_search' => 'タンブラー',
-            ])->id,
+            'method_id' => Method::factory()->create(['name' => 'ビルド', 'name_eng' => 'Build', 'dictionary_id' => $build->id])->id,
+            'glass_dictionary_id' => $tumbler->id,
             'ice_id' => Ice::query()->create(['name' => 'キューブアイス', 'name_eng' => 'Ice Cube'])->id,
             'volume' => 12.5,
             'sweet_degree' => 0,
@@ -108,5 +107,38 @@ class E2eSeeder extends Seeder
         $mint = $node($other, 'ミント');
 
         return ['gin' => $gin, 'beefeater' => $beefeater, 'mint' => $mint];
+    }
+
+    /**
+     * 用語辞典(#56)の E2E 用の分類と用語。分類は旧と同じ ID(製法 1・グラス 2・スタイル 5・単位 6)で作る。
+     * スタイルは用語が 0 件(一覧に出ない)。単位の用語は、作る順(ID の順)と五十音の順をずらし、ひらがなとカタカナを混ぜる。
+     * ビルドの説明文は、タンブラーへの参照を持つ(用語から用語へ移る E2E に使う)。
+     * タンブラーは、カクテルの詳細(#108)の E2E がグラスのリンク先を /dictionary/1 と見るので、最初に作る。
+     *
+     * @return array{build: Dictionary, tumbler: Dictionary} 技法とグラスに結び付ける用語
+     */
+    private function seedDictionary(): array
+    {
+        $category = fn (int $id, string $name, string $nameEng): DictionaryCategory => DictionaryCategory::factory()
+            ->create(['id' => $id, 'name' => $name, 'name_eng' => $nameEng]);
+        $term = fn (DictionaryCategory $category, string $name, string $nameEng, string $description): Dictionary => Dictionary::factory()
+            ->create([
+                'dictionary_category_id' => $category->id, 'name' => $name, 'name_eng' => $nameEng, 'name_search' => $name,
+                'description' => $description,
+            ]);
+
+        $method = $category(1, '製法', 'Method');
+        $glass = $category(DictionaryCategory::GLASS_ID, 'グラス', 'Glass');
+        $category(5, 'スタイル', 'Style');
+        $unit = $category(6, '単位', 'Unit');
+
+        $tumbler = $term($glass, 'タンブラー', 'Tumbler', '脚の無い、筒の形のグラス。');
+        $build = $term($method, 'ビルド', 'Build', 'グラスに直接注いで作る。@d'.$tumbler->id.'@で作ることが多い。');
+        $term($method, 'シェイク', 'Shake', 'シェイカーで振って混ぜる。');
+        $term($unit, 'ひとつまみ', 'Pinch', '指でつまんだ量。');
+        $term($unit, 'ティースプーン', 'Teaspoon', '約 5ml。');
+        $term($unit, 'ダッシュ', 'Dash', '約 1ml。');
+
+        return ['build' => $build, 'tumbler' => $tumbler];
     }
 }

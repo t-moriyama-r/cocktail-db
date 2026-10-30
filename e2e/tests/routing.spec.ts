@@ -13,7 +13,8 @@ const pages = [
   // E2eSeeder のジントニック(#108 で中身を出すようにした)
   { path: '/detail/cocktail/1', heading: 'ジントニック(Gin and Tonic)' },
   { path: '/dictionary', heading: '用語辞典' },
-  { path: '/dictionary/1', heading: '用語の詳細' },
+  // E2eSeeder の用語辞典で ID 1 の用語(#56)
+  { path: '/dictionary/1', heading: 'タンブラー(Tumbler)' },
 ]
 
 for (const { path, heading } of pages) {

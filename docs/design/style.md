@@ -83,6 +83,8 @@ npm run dev
 | 詳細の欄の線 `--color-detail-data-line`・`--color-detail-recipe-line`・`--color-detail-note-line` | `#006699`・`#ff6600`・`#98d4d6`(旧の `Detail/CocktailDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | カクテルの詳細の、ベースなどの欄の左の線・材料の欄の左の線・Note の上の線(#108) |
 | 区切りの文字 `--color-section-label` | `#1177ff`(旧と同じ。白地で 4.11:1 で、4.5:1 に届かない) | カクテルの詳細の、960px 未満で説明文の上に出す「§Description§」(#108) |
 | モーダルの後ろ `--color-overlay` | `rgb(33 33 33 / 46%)`(旧の Vuetify の v-overlay と同じ色と濃さ) | ヘッダーの条件検索のモーダル(#99) |
+| 用語辞典の分類の見出しの線 `--color-dictionary-category-line` | `#006699`(旧の `Dictionary/index.vue` と同じ。旧でもほかの見出しの線 `#4499FF` と違った) | 用語辞典の一覧の、分類の見出しの左と下の線(#56) |
+| 用語辞典のカクテルの欄の線 `--color-dictionary-method-line`・`--color-dictionary-glass-line` | `#3399ff`・`#1f0d85`(旧の `Dictionary/detail.vue` と同じ。飾りの線で、文字には使わない) | 用語辞典の詳細の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(#56) |
 
 案 A の色は旧の画面から取った(ヘッダーの水色 `#99DDFF`・リンクの青 `#337ab7`・見出しの線 `#4499FF`・区切りの線 `#BBDDFF`)。
 

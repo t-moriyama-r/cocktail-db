@@ -14,7 +14,8 @@ const pages = [
   { path: '/detail/brand/1', title: SITE_TITLE },
   { path: '/detail/cocktail/1', title: SITE_TITLE },
   { path: '/dictionary', title: `用語辞典 ｜ ${SITE_TITLE}` },
-  { path: '/dictionary/1', title: SITE_TITLE },
+  // E2eSeeder の用語辞典で ID 1 の用語(#56)。詳細はタイトルに用語の名前を出す(TC-56-06)
+  { path: '/dictionary/1', title: `タンブラー(Tumbler) ｜ ${SITE_TITLE}` },
   { path: '/nope', title: `ページが見つかりません ｜ ${SITE_TITLE}` },
 ]
 
