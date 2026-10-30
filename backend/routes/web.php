@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminLoginLinkController;
 use App\Http\Controllers\DetailPageController;
+use App\Http\Controllers\SitemapController;
 use Illuminate\Routing\RedirectController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,12 @@ Route::get('/detail/cocktail/{id}', [DetailPageController::class, 'cocktail'])->
 Route::get('/category/{id}', [DetailPageController::class, 'category'])->whereNumber('id');
 Route::get('/detail/brand/{id}', [DetailPageController::class, 'brand'])->whereNumber('id');
 Route::get('/dictionary/{id}', [DetailPageController::class, 'dictionary'])->whereNumber('id');
+
+// sitemap.xml と robots.txt(#114)。下の SPA へ渡すルートが拾うので、その前に置く。
+// robots.txt は sitemap.xml の場所を APP_URL で書くため、public/ の静的なファイルにせずここで返す
+Route::get('/sitemap.xml', [SitemapController::class, 'index']);
+Route::get('/sitemap-{page}.xml', [SitemapController::class, 'page'])->where('page', '[1-9][0-9]*');
+Route::get('/robots.txt', [SitemapController::class, 'robots']);
 
 // API 以外のパスはすべて SPA に渡し、画面の出し分けは React 側のルーターに任せる
 Route::view('/{any?}', 'spa')->where('any', '^(?!api(/|$)|up$).*');
