@@ -333,7 +333,7 @@ function LocationProbe() {
 }
 
 describe('トップページの条件検索のフォーム', () => {
-  test('TC-307-19: メニューの「カクテル検索」の飛び先に条件検索のフォームを出し、材料を選んで検索すると結果の画面へ移る', async () => {
+  test('TC-307-19・TC-102-19: メニューの「カクテル検索」の飛び先に条件検索のフォームを出し、材料を選んで検索すると、条件を URL に入れて結果の画面へ移る', async () => {
     mockApi('get', '/cocktails/latest-video', 200, LATEST_VIDEO)
     mockLists()
     mockApi('get', '/search-form', 200, {
