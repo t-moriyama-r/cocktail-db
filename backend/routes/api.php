@@ -99,6 +99,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
 
     // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::get('/brands', [BrandController::class, 'index']);
+    // 確かめ用(#528)。生成ファイルの作り直しを確かめるためだけの試しのルート。develop には入れない
+    Route::get('/brands-regen-check', [BrandController::class, 'index']);
     Route::post('/brands', [BrandController::class, 'store']);
     Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
