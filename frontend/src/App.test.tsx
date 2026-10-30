@@ -25,6 +25,8 @@ describe('App のルーティング', () => {
   beforeEach(() => {
     // トップの画面が GET /api/hello を呼ぶ
     mockApi('get', '/hello', 200, HELLO)
+    // 名前検索の結果の画面(#52)が GET /api/search を呼ぶ
+    mockApi('get', '/search', 200, { cocktails: [], nodes: [], brands: [], ingredient_matches: [] })
   })
 
   test.each([
@@ -37,8 +39,8 @@ describe('App のルーティング', () => {
 
   test.each([
     ['TC-97-03', '/helpme', '更新ボランティア募集'],
-    ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '名前検索の結果'],
-    ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '名前検索の結果'],
+    ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '結果'],
+    ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '結果'],
     ['TC-97-06', '/result/Cocktails', '条件検索の結果'],
     ['TC-97-07', '/category/1', 'カテゴリの詳細'],
     ['TC-97-08', '/detail/brand/1', '銘柄の詳細'],
