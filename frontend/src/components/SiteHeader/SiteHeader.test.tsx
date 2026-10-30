@@ -8,6 +8,7 @@ import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../../test/a
 type NameSearchResponse = paths['/search']['get']['responses'][200]['content']['application/json']
 type RandomWalk = paths['/random-walk']['get']['responses'][200]['content']['application/json']
 
+const root: components['schemas']['NodeRefResource'] = { id: 1, name: '蒸留酒', name_eng: 'Spirits' }
 const node: components['schemas']['NodeRefResource'] = { id: 10, name: 'ジン', name_eng: 'Gin' }
 
 const cocktail = (id: number): components['schemas']['CocktailSummaryResource'] => ({
@@ -30,6 +31,7 @@ const nodeHit = (id: number): components['schemas']['NameSearchNodeResource'] =>
   name: `ジン${id}`,
   name_eng: `Gin${id}`,
   parent: node,
+  path: [root, node, { id, name: `ジン${id}`, name_eng: `Gin${id}` }],
 })
 
 const brandHit = (id: number): components['schemas']['NameSearchBrandResource'] => ({
@@ -39,6 +41,7 @@ const brandHit = (id: number): components['schemas']['NameSearchBrandResource'] 
   volume: 40,
   youtube: null,
   category: node,
+  path: [root, node],
 })
 
 const hits = (cocktails: number, nodes = 0, brands = 0, ingredientMatches = 0): NameSearchResponse => ({
@@ -210,7 +213,7 @@ describe('ヘッダー(SiteHeader)', () => {
       fireEvent.click(await header().findByRole('button', { name: '1件ヒット' }))
 
       expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン')}`)
-      expect(await screen.findByRole('heading', { level: 1, name: '名前検索の結果' })).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { level: 1, name: '結果' })).toBeInTheDocument()
     })
 
     test('TC-99-11: 件数は、カクテル・ノード・銘柄の合計', async () => {
@@ -251,7 +254,8 @@ describe('ヘッダー(SiteHeader)', () => {
 
       fireEvent.click(await header().findByRole('button', { name: '1件ヒット' }))
 
-      expect(sentWords()).toEqual(['ジン トニック'])
+      // 移った先の名前検索の結果の画面(#52)も、同じ語で検索する
+      expect(new Set(sentWords())).toEqual(new Set(['ジン トニック']))
       expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン トニック')}`)
     })
 
