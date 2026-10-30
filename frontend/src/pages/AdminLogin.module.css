@@ -1,0 +1,6 @@
+/* ログインの画面。管理画面の枠(メニュー)の外に、中身の幅に収めて出す */
+.page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
