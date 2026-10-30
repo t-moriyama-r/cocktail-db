@@ -4083,7 +4083,59 @@
                         "description": "\u6280\u6cd5\u306e\u7528\u8a9e\u306a\u3089\u3001\u305d\u306e\u6280\u6cd5\u306e ID(\u6280\u6cd5\u304b\u3089\u63a2\u3059\u30ab\u30af\u30c6\u30eb\u306e\u6761\u4ef6\u306b\u4f7f\u3046)\u3002\u6280\u6cd5\u3067\u306a\u3051\u308c\u3070 null"
                     },
                     "description": {
-                        "type": "string"
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "const": "text"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "type",
+                                        "text"
+                                    ]
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "node",
+                                                "cocktail",
+                                                "brand",
+                                                "dictionary"
+                                            ]
+                                        },
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        },
+                                        "has_youtube": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "type",
+                                        "id",
+                                        "text",
+                                        "has_youtube"
+                                    ]
+                                }
+                            ]
+                        }
                     },
                     "youtube": {
                         "type": [
