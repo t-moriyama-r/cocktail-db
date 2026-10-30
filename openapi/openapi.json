@@ -564,47 +564,74 @@
                 }
             }
         },
-        "/cocktails/{cocktail}": {
-            "get": {
-                "operationId": "cocktailDetail",
-                "description": "\u4e0b\u66f8\u304d\u30fb\u7121\u3044\u30ab\u30af\u30c6\u30eb\u306f 404(\u65e7\u306f\u4e0b\u66f8\u304d\u3082\u8fd4\u3057\u3001\u7121\u3044 ID \u306f 500 \u3060\u3063\u305f\u3002docs/decisions/cocktail-detail.md)\u3002",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u8a73\u7d30\u3092\u8fd4\u3059\u3002\u57fa\u672c\u60c5\u5831\u30fb\u6280\u6cd5(\u3068\u3001\u305d\u308c\u3092\u8aac\u660e\u3059\u308b\u7528\u8a9e\u306e ID)\u30fb\u30b0\u30e9\u30b9\u30fb\u6c37\u3068\u3001\u6750\u6599\u3092\u4e26\u3073\u9806(position)\u3067\u8fd4\u3059\u3002\n\u6750\u6599\u3054\u3068\u306b\u3001\u30ce\u30fc\u30c9\u306e\u6839\u304b\u3089\u306e\u30d1\u30f3\u304f\u305a\u3068\u9298\u67c4\u3092\u8fd4\u3059\u3002",
+        "/admin/cocktails": {
+            "post": {
+                "operationId": "cocktail.store",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u4f5c\u308b\u3002\u4e0b\u66f8\u304d\u304b\u516c\u958b\u304b\u306f is_draft \u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
                 "tags": [
-                    "CocktailDetail"
+                    "Cocktail"
                 ],
-                "parameters": [
-                    {
-                        "name": "cocktail",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveCocktailRequest"
+                            }
                         }
                     }
-                ],
+                },
                 "responses": {
-                    "200": {
-                        "description": "`CocktailDetailResource`",
+                    "201": {
+                        "description": "`CocktailResource`",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/CocktailDetailResource"
+                                            "$ref": "#/components/schemas/CocktailResource"
+                                        },
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "cocktail_id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "cocktail_name": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "message",
+                                                    "cocktail_id",
+                                                    "cocktail_name"
+                                                ]
+                                            }
                                         }
                                     },
                                     "required": [
-                                        "data"
+                                        "data",
+                                        "warnings"
                                     ]
                                 }
                             }
                         }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
                     }
                 }
-            }
-        },
-        "/admin/cocktails": {
+            },
             "get": {
                 "operationId": "admin.cocktailIndex",
                 "description": "\u540d\u524d\u306f\u30ab\u30bf\u30ab\u30ca\u3092\u3072\u3089\u304c\u306a\u306b\u3001\u5168\u89d2\u306e\u82f1\u6570\u5b57\u3092\u534a\u89d2\u306b\u3001\u5927\u6587\u5b57\u3092\u5c0f\u6587\u5b57\u306b\u305d\u308d\u3048\u3066\u6bd4\u3079\u3001\u540c\u3058\u306a\u3089 ID \u306e\u9806(\u65e7\u306e\u7ba1\u7406\u753b\u9762\u306e\n\u4e00\u89a7\u3068\u540c\u3058\u4e26\u3073)\u3002q \u306f\u540d\u524d\u304b\u82f1\u540d\u306e\u3069\u3053\u304b\u306b\u542b\u3080\u3082\u306e\u306b\u7d5e\u308b(\u82f1\u540d\u306f\u5927\u6587\u5b57\u30fb\u5c0f\u6587\u5b57\u3092\u533a\u5225\u3057\u306a\u3044)\u3002",
@@ -804,6 +831,305 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/cocktails/{cocktail}": {
+            "get": {
+                "operationId": "cocktail.show",
+                "summary": "\u7de8\u96c6\u3067\u958b\u304f\u30ab\u30af\u30c6\u30eb\u3002\u4e0b\u66f8\u304d\u3082\u8fd4\u3059\u3002",
+                "tags": [
+                    "Cocktail"
+                ],
+                "parameters": [
+                    {
+                        "name": "cocktail",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CocktailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CocktailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "cocktail.update",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3068\u5225\u540d\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u5ea6\u6570\u306f\u5909\u3048\u305a\u3001\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5\u306f\u4eca\u306e\u6750\u6599\u304b\u3089\u4f5c\u308a\u76f4\u3059(#130)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
+                "tags": [
+                    "Cocktail"
+                ],
+                "parameters": [
+                    {
+                        "name": "cocktail",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveCocktailRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CocktailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CocktailResource"
+                                        },
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "field": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "cocktail_id": {
+                                                        "type": "integer"
+                                                    },
+                                                    "cocktail_name": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "field",
+                                                    "message",
+                                                    "cocktail_id",
+                                                    "cocktail_name"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "warnings"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "cocktail.destroy",
+                "description": "\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u30fb\u30ce\u30fc\u30c9\u30fb\u6280\u6cd5\u30fb\u9298\u67c4\u30fb\u7528\u8a9e\u306e\u8aac\u660e\u6587\u304b\u3089 `@c<ID>@` \u3067\u53c2\u7167\u3055\u308c\u3066\u3044\u308b\u3068\u304d\u306f\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3068\u53c2\u7167\u3057\u3066\u3044\u308b\u884c\u3092\u8fd4\u3059(#579)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u3082\u4e00\u7dd2\u306b\u6d88\u3048\u308b(#130)\u3002",
+                "tags": [
+                    "Cocktail"
+                ],
+                "parameters": [
+                    {
+                        "name": "cocktail",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "\u3053\u306e\u30ab\u30af\u30c6\u30eb\u306f\u6d88\u305b\u307e\u305b\u3093"
+                                        },
+                                        "reasons": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "code": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "cocktail",
+                                                            "node",
+                                                            "method",
+                                                            "brand",
+                                                            "dictionary"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "referrers": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "id",
+                                                                "name"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "required": [
+                                                    "code",
+                                                    "message",
+                                                    "referrers"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "reasons"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            }
+        },
+        "/cocktails/{cocktail}": {
+            "get": {
+                "operationId": "cocktailDetail",
+                "description": "\u4e0b\u66f8\u304d\u30fb\u7121\u3044\u30ab\u30af\u30c6\u30eb\u306f 404(\u65e7\u306f\u4e0b\u66f8\u304d\u3082\u8fd4\u3057\u3001\u7121\u3044 ID \u306f 500 \u3060\u3063\u305f\u3002docs/decisions/cocktail-detail.md)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u8a73\u7d30\u3092\u8fd4\u3059\u3002\u57fa\u672c\u60c5\u5831\u30fb\u6280\u6cd5(\u3068\u3001\u305d\u308c\u3092\u8aac\u660e\u3059\u308b\u7528\u8a9e\u306e ID)\u30fb\u30b0\u30e9\u30b9\u30fb\u6c37\u3068\u3001\u6750\u6599\u3092\u4e26\u3073\u9806(position)\u3067\u8fd4\u3059\u3002\n\u6750\u6599\u3054\u3068\u306b\u3001\u30ce\u30fc\u30c9\u306e\u6839\u304b\u3089\u306e\u30d1\u30f3\u304f\u305a\u3068\u9298\u67c4\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "CocktailDetail"
+                ],
+                "parameters": [
+                    {
+                        "name": "cocktail",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CocktailDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CocktailDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/cocktail-form-options": {
+            "get": {
+                "operationId": "admin.cocktailFormOptions",
+                "description": "\u65e7\u306f SearchController@getListForRecipe \u304c\u3001\u6750\u6599\u306e\u9078\u629e\u80a2\u3068\u4e00\u7dd2\u306b\u307e\u3068\u3081\u3066\u8fd4\u3057\u3066\u3044\u305f\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u7de8\u96c6\u753b\u9762\u306e\u9078\u629e\u80a2(#291)\u3002\u6280\u6cd5\u30fb\u30b0\u30e9\u30b9(\u7528\u8a9e\u8f9e\u5178\u306e\u5206\u985e\u300c\u30b0\u30e9\u30b9\u300d\u306e\u9805\u76ee)\u30fb\u6c37\u3092\u3001\u305d\u308c\u305e\u308c ID \u306e\u9806\u3067\u8fd4\u3059\u3002",
+                "tags": [
+                    "CocktailFormOptions"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "methods": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/FormOptionResource"
+                                            }
+                                        },
+                                        "glasses": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/FormOptionResource"
+                                            }
+                                        },
+                                        "ices": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/FormOptionResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "methods",
+                                        "glasses",
+                                        "ices"
+                                    ]
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1267,6 +1593,244 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/admin/dictionaries": {
+            "get": {
+                "operationId": "dictionaries.index",
+                "description": "\u7528\u8a9e\u306e\u7121\u3044\u5206\u985e\u3082\u7a7a\u306e\u4e26\u3073\u3067\u8fd4\u3059(\u65b0\u898f\u306e\u753b\u9762\u3067\u5206\u985e\u3092\u9078\u3079\u308b\u3088\u3046\u306b\u3002\u65e7\u306e\u4e00\u89a7\u306e\u753b\u9762\u306f\u7528\u8a9e\u306e\u7121\u3044\u5206\u985e\u3092\u51fa\u3055\u306a\u304b\u3063\u305f)\u3002",
+                "summary": "\u7528\u8a9e\u8f9e\u5178\u306e\u4e00\u89a7\u3002\u5206\u985e\u3092 ID \u306e\u9806\u306b\u3001\u5206\u985e\u3054\u3068\u306e\u7528\u8a9e\u3092\u540d\u524d\u306e\u9806\u3067\u8fd4\u3059\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `DictionaryListCategoryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/DictionaryListCategoryResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "dictionaries.store",
+                "summary": "\u7528\u8a9e\u3092\u4f5c\u308b\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveDictionaryRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`DictionaryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DictionaryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/dictionaries/{dictionary}": {
+            "get": {
+                "operationId": "dictionaries.show",
+                "summary": "\u7de8\u96c6\u3067\u958b\u304f\u7528\u8a9e\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "parameters": [
+                    {
+                        "name": "dictionary",
+                        "in": "path",
+                        "required": true,
+                        "description": "The dictionary ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`DictionaryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DictionaryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "dictionaries.update",
+                "summary": "\u7528\u8a9e\u3092\u66f8\u304d\u63db\u3048\u308b\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "parameters": [
+                    {
+                        "name": "dictionary",
+                        "in": "path",
+                        "required": true,
+                        "description": "The dictionary ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveDictionaryRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DictionaryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DictionaryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "dictionaries.destroy",
+                "summary": "\u7528\u8a9e\u3092\u6d88\u3059\u3002\u30ab\u30af\u30c6\u30eb\u306e\u30b0\u30e9\u30b9\u306b\u4f7f\u308f\u308c\u3066\u3044\u308b\u30fb\u6280\u6cd5\u3092\u8aac\u660e\u3059\u308b\u7528\u8a9e\u306b\u306a\u3063\u3066\u3044\u308b\u3068\u304d\u306f\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "Dictionary"
+                ],
+                "parameters": [
+                    {
+                        "name": "dictionary",
+                        "in": "path",
+                        "required": true,
+                        "description": "The dictionary ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "\u3053\u306e\u7528\u8a9e\u306f\u6d88\u305b\u307e\u305b\u3093"
+                                        },
+                                        "reasons": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "code": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "glass",
+                                                            "method"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "code",
+                                                    "message"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "reasons"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 }
             }
@@ -3815,6 +4379,164 @@
                 ],
                 "title": "CocktailListItemResource"
             },
+            "CocktailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "base_category_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "method_id": {
+                        "type": "integer"
+                    },
+                    "glass_dictionary_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "ice_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "strength": {
+                        "type": "number",
+                        "description": "\u5ea6\u6570(%)\u3002\u6750\u6599\u304b\u3089\u8a08\u7b97\u3057\u305f\u5024\u3067\u3001\u5165\u529b\u3057\u306a\u3044"
+                    },
+                    "rate": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "sweet_degree": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "is_draft": {
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "description": "\u52d5\u753b\u3092\u5165\u308c\u305f\u30fb\u5909\u3048\u305f\u65e5\u6642"
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "aliases": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "base_category_id",
+                    "name",
+                    "name_eng",
+                    "method_id",
+                    "glass_dictionary_id",
+                    "ice_id",
+                    "strength",
+                    "rate",
+                    "sweet_degree",
+                    "is_major",
+                    "is_draft",
+                    "description",
+                    "note",
+                    "youtube",
+                    "youtube_start_hour",
+                    "youtube_start_minute",
+                    "youtube_start_second",
+                    "youtube_created_at",
+                    "image",
+                    "image_txt",
+                    "image_url",
+                    "aliases",
+                    "updated_at"
+                ],
+                "title": "CocktailResource"
+            },
             "CocktailSearchRequest": {
                 "type": "object",
                 "description": "\u6761\u4ef6\u691c\u7d22(POST /api/cocktails/search)\u306e\u6761\u4ef6(docs/search.md \u306e\u300c\u65b0\u3057\u3044\u6761\u4ef6\u3068\u306e\u5bfe\u5fdc\u300d)\u3002\n\n\u9078\u3093\u3060\u30ce\u30fc\u30c9\u306e ID \u306f\u3001\u753b\u9762\u304c\u90e8\u5206\u6728\u3092\u89aa\u306b\u7573\u3081\u306a\u3044\u3068\u6570\u767e\u500b\u306b\u306a\u308a\u3046\u308b(docs/decisions/search-screen.md \u306e 3)\u306e\u3067\u3001\nGET \u306e\u30af\u30a8\u30ea\u3067\u306f\u306a\u304f JSON \u306e\u672c\u6587\u3067\u53d7\u3051\u308b(#163 \u306e\u300c\u8ffd\u8a18: API \u306e\u5f62\u300d)\u3002",
@@ -4212,6 +4934,49 @@
                 ],
                 "title": "DictionaryDetailResource"
             },
+            "DictionaryListCategoryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "dictionaries": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "name_eng": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "name_eng"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "dictionaries"
+                ],
+                "title": "DictionaryListCategoryResource"
+            },
             "DictionaryRefResource": {
                 "type": "object",
                 "properties": {
@@ -4231,6 +4996,111 @@
                     "name_eng"
                 ],
                 "title": "DictionaryRefResource"
+            },
+            "DictionaryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "dictionary_category_id": {
+                        "type": "integer",
+                        "description": "\u5206\u985e(\u88fd\u6cd5\u30fb\u30b0\u30e9\u30b9\u306a\u3069)"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u52d5\u753b ID"
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "dictionary_category_id",
+                    "name",
+                    "name_eng",
+                    "description",
+                    "youtube",
+                    "youtube_start_hour",
+                    "youtube_start_minute",
+                    "youtube_start_second",
+                    "image",
+                    "image_txt",
+                    "image_url",
+                    "updated_at"
+                ],
+                "title": "DictionaryResource"
+            },
+            "FormOptionResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name"
+                ],
+                "title": "FormOptionResource"
             },
             "LatestVideoCocktailResource": {
                 "type": "object",
@@ -4837,6 +5707,246 @@
                     "is_like"
                 ],
                 "title": "SaveBrandRequest"
+            },
+            "SaveCocktailRequest": {
+                "type": "object",
+                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002#291)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u3068\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u6750\u6599\u306f #292 \u3067\u8db3\u3059\u3002\n\u5225\u540d(aliases\u3002#293)\u306f\u65e7\u306b\u7121\u3044\u9805\u76ee\u3067\u3001\u9001\u3063\u305f\u3068\u304d\u3060\u3051\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b(\u4e0b\u306e aliases())\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
+                "properties": {
+                    "base_category_id": {
+                        "type": "integer",
+                        "description": "\u30d9\u30fc\u30b9\u3002\u3069\u306e\u6df1\u3055\u306e\u30ce\u30fc\u30c9\u3067\u3082\u3088\u3044\u304c\u3001\u6839(\u65e7\u306e\u7a2e\u5225)\u306f\u9078\u3079\u306a\u3044(#153)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "name_eng": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "method_id": {
+                        "type": "integer",
+                        "description": "\u6280\u6cd5\u30fb\u30b0\u30e9\u30b9(\u7528\u8a9e\u8f9e\u5178\u306e\u5206\u985e\u300c\u30b0\u30e9\u30b9\u300d\u306e\u9805\u76ee)\u30fb\u6c37\u3002\u9078\u629e\u80a2\u306f GET /api/admin/cocktail-form-options"
+                    },
+                    "glass_dictionary_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "ice_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "rate": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "\u8a55\u4fa1\u30fb\u7518\u3055(\u65e7\u3068\u540c\u3058\u7bc4\u56f2)",
+                        "minimum": 1,
+                        "maximum": 5
+                    },
+                    "sweet_degree": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": -10,
+                        "maximum": 10
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "is_draft": {
+                        "type": "boolean",
+                        "description": "\u4e0b\u66f8\u304d\u3068\u3057\u3066\u4fdd\u5b58\u3059\u308b\u304b(true)\u3001\u516c\u958b\u3059\u308b\u304b(false)\u3002\u4fdd\u5b58\u306e\u30dc\u30bf\u30f3\u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u8aac\u660e\u30fb\u88dc\u8db3\u3002\u4fdd\u5b58\u306e\u3068\u304d\u306b\u8a18\u6cd5\u3078\u5909\u63db\u3059\u308b(DescriptionMarkup\u3002#287)\u3002\n\u516c\u958b\u3059\u308b\u3068\u304d\u306f\u8aac\u660e\u304c\u8981\u308b(\u65e7\u3082\u8aac\u660e\u306e\u7121\u3044\u30ab\u30af\u30c6\u30eb\u306f\u516c\u958b\u306b\u306a\u3089\u306a\u304b\u3063\u305f\u3002#291 \u306e\u300c\u65e7\u3068\u306e\u5dee\u5206\u300d)"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "YouTube \u306e URL \u304b\u52d5\u753b ID \u3068\u3001\u958b\u59cb\u4f4d\u7f6e(\u6642\u30fb\u5206\u30fb\u79d2\u3002\u6642\u306e 0 \u306f #284 \u306e 8)",
+                        "maxLength": 255
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 99
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u753b\u50cf\u306e\u30ea\u30f3\u30af\u306e\u6587\u5b57\u3068 URL(#288)",
+                        "maxLength": 255
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 5120 kilobytes."
+                    },
+                    "remove_image": {
+                        "type": "boolean"
+                    },
+                    "aliases": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "\u5225\u540d(#293)\u3002\u540d\u524d\u306e\u914d\u5217\u3067\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b\u3002\u9001\u3089\u306a\u3051\u308c\u3070\u4eca\u306e\u5225\u540d\u3092\u6b8b\u3059\u3002\n\u5168\u90e8\u6d88\u3059\u3068\u304d\u306f\u7a7a\u306e\u914d\u5217(multipart \u3067\u306f\u7a7a\u306e\u5024\u306e aliases\u3002\u7a7a\u6587\u5b57\u306f null \u3067\u5c4a\u304f)\u3092\u9001\u308b",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    }
+                },
+                "required": [
+                    "base_category_id",
+                    "name",
+                    "name_eng",
+                    "method_id",
+                    "is_major",
+                    "is_draft"
+                ],
+                "title": "SaveCocktailRequest"
+            },
+            "SaveDictionaryRequest": {
+                "type": "object",
+                "description": "\u7528\u8a9e\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/dictionaries\u30fbPUT /api/admin/dictionaries/{id}\u3002#315)\u306e\u5165\u529b\u3002\n\n\u65e7\u306f\u7528\u8a9e\u306e\u4fdd\u5b58\u3092\u6b62\u3081\u3066\u3044\u305f(\u65e7 routes/web.php \u306e\u300c\u9762\u5012\u306a\u306e\u3067\u30b5\u30dd\u30fc\u30c8\u5207\u308a\u300d)\u306e\u3067\u3001\u65e7\u306e\u898f\u5247\u306f\u7121\u3044\u3002\u5217\u306b\u5408\u308f\u305b\u305f\n\u5fc5\u9808\u3068\u9577\u3055\u306e\u4e0a\u9650\u306b\u3001\u9298\u67c4(#314)\u30fb\u30ab\u30af\u30c6\u30eb(#291)\u3068\u540c\u3058 YouTube\u30fb\u753b\u50cf\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
+                "properties": {
+                    "dictionary_category_id": {
+                        "type": "integer",
+                        "description": "\u5206\u985e(\u88fd\u6cd5\u30fb\u30b0\u30e9\u30b9\u306a\u3069)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "name_eng": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "\u8aac\u660e\u3002\u4fdd\u5b58\u306e\u3068\u304d\u306b\u8a18\u6cd5\u3078\u5909\u63db\u3059\u308b(DescriptionMarkup\u3002#287)"
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "YouTube \u306e URL \u304b\u52d5\u753b ID",
+                        "maxLength": 255
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 99
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u753b\u50cf\u306e\u30ea\u30f3\u30af\u306e\u6587\u5b57\u3068 URL",
+                        "maxLength": 255
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 5120 kilobytes."
+                    },
+                    "remove_image": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "dictionary_category_id",
+                    "name",
+                    "name_eng",
+                    "description"
+                ],
+                "title": "SaveDictionaryRequest"
             },
             "SaveParaphraseRequest": {
                 "type": "object",

@@ -75,6 +75,8 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 `ai-in-actions`・`needs-human`・`needs-local`・`needs-manual`・`needs-decision`・`needs-approval` が PR に付いているあいだは、どちらもしない。
 
+PR・issue(PR なら閉じる issue も)に、オーナー・コラボレーター・決まった bot 以外の人が書いたものがあるときも、AI のワークフローは Claude Code を動かさず、`ai-auto-merge.yml` もマージしない。その URL を並べたコメント(目印 `<!-- ai-dev:untrusted -->`)を書いて `needs-human` を付け、通知のジョブから Slack に知らせる(`.github/scripts/untrusted-hold.sh`・`untrusted-notify.sh`。#494)。中身を確かめて問題が無ければ、そのコメントを消してから `needs-human` を外すと、見回りが続きを拾う。
+
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
 | `no-auto-merge` | 自動でマージしたくない PR | 人が、いつでも | 自動でマージしない。マージできる状態になったら `needs-approval` を付けて知らせる。外すと、自動マージの条件をもう一度確かめる |
