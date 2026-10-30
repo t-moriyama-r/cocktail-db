@@ -6,6 +6,7 @@ use Database\Factories\CocktailFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,7 @@ use LogicException;
  * カクテル。
  *
  * recipe_count は材料から数えた値で、書き込むのは RecipeCounter(#156)なので fillable に入れない。
+ * recipe_signature も材料から作る値で、書き込むのは RecipeSignature(#82)なので fillable に入れない。
  */
 #[Fillable([
     'name', 'name_search', 'name_eng', 'base_category_id',
@@ -38,6 +40,16 @@ class Cocktail extends Model
     public function ingredients(): HasMany
     {
         return $this->hasMany(CocktailIngredient::class)->orderBy('position');
+    }
+
+    /**
+     * 別名。登録した順(ID の昇順)に返す。
+     *
+     * @return HasMany<CocktailAlias, $this>
+     */
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(CocktailAlias::class)->orderBy('id');
     }
 
     /**
@@ -92,6 +104,26 @@ class Cocktail extends Model
     }
 
     /**
+     * 材料の組がまったく同じ、ほかの公開しているカクテル(#82)を ID の順で返す。材料の組は recipe_signature で比べる。
+     * 材料の無いカクテル(recipe_signature が null)は、どのカクテルとも同じレシピにしない。
+     *
+     * @return Collection<int, self>
+     */
+    public function sameRecipeCocktails(): Collection
+    {
+        if ($this->recipe_signature === null) {
+            return new Collection;
+        }
+
+        return self::query()
+            ->published()
+            ->where('recipe_signature', $this->recipe_signature)
+            ->whereKeyNot($this->getKey())
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
      * 技法。外部キー(NOT NULL・RESTRICT)で必ずあるので、無ければデータの壊れとして例外にする。
      */
     public function requiredMethod(): Method
@@ -104,7 +136,15 @@ class Cocktail extends Model
      */
     public function strength(): float
     {
-        return (float) $this->volume;
+        return self::strengthOf($this->volume);
+    }
+
+    /**
+     * 列の volume の値から度数(%)を出す。モデルにせずに行のまま読むとき(条件検索の並べ替え。#96)も、strength と同じ値にする。
+     */
+    public static function strengthOf(mixed $volume): float
+    {
+        return is_numeric($volume) ? (float) $volume : 0.0;
     }
 
     /**

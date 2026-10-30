@@ -80,6 +80,8 @@ it('TC-22-07: cocktails の列の型・null 可・既定値が設計どおり', 
         'is_draft' => ['tinyint(1)', false, '0'],
         'is_major' => ['tinyint(1)', false, '0'],
         'recipe_count' => ['tinyint(3) unsigned', false, '0'],
+        // 材料の組のハッシュ(#82)。材料の無いカクテルは null
+        'recipe_signature' => ['char(64)', true, 'NULL'],
         'instagram' => ['varchar(255)', true, 'NULL'],
         'youtube' => ['varchar(255)', true, 'NULL'],
         'youtube_created_at' => ['datetime', true, 'NULL'],
@@ -108,6 +110,8 @@ it('TC-22-08: cocktails の索引は旧と同じ 11 列と主キー(と #325 で
         'cocktails_recipe_count_index' => ['recipe_count'],
         // ice_id の索引と、method_id・glass_dictionary_id・ice_id の外部キーは、指す表(#23)の後に #325 で足した(TC-325-01)
         'cocktails_ice_id_index' => ['ice_id'],
+        // 同じレシピのカクテルを引く索引(#82)
+        'cocktails_recipe_signature_index' => ['recipe_signature'],
     ])
         ->and(SchemaShape::foreignKeys('cocktails'))->toEqualCanonicalizing([
             ['base_category_id', 'categories', 'id', 'restrict'],

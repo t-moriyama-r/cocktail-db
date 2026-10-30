@@ -3,6 +3,7 @@
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Models\CocktailIngredient;
 use App\Models\Method;
 use App\Services\CategoryTree;
@@ -238,6 +239,8 @@ it('TC-172-13: 1 件ごとに、一覧に出す項目を返す', function () {
             'rate' => null,
             'youtube' => null,
             'updated_at' => $cocktail->updated_at?->toJSON(),
+            // 名前で当たったので、当たった別名は無い(#82)
+            'matched_alias' => null,
         ])
         ->assertJsonPath('nodes', [
             [
@@ -416,4 +419,85 @@ it('TC-173-09: 任意の材料も対象にし、ID の順で、一覧と同じ�
         ->assertJsonStructure(['ingredient_matches' => [[
             'id', 'name', 'name_eng', 'is_major', 'base', 'method', 'recipe_count', 'strength', 'sweet_degree', 'rate', 'youtube', 'updated_at',
         ]]]);
+});
+
+/**
+ * $cocktail に別名を足す。name_search は名前を NameNormalizer でそろえた値。
+ */
+function nameSearchAlias(Cocktail $cocktail, string $name): CocktailAlias
+{
+    return CocktailAlias::factory()->named($name)->create(['cocktail_id' => $cocktail->id]);
+}
+
+it('TC-82-13: 別名で探すと、そのカクテルを返し、当たった別名を matched_alias に返す', function () {
+    $reggae = nameSearchCocktail('レゲエ・パンチ', 'Reggae Punch');
+    nameSearchCocktail('ファジー・ネーブル', 'Fuzzy Navel');
+    nameSearchAlias($reggae, 'ピーチ・ウーロン');
+
+    nameSearch($this, 'ウーロン')->assertOk()
+        ->assertJsonPath('cocktails.*.id', [$reggae->id])
+        ->assertJsonPath('cocktails.0.name', 'レゲエ・パンチ')
+        ->assertJsonPath('cocktails.0.matched_alias', 'ピーチ・ウーロン');
+});
+
+it('TC-82-14: 名前でも別名でも当たるカクテルは 1 件だけ返し、matched_alias は null', function () {
+    $cocktail = nameSearchCocktail('ピーチ・ウーロン', 'Peach Oolong');
+    nameSearchAlias($cocktail, 'ピーチ・ウーロン・ティー');
+
+    nameSearch($this, 'ピーチ')->assertOk()
+        ->assertJsonPath('cocktails.*.id', [$cocktail->id])
+        ->assertJsonPath('cocktails.0.matched_alias', null);
+});
+
+it('TC-82-15: 名前で当たったカクテルと別名で当たったカクテルを、まとめて ID の順で返す', function () {
+    $byAlias = nameSearchCocktail('レゲエ・パンチ', 'Reggae Punch');
+    $byName = nameSearchCocktail('ピーチ・ツリー・フィズ', 'Peach Tree Fizz');
+    nameSearchAlias($byAlias, 'ピーチ・ウーロン');
+    expect($byName->id)->toBeGreaterThan($byAlias->id);
+
+    nameSearch($this, 'ピーチ')->assertOk()
+        ->assertJsonPath('cocktails.*.id', [$byAlias->id, $byName->id])
+        ->assertJsonPath('cocktails.*.matched_alias', ['ピーチ・ウーロン', null]);
+});
+
+it('TC-82-16: 1 つのカクテルの別名が 2 つ当たったら、先に登録した別名を返す', function () {
+    $cocktail = nameSearchCocktail('レゲエ・パンチ', 'Reggae Punch');
+    nameSearchAlias($cocktail, 'ピーチ・ウーロン・ハイ');
+    nameSearchAlias($cocktail, 'ピーチ・ウーロン');
+
+    nameSearch($this, 'ウーロン')->assertOk()
+        ->assertJsonPath('cocktails.*.id', [$cocktail->id])
+        ->assertJsonPath('cocktails.0.matched_alias', 'ピーチ・ウーロン・ハイ');
+});
+
+it('TC-82-17: 別名も検索用の名前で探す(中黒・空白の有無、全角の英数字を問わない)。英数字だけの語でも探す', function (string $q) {
+    $cocktail = nameSearchCocktail('レゲエ・パンチ', 'Reggae Punch');
+    nameSearchAlias($cocktail, 'ピーチ・ウーロン 2');
+
+    nameSearch($this, $q)->assertOk()
+        ->assertJsonPath('cocktails.*.id', [$cocktail->id])
+        ->assertJsonPath('cocktails.0.matched_alias', 'ピーチ・ウーロン 2');
+})->with([
+    '中黒なし' => ['ピーチウーロン'],
+    '全角の数字' => ['ウーロン２'],
+    '英数字だけ' => ['2'],
+]);
+
+it('TC-82-18: 下書きのカクテルは、別名で当たっても返さない', function () {
+    $draft = nameSearchCocktail('レゲエ・パンチ', 'Reggae Punch', ['is_draft' => true]);
+    nameSearchAlias($draft, 'ピーチ・ウーロン');
+
+    nameSearch($this, 'ウーロン')->assertOk()->assertJsonPath('cocktails', []);
+});
+
+it('TC-82-19: 別名で当たったカクテルも、一覧に出す項目を返す。材料の検索(ingredient_matches)は別名を見ない', function () {
+    $cocktail = nameSearchCocktail('レゲエ・パンチ', 'Reggae Punch');
+    nameSearchAlias($cocktail, 'ピーチ・ウーロン');
+
+    nameSearch($this, 'ウーロン')->assertOk()
+        ->assertJsonStructure(['cocktails' => [[
+            'id', 'name', 'name_eng', 'is_major', 'base', 'method', 'recipe_count', 'strength', 'sweet_degree', 'rate', 'youtube', 'updated_at',
+            'matched_alias',
+        ]]])
+        ->assertJsonPath('ingredient_matches', []);
 });
