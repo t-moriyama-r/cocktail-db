@@ -14,8 +14,9 @@ use Illuminate\Validation\ValidationException;
  * 管理画面のカクテルの基本情報の新規・更新(#291)。旧の DetailEditController@cocktail と
  * FactoryHelper::generateFromRequest のカクテルの分(材料を除く)。
  *
- * 材料と、材料から作る値(度数 volume・材料の数 recipe_count・材料の組のハッシュ recipe_signature)は、材料の保存(#292)が
- * 書く。ここでは触らない。新しく作るカクテルは材料がまだ無いので、度数を 0 にしておく(列が NOT NULL のため)。
+ * 材料と度数(volume)は、材料の保存(#292)が書く。新しく作るカクテルは材料がまだ無いので、度数を 0 にしておく(列が
+ * NOT NULL のため)。材料の数(recipe_count)と材料の組のハッシュ(recipe_signature)は、保存のたびに、保存してある材料の行から
+ * RecipeCounter・RecipeSignature で作り直す(#130)。
  *
  * 別名(#293)は、送ったときだけ、送った並びに置き換える。
  */
@@ -24,6 +25,8 @@ class AdminCocktailWriter
     public function __construct(
         private readonly DescriptionMarkup $markup,
         private readonly AdminImageStore $images,
+        private readonly RecipeCounter $counter,
+        private readonly RecipeSignature $signature,
     ) {}
 
     /**
@@ -94,6 +97,11 @@ class AdminCocktailWriter
             if ($aliases !== null) {
                 $this->replaceAliases($cocktail, $aliases);
             }
+
+            // 数え直しは列だけを書き換えるので、返すモデルも読み直す
+            $this->counter->recount([$cocktail->id]);
+            $this->signature->rewrite([$cocktail->id]);
+            $cocktail->refresh();
 
             return $cocktail;
         });

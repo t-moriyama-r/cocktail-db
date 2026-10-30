@@ -126,10 +126,7 @@ export interface paths {
          */
         get: operations["admin.cocktailIndex"];
         put?: never;
-        /**
-         * カクテルを作る。下書きか公開かは is_draft で決める(docs/decisions/admin-screens.md の 1)。
-         *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
-         */
+        /** カクテルを作る。下書きか公開かは is_draft で決める(docs/decisions/admin-screens.md の 1)。 */
         post: operations["cocktail.store"];
         delete?: never;
         options?: never;
@@ -146,13 +143,11 @@ export interface paths {
         };
         /** 編集で開くカクテル。下書きも返す。 */
         get: operations["cocktail.show"];
-        /**
-         * カクテルの基本情報と別名を書き換える。材料と、材料から作る値(度数・材料の数)は変えない。
-         *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
-         */
+        /** カクテルの基本情報を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。 */
         put: operations["cocktail.update"];
         post?: never;
-        delete?: never;
+        /** カクテルを消す。材料・別名も一緒に消える(#130)。 */
+        delete: operations["cocktail.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1079,7 +1074,6 @@ export interface components {
             image: string | null;
             image_txt: string | null;
             image_url: string | null;
-            aliases: string[];
             updated_at: string | null;
         };
         /**
@@ -1374,7 +1368,6 @@ export interface components {
          * @description カクテルの基本情報の新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。#291)の入力。
          *
          *     旧の EditCocktailValidate の規則に、長さの上限とベースの規則を足したもの。材料は #292 で足す。
-         *     別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
          *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
          */
         SaveCocktailRequest: {
@@ -1413,11 +1406,6 @@ export interface components {
              */
             image?: string | null;
             remove_image?: boolean;
-            /**
-             * @description 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
-             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
-             */
-            aliases?: string[] | null;
         };
         /**
          * SaveParaphraseRequest
@@ -1828,12 +1816,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["CocktailResource"];
-                        warnings: {
-                            field: string;
-                            message: string;
-                            cocktail_id: number;
-                            cocktail_name: string;
-                        }[];
                     };
                 };
             };
@@ -1888,17 +1870,32 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["CocktailResource"];
-                        warnings: {
-                            field: string;
-                            message: string;
-                            cocktail_id: number;
-                            cocktail_name: string;
-                        }[];
                     };
                 };
             };
             404: components["responses"]["ModelNotFoundException"];
             422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktail.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     cocktailDetail: {
