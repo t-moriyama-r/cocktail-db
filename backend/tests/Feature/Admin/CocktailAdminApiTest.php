@@ -2,6 +2,7 @@
 
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\Storage;
 
 // 管理 API のカクテルの基本情報の取得・新規・更新と、フォームの選択肢(#291)。旧の DetailEditController@cocktail・
 // EditCocktailValidate・FactoryHelper::generateFromRequest(材料を除く)と、SearchController@getListForRecipe の置き換え。
+// 別名の取得・保存(#293。旧には別名が無い)も、ここで確かめる。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
 
 uses(RefreshDatabase::class)->group('db');
@@ -461,4 +463,219 @@ it('TC-291-15: 選択肢は、技法・グラス(分類「グラス」の用語�
                 ['id' => $f['ices'][1]->id, 'name' => 'キューブド'],
             ],
         ]);
+});
+
+/**
+ * 別名を持つカクテルを作る。別名は並べた順に登録する。
+ *
+ * @param  array<string, mixed>  $attributes
+ * @param  list<string>  $aliases
+ */
+function cocktailWithAliases(array $attributes, array $aliases = []): Cocktail
+{
+    $name = is_string($attributes['name'] ?? null) ? $attributes['name'] : 'テスト';
+    $cocktail = Cocktail::factory()->create([...$attributes, 'name' => $name, 'name_search' => NameNormalizer::normalize($name)]);
+    foreach ($aliases as $alias) {
+        CocktailAlias::factory()->named($alias)->create(['cocktail_id' => $cocktail->id]);
+    }
+
+    return $cocktail;
+}
+
+/**
+ * カクテルの別名を、登録した順に [名前, 検索用の名前] で返す。
+ *
+ * @return list<array{0: string, 1: string}>
+ */
+function storedAliases(Cocktail $cocktail): array
+{
+    return array_values(CocktailAlias::query()
+        ->where('cocktail_id', $cocktail->id)
+        ->orderBy('id')
+        ->get()
+        ->map(fn (CocktailAlias $a): array => [$a->name, $a->name_search])
+        ->all());
+}
+
+it('TC-293-01: 取得は、別名の名前を登録した順に aliases で返す。別名が無ければ空の配列', function () {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $with = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン', 'ピーチ烏龍']);
+    $without = cocktailWithAliases([...$base, 'name' => 'ダイキリ']);
+
+    $this->getJson("/api/admin/cocktails/{$with->id}")
+        ->assertOk()
+        ->assertJsonPath('data.aliases', ['ピーチウーロン', 'ピーチ烏龍']);
+    $this->getJson("/api/admin/cocktails/{$without->id}")
+        ->assertOk()
+        ->assertJsonPath('data.aliases', []);
+});
+
+it('TC-293-02: 新規で送った別名を、送った並びで、検索用の名前を付けて保存する', function () {
+    $f = cocktailAdminFixture();
+    $response = $this->postJson('/api/admin/cocktails', cocktailAdminInput($f, [
+        'name' => 'レゲエパンチ',
+        'aliases' => ['ピーチ・ウーロン', 'ＰＯ'],
+    ]))->assertCreated()
+        ->assertJsonPath('data.aliases', ['ピーチ・ウーロン', 'ＰＯ'])
+        ->assertJsonPath('warnings', []);
+
+    $cocktail = Cocktail::query()->whereKey($response->json('data.id'))->sole();
+    expect(storedAliases($cocktail))->toBe([['ピーチ・ウーロン', 'ピーチウーロン'], ['ＰＯ', 'PO']]);
+});
+
+it('TC-293-03: 更新で送った別名に置き換える(足した別名は入り、送らなかった別名は消える)', function () {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $cocktail = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン', 'ピーチ烏龍']);
+
+    $this->putJson("/api/admin/cocktails/{$cocktail->id}", cocktailAdminInput($f, [
+        'name' => 'レゲエパンチ',
+        'aliases' => ['ピーチ・ティー', 'ピーチウーロン'],
+    ]))->assertOk()
+        ->assertJsonPath('data.aliases', ['ピーチ・ティー', 'ピーチウーロン']);
+
+    expect(storedAliases($cocktail))->toBe([['ピーチ・ティー', 'ピーチティー'], ['ピーチウーロン', 'ピーチウーロン']]);
+});
+
+it('TC-293-04: 空の別名を送ると全部消す(JSON は空の配列、multipart は空の値)', function (bool $multipart) {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $cocktail = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン']);
+    $uri = "/api/admin/cocktails/{$cocktail->id}";
+
+    $response = $multipart
+        ? $this->post($uri, [...cocktailAdminInput($f, ['name' => 'レゲエパンチ']), '_method' => 'PUT', 'aliases' => ''], ['Accept' => 'application/json'])
+        : $this->putJson($uri, cocktailAdminInput($f, ['name' => 'レゲエパンチ', 'aliases' => []]));
+
+    $response->assertOk()->assertJsonPath('data.aliases', []);
+    expect(storedAliases($cocktail))->toBe([]);
+})->with(['JSON' => [false], 'multipart' => [true]]);
+
+it('TC-293-05: 別名を送らない更新は、今の別名を残す', function () {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $cocktail = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン', 'ピーチ烏龍']);
+
+    $this->putJson("/api/admin/cocktails/{$cocktail->id}", cocktailAdminInput($f, ['name' => 'レゲエ・パンチ']))
+        ->assertOk()
+        ->assertJsonPath('data.name', 'レゲエ・パンチ')
+        ->assertJsonPath('data.aliases', ['ピーチウーロン', 'ピーチ烏龍']);
+
+    expect(storedAliases($cocktail))->toBe([['ピーチウーロン', 'ピーチウーロン'], ['ピーチ烏龍', 'ピーチ烏龍']]);
+});
+
+it('TC-293-06: 検索用の名前が同じ別名を 2 つ送ると 422 で、後の方を誤りにし、何も保存しない', function (string $first, string $second) {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $cocktail = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチ烏龍']);
+
+    $this->putJson("/api/admin/cocktails/{$cocktail->id}", cocktailAdminInput($f, [
+        'name' => '新しい名前',
+        'aliases' => ['別の名前', $first, $second],
+    ]))->assertUnprocessable()
+        ->assertJsonValidationErrors(['aliases.2' => '同じ別名がほかにあります'])
+        ->assertJsonMissingValidationErrors(['aliases.0', 'aliases.1']);
+
+    expect($cocktail->refresh()->name)->toBe('レゲエパンチ')
+        ->and(storedAliases($cocktail))->toBe([['ピーチ烏龍', 'ピーチ烏龍']]);
+})->with([
+    'まったく同じ' => ['ピーチウーロン', 'ピーチウーロン'],
+    '中黒の有無' => ['ピーチウーロン', 'ピーチ・ウーロン'],
+    '空白の有無' => ['Peach Oolong', 'PeachOolong'],
+    '全角と半角の英数字' => ['PO1', 'ＰＯ１'],
+]);
+
+it('TC-293-07: 検索用の名前がカクテル自身の名前と同じ別名は 422 で、何も保存しない', function (string $name, string $alias) {
+    $f = cocktailAdminFixture();
+    $this->postJson('/api/admin/cocktails', cocktailAdminInput($f, ['name' => $name, 'aliases' => [$alias]]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['aliases.0' => 'カクテルの名前と同じ別名です']);
+
+    expect(Cocktail::query()->count())->toBe(0)->and(CocktailAlias::query()->count())->toBe(0);
+})->with([
+    'まったく同じ' => ['レゲエパンチ', 'レゲエパンチ'],
+    '中黒の有無' => ['レゲエパンチ', 'レゲエ・パンチ'],
+    '全角と半角の英数字' => ['XYZ', 'ＸＹＺ'],
+]);
+
+it('TC-293-08: 別名を送らずに、名前を今の別名と同じ検索用の名前に変えると 422', function () {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $cocktail = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン']);
+
+    $this->putJson("/api/admin/cocktails/{$cocktail->id}", cocktailAdminInput($f, ['name' => 'ピーチ・ウーロン']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['name' => '別名と同じ名前です']);
+
+    expect($cocktail->refresh()->name)->toBe('レゲエパンチ');
+});
+
+it('TC-293-09: 別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings にどのカクテルと同じかを返す', function () {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $byName = cocktailWithAliases([...$base, 'name' => 'ピーチウーロン']);
+    $byAlias = cocktailWithAliases([...$base, 'name' => 'ファジーネーブル'], ['ピーチ烏龍']);
+    // 名前でも別名でも同じになるカクテルは、名前の方で 1 件だけ返す
+    $both = cocktailWithAliases([...$base, 'name' => 'ピーチ烏龍', 'is_draft' => true], ['ピーチ・烏龍']);
+    $target = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ']);
+
+    $this->putJson("/api/admin/cocktails/{$target->id}", cocktailAdminInput($f, [
+        'name' => 'レゲエパンチ',
+        'aliases' => ['ほかと同じでない', 'ピーチ・ウーロン', 'ピーチ烏龍'],
+    ]))->assertOk()
+        ->assertJsonPath('data.aliases', ['ほかと同じでない', 'ピーチ・ウーロン', 'ピーチ烏龍'])
+        ->assertJsonPath('warnings', [
+            ['field' => 'aliases.1', 'message' => '「ピーチウーロン」の名前と同じです', 'cocktail_id' => $byName->id, 'cocktail_name' => 'ピーチウーロン'],
+            ['field' => 'aliases.2', 'message' => '「ファジーネーブル」の別名と同じです', 'cocktail_id' => $byAlias->id, 'cocktail_name' => 'ファジーネーブル'],
+            ['field' => 'aliases.2', 'message' => '「ピーチ烏龍」の名前と同じです', 'cocktail_id' => $both->id, 'cocktail_name' => 'ピーチ烏龍'],
+        ]);
+
+    expect(storedAliases($target))->toBe([
+        ['ほかと同じでない', 'ほかと同じでない'], ['ピーチ・ウーロン', 'ピーチウーロン'], ['ピーチ烏龍', 'ピーチ烏龍'],
+    ]);
+});
+
+it('TC-293-10: ほかのカクテルと同じでなければ warnings は空(自分の別名・名前とは比べない)', function () {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    cocktailWithAliases([...$base, 'name' => 'ダイキリ'], ['フローズン']);
+    $target = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン']);
+
+    $this->putJson("/api/admin/cocktails/{$target->id}", cocktailAdminInput($f, [
+        'name' => 'レゲエパンチ',
+        'aliases' => ['ピーチウーロン'],
+    ]))->assertOk()->assertJsonPath('warnings', []);
+});
+
+it('TC-293-11: 別名は 255 文字までの文字列の配列で、空の要素・配列でない値は 422', function (mixed $aliases, ?string $error) {
+    $f = cocktailAdminFixture();
+    $response = $this->postJson('/api/admin/cocktails', cocktailAdminInput($f, ['name' => 'レゲエパンチ', 'aliases' => $aliases]));
+
+    if ($error === null) {
+        $response->assertCreated();
+
+        return;
+    }
+    $response->assertUnprocessable()->assertJsonValidationErrors($error);
+    expect(Cocktail::query()->count())->toBe(0);
+})->with([
+    '255 文字' => [[str_repeat('あ', 255)], null],
+    '256 文字' => [[str_repeat('あ', 256)], 'aliases.0'],
+    '空文字の要素' => [['ピーチウーロン', ''], 'aliases.1'],
+    '文字列でない要素' => [[['x']], 'aliases.0'],
+    '配列でない' => ['ピーチウーロン', 'aliases'],
+]);
+
+it('TC-293-12: 保存した別名で、名前の横断検索がカクテルを見つける', function () {
+    $f = cocktailAdminFixture();
+    $response = $this->postJson('/api/admin/cocktails', cocktailAdminInput($f, [
+        'name' => 'レゲエパンチ',
+        'aliases' => ['ピーチ・ウーロン'],
+    ]))->assertCreated();
+
+    $this->getJson('/api/search?'.http_build_query(['q' => 'ピーチウーロン']))
+        ->assertOk()
+        ->assertJsonPath('cocktails.0.id', $response->json('data.id'))
+        ->assertJsonPath('cocktails.0.matched_alias', 'ピーチ・ウーロン');
 });

@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Admin;
 
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Services\DescriptionMarkup;
 use App\Support\YoutubeInput;
 use Illuminate\Http\Request;
@@ -13,14 +14,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * 説明・補足は、編集で開く形(記法に指す先の名前を添えたもの。DescriptionMarkup::withNotes)で返す。
  * YouTube の開始位置は、画面の欄に合わせて時・分・秒に分けて返す。画像は保存した値のまま返す
- * (public ディスクのファイル名か、外部の URL。AdminImageStore)。材料は #292 で足す。
+ * (public ディスクのファイル名か、外部の URL。AdminImageStore)。別名は名前だけを登録した順に返す(#293)。材料は #292 で足す。
  *
  * @property Cocktail $resource
  */
 class CocktailResource extends JsonResource
 {
     /**
-     * @return array{id: int, base_category_id: int, name: string, name_eng: string|null, method_id: int, glass_dictionary_id: int|null, ice_id: int|null, strength: float, rate: int|null, sweet_degree: int|null, is_major: bool, is_draft: bool, description: string|null, note: string|null, youtube: string|null, youtube_start_hour: int|null, youtube_start_minute: int|null, youtube_start_second: int|null, youtube_created_at: string|null, image: string|null, image_txt: string|null, image_url: string|null, updated_at: string|null}
+     * @return array{id: int, base_category_id: int, name: string, name_eng: string|null, method_id: int, glass_dictionary_id: int|null, ice_id: int|null, strength: float, rate: int|null, sweet_degree: int|null, is_major: bool, is_draft: bool, description: string|null, note: string|null, youtube: string|null, youtube_start_hour: int|null, youtube_start_minute: int|null, youtube_start_second: int|null, youtube_created_at: string|null, image: string|null, image_txt: string|null, image_url: string|null, aliases: list<string>, updated_at: string|null}
      */
     public function toArray(Request $request): array
     {
@@ -70,6 +71,9 @@ class CocktailResource extends JsonResource
             'image_txt' => $cocktail->image_txt,
             /** @var string|null */
             'image_url' => $cocktail->image_url,
+            // 別名の名前。登録した順(保存で送った並び)
+            /** @var list<string> */
+            'aliases' => array_values($cocktail->aliases()->get()->map(fn (CocktailAlias $alias): string => $alias->name)->all()),
             'updated_at' => $cocktail->updated_at?->toJSON(),
         ];
     }
