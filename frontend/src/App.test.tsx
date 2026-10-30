@@ -74,6 +74,12 @@ describe('App のルーティング', () => {
     mockApi('get', '/categories/{category}', 200, CATEGORY)
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
+    // 詳細の画面は、同じ名前・材料が似た・同じベースのカクテルの API も呼ぶ。どれも 0 件を返す。
+    // 差し替えは `{cocktail}` を任意の 1 区切りに当て、後から登録したものを先に使うので、
+    // /cocktails/random は上の登録より後に登録する(登録しないと詳細の本文が返り、一覧が配列でなく落ちる。#569)
+    mockApi('get', '/cocktails/{cocktail}/same-name', 200, { data: [] })
+    mockApi('get', '/cocktails/{cocktail}/related', 200, { data: [] })
+    mockApi('get', '/cocktails/random', 200, { data: [] })
   })
 
   test.each([
