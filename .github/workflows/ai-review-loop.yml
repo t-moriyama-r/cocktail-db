@@ -611,6 +611,14 @@ jobs:
             `needs-approval` ラベルは付けない。CI が緑でマージできる状態になったら、ai-auto-merge.yml が付けて人に知らせる(自動でマージする PR なら、そのままマージする)
             決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
+      # resume の「拒否されたツールをログに出す」と同じ。渡すツールを絞ったので、足りないものがあれば分かるようにする(#498)
+      - name: 拒否されたツールをログに出す
+        if: always() && steps.claude.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: bash "$RUNNER_TEMP/ai-dev/permission-denials.sh" "$EXECUTION_FILE"
+
       # PR のブランチの checkout が作業ディレクトリを消すので、.ai-dev のスクリプトを取り直す(最初の checkout と同じ版)
       - uses: actions/checkout@v6
         if: success() && steps.pr.outputs.run

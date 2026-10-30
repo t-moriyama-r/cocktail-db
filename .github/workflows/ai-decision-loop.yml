@@ -78,6 +78,7 @@ jobs:
 
       # Write は作業ディレクトリの中(./**)だけ。gh は、この issue の本文・ラベル・コメントを書き込む形だけを渡す
       - uses: anthropics/claude-code-action@v1
+        id: claude
         if: steps.live.outputs.open == 'true' && steps.trust.outputs.held != 'true'
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
@@ -138,6 +139,14 @@ jobs:
         env:
           SINCE: ${{ github.event.comment.created_at }}
         run: bash .ai-dev/.github/scripts/mermaid-labels-comments.sh "$REPO" "$ISSUE" "$SINCE"
+
+      # 渡すツールを絞ったので、拒否されたツールをログに出す(ai-review-loop.yml の「拒否されたツールをログに出す」と同じ。#498)
+      - name: 拒否されたツールをログに出す
+        if: always() && steps.claude.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: bash .ai-dev/.github/scripts/permission-denials.sh "$EXECUTION_FILE"
 
       # 人の返信は読まれないまま残る。気づけるように issue に書いておく(目印付きなので、このワークフローは起動しない)
       - name: Claude Code が動かなかったことを issue に書く

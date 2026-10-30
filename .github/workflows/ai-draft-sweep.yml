@@ -148,6 +148,7 @@ jobs:
       # Edit・Write は作業ディレクトリの中(./**)だけにする(外の ~/.gitconfig などを書き換えさせない)。
       # gh pr view・gh issue view(コメントをその場で読める)は渡さない。diff・checks は番号の後ろまで書き、ほかの PR を読ませない
       - uses: anthropics/claude-code-action@v1
+        id: claude
         if: steps.live.outputs.run
         with:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
@@ -213,6 +214,14 @@ jobs:
             `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --add-label needs-manual`・`edit --remove-label ai-in-actions` と、`gh run view`)。この形のまま使う。
             ファイルを書き換えられるのは作業ディレクトリの中だけ。
             返信・コメントの先頭には <!-- ai-dev:agent --> を付ける。決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
+
+      # 渡すツールを絞ったので、拒否されたツールをログに出す(ai-review-loop.yml の「拒否されたツールをログに出す」と同じ。#498)
+      - name: 拒否されたツールをログに出す
+        if: always() && steps.claude.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: bash "$RUNNER_TEMP/ai-dev/permission-denials.sh" "$EXECUTION_FILE"
 
       # PR のブランチの checkout が .ai-dev を消し、Claude Code は作業ディレクトリのファイルを書き換えられるので、既定のブランチのスクリプトを取り直す
       - uses: actions/checkout@v6
