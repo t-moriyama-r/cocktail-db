@@ -37,6 +37,8 @@ class E2eSeeder extends Seeder
      * ジントニックは、カクテルの詳細(#108)の E2E にも使う。登録数を変えないよう、カクテルは足さずにこの 1 件に
      * グラス・氷・甘さ・評価・補足と、銘柄つきの材料・任意の材料を持たせる。
      * 技法(ビルド)とグラス(タンブラー)は用語辞典の用語に結び付け、用語の詳細(#56)の「これを使ったカクテル」に出す。
+     *
+     * 銘柄はジンの有名な銘柄にもする(カテゴリの詳細の E2E(#105)で、有名な銘柄の欄が出るノードと出ないノードを作る)。
      */
     private function seedHeaderData(Category $gin, Category $beefeater, Category $mint, Dictionary $build, Dictionary $tumbler): void
     {
@@ -46,6 +48,7 @@ class E2eSeeder extends Seeder
             'name_search' => 'ビーフィーター40度',
             'name_eng' => 'Beefeater 40',
         ]);
+        $gin->update(['famous_brand_id' => $beefeater40->id]);
         $cocktail = Cocktail::factory()->create([
             'name' => 'ジントニック',
             'name_search' => 'ジントニック',

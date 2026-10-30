@@ -34,6 +34,9 @@
   /* ヘッダーの名前検索のボタン(#99)。押せないときの地と、禁止文字を含むときの「Error」の地。どちらも文字との差は 4.5:1 以上 */
   --color-disabled-bg: #e0e0e0; /* 文字は --color-text-muted(4.69:1) */
   --color-danger: #c62828; /* 文字は --color-on-accent(5.62:1) */
+  /* カテゴリの詳細の欄の線(#105)。有名な銘柄と子のノード(旧 Detail/CategoryDetail.vue の famous_brand・middle_list と同じ値) */
+  --color-famous-line: #006699;
+  --color-children-line: #ff6600;
   /* カクテルの詳細(#108)。ベースなどの欄・材料の欄の左の線と、Note の上の線(旧 Detail/CocktailDetail.vue と同じ値。文字ではないので 4.5:1 の対象外) */
   --color-detail-data-line: #006699;
   --color-detail-recipe-line: #ff6600;

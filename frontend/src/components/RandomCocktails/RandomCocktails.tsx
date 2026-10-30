@@ -4,6 +4,7 @@ import ApiError from '../ApiView/ApiError'
 import CocktailTable from '../CocktailTable/CocktailTable'
 import type { CocktailTableRow } from '../CocktailTable/CocktailTable.types'
 import FontAwesomeIcon from '../CocktailTable/FontAwesomeIcon'
+import SquareDot from '../SquareDot/SquareDot'
 import styles from './RandomCocktails.module.css'
 import type { RandomCocktailsOrigin } from './RandomCocktails.types'
 import { fetchRandomCocktails } from './fetchRandomCocktails'
@@ -59,7 +60,7 @@ export default function RandomCocktails({ origin, limit = DEFAULT_LIMIT }: Props
     <section className={styles.section} aria-labelledby={headingId} aria-busy={state.kind === 'loading'}>
       <div className={styles.header}>
         <h2 className={styles.heading} id={headingId}>
-          <span className={styles.squareDot} aria-hidden="true" />
+          <SquareDot />
           {heading}
         </h2>
         <button className={styles.reget} type="button" onClick={retry}>
