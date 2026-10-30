@@ -112,6 +112,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/cocktails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 管理画面のカクテルの一覧。公開済みか下書きのどちらかを、名前の昇順で 1 ページずつ返す。
+         * @description 名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順(旧の管理画面の
+         *     一覧と同じ並び)。q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         */
+        get: operations["admin.cocktailIndex"];
+        put?: never;
+        /** カクテルを作る。下書きか公開かは is_draft で決める(docs/decisions/admin-screens.md の 1)。 */
+        post: operations["cocktail.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/cocktails/{cocktail}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 編集で開くカクテル。下書きも返す。 */
+        get: operations["cocktail.show"];
+        /** カクテルの基本情報を書き換える。材料と、材料から作る値(度数・材料の数)は変えない。 */
+        put: operations["cocktail.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cocktails/{cocktail}": {
         parameters: {
             query?: never;
@@ -133,7 +173,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/cocktails": {
+    "/admin/cocktail-form-options": {
         parameters: {
             query?: never;
             header?: never;
@@ -141,11 +181,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 管理画面のカクテルの一覧。公開済みか下書きのどちらかを、名前の昇順で 1 ページずつ返す。
-         * @description 名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順(旧の管理画面の
-         *     一覧と同じ並び)。q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         * カクテルの編集画面の選択肢(#291)。技法・グラス(用語辞典の分類「グラス」の項目)・氷を、それぞれ ID の順で返す。
+         * @description 旧は SearchController@getListForRecipe が、材料の選択肢と一緒にまとめて返していた。
          */
-        get: operations["admin.cocktailIndex"];
+        get: operations["admin.cocktailFormOptions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1005,6 +1044,37 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
         };
+        /** CocktailResource */
+        CocktailResource: {
+            id: number;
+            base_category_id: number;
+            name: string;
+            name_eng: string | null;
+            method_id: number;
+            glass_dictionary_id: number | null;
+            ice_id: number | null;
+            /** @description 度数(%)。材料から計算した値で、入力しない */
+            strength: number;
+            rate: number | null;
+            sweet_degree: number | null;
+            is_major: boolean;
+            is_draft: boolean;
+            description: string | null;
+            note: string | null;
+            youtube: string | null;
+            youtube_start_hour: number | null;
+            youtube_start_minute: number | null;
+            youtube_start_second: number | null;
+            /**
+             * Format: date-time
+             * @description 動画を入れた・変えた日時
+             */
+            youtube_created_at: string | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            updated_at: string | null;
+        };
         /**
          * CocktailSearchRequest
          * @description 条件検索(POST /api/cocktails/search)の条件(docs/search.md の「新しい条件との対応」)。
@@ -1131,6 +1201,11 @@ export interface components {
             id: number;
             name: string;
             name_eng: string;
+        };
+        /** FormOptionResource */
+        FormOptionResource: {
+            id: string;
+            name: string;
         };
         /** LatestVideoCocktailResource */
         LatestVideoCocktailResource: {
@@ -1277,6 +1352,50 @@ export interface components {
             is_major: boolean;
             is_like: boolean;
             /** @description 画像のリンクの文字と URL */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
+        };
+        /**
+         * SaveCocktailRequest
+         * @description カクテルの基本情報の新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。#291)の入力。
+         *
+         *     旧の EditCocktailValidate の規則に、長さの上限とベースの規則を足したもの。材料は #292 で足す。
+         *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+         */
+        SaveCocktailRequest: {
+            /** @description ベース。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
+            base_category_id: number;
+            name: string;
+            name_eng: string;
+            /** @description 技法・グラス(用語辞典の分類「グラス」の項目)・氷。選択肢は GET /api/admin/cocktail-form-options */
+            method_id: number;
+            glass_dictionary_id?: number | null;
+            ice_id?: number | null;
+            /** @description 評価・甘さ(旧と同じ範囲) */
+            rate?: number | null;
+            sweet_degree?: number | null;
+            is_major: boolean;
+            /** @description 下書きとして保存するか(true)、公開するか(false)。保存のボタンで決める(docs/decisions/admin-screens.md の 1) */
+            is_draft: boolean;
+            /**
+             * @description 説明・補足。保存のときに記法へ変換する(DescriptionMarkup。#287)。
+             *     公開するときは説明が要る(旧も説明の無いカクテルは公開にならなかった。#291 の「旧との差分」)
+             */
+            description?: string | null;
+            note?: string | null;
+            /** @description YouTube の URL か動画 ID と、開始位置(時・分・秒。時の 0 は #284 の 8) */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            /** @description 画像のリンクの文字と URL(#288) */
             image_txt?: string | null;
             /** Format: uri */
             image_url?: string | null;
@@ -1620,30 +1739,6 @@ export interface operations {
             404: components["responses"]["ModelNotFoundException"];
         };
     };
-    cocktailDetail: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cocktail: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description `CocktailDetailResource` */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        data: components["schemas"]["CocktailDetailResource"];
-                    };
-                };
-            };
-        };
-    };
     "admin.cocktailIndex": {
         parameters: {
             query: {
@@ -1697,6 +1792,135 @@ export interface operations {
                 };
             };
             422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktail.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveCocktailRequest"];
+            };
+        };
+        responses: {
+            /** @description `CocktailResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktail.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CocktailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "cocktail.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveCocktailRequest"];
+            };
+        };
+        responses: {
+            /** @description `CocktailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    cocktailDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CocktailDetailResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CocktailDetailResource"];
+                    };
+                };
+            };
+        };
+    };
+    "admin.cocktailFormOptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        methods: components["schemas"]["FormOptionResource"][];
+                        glasses: components["schemas"]["FormOptionResource"][];
+                        ices: components["schemas"]["FormOptionResource"][];
+                    };
+                };
+            };
         };
     };
     "cocktailList.index": {
