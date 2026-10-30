@@ -25,9 +25,14 @@ type Props = {
   sort: CocktailTableSortMode
   /** 表の名前(読み上げに使う)。画面に出す見出しは表の外に置く */
   label: string
+  /**
+   * 別名で当たったカクテルの、当たった別名(カクテルの ID → 別名)。名前の後ろに添える。
+   * 名前検索の結果(#52)で、名前では当たらず別名(#82。旧に無い)で当たったカクテルに使う
+   */
+  matchedAliases?: ReadonlyMap<number, string>
 }
 
-export default function CocktailTable({ cocktails, sort, label }: Props) {
+export default function CocktailTable({ cocktails, sort, label, matchedAliases }: Props) {
   const [localSort, setLocalSort] = useState<CocktailSort | null>(null)
   const current = sort.mode === 'local' ? localSort : sort.sort
   const rows = sort.mode === 'local' ? sortCocktails(cocktails, localSort) : cocktails
@@ -70,6 +75,7 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
             </td>
             <td className={styles.name}>
               <Link to={cocktailPath(c.id)}>{c.name}</Link>
+              {matchedAliases?.has(c.id) && <span className={styles.alias}>(別名: {matchedAliases.get(c.id)})</span>}
             </td>
             <td className={styles.nameEng}>
               {c.name_eng && <Link to={cocktailPath(c.id)}>{c.name_eng}</Link>}

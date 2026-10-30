@@ -1,0 +1,45 @@
+/* 用語辞典の詳細(旧 Dictionary/detail.vue と、詳細で共通の Detail/detail.scss の detail_container) */
+.page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4) 0;
+}
+
+/* ページの題。旧は 2.5 倍。ほかの題と同じく、960px 以上は --font-size-title、未満は --font-size-xl にする */
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+}
+
+/* 旧の Breadcrumb.vue(コンパスのアイコンと、分類の名前の一覧へのリンク) */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2);
+}
+
+/* 旧の description_block(上 16px・ほか 8px) */
+.description {
+  margin: var(--space-4) var(--space-2) var(--space-2);
+}
+
+/* 旧の method_cocktail・glass_cocktail(左の太い線の色で、技法とグラスを分ける) */
+.methodCocktails,
+.glassCocktails {
+  margin-top: var(--space-5);
+  padding-left: var(--space-2);
+  border-left: 5px solid var(--color-dictionary-method-line);
+}
+
+.glassCocktails {
+  border-left-color: var(--color-dictionary-glass-line);
+}
+
+@media (min-width: 960px) {
+  .title {
+    font-size: var(--font-size-title);
+  }
+}
