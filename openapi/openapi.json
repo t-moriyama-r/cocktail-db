@@ -958,7 +958,8 @@
             },
             "delete": {
                 "operationId": "cocktail.destroy",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u3082\u4e00\u7dd2\u306b\u6d88\u3048\u308b(#130)\u3002\u753b\u50cf\u306e\u30d5\u30a1\u30a4\u30eb\u3082\u6d88\u3059(\u307b\u304b\u306e\u884c\u304c\u6307\u3059\u30d5\u30a1\u30a4\u30eb\u306f\u6b8b\u3059\u3002#578)\u3002",
+                "description": "\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u30fb\u30ce\u30fc\u30c9\u30fb\u6280\u6cd5\u30fb\u9298\u67c4\u30fb\u7528\u8a9e\u306e\u8aac\u660e\u6587\u304b\u3089 `@c<ID>@` \u3067\u53c2\u7167\u3055\u308c\u3066\u3044\u308b\u3068\u304d\u306f\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3068\u53c2\u7167\u3057\u3066\u3044\u308b\u884c\u3092\u8fd4\u3059(#579)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u3082\u4e00\u7dd2\u306b\u6d88\u3048\u308b(#130)\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -975,6 +976,70 @@
                 "responses": {
                     "204": {
                         "description": "No content"
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "\u3053\u306e\u30ab\u30af\u30c6\u30eb\u306f\u6d88\u305b\u307e\u305b\u3093"
+                                        },
+                                        "reasons": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "code": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "cocktail",
+                                                            "node",
+                                                            "method",
+                                                            "brand",
+                                                            "dictionary"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "referrers": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "id",
+                                                                "name"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "required": [
+                                                    "code",
+                                                    "message",
+                                                    "referrers"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "reasons"
+                                    ]
+                                }
+                            }
+                        }
                     },
                     "404": {
                         "$ref": "#/components/responses/ModelNotFoundException"

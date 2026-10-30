@@ -152,7 +152,10 @@ export interface paths {
          */
         put: operations["cocktail.update"];
         post?: never;
-        /** カクテルを消す。材料・別名も一緒に消える(#130)。画像のファイルも消す(ほかの行が指すファイルは残す。#578)。 */
+        /**
+         * カクテルを消す。材料・別名も一緒に消える(#130)。
+         * @description ほかのカクテル・ノード・技法・銘柄・用語の説明文から `@c<ID>@` で参照されているときは消さず、409 で理由と参照している行を返す(#579)。
+         */
         delete: operations["cocktail.destroy"];
         options?: never;
         head?: never;
@@ -2021,6 +2024,26 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["ModelNotFoundException"];
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        message: "このカクテルは消せません";
+                        reasons: {
+                            /** @enum {string} */
+                            code: "cocktail" | "node" | "method" | "brand" | "dictionary";
+                            message: string;
+                            referrers: {
+                                id: number;
+                                name: string;
+                            }[];
+                        }[];
+                    };
+                };
+            };
         };
     };
     cocktailDetail: {

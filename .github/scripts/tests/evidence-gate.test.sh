@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-gate.sh のテスト(TC-380-01〜15・TC-432-01〜11・TC-518-01〜12)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# evidence-gate.sh のテスト(TC-380-01〜15・TC-432-01〜11・TC-518-01〜12・TC-598-01〜13)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 #
 # 使い方: .github/scripts/tests/evidence-gate.test.sh
 
@@ -18,6 +18,12 @@ IMG='<img width="922" height="543" alt="compare" src="https://github.com/user-at
 MD_IMG='![compare](https://github.com/user-attachments/assets/22222222-bbbb)'
 VIDEO_BEFORE='https://github.com/user-attachments/assets/33333333-cccc'
 VIDEO_AFTER='https://github.com/user-attachments/assets/44444444-dddd'
+# Actions で撮って evidence ブランチに置いた証跡(#487・#598)。検査するリポジトリは o/r
+EV_ROOT='https://raw.githubusercontent.com/o/r/evidence'
+EV_IMG="<img width=\"922\" alt=\"compare\" src=\"$EV_ROOT/598/compare.png\" />"
+EV_MD_IMG="![compare]($EV_ROOT/598/compare.png)"
+EV_MP4_BEFORE="$EV_ROOT/598/before.mp4"
+EV_MP4_AFTER="$EV_ROOT/598/after.mp4"
 CODE='["backend/app/Http/Controllers/HelloController.php"]'
 FE='["frontend/src/components/DataTable.tsx","frontend/src/components/DataTable.module.css"]'
 DOCS='["README.md","docs/design/style.md",".github/workflows/test.yml","backend/tests/Feature/HelloTest.php","frontend/src/App.test.tsx","e2e/tests/layout.spec.ts","frontend/package-lock.json"]'
@@ -108,6 +114,34 @@ main() {
 	check TC-518-12 '色コード(#337ab7)は issue の参照として数えない' "$CODE" \
 		"$(fe_body "### 気づいたこと" "" "- #337ab7 の文字が見づらい")" 1 '「気づいたこと」に、issue の参照'
 
+	# Actions で撮って evidence ブランチに置いた証跡も数える。検査する PR のリポジトリの evidence ブランチの下だけ(#598)
+	check TC-598-01 'evidence ブランチの画像を <img src> で貼ったら静止画と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
+	check TC-598-02 'evidence ブランチの画像を ![](…) で貼ったら静止画と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_MD_IMG" "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 0
+	check TC-598-03 'evidence ブランチの .mp4 の行だけの URL を、1 本ずつ動画と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_IMG" "" "$EV_MP4_BEFORE" "" "$EV_MP4_AFTER")" 0
+	check TC-598-04 'evidence ブランチの .mp4 への Markdown のリンクを、1 本ずつ動画と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_IMG" "" "- [修正前の動画]($EV_MP4_BEFORE)" "- [修正後の動画]($EV_MP4_AFTER)")" 0
+	check TC-598-05 '同じ .mp4 の URL を行だけの URL とリンクで 3 回書いても 1 本と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$EV_IMG" "" "$EV_MP4_BEFORE" "" "  $EV_MP4_BEFORE  " "[修正前]($EV_MP4_BEFORE)")" 1 '(1 本)'
+	check TC-598-06 'ほかのリポジトリの evidence ブランチの画像は数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/x/r/evidence/598/compare.png" />' '![b](https://raw.githubusercontent.com/o/r2/evidence/598/compare.png)' "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画'
+	check TC-598-07 'ほかのリポジトリの evidence ブランチの .mp4 は数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "https://raw.githubusercontent.com/x/r/evidence/598/before.mp4" "" "[修正後](https://raw.githubusercontent.com/o/r2/evidence/598/after.mp4)")" 1 '(0 本)'
+	check TC-598-08 'ほかのブランチ(main・evidence-old)の画像は数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/o/r/main/598/compare.png" />' '![b](https://raw.githubusercontent.com/o/r/evidence-old/598/compare.png)' "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画'
+	check TC-598-09 'ほかのブランチ(main・evidence-old)の .mp4 は数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "https://raw.githubusercontent.com/o/r/main/598/before.mp4" "" "[修正後](https://raw.githubusercontent.com/o/r/evidence-old/598/after.mp4)")" 1 '(0 本)'
+	check TC-598-10 'リポジトリ名の . は 1 文字に当たらない(o/r.db の検査で o/rXdb の画像を数えない)' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/o/rXdb/evidence/598/compare.png" />' "" "$VIDEO_BEFORE" "" "$VIDEO_AFTER")" 1 '静止画' o/r.db
+	check TC-598-11 '. を含むリポジトリ名でも、そのリポジトリの evidence ブランチなら数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" '<img alt="a" src="https://raw.githubusercontent.com/o/r.db/evidence/598/compare.png" />' "" "https://raw.githubusercontent.com/o/r.db/evidence/598/before.mp4" "" "https://raw.githubusercontent.com/o/r.db/evidence/598/after.mp4")" 0 '' o/r.db
+	check TC-598-12 '![](….mp4) と、.mp4 でない行だけの URL は動画と数えない' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "![修正前]($EV_MP4_BEFORE)" "" "$EV_ROOT/598/after.png")" 1 '(0 本)'
+	check TC-598-13 'user-attachments の動画と evidence ブランチの .mp4 を 1 本ずつ合わせて 2 本と数える' "$CODE" \
+		"$(body "## 証跡" "修正前・修正後" "$IMG" "" "$VIDEO_BEFORE" "" "$EV_MP4_AFTER")" 0
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }
@@ -134,9 +168,9 @@ fe_body() {
 body() { printf '%s\r\n' "$@"; }
 
 check() {
-	local id=$1 title=$2 files=$3 text=$4 expected=$5 message=${6:-} actual output
+	local id=$1 title=$2 files=$3 text=$4 expected=$5 message=${6:-} repo=${7:-o/r} actual output
 	jq -n --argjson files "$files" --arg body "$text" '{body: $body, files: ($files | map({path: .}))}' >"$FAKE/pr.json"
-	output=$(PATH="$FAKE:$PATH" FAKE_DIR="$FAKE" bash "$SCRIPT" o/r 1 2>&1)
+	output=$(PATH="$FAKE:$PATH" FAKE_DIR="$FAKE" bash "$SCRIPT" "$repo" 1 2>&1)
 	actual=$?
 	if [ "$actual" -eq "$expected" ] && { [ -z "$message" ] || grep -qF -- "$message" <<<"$output"; }; then
 		PASSED=$((PASSED + 1))

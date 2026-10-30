@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Storage;
 // 作り直すこと(#130)。旧の DetailEditController@delete_cocktail と、旧の保存で材料の数を書いていたところの置き換え。
 // 旧と変えたところは #130 の本文の「旧との差分」。
 // 削除で画像のファイルも消すこと(#578)。旧は行を消すだけでファイルを残していた(#578 の本文の「旧との差分」)。
+// 説明文から参照されているカクテルを 409 で消させないこと(#579。旧との差分は #579 の本文)。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
 
 uses(RefreshDatabase::class)->group('db');
@@ -229,3 +230,127 @@ it('TC-578-06: 無い ID の削除は 404 で、画像のファイルは残る',
     expect(Cocktail::query()->whereKey($target->id)->exists())->toBeTrue();
     Storage::disk('public')->assertExists('target.png');
 });
+
+/**
+ * 説明文から参照される側のカクテル(材料・別名つき)。409 のときに、材料・別名も残ることを見る。
+ */
+function cocktailDeleteReferenced(): Cocktail
+{
+    $n = cocktailDeleteNodes();
+    $cocktail = Cocktail::factory()->create(['name' => 'ダイキリ']);
+    cocktailDeleteIngredients($cocktail, [[$n['ラム'], false], [$n['ライム'], false]]);
+    CocktailAlias::factory()->create(['cocktail_id' => $cocktail->id]);
+
+    return $cocktail;
+}
+
+/**
+ * $cocktail と、その材料・別名が残っているか。
+ */
+function cocktailDeleteRemains(Cocktail $cocktail): void
+{
+    expect(Cocktail::query()->whereKey($cocktail->id)->exists())->toBeTrue()
+        ->and(CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->count())->toBe(2)
+        ->and(CocktailAlias::query()->where('cocktail_id', $cocktail->id)->count())->toBe(1);
+}
+
+it('TC-579-01: ほかのカクテルの説明・補足から参照されているカクテルは消せず、409 で理由と参照しているカクテルを返す', function (string $column, string $format, bool $draft) {
+    $target = cocktailDeleteReferenced();
+    $referrer = Cocktail::factory()->create([
+        'name' => 'フローズン・ダイキリ',
+        'is_draft' => $draft,
+        $column => sprintf($format, $target->id),
+    ]);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")
+        ->assertConflict()
+        ->assertExactJson(['message' => 'このカクテルは消せません', 'reasons' => [
+            ['code' => 'cocktail', 'message' => 'ほかのカクテルの説明から参照されています', 'referrers' => [
+                ['id' => $referrer->id, 'name' => 'フローズン・ダイキリ'],
+            ]],
+        ]]);
+
+    cocktailDeleteRemains($target);
+})->with([
+    '説明' => ['description', '@c%d@を凍らせたもの', false],
+    '補足' => ['note', '元は@c%d@', false],
+    '大文字の記法' => ['description', '@C%d@を凍らせたもの', false],
+    '下書きのカクテルから' => ['description', '@c%d@を凍らせたもの', true],
+]);
+
+it('TC-579-02: ノード・技法・銘柄・用語の説明から参照されているカクテルは消せず、409 で理由と参照している行を返す', function (string $kind, string $code, string $message) {
+    $target = cocktailDeleteReferenced();
+    $description = "定番は@c{$target->id}@";
+    $tree = app(CategoryTree::class);
+    $referrer = match ($kind) {
+        'node' => $tree->addNode(null, Category::factory()->make(['name' => 'ラム酒', 'name_search' => 'ラム酒', 'description' => $description])->getAttributes()),
+        'method' => Method::factory()->create(['name' => 'ラム酒', 'description' => $description]),
+        'brand' => Brand::factory()->create([
+            'category_id' => $tree->addNode(null, Category::factory()->make(['name' => '洋酒2', 'name_search' => '洋酒2'])->getAttributes())->id,
+            'name' => 'ラム酒',
+            'description' => $description,
+        ]),
+        'dictionary' => Dictionary::factory()->create(['name' => 'ラム酒', 'description' => $description]),
+        default => throw new LogicException("知らない種類: {$kind}"),
+    };
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")
+        ->assertConflict()
+        ->assertExactJson(['message' => 'このカクテルは消せません', 'reasons' => [
+            ['code' => $code, 'message' => $message, 'referrers' => [['id' => $referrer->id, 'name' => 'ラム酒']]],
+        ]]);
+
+    cocktailDeleteRemains($target);
+})->with([
+    'ノード' => ['node', 'node', 'ノードの説明から参照されています'],
+    '技法' => ['method', 'method', '技法の説明から参照されています'],
+    '銘柄' => ['brand', 'brand', '銘柄の説明から参照されています'],
+    '用語' => ['dictionary', 'dictionary', '用語の説明から参照されています'],
+]);
+
+it('TC-579-03: いくつもの種類・行から参照されているときは、理由を cocktail・node・method・brand・dictionary の順に、行を ID の順にすべて返す', function () {
+    $target = cocktailDeleteReferenced();
+    $ref = "@c{$target->id}@";
+    $second = Cocktail::factory()->create(['name' => 'B', 'note' => $ref]);
+    $first = Cocktail::factory()->create(['name' => 'A', 'description' => $ref]);
+    $term = Dictionary::factory()->create(['name' => '用語', 'description' => $ref]);
+    $method = Method::factory()->create(['name' => '技法', 'description' => $ref]);
+    // 名前の順ではなく ID の順に並ぶことを見るため、B を先に作る
+    expect($first->id)->toBeGreaterThan($second->id);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")
+        ->assertConflict()
+        ->assertExactJson(['message' => 'このカクテルは消せません', 'reasons' => [
+            ['code' => 'cocktail', 'message' => 'ほかのカクテルの説明から参照されています', 'referrers' => [
+                ['id' => $second->id, 'name' => 'B'],
+                ['id' => $first->id, 'name' => 'A'],
+            ]],
+            ['code' => 'method', 'message' => '技法の説明から参照されています', 'referrers' => [['id' => $method->id, 'name' => '技法']]],
+            ['code' => 'dictionary', 'message' => '用語の説明から参照されています', 'referrers' => [['id' => $term->id, 'name' => '用語']]],
+        ]]);
+
+    cocktailDeleteRemains($target);
+});
+
+it('TC-579-04: 説明文から参照されていないカクテルは 204 で消せる(自分の説明・補足からの参照と、参照にならない似た文字は数えない)', function (string $column, string $format) {
+    $target = cocktailDeleteReferenced();
+    $other = Cocktail::factory()->create(['name' => 'モヒート']);
+    if ($column === 'self') {
+        $target->update(['description' => sprintf($format, $target->id), 'note' => sprintf($format, $target->id)]);
+    } else {
+        Cocktail::factory()->create([$column => sprintf($format, $target->id, $other->id)]);
+    }
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")->assertNoContent();
+
+    expect(Cocktail::query()->whereKey($target->id)->exists())->toBeFalse()
+        ->and(CocktailIngredient::query()->where('cocktail_id', $target->id)->count())->toBe(0)
+        ->and(CocktailAlias::query()->where('cocktail_id', $target->id)->count())->toBe(0);
+})->with([
+    '参照が無い' => ['description', 'ラムベースの定番'],
+    '自分の説明・補足からの参照だけ' => ['self', '@c%d@の作り方'],
+    'ほかのカクテルへの参照' => ['description', '@c%2$d@に近い'],
+    'ID の桁が違う' => ['description', '@c%d0@に近い'],
+    'ほかの種類の記法' => ['description', '@n%d@・@b%1$d@・@d%1$d@'],
+    '前の記法と @ を分け合い、参照にならない' => ['description', '@c%2$d@c%1$d@'],
+]);
