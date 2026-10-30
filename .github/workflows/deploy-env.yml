@@ -204,7 +204,7 @@ jobs:
           for name in AMAZON_CREDENTIAL_ID AMAZON_CREDENTIAL_SECRET AMAZON_PARTNER_TAG RAKUTEN_AFFILIATE_ID; do
             value=${!name}
             [ -n "$value" ] || continue
-            case "$value" in *$'\n'*|*\'*) echo "::error::$name に改行か単一引用符が入っている"; exit 1;; esac
+            case "$value" in *$'\n'*|*$'\r'*|*\'*) echo "::error::$name に改行、復帰文字、または単一引用符が入っている"; exit 1;; esac
             affiliate_env+="${name}='${value}'"$'\n'
           done
           { printf '%s\n' "$DB_PASSWORD"; printf '%s' "$affiliate_env"; } | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${SSH_USER}@${{ secrets.MIXHOST_SSH_HOST }}" "
@@ -253,6 +253,9 @@ jobs:
             # 既にあれば作らずに 0 で終わる(deploy.yml と同じ)
             php artisan storage:link
             php artisan migrate --force
+            # 設定のキャッシュ(bootstrap/cache/config.php)には Secret が平文で入るので、ほかのユーザーに読ませない。
+            # storage のディレクトリは Web サーバーが静的に配信するので、mkdir より後で絞る
+            umask 077
             php artisan optimize
           "
 
