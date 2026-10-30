@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import type { components } from '../api/schema'
@@ -71,7 +71,8 @@ describe('カテゴリの詳細の画面', () => {
     renderAt(GIN.id)
 
     expect(await findTitle()).toHaveTextContent('ジン(Gin)')
-    expect(document.title).toBe(`ジン(Gin) ｜ ${SITE_TITLE}`)
+    // タイトルは usePageTitle の useEffect で付くので、見出しが出た直後にはまだ付いていないことがある。付くまで待つ
+    await waitFor(() => expect(document.title).toBe(`ジン(Gin) ｜ ${SITE_TITLE}`))
   })
 
   test('TC-105-02: 根のノードは祖先が無いので、パンくずを出さない', async () => {
@@ -216,7 +217,8 @@ describe('カテゴリの詳細の画面', () => {
     renderAt(999)
 
     expect(await findTitle()).toHaveTextContent('ページが見つかりません')
-    expect(document.title).toBe(`ページが見つかりません ｜ ${SITE_TITLE}`)
+    // タイトルは usePageTitle の useEffect で付くので、見出しが出た直後にはまだ付いていないことがある。付くまで待つ
+    await waitFor(() => expect(document.title).toBe(`ページが見つかりません ｜ ${SITE_TITLE}`))
   })
 
   test('TC-105-15: URL の ID で API を呼び、子のノードのリンクで移ると、移った先のノードを出す', async () => {
