@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import type { paths } from '../../api/schema'
 import { useApi } from '../../api/useApi'
 import ApiError from '../../components/ApiView/ApiError'
+import Loading from '../../components/ApiView/Loading'
 import CocktailTable from '../../components/CocktailTable/CocktailTable'
 import type { CocktailTableRow } from '../../components/CocktailTable/CocktailTable.types'
 import FontAwesomeIcon from '../../components/CocktailTable/FontAwesomeIcon'
@@ -25,7 +26,7 @@ type Props = {
 /**
  * トップの 3 つの一覧(最近更新された・おすすめ・気まぐれ)の 1 つ(旧 components/index.vue の new_updates_div)。
  *
- * - 見出しは読み込み中も出し、表は届いてから出す(旧も届くまで表を出さなかった)
+ * - 見出しは読み込み中も出し、表は届いてから出す(旧も届くまで表を出さなかった)。初回の読み込み中は「読み込み中…」を出す
  * - 「再取得」を押すと取り直す。新しい一覧が届くまでは、今の一覧を出したままにする(旧と同じ)
  * - API が失敗したら、エラーの表示と「もう一度読み込む」を出す(#98)
  */
@@ -60,6 +61,7 @@ export default function TopCocktailList({ title, sort, canReget = false }: Props
           </button>
         )}
       </div>
+      {state.kind === 'loading' && rows === null && <Loading />}
       {(state.kind === 'http-error' || state.kind === 'network-error') && <ApiError error={state} onRetry={retry} />}
       {/* 404 は返らない API だが、返ったら当たるものが無いのと同じく表を出さない */}
       {rows !== null && <CocktailTable cocktails={rows} sort={{ mode: 'local' }} label={title} />}
