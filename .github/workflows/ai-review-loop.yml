@@ -207,7 +207,8 @@ jobs:
                返信で案が決まった・直して見た目が変わったときは、CLAUDE.md の手順 5 のとおり、PR 本文の「最終的にどうなったか(証跡)」の節を文字で書き直す
                (決まったこと・まだ決まっていないこと・決まった後に変えたところ)。この環境では画面を撮れないので、撮ってほしいもの
                (画面・幅と、比べる 2 つのコミット(決める前と最終))を PR にコメントし、`needs-local` を付けて終える(撮影は人の判断ではなく、手元の見回りが撮る)。
-               コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence --> を付ける
+               コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence --> を付ける。
+               撮ってほしいものは、`docs/evidence-request.md` の形の ```evidence のブロック(YAML)にして、そのコメントに 1 つだけ置く(撮る側が機械で読む)。比べる 2 つのコミットは before・after に書く
             PR の本文を書き換えるとき(テストケースの表に行を足す など)は、`gh pr edit` を使わない(この環境では本文の書き換えに失敗することがある。#426)。
             いまの本文を `gh pr view ${{ env.PR }} --json body --jq .body` で読み、書き換えた本文を Write でファイル(作業ディレクトリの `pr-body.md`)に書き、
             `gh api -X PATCH repos/${{ github.repository }}/pulls/${{ env.PR }} -F body=@pr-body.md` で更新する。`pr-body.md` はコミットしない(`git add` はファイルを名指しする)。
@@ -535,7 +536,9 @@ jobs:
             PR にコメントを書いてから `needs-local` ラベルを付けて終える(PC を開いたときに手元の見回りが片付ける)。
             コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=<evidence|push|other> --> を付け(撮影なら evidence、push なら push、コマンドが要る作業なら other。
             2 つ以上なら evidence > push > other の順で重いものにして、ほかの作業も同じコメントに書く)、
-            中身は、何をしてほしいか(撮ってほしいもの、当てる差分と理由、または手元でそのまま流せる手順)。人に頼むものもあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
+            中身は、何をしてほしいか(撮ってほしいもの、当てる差分と理由、または手元でそのまま流せる手順)。
+            撮ってほしいものは、`docs/evidence-request.md` の形の ```evidence のブロック(YAML)にして、そのコメントに 1 つだけ置く(撮る側が機械で読む)。
+            人に頼むものもあるときは、人に頼むコメントにこれも書き足して `needs-human` だけを付ける。
             `needs-local` で終えるときも、`ai-in-actions` ラベルを外す(付けたままだと、手元で `needs-local` を外した後の自動マージが見送られる)。
             人が手を動かさないと進まない作業(Secret・変数の設定、アカウントへのログイン、外部サービスの画面での設定など、手元のエージェントにもできないもの)は、
             `needs-local` ではなく `needs-manual` を付ける(`needs-local` は待っていれば見回りが片付けるもの、`needs-manual` は待っていても進まないもの)。
