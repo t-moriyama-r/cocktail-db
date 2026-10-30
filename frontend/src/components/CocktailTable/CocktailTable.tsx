@@ -10,6 +10,7 @@ import { rateStars } from './rateStars'
 import { sortCocktails } from './sortCocktails'
 import { strengthLabel } from './strengthLabel'
 import { sweetDegreeLabel } from './sweetDegreeLabel'
+import { categoryPath, cocktailPath } from '../../utils/detailPaths'
 import { youtubeWatchUrl } from '../../utils/youtubeWatchUrl'
 
 /**
@@ -97,12 +98,4 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
       </tbody>
     </table>
   )
-}
-
-function cocktailPath(id: number): string {
-  return `/detail/cocktail/${id}`
-}
-
-function categoryPath(id: number): string {
-  return `/category/${id}`
 }

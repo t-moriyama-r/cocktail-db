@@ -4,6 +4,7 @@ import { toApiResult } from '../../api/apiResult'
 import { api } from '../../api/client'
 import type { paths } from '../../api/schema'
 import { useApi } from '../../api/useApi'
+import { brandPath, categoryPath, cocktailPath } from '../../utils/detailPaths'
 import styles from './SiteHeader.module.css'
 
 type RandomWalk = paths['/random-walk']['get']['responses'][200]['content']['application/json']
@@ -14,11 +15,11 @@ const fetchCount = () => api.GET('/cocktails/count')
 const randomWalkPath = ({ type, id }: RandomWalk) => {
   switch (type) {
     case 'cocktail':
-      return `/detail/cocktail/${id}`
+      return cocktailPath(id)
     case 'category':
-      return `/category/${id}`
+      return categoryPath(id)
     case 'brand':
-      return `/detail/brand/${id}`
+      return brandPath(id)
   }
 }
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { affiliationNodes } from '../../components/BrandTable/affiliationNodes'
 import styles from './CocktailDetail.module.css'
 import type { CocktailIngredient } from './CocktailDetail.types'
-import { brandPath, categoryPath } from './detailPaths'
+import { brandPath, categoryPath } from '../../utils/detailPaths'
 
 type Props = {
   /** API が返した順(position の順)のまま出す */
