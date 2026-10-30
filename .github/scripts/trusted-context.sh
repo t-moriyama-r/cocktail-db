@@ -37,8 +37,7 @@ trusted_context() {
     gh api --paginate --slurp "repos/$repo/pulls/$n/comments?per_page=100" >"$tmp/review_comments"
     gh api --paginate --slurp "repos/$repo/pulls/$n/reviews?per_page=100" >"$tmp/reviews"
     review_threads "$repo" "$n" >"$tmp/threads"
-    closing=$(jq -r --arg repo "$repo" \
-      '.closingIssuesReferences[] | select(.repository.owner.login + "/" + .repository.name == $repo) | .number' <<<"$pr")
+    closing=$(jq -r -L "$HERE" --arg repo "$repo" 'include "closing-issues"; own_closing_issues($repo)' <<<"$pr")
   else
     echo null >"$tmp/pr"
     echo '[[]]' >"$tmp/review_comments"

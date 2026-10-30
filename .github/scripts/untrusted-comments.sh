@@ -9,7 +9,7 @@
 # public のリポジトリでは誰でもコメントでき、Actions やルーチンの Claude Code はそれを読んで、書き込みのできる権限で動く。
 # 外部の人がコメントで Claude Code に指示を渡し、自動マージとデプロイまで届かせられないよう、読ませる前にここで止める。
 #
-# 信頼するかの決め方は trust.jq(Claude Code に読ませるものを書き出す trusted-context.sh と同じ)。
+# 信頼するかの決め方は trust.jq。
 # 本文(PR・issue を作った人)も、コメントと同じく見る
 set -euo pipefail
 

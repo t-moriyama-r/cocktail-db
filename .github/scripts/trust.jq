@@ -1,6 +1,6 @@
-# PR・issue の本文・コメント・レビューを書いた人を信頼するか(untrusted-comments.sh・trusted-context.sh が include する)
+# PR・issue の本文・コメント・レビューを書いた人を信頼するか
 #
-# 渡すのは REST の形(.user.login・.author_association・.body)。GraphQL は bot のログイン名に [bot] が付かないので渡さない。
+# 入力は REST の形(.user.login・.author_association・.body)。bot のログイン名は REST の綴り([bot] が付く)で比べる。
 #
 # public のリポジトリでは誰でもコメントでき、Actions やルーチンの Claude Code はそれを読んで、書き込みのできる権限で動く。
 # 外部の人がコメントで Claude Code に指示を渡し、自動マージとデプロイまで届かせられないよう、読ませるものをここで決める。

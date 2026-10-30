@@ -5,13 +5,11 @@
 #   agent-write.sh reply <スレッドの ID(PRRT_…)> <返信の本文のファイル>   … 書いた返信の URL を出す
 #   agent-write.sh resolve <スレッドの ID(PRRT_…)>                      … 「resolved <ID>」を出す
 #   agent-write.sh body <PR の本文のファイル>                            … 「updated #<番号>」を出す
-# 対象のリポジトリと PR は、このスクリプトと同じディレクトリの agent-write.target(repo=<owner/repo> と pr=<番号> の行)で渡す。
-# 無ければ環境変数 REPO・PR を使う。どちらも引数では受け取らない(Claude Code に別の PR を選ばせない)
+# 対象のリポジトリと PR は、このスクリプトと同じディレクトリの agent-write.target(repo=<owner/repo> と pr=<番号> の行)で受け取り、
+# 引数では受け取らない(動かす人に、別の PR を選ばせない)
 #
-# Claude Code には、PR・issue のコメントをその場で読める gh(gh pr view・gh api graphql など)を渡さない。
-# 読むのは動かす前に取ったもの(trusted-context.sh)だけにして、確かめた後に書かれたものを読ませないため(#498)。
-# そのため GraphQL の問い合わせはここに固定で書き、返すものは書いたものの URL・ID だけにする
-# (問い合わせを渡せると、返信と一緒にスレッドのほかのコメントを返させて読めてしまう)
+# 書くだけで読まないことが、このスクリプトの役目(#498)。そのため GraphQL の問い合わせはここに固定で書き、
+# 返すものは書いたものの URL・ID だけにする(問い合わせを渡せると、返信と一緒にスレッドのほかのコメントを返させて読めてしまう)
 set -euo pipefail
 
 USAGE="使い方: agent-write.sh reply <スレッドの ID> <本文のファイル> | resolve <スレッドの ID> | body <本文のファイル>"
@@ -19,13 +17,11 @@ MARK='<!-- ai-dev:agent -->'
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 agent_write() {
-  local cmd=${1:-}
-  if [ -f "$HERE/agent-write.target" ]; then
-    REPO=$(sed -n 's/^repo=//p' "$HERE/agent-write.target")
-    PR=$(sed -n 's/^pr=//p' "$HERE/agent-write.target")
-  fi
-  if [ -z "${REPO:-}" ] || [ -z "${PR:-}" ]; then
-    echo "対象のリポジトリと PR が分からない(agent-write.target も、環境変数 REPO・PR も無い)" >&2
+  local cmd=${1:-} REPO PR
+  REPO=$(sed -n 's/^repo=//p' "$HERE/agent-write.target" 2>/dev/null || true)
+  PR=$(sed -n 's/^pr=//p' "$HERE/agent-write.target" 2>/dev/null || true)
+  if [ -z "$REPO" ] || [ -z "$PR" ]; then
+    echo "対象のリポジトリと PR が分からない(agent-write.target が無い)" >&2
     return 2
   fi
   case "$cmd" in

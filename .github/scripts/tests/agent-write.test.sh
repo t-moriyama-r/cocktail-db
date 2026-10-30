@@ -63,13 +63,13 @@ main() {
 	reset
 	echo x >"$FAKE/body.md"
 	REPO=evil/repo PR=99 run body "$FAKE/body.md"
-	expect TC-498-21 '対象の PR は agent-write.target から取り、環境変数より優先する' "$(grep -c 'repos/o/r/pulls/5' "$FAKE/calls")" '1'
+	expect TC-498-21 '対象の PR は agent-write.target から取り、環境変数 REPO・PR は見ない' "$(grep -c 'repos/o/r/pulls/5' "$FAKE/calls")" '1'
 
 	reset
 	rm -f "$FAKE/scripts/agent-write.target"
 	echo x >"$FAKE/body.md"
-	run body "$FAKE/body.md"
-	expect TC-498-22 'agent-write.target も環境変数 REPO・PR も無ければ、gh を呼ばずに 2 で終わる' "$RC|$(calls)" '2|0'
+	REPO=o/r PR=5 run body "$FAKE/body.md"
+	expect TC-498-22 'agent-write.target が無ければ、環境変数があっても gh を呼ばずに 2 で終わる' "$RC|$(calls)" '2|0'
 
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
