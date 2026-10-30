@@ -2,7 +2,8 @@
 #
 # ブランチ保護の必須のチェックに数えられるのは、PR に結び付いた回(pull_request)のチェックだけ。workflow_dispatch で流した回は数えられない(#389)。
 # 開いている PR の上に積んだ PR は、土台がマージされてブランチが消えると、base が既定のブランチに付け替わる(人がマージして
-# GitHub がブランチを消したときは GitHub が、ai-auto-merge.yml が自動でマージしたときは ai-auto-merge.yml が付け替えてから消す。#463)。
+# GitHub がブランチを消したとき(ai-auto-merge.yml が secret AUTO_MERGE_TOKEN でマージしたときも。#540)は GitHub が、
+# ai-auto-merge.yml が GITHUB_TOKEN で自動でマージしたときは ai-auto-merge.yml が付け替えてから消す。#463)。
 # 付け替えでは test.yml が動かず、必須のチェックがそろわないまま止まる。付け替えのイベント(edited)が起きるとは限らず、
 # ai-auto-merge.yml が GITHUB_TOKEN で付け替えたときはワークフローも起きない。ai-auto-merge.yml は付け替えた PR に ci-rerun.sh を直接流すが、
 # それが落ちたときや、ほかの付け替えは、1 時間ごとの見回りで拾う。
