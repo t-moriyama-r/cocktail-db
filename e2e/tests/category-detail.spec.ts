@@ -40,7 +40,7 @@ test('TC-105-16: 根から子のノードを辿ると、深さごとにパンく
   await expect(children(page).getByRole('link')).toHaveCount(0)
 
   // パンくずのリンクで祖先のノードへ移る
-  await breadcrumb(page).getByRole('link', { name: 'ジン' }).click()
+  await breadcrumb(page).getByRole('link', { name: 'ジン', exact: true }).click()
   await expect(title(page)).toHaveText('ジン(ジン)')
 })
 
