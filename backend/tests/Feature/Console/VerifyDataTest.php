@@ -9,6 +9,7 @@ use App\Models\Dictionary;
 use App\Models\Method;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
+use App\Services\RecipeSignature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +70,7 @@ function verifyDataFixture(): array
     $c['ライムだけ'] = Cocktail::factory()->create(['name' => 'ライムだけ', 'base_category_id' => $n['ライム']->id]);
     CocktailIngredient::factory()->create(['cocktail_id' => $c['ライムだけ']->id, 'position' => 0, 'category_id' => $n['ライム']->id]);
     app(RecipeCounter::class)->recount([$c['ラムソーダ']->id, $c['ライムだけ']->id]);
+    app(RecipeSignature::class)->rewrite([$c['ラムソーダ']->id, $c['ライムだけ']->id]);
 
     Affiliate::factory()->create(['category_id' => $n['ジン']->id]);
     Affiliate::factory()->create(['category_id' => $n['ジン']->id, 'brand_id' => $b['ビーフィーター']->id]);
@@ -142,6 +144,36 @@ it('TC-157-04: recipe_count が数え直した値と違うと、そのカクテ�
     '少ない' => ['ラムソーダ', 1, 2],
     '数える材料が無いのに 0 でない' => ['ライムだけ', 1, 0],
 ]);
+
+it('TC-82-25: recipe_signature が材料から作り直した値と違うと、そのカクテルを挙げて失敗する', function (?string $stored) {
+    $data = verifyDataFixture();
+    $cocktail = $data['cocktails']['ラムソーダ'];
+    $expected = $cocktail->refresh()->recipe_signature;
+    Cocktail::query()->whereKey($cocktail->id)->update(['recipe_signature' => $stored]);
+
+    [$code, $output] = runVerifyData();
+
+    expect($expected)->toBeString()
+        ->and($code)->toBe(1)
+        ->and($output)->toContain('材料の組のハッシュ(recipe_signature)')
+        ->and($output)->toContain("カクテル #{$cocktail->id} ラムソーダ")
+        ->and($output)->toContain(sprintf('いま %s・作り直すと %s', $stored ?? 'null', $expected));
+})->with([
+    '作り直していない(null)' => [null],
+    '材料を変える前の値' => [str_repeat('0', 64)],
+]);
+
+it('TC-82-26: 材料の無いカクテルに recipe_signature が残っていると、作り直すと null として挙げて失敗する', function () {
+    $data = verifyDataFixture();
+    $cocktail = $data['cocktails']['ライムだけ'];
+    CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->delete();
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain("カクテル #{$cocktail->id} ライムだけ")
+        ->and($output)->toContain('・作り直すと null');
+});
 
 it('TC-157-05: 材料に根を使うと、その材料を挙げて失敗する', function () {
     $data = verifyDataFixture();

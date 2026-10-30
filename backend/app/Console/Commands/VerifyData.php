@@ -9,6 +9,7 @@ use App\Models\CocktailIngredient;
 use App\Services\CategoryTree;
 use App\Services\DescriptionMarkup;
 use App\Services\RecipeCounter;
+use App\Services\RecipeSignature;
 use App\Support\DescriptionParser;
 use Illuminate\Console\Command;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -18,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  * カテゴリ木の外にある、木とつながった値の整合性を調べる。読むだけで、何も書き換えない。
  *
  * 次の決まりは DB の制約では守れず、保存のときの検証と数え直しで守る決まり(docs/schema.md の「材料が銘柄を持つときの
- * ノード」「材料とベースに使ってよいノード」、docs/decisions/recipe-count.md、docs/decisions/strength.md)。
+ * ノード」「材料とベースに使ってよいノード」「recipe_signature」、docs/decisions/recipe-count.md、docs/decisions/strength.md)。
  * 保存の処理の取りこぼしや移行で破れても、検索・材料の数・度数の計算が黙って食い違うだけなので、機械で確かめる。
  * 木そのもの(閉包表)は tree:verify が見る。
  *
@@ -35,13 +36,15 @@ final class VerifyData extends Command
     protected $signature = 'data:verify
         {--strict : 警告(有名な銘柄を持たないノード)も失敗に数える}';
 
-    protected $description = '材料・アフィリエイトのノード、材料の数(recipe_count)、根の使い方、有名な銘柄、説明文の参照と記法が決まりどおりかを調べ、破れていれば一覧を出して失敗する';
+    protected $description = '材料・アフィリエイトのノード、材料の数(recipe_count)、材料の組のハッシュ(recipe_signature)、根の使い方、有名な銘柄、説明文の参照と記法が決まりどおりかを調べ、破れていれば一覧を出して失敗する';
 
     private const INGREDIENT_BRAND_NODE = '材料のノードと銘柄の所属';
 
     private const AFFILIATE_BRAND_NODE = 'アフィリエイトのノードと銘柄の所属';
 
     private const RECIPE_COUNT = '材料の数(recipe_count)';
+
+    private const RECIPE_SIGNATURE = '材料の組のハッシュ(recipe_signature)';
 
     private const ROOT_INGREDIENT = '材料に根';
 
@@ -92,7 +95,7 @@ final class VerifyData extends Command
     /** @var array<int, string> ノードの ID → 名前 */
     private array $nodeNames = [];
 
-    public function handle(CategoryTree $tree, RecipeCounter $counter): int
+    public function handle(CategoryTree $tree, RecipeCounter $counter, RecipeSignature $signature): int
     {
         foreach (Category::query()->orderBy('id')->get(['id', 'name']) as $category) {
             $this->nodeNames[$category->id] = $category->name;
@@ -102,6 +105,7 @@ final class VerifyData extends Command
             ...$this->ingredientBrandNodeViolations(),
             ...$this->affiliateBrandNodeViolations(),
             ...$this->recipeCountViolations($counter),
+            ...$this->recipeSignatureViolations($signature),
             ...$this->rootIngredientViolations($tree),
             ...$this->rootBaseViolations($tree),
             ...$this->famousBrandSubtreeViolations(),
@@ -219,6 +223,31 @@ final class VerifyData extends Command
                     self::RECIPE_COUNT,
                     $this->cocktailLabel($cocktail->id, $cocktail->name),
                     "いま {$cocktail->recipe_count}・数え直すと {$count}",
+                ];
+            }
+        }
+
+        return $violations;
+    }
+
+    /**
+     * recipe_signature も材料から作り直すたびに書く持ち値なので、作り直しを呼び忘れた材料の書き換えがあるとずれ、
+     * 同じレシピのカクテル(#82)が黙って食い違う。作り方は RecipeSignature だけが持つので、同じ作り方で作り直した値と比べる。
+     *
+     * @return list<array{string, string, string}>
+     */
+    private function recipeSignatureViolations(RecipeSignature $signature): array
+    {
+        $expected = $signature->signaturesByCocktail();
+
+        $violations = [];
+        foreach (Cocktail::query()->orderBy('id')->get(['id', 'name', 'recipe_signature']) as $cocktail) {
+            $rebuilt = $expected[$cocktail->id] ?? null;
+            if ($cocktail->recipe_signature !== $rebuilt) {
+                $violations[] = [
+                    self::RECIPE_SIGNATURE,
+                    $this->cocktailLabel($cocktail->id, $cocktail->name),
+                    sprintf('いま %s・作り直すと %s', $cocktail->recipe_signature ?? 'null', $rebuilt ?? 'null'),
                 ];
             }
         }

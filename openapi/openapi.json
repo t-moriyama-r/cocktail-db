@@ -1451,7 +1451,7 @@
         "/search": {
             "get": {
                 "operationId": "nameSearch",
-                "description": "\u82f1\u6570\u5b57\u3060\u3051\u306e\u5165\u529b\u306a\u3089\u82f1\u540d(name_eng)\u3068\u691c\u7d22\u7528\u306e\u540d\u524d(name_search)\u3001\u305d\u308c\u4ee5\u5916\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3092\u90e8\u5206\u4e00\u81f4\u3067\u63a2\u3059\u3002\n\u7a7a\u767d(\u534a\u89d2\u30fb\u5168\u89d2)\u3067\u5206\u3051\u305f\u8a9e\u306f\u3001\u3069\u308c\u304b\u306b\u5f53\u305f\u308c\u3070\u4e00\u81f4(\u65e7\u3068\u540c\u3058 OR)\u3002\u8a9e\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3068\u540c\u3058\u5f62\u306b\u305d\u308d\u3048\u3066\u304b\u3089\n\u63a2\u3059\u3002\u4e0b\u66f8\u304d\u306e\u30ab\u30af\u30c6\u30eb\u3068\u3001\u6728\u306e\u6839(\u65e7\u306e\u7a2e\u5225)\u306f\u8fd4\u3055\u306a\u3044\u3002\u7a2e\u985e\u3054\u3068\u306b ID \u306e\u9806\u3067\u3001\u30da\u30fc\u30b8\u306b\u5206\u3051\u306a\u3044(\u65e7\u3068\u540c\u3058)\u3002\n\ningredient_matches \u306f\u3001\u8a9e\u3092\u6750\u6599\u306b\u4f7f\u3046\u30ab\u30af\u30c6\u30eb(\u65e7\u306e\u30a4\u30f3\u30c6\u30ea\u30b8\u30a7\u30f3\u30b9\u30b5\u30fc\u30c1\u3002#173)\u3002\u8a9e\u3054\u3068\u306b\u3001\u540d\u524d\u304c\u8a9e\u305d\u306e\u3082\u306e\u304b\n\u8a9e\u306b\u300c\u30ea\u30ad\u30e5\u30fc\u30eb\u300d(\u82f1\u6570\u5b57\u3060\u3051\u306e\u5165\u529b\u306a\u3089\u82f1\u540d\u3067\u3001\u8a9e\u306b liqueur)\u3092\u4ed8\u3051\u305f\u3082\u306e\u3068\u5b8c\u5168\u4e00\u81f4\u3059\u308b\u30ce\u30fc\u30c9\u30fb\u9298\u67c4\u3092\u63a2\u3057\u3001\n\u30ce\u30fc\u30c9\u306a\u3089\u305d\u306e\u30ce\u30fc\u30c9\u3068\u4e00\u81f4\u3059\u308b\u6750\u6599(\u914d\u4e0b\u3068\u3001\u6839\u3092\u9664\u304f\u7956\u5148)\u3092\u3001\u9298\u67c4\u306a\u3089\u305d\u306e\u9298\u67c4\u3092\u4f7f\u3046\u30ab\u30af\u30c6\u30eb\u3092\u8fd4\u3059\u3002\n\u8a9e\u306e\u9593\u306f AND \u3067\u3001\u3069\u308c\u304b\u306e\u8a9e\u3067\u4f55\u3082\u898b\u3064\u304b\u3089\u306a\u3051\u308c\u3070 0 \u4ef6\u3002",
+                "description": "\u82f1\u6570\u5b57\u3060\u3051\u306e\u5165\u529b\u306a\u3089\u82f1\u540d(name_eng)\u3068\u691c\u7d22\u7528\u306e\u540d\u524d(name_search)\u3001\u305d\u308c\u4ee5\u5916\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3092\u90e8\u5206\u4e00\u81f4\u3067\u63a2\u3059\u3002\n\u7a7a\u767d(\u534a\u89d2\u30fb\u5168\u89d2)\u3067\u5206\u3051\u305f\u8a9e\u306f\u3001\u3069\u308c\u304b\u306b\u5f53\u305f\u308c\u3070\u4e00\u81f4(\u65e7\u3068\u540c\u3058 OR)\u3002\u8a9e\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3068\u540c\u3058\u5f62\u306b\u305d\u308d\u3048\u3066\u304b\u3089\n\u63a2\u3059\u3002\u4e0b\u66f8\u304d\u306e\u30ab\u30af\u30c6\u30eb\u3068\u3001\u6728\u306e\u6839(\u65e7\u306e\u7a2e\u5225)\u306f\u8fd4\u3055\u306a\u3044\u3002\u7a2e\u985e\u3054\u3068\u306b ID \u306e\u9806\u3067\u3001\u30da\u30fc\u30b8\u306b\u5206\u3051\u306a\u3044(\u65e7\u3068\u540c\u3058)\u3002\n\n\u30ab\u30af\u30c6\u30eb\u306f\u5225\u540d(#82\u3002\u65e7\u306b\u7121\u3044)\u306e\u691c\u7d22\u7528\u306e\u540d\u524d\u3067\u3082\u63a2\u3059\u3002\u540d\u524d\u3067\u306f\u5f53\u305f\u3089\u305a\u5225\u540d\u3067\u5f53\u305f\u3063\u305f\u30ab\u30af\u30c6\u30eb\u306f\u3001\u5f53\u305f\u3063\u305f\u5225\u540d\u3092\nmatched_alias \u306b\u8fd4\u3059(2 \u3064\u4ee5\u4e0a\u5f53\u305f\u308c\u3070\u5148\u306b\u767b\u9332\u3057\u305f\u65b9\u3002\u540d\u524d\u3067\u5f53\u305f\u3063\u305f\u30ab\u30af\u30c6\u30eb\u306f null)\u3002\n\ningredient_matches \u306f\u3001\u8a9e\u3092\u6750\u6599\u306b\u4f7f\u3046\u30ab\u30af\u30c6\u30eb(\u65e7\u306e\u30a4\u30f3\u30c6\u30ea\u30b8\u30a7\u30f3\u30b9\u30b5\u30fc\u30c1\u3002#173)\u3002\u8a9e\u3054\u3068\u306b\u3001\u540d\u524d\u304c\u8a9e\u305d\u306e\u3082\u306e\u304b\n\u8a9e\u306b\u300c\u30ea\u30ad\u30e5\u30fc\u30eb\u300d(\u82f1\u6570\u5b57\u3060\u3051\u306e\u5165\u529b\u306a\u3089\u82f1\u540d\u3067\u3001\u8a9e\u306b liqueur)\u3092\u4ed8\u3051\u305f\u3082\u306e\u3068\u5b8c\u5168\u4e00\u81f4\u3059\u308b\u30ce\u30fc\u30c9\u30fb\u9298\u67c4\u3092\u63a2\u3057\u3001\n\u30ce\u30fc\u30c9\u306a\u3089\u305d\u306e\u30ce\u30fc\u30c9\u3068\u4e00\u81f4\u3059\u308b\u6750\u6599(\u914d\u4e0b\u3068\u3001\u6839\u3092\u9664\u304f\u7956\u5148)\u3092\u3001\u9298\u67c4\u306a\u3089\u305d\u306e\u9298\u67c4\u3092\u4f7f\u3046\u30ab\u30af\u30c6\u30eb\u3092\u8fd4\u3059\u3002\n\u8a9e\u306e\u9593\u306f AND \u3067\u3001\u3069\u308c\u304b\u306e\u8a9e\u3067\u4f55\u3082\u898b\u3064\u304b\u3089\u306a\u3051\u308c\u3070 0 \u4ef6\u3002",
                 "summary": "\u540d\u524d\u3067\u3001\u30ab\u30af\u30c6\u30eb\u30fb\u30ce\u30fc\u30c9\u30fb\u9298\u67c4\u3092\u7a2e\u985e\u3054\u3068\u306b\u63a2\u3059\u3002",
                 "tags": [
                     "NameSearch"
@@ -1478,7 +1478,7 @@
                                         "cocktails": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/CocktailSummaryResource"
+                                                "$ref": "#/components/schemas/NameSearchCocktailResource"
                                             }
                                         },
                                         "nodes": {
@@ -3618,6 +3618,32 @@
                         "items": {
                             "$ref": "#/components/schemas/CocktailIngredientResource"
                         }
+                    },
+                    "aliases": {
+                        "type": "array",
+                        "description": "\u5225\u540d\u3002\u767b\u9332\u3057\u305f\u9806",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name"
+                            ]
+                        }
+                    },
+                    "same_recipe": {
+                        "type": "array",
+                        "description": "\u6750\u6599\u306e\u7d44\u304c\u307e\u3063\u305f\u304f\u540c\u3058\u3001\u307b\u304b\u306e\u516c\u958b\u3057\u3066\u3044\u308b\u30ab\u30af\u30c6\u30eb\u3002ID \u306e\u9806\u3002\u4e00\u89a7\u306e\u8868\u3068\u540c\u3058\u9805\u76ee",
+                        "items": {
+                            "$ref": "#/components/schemas/CocktailSummaryResource"
+                        }
                     }
                 },
                 "required": [
@@ -3644,7 +3670,9 @@
                     "image_url",
                     "created_at",
                     "updated_at",
-                    "ingredients"
+                    "ingredients",
+                    "aliases",
+                    "same_recipe"
                 ],
                 "title": "CocktailDetailResource"
             },
@@ -4336,6 +4364,97 @@
                     "category"
                 ],
                 "title": "NameSearchBrandResource"
+            },
+            "NameSearchCocktailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "base": {
+                        "$ref": "#/components/schemas/NodeRefResource"
+                    },
+                    "method": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    },
+                    "recipe_count": {
+                        "type": "integer"
+                    },
+                    "strength": {
+                        "type": "number"
+                    },
+                    "sweet_degree": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "rate": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "matched_alias": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "is_major",
+                    "base",
+                    "method",
+                    "recipe_count",
+                    "strength",
+                    "sweet_degree",
+                    "rate",
+                    "youtube",
+                    "updated_at",
+                    "matched_alias"
+                ],
+                "title": "NameSearchCocktailResource"
             },
             "NameSearchNodeResource": {
                 "type": "object",
