@@ -49,4 +49,6 @@ const DEFAULT_DETAIL: CocktailDetailData = {
   created_at: '2020-01-01T00:00:00.000000Z',
   updated_at: '2020-01-01T00:00:00.000000Z',
   ingredients: [DEFAULT_INGREDIENT],
+  aliases: [],
+  same_recipe: [],
 }
