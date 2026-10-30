@@ -143,10 +143,11 @@ export interface paths {
         };
         /** 編集で開くカクテル。下書きも返す。 */
         get: operations["cocktail.show"];
-        /** カクテルの基本情報を書き換える。材料と、材料から作る値(度数・材料の数)は変えない。 */
+        /** カクテルの基本情報を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。 */
         put: operations["cocktail.update"];
         post?: never;
-        delete?: never;
+        /** カクテルを消す。材料・別名は外部キーの CASCADE で一緒に消える(旧は材料の行を残していた。docs/migration-anomalies.md の 1)。 */
+        delete: operations["cocktail.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1874,6 +1875,27 @@ export interface operations {
             };
             404: components["responses"]["ModelNotFoundException"];
             422: components["responses"]["ValidationException"];
+        };
+    };
+    "cocktail.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cocktail: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
         };
     };
     cocktailDetail: {

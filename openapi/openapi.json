@@ -851,7 +851,7 @@
             },
             "put": {
                 "operationId": "cocktail.update",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u3001\u6750\u6599\u304b\u3089\u4f5c\u308b\u5024(\u5ea6\u6570\u30fb\u6750\u6599\u306e\u6570)\u306f\u5909\u3048\u306a\u3044\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u5ea6\u6570\u306f\u5909\u3048\u305a\u3001\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5\u306f\u4eca\u306e\u6750\u6599\u304b\u3089\u4f5c\u308a\u76f4\u3059(#130)\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -899,6 +899,31 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "cocktail.destroy",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u306f\u5916\u90e8\u30ad\u30fc\u306e CASCADE \u3067\u4e00\u7dd2\u306b\u6d88\u3048\u308b(\u65e7\u306f\u6750\u6599\u306e\u884c\u3092\u6b8b\u3057\u3066\u3044\u305f\u3002docs/migration-anomalies.md \u306e 1)\u3002",
+                "tags": [
+                    "Cocktail"
+                ],
+                "parameters": [
+                    {
+                        "name": "cocktail",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 }
             }
