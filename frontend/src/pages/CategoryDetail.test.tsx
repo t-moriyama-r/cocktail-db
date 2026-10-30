@@ -149,12 +149,13 @@ describe('カテゴリの詳細の画面', () => {
 
   test('TC-105-08: 画像があれば画像と出典を出し、アフィリエイトの場所は作らない', async () => {
     respondWith(
-      buildNode([LIQUOR, GIN], { image: '/images/gin.jpg', image_txt: '出典のサイト', image_url: 'https://example.com/gin' }),
+      buildNode([LIQUOR, GIN], { image: 'gin.jpg', image_txt: '出典のサイト', image_url: 'https://example.com/gin' }),
     )
     renderAt(GIN.id)
     await findTitle()
 
-    expect(screen.getByRole('img', { name: 'ジン' })).toHaveAttribute('src', '/images/gin.jpg')
+    // 画像の列はファイル名で返る(API は保存した値のまま返す)。画面は /storage/ の下を指す(#585)
+    expect(screen.getByRole('img', { name: 'ジン' })).toHaveAttribute('src', '/storage/gin.jpg')
     expect(screen.getByRole('link', { name: '出典のサイト' })).toHaveAttribute('href', 'https://example.com/gin')
     expect(screen.queryByTestId('affiliate-in-image')).not.toBeInTheDocument()
   })
