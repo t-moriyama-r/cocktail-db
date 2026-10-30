@@ -8,6 +8,7 @@ use App\Models\Cocktail;
 use App\Models\Dictionary;
 use App\Support\MetaDescription;
 use App\Support\PageTitle;
+use App\Support\SocialCard;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Response;
@@ -18,6 +19,8 @@ use Illuminate\Http\Response;
  *
  * 無い ID・下書きのカクテルは、SPA の HTML を 404 の状態で返す(画面は #97 の「ページが見つかりません」)。
  * 旧は画面の HTML を 200 で返していた(#111 の旧との差分)。
+ *
+ * OGP・Twitter カード(#112)も、ここでページごとの値を渡す。og:description は description と同じ文にする。
  */
 class DetailPageController extends Controller
 {
@@ -57,7 +60,7 @@ class DetailPageController extends Controller
     }
 
     /**
-     * canonical は APP_URL と、そのページのパス(クエリを付けない)。
+     * canonical は APP_URL と、そのページのパス(クエリを付けない)。og:url も同じ。
      */
     private function page(Cocktail|Category|Brand|Dictionary|null $model, string $pathPrefix): Response
     {
@@ -65,12 +68,16 @@ class DetailPageController extends Controller
             return response()->view('spa', [], 404);
         }
 
+        $description = $this->description->make($model->description);
+        $canonical = rtrim(config()->string('app.url'), '/').$pathPrefix.$model->id;
+
         return response()->view('spa', [
             'head' => [
                 'title' => PageTitle::forDetail($model->name, $model->name_eng),
-                'description' => $this->description->make($model->description),
-                'canonical' => rtrim(config()->string('app.url'), '/').$pathPrefix.$model->id,
+                'description' => $description,
+                'canonical' => $canonical,
             ],
+            'social' => SocialCard::detail($model->name, $description, $model->image, $canonical),
         ]);
     }
 }
