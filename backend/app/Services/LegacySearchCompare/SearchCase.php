@@ -90,6 +90,20 @@ final readonly class SearchCase
         }
         if (array_is_list($categories) && $categories !== []) {
             $categories = self::ids($categories) ?? throw $fail('categories の ID は整数');
+        } elseif (! array_is_list($categories)) {
+            foreach (['kind', 'not_kind'] as $key) {
+                if (isset($categories[$key]) && (! is_array($categories[$key]) || ! array_is_list($categories[$key]) || self::ids($categories[$key]) === null)) {
+                    throw $fail("categories の {$key} は整数の並び");
+                }
+            }
+            foreach (['has_middles', 'optional'] as $key) {
+                if (isset($categories[$key]) && ! is_bool($categories[$key])) {
+                    throw $fail("categories の {$key} は真偽値");
+                }
+            }
+            if (isset($categories['limit']) && ! is_int($categories['limit'])) {
+                throw $fail('categories の limit は整数');
+            }
         }
 
         $middles = $raw['middles'] ?? null;

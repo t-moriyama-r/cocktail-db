@@ -103,8 +103,7 @@
       "kind": [
         4,
         5
-      ],
-      "limit": 2
+      ]
     },
     "middles": "children",
     "methods": "all",
@@ -292,7 +291,7 @@
     "mode": "and",
     "categories": [
       4,
-      5
+      6
     ],
     "middles": "children",
     "methods": "all",
