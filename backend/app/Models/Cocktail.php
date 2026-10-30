@@ -136,7 +136,15 @@ class Cocktail extends Model
      */
     public function strength(): float
     {
-        return (float) $this->volume;
+        return self::strengthOf($this->volume);
+    }
+
+    /**
+     * 列の volume の値から度数(%)を出す。モデルにせずに行のまま読むとき(条件検索の並べ替え。#96)も、strength と同じ値にする。
+     */
+    public static function strengthOf(mixed $volume): float
+    {
+        return is_numeric($volume) ? (float) $volume : 0.0;
     }
 
     /**

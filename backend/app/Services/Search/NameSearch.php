@@ -10,6 +10,7 @@ use App\Support\NameNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * 名前の横断検索(GET /api/search。#172)。カクテル・ノード・銘柄を、名前の部分一致で種類ごとに探す。
@@ -41,10 +42,13 @@ class NameSearch
         return [
             'cocktails' => $this->cocktails($words, $columns),
             // 根(旧の種別)は旧の検索に入っていなかったので除く。旧のカテゴリとミドルは、どちらも根の下のノード
+            // 画面が所属の列を出せるよう、祖先(根から順)も一緒に引く(#52)
             'nodes' => $this->matching(Category::query()->has('ancestors'), $words, $columns)
-                ->with('parent')->get(),
+                ->with(['parent', 'ancestors' => fn (BelongsToMany $ancestors) => $ancestors->orderByPivot('depth', 'desc')])
+                ->get(),
             'brands' => $this->matching(Brand::query(), $words, $columns)
-                ->with('category')->get(),
+                ->with(['category.ancestors' => fn (BelongsToMany $ancestors) => $ancestors->orderByPivot('depth', 'desc')])
+                ->get(),
             // 旧と同じく、英数字だけの入力なら英名だけ、それ以外は検索用の名前だけで、ノード・銘柄の完全一致を探す
             'ingredient_matches' => $this->ingredientMatches($words, ctype_alnum($query) ? 'name_eng' : 'name_search'),
         ];

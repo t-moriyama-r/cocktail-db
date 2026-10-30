@@ -21,8 +21,9 @@ const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
   beforeEach(() => {
-    // トップの画面が GET /api/hello を呼ぶ
+    // トップの画面が GET /api/hello を、用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
     mockApi('get', '/hello', 200, HELLO)
+    mockApi('get', '/dictionaries', 200, { data: [] })
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
   })
@@ -51,12 +52,12 @@ describe('共通の枠(SiteLayout)', () => {
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
 
-    expect(await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })).toBeInTheDocument()
   })
 
   test.each([
     ['/', 'Hello World from Laravel'],
-    ['/helpme', '更新ボランティア募集'],
+    ['/helpme', '当DBの更新ボランティア募集について'],
     ['/detail/cocktail/1', 'マティーニ(Martini)'],
     ['/nope', 'ページが見つかりません'],
   ])('TC-296-04: %s でも、ヘッダーの場所とフッターの中に画面を出す', async (path, heading) => {
@@ -98,7 +99,7 @@ describe('共通の枠(SiteLayout)', () => {
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
 
-    await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })
+    await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })
     expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
   })
 })

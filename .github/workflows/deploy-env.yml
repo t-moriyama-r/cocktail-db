@@ -49,6 +49,16 @@ on:
         required: true
       MIXHOST_SSH_USER:
         required: true
+      # アフィリエイト(Amazon Creators API・楽天)の設定。呼び出し元が環境ごとの Secret(DEV_*・STG_*)を渡す。
+      # 空(Secret が無い)なら .env に行を書かない。鍵が無ければ Amazon に問い合わせず、設定は既定の値になる(#505)
+      AMAZON_CREDENTIAL_ID:
+        required: false
+      AMAZON_CREDENTIAL_SECRET:
+        required: false
+      AMAZON_PARTNER_TAG:
+        required: false
+      RAKUTEN_AFFILIATE_ID:
+        required: false
 
 permissions:
   contents: read
@@ -171,22 +181,38 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
             backend/ "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}:~/${APP_DIR}/"
 
-      # .env はデプロイのたびに作り直す。DB のパスワードは Secret から、コマンドの引数に載せずに標準入力で送る。
+      # .env はデプロイのたびに作り直す。DB のパスワードとアフィリエイトの設定は Secret から、コマンドの引数に載せずに標準入力で送る
+      # (1 行目が DB のパスワード、2 行目からがアフィリエイトの .env の行。空の Secret は行にしない。#505)。
       # APP_KEY は初回だけサーバーで作り、以後はサーバーの .env にあるものを使い続ける(変えるとセッションなどが読めなくなる)。
       # DB 名とユーザー名は cPanel のユーザー名が頭に付く(<user>_<db_suffix>)
       - name: Write .env
         env:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          AMAZON_CREDENTIAL_ID: ${{ secrets.AMAZON_CREDENTIAL_ID }}
+          AMAZON_CREDENTIAL_SECRET: ${{ secrets.AMAZON_CREDENTIAL_SECRET }}
+          AMAZON_PARTNER_TAG: ${{ secrets.AMAZON_PARTNER_TAG }}
+          RAKUTEN_AFFILIATE_ID: ${{ secrets.RAKUTEN_AFFILIATE_ID }}
           SSH_USER: ${{ secrets.MIXHOST_SSH_USER }}
           APP_URL: ${{ inputs.app_url }}
           APP_ENV: ${{ inputs.environment }}
           DB_SUFFIX: ${{ inputs.db_suffix }}
         run: |
-          printf '%s' "$DB_PASSWORD" | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${SSH_USER}@${{ secrets.MIXHOST_SSH_HOST }}" "
+          set -o pipefail
+          # 標準入力は行で区切るので、改行を含む値は送れない。.env の単一引用符の中は展開されないので、単一引用符を含む値も書けない
+          case "$DB_PASSWORD" in *$'\n'*) echo "::error::DB のパスワードに改行が入っている"; exit 1;; esac
+          affiliate_env=""
+          for name in AMAZON_CREDENTIAL_ID AMAZON_CREDENTIAL_SECRET AMAZON_PARTNER_TAG RAKUTEN_AFFILIATE_ID; do
+            value=${!name}
+            [ -n "$value" ] || continue
+            case "$value" in *$'\n'*|*$'\r'*|*\'*) echo "::error::$name に改行、復帰文字、または単一引用符が入っている"; exit 1;; esac
+            affiliate_env+="${name}='${value}'"$'\n'
+          done
+          { printf '%s\n' "$DB_PASSWORD"; printf '%s' "$affiliate_env"; } | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${SSH_USER}@${{ secrets.MIXHOST_SSH_HOST }}" "
             set -e
             cd ~/${APP_DIR}
             umask 077
-            db_password=\$(cat)
+            IFS= read -r db_password
+            affiliate_env=\$(cat)
             # .env では単一引用符の中は展開されない。単一引用符そのものを含むパスワードは書けないので止める
             case \"\$db_password\" in *\\'*) echo 'DB のパスワードに単一引用符が入っている' >&2; exit 1;; esac
             app_key=\$(grep -E '^APP_KEY=base64:' .env 2>/dev/null | head -n 1 | cut -d= -f2- || true)
@@ -211,6 +237,8 @@ jobs:
           QUEUE_CONNECTION=sync
           MAIL_MAILER=log
           ENV
+            # アフィリエイトの設定は、Secret の入っているものだけ足す(どれも空なら何も足さない)
+            if [ -n \"\$affiliate_env\" ]; then printf '%s\\n' \"\$affiliate_env\" >> .env.new; fi
             mv .env.new .env
             if [ -z \"\$app_key\" ]; then php artisan key:generate --force; fi
           "
@@ -225,6 +253,9 @@ jobs:
             # 既にあれば作らずに 0 で終わる(deploy.yml と同じ)
             php artisan storage:link
             php artisan migrate --force
+            # 設定のキャッシュ(bootstrap/cache/config.php)には Secret が平文で入るので、ほかのユーザーに読ませない。
+            # storage のディレクトリは Web サーバーが静的に配信するので、mkdir より後で絞る
+            umask 077
             php artisan optimize
           "
 

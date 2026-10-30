@@ -155,10 +155,16 @@ GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
 | Secret | `DEV_DB_PASSWORD` | dev の DB ユーザー(`<user>_cocktail_dev`)のパスワード。単一引用符は使えない |
 | Secret | `STG_DB_PASSWORD` | stg の DB ユーザー(`<user>_cocktail_stg`)のパスワード。単一引用符は使えない |
 | Secret | `DEV_BASIC_AUTH` | 動作確認に使う Basic 認証の `<ユーザー名>:<パスワード>`(dev・stg 共通) |
+| Secret | `DEV_AMAZON_CREDENTIAL_ID`・`STG_AMAZON_CREDENTIAL_ID` | dev・stg の `.env` の `AMAZON_CREDENTIAL_ID`(Amazon Creators API の資格情報の ID) |
+| Secret | `DEV_AMAZON_CREDENTIAL_SECRET`・`STG_AMAZON_CREDENTIAL_SECRET` | dev・stg の `.env` の `AMAZON_CREDENTIAL_SECRET`(同じく、シークレット) |
+| Secret | `DEV_AMAZON_PARTNER_TAG`・`STG_AMAZON_PARTNER_TAG` | dev・stg の `.env` の `AMAZON_PARTNER_TAG`(Amazon のパートナータグ) |
+| Secret | `DEV_RAKUTEN_AFFILIATE_ID`・`STG_RAKUTEN_AFFILIATE_ID` | dev・stg の `.env` の `RAKUTEN_AFFILIATE_ID`(楽天アフィリエイトの ID) |
 | Variable | `DEV_APP_URL` | `https://cocktail-dev.trc-vlackhistory.net` |
 | Variable | `STG_APP_URL` | `https://cocktail-stg.trc-vlackhistory.net` |
 
-Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは、デプロイの最初の check で止まる。
+Amazon・楽天の 8 つ(`DEV_AMAZON_*`・`STG_AMAZON_*`・`DEV_RAKUTEN_AFFILIATE_ID`・`STG_RAKUTEN_AFFILIATE_ID`)は入れなくてよい。空なら `.env` にその行を書かず、デプロイは通る(鍵が無ければ Amazon に問い合わせず、設定は既定の値になるので、Amazon の情報が出ず、楽天のリンクに ID が付かない)。値に改行・復帰文字・単一引用符は使えない(入っているとデプロイの `.env` を書くところで止まる)。管理画面の設定で保存した値があれば、`.env` よりそちらが優先する。
+
+Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは(Amazon・楽天の 8 つを除き)、デプロイの最初の check で止まる。
 
 ## サーバーの PHP の版
 
