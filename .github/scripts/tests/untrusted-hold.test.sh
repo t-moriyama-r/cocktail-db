@@ -112,7 +112,7 @@ case "$*" in
 	"api --paginate --slurp repos/o/r/pulls/"*) echo '[]' ;;
 	"api --paginate repos/o/r/issues/"*"/comments"*)
 		n=$(num "$3")
-		if [ -f "$FAKE/hold-comments-$n" ]; then jq -c '.[]' "$FAKE/hold-comments-$n" | jq -r "${*#*--jq }"; fi ;;
+		if [ -f "$FAKE/hold-comments-$n" ]; then jq -c '.[]' "$FAKE/hold-comments-$n" | jq -r "${@: -1}"; fi ;;
 	"api -X POST repos/o/r/issues/"*"/labels -f labels[]=needs-human")
 		echo labels:needs-human >>"$FAKE/posts" ;;
 	*) echo "unexpected: gh $*" >&2; exit 2 ;;
