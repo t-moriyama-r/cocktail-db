@@ -10,6 +10,7 @@ import NodeBreadcrumb from '../components/NodeBreadcrumb/NodeBreadcrumb'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 import SquareDot from '../components/SquareDot/SquareDot'
 import YouTubeEmbed from '../components/YouTubeEmbed/YouTubeEmbed'
+import { brandPath, categoryPath } from '../utils/detailPaths'
 import styles from './CategoryDetail.module.css'
 
 type CategoryDetailResource = components['schemas']['CategoryDetailResource']
@@ -63,7 +64,7 @@ function CategoryDetailContent({ node }: { node: CategoryDetailResource }) {
       <div className={styles.intro}>
         {node.famous_brand && (
           <IntroSection heading="有名な銘柄" kind="famous">
-            <Link to={`/detail/brand/${node.famous_brand.id}`}>{nameWithEng(node.famous_brand)}</Link>
+            <Link to={brandPath(node.famous_brand.id)}>{nameWithEng(node.famous_brand)}</Link>
           </IntroSection>
         )}
         <IntroSection heading="子のノード" kind="children">
@@ -71,7 +72,7 @@ function CategoryDetailContent({ node }: { node: CategoryDetailResource }) {
             <ul className={styles.childList}>
               {node.children.map((child) => (
                 <li key={child.id}>
-                  <Link to={`/category/${child.id}`}>{nameWithEng(child)}</Link>
+                  <Link to={categoryPath(child.id)}>{nameWithEng(child)}</Link>
                 </li>
               ))}
             </ul>
