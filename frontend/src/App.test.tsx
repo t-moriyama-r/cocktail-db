@@ -1,13 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import App from './App'
-import type { paths } from './api/schema'
-import { mockApi } from './test/api'
 
-type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
-
-const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
+/** トップの画面の見出し(API の応答によらず出る) */
+const TOP_HEADING = '宅飲みカクテルデータベース'
 const NOT_FOUND_HEADING = 'ページが見つかりません'
 
 const renderAt = (path: string) =>
@@ -22,17 +19,12 @@ const expectHeading = async (name: string) => {
 }
 
 describe('App のルーティング', () => {
-  beforeEach(() => {
-    // トップの画面が GET /api/hello を呼ぶ
-    mockApi('get', '/hello', 200, HELLO)
-  })
-
   test.each([
     ['TC-97-01', '/'],
     ['TC-97-02', '/index'],
   ])('%s: %s はトップの画面を出す', async (_id, path) => {
     renderAt(path)
-    await expectHeading(HELLO.message)
+    await expectHeading(TOP_HEADING)
   })
 
   test.each([
@@ -75,6 +67,6 @@ describe('App のルーティング', () => {
 
     fireEvent.click(await screen.findByRole('link', { name: 'トップへ戻る' }))
 
-    await expectHeading(HELLO.message)
+    await expectHeading(TOP_HEADING)
   })
 })

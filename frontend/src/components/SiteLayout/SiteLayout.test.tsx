@@ -1,13 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import App from '../../App'
-import type { paths } from '../../api/schema'
-import { mockApi } from '../../test/api'
-
-type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
-
-const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
 
 const renderAt = (path: string) =>
   render(
@@ -19,11 +13,6 @@ const renderAt = (path: string) =>
 const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
-  beforeEach(() => {
-    // トップの画面が GET /api/hello を呼ぶ
-    mockApi('get', '/hello', 200, HELLO)
-  })
-
   test('TC-296-01: フッターに著作の表示と、作者のサイトへのリンク(新しいタブ)がある', async () => {
     renderAt('/')
 
@@ -52,7 +41,7 @@ describe('共通の枠(SiteLayout)', () => {
   })
 
   test.each([
-    ['/', 'Hello World from Laravel'],
+    ['/', '宅飲みカクテルデータベース'],
     ['/helpme', '更新ボランティア募集'],
     ['/detail/cocktail/1', 'カクテルの詳細'],
     ['/nope', 'ページが見つかりません'],
@@ -90,7 +79,7 @@ describe('共通の枠(SiteLayout)', () => {
 
   test('TC-296-07: 画面を移るとタイトルが変わり、ページ名の無い画面ではサイト名だけに戻る', async () => {
     renderAt('/')
-    await screen.findByRole('heading', { level: 1, name: HELLO.message })
+    await screen.findByRole('heading', { level: 1, name: '宅飲みカクテルデータベース' })
     expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)')
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))

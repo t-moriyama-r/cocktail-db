@@ -16,5 +16,5 @@ test('TC-305-12: 深さ 5 のノードを開いてチェックでき、名前を
 
   // 欄はトップにあるので、戻ると選び直しになる。チェックが残るのは、ヘッダーのモーダル(#99)の中の欄で確かめる(欄をモーダルに置くのは #307)
   await page.goBack()
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
 })
