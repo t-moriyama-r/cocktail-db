@@ -40,3 +40,8 @@ jobs:
       MIXHOST_SSH_KEY: ${{ secrets.MIXHOST_SSH_KEY }}
       MIXHOST_SSH_HOST: ${{ secrets.MIXHOST_SSH_HOST }}
       MIXHOST_SSH_USER: ${{ secrets.MIXHOST_SSH_USER }}
+      # アフィリエイトの設定(#505)。Secret が無ければ空で渡り、.env に行を書かない
+      AMAZON_CREDENTIAL_ID: ${{ secrets.DEV_AMAZON_CREDENTIAL_ID }}
+      AMAZON_CREDENTIAL_SECRET: ${{ secrets.DEV_AMAZON_CREDENTIAL_SECRET }}
+      AMAZON_PARTNER_TAG: ${{ secrets.DEV_AMAZON_PARTNER_TAG }}
+      RAKUTEN_AFFILIATE_ID: ${{ secrets.DEV_RAKUTEN_AFFILIATE_ID }}
