@@ -71,3 +71,34 @@ for (const { width, material, baseOwnRow, divider } of widths) {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
   })
 }
+
+// 同じ名前・別名・同じレシピ・材料が似た・同じベースのカクテル(#109)。シーダーのカクテルはジントニックの 1 件だけなので、
+// 同じ名前・同じレシピ・材料が似たカクテルは 0 件、同じベース(ジン)のカクテルはジントニック自身の 1 件。別名は「G&T」
+test('TC-109-12: シーダーのカクテルを開くと、別名を出し、0 件の同じ名前・同じレシピは出さず、材料が似た・同じベースは見出しを出す', async ({
+  page,
+}) => {
+  await page.goto(PATH)
+
+  await expect(page.getByRole('region', { name: '別名' })).toHaveText('別名: G&T')
+  await expect(page.getByRole('table', { name: '材料が似たカクテル' }).locator('tbody tr')).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 2, name: '材料が似たカクテル' })).toBeVisible()
+  const sameBase = page.getByRole('table', { name: '同じベースのカクテル' })
+  await expect(sameBase.getByRole('link', { name: 'ジントニック' }).first()).toHaveAttribute('href', '/detail/cocktail/1')
+  await expect(page.getByText('同じ名前のカクテルがあります！')).toHaveCount(0)
+  await expect(page.getByText('同じレシピのカクテルがあります！')).toHaveCount(0)
+})
+
+for (const width of [375, 768, 1024, 1440]) {
+  test(`TC-109-13: 幅 ${width}px で、別名・材料が似た・同じベースの欄を出しても横スクロールが出ない`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(PATH)
+    await expect(page.getByRole('table', { name: '同じベースのカクテル' }).locator('tbody tr')).toHaveCount(1)
+    await expect(page.getByRole('region', { name: '別名' })).toBeVisible()
+
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+}

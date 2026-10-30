@@ -80,6 +80,7 @@ npm run dev
 | 押せないボタンの地 `--color-disabled-bg` | `#e0e0e0`(文字は `--color-text-muted` で 4.69:1) | ヘッダーの名前検索のボタンで、入力が空・検索中・0 件・サーバーエラーのとき(#99) |
 | 誤りの地 `--color-danger` | `#c62828`(文字は `--color-on-accent` で 5.62:1) | ヘッダーの名前検索のボタンで、禁止文字を含むときの「Error」(#99) |
 | 詳細の欄の線 `--color-detail-data-line`・`--color-detail-recipe-line`・`--color-detail-note-line` | `#006699`・`#ff6600`・`#98d4d6`(旧の `Detail/CocktailDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | カクテルの詳細の、ベースなどの欄の左の線・材料の欄の左の線・Note の上の線(#108) |
+| 詳細の関連の欄の線 `--color-detail-same-name-line`・`--color-detail-similar-line`・`--color-detail-same-base-line` | `#fae125`・`#3399ff`・`#1f0d85`(旧の `Detail/CocktailDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | カクテルの詳細の、同じ名前のカクテルの欄(旧に無い別名・同じレシピの欄も同じ線)・材料が似たカクテルの欄・同じベースのカクテルの欄の左の線(#109) |
 | 区切りの文字 `--color-section-label` | `#1177ff`(旧と同じ。白地で 4.11:1 で、4.5:1 に届かない) | カクテルの詳細の、960px 未満で説明文の上に出す「§Description§」(#108) |
 | モーダルの後ろ `--color-overlay` | `rgb(33 33 33 / 46%)`(旧の Vuetify の v-overlay と同じ色と濃さ) | ヘッダーの条件検索のモーダル(#99) |
 

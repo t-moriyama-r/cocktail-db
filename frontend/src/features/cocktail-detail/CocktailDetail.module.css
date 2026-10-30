@@ -146,3 +146,41 @@
   margin-left: 1em;
   border-top: 1px solid var(--color-detail-note-line);
 }
+
+/* 同じ名前・別名・同じレシピ・材料が似た・同じベースのカクテルの欄(#109)。旧と同じく、左に 5px の線を引いて欄ごとに色を変える。
+   材料が似た・同じベースの一覧(RandomCocktails)の上下の余白は、この欄の上の余白と重なる(縦の余白の相殺) */
+.related {
+  margin-top: var(--space-5);
+  padding-left: var(--space-2);
+  border-left: 5px solid;
+}
+
+.sameCocktail {
+  border-left-color: var(--color-detail-same-name-line);
+}
+
+.similar {
+  border-left-color: var(--color-detail-similar-line);
+}
+
+.sameBase {
+  border-left-color: var(--color-detail-same-base-line);
+}
+
+/* 「同じ名前のカクテルがあります！」。旧は見出しではなく地の文と同じ大きさ・太さの文字だった */
+.noticeHeading {
+  margin: 0 0 var(--space-2);
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+}
+
+.aliases {
+  margin: 0;
+}
+
+/* 電球・タグのアイコンと文言の間を空ける(旧の fa-fw の幅に近づける) */
+.noticeHeading svg,
+.aliases svg {
+  margin-right: var(--space-1);
+  vertical-align: -0.125em;
+}

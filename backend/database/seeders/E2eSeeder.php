@@ -6,6 +6,7 @@ use App\Enums\CategoryRole;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\Ice;
@@ -34,6 +35,7 @@ class E2eSeeder extends Seeder
      *
      * ジントニックは、カクテルの詳細(#108)の E2E にも使う。登録数を変えないよう、カクテルは足さずにこの 1 件に
      * グラス・氷・甘さ・評価・補足と、銘柄つきの材料・任意の材料を持たせる。技法のビルドは用語を持たない(製法をリンクにしない)。
+     * 詳細の別名の欄(#109)のために、別名「G&T」を持たせる(名前検索「ジン」には当たらない名前にし、件数を変えない)。
      */
     private function seedHeaderData(Category $gin, Category $beefeater, Category $mint): void
     {
@@ -73,6 +75,7 @@ class E2eSeeder extends Seeder
             'amount' => '適量',
             'is_optional' => true,
         ]);
+        CocktailAlias::factory()->named('G&T')->create(['cocktail_id' => $cocktail->id]);
         app(RecipeCounter::class)->recount([$cocktail->id]);
     }
 
