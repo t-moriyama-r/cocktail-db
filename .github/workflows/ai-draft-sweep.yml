@@ -100,6 +100,10 @@ jobs:
             echo "#$PR は pick の後に push された"
           elif [ -n "$label" ]; then
             echo "#$PR は pick の後にラベル $label が付いた"
+          # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+          # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+          elif ! bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$PR"; then
+            echo "#$PR は信頼しない人が書いたものがある・確かめられなかったので見送る"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
@@ -156,9 +160,10 @@ jobs:
                `ai-in-actions` ラベルを外して終える。CodeRabbit へのレビューの依頼は書かない(後のジョブがオーナーのトークンで出す)。
                CI の結果は待たない(CI が緑になるまでは ai-auto-merge.yml がマージしない)
             5. 次のどれかに当たるものは、仕上げずに人に頼む。足りないものは埋められるところまで埋めて push してよい
-               - 仕様の解釈・設計の選択など、判断が要る
-               - データを消す・費用がかかる・テストで確かめられない
+               - 重大なトレードオフがある(仕様の解釈・設計の選択が分かれ、どちらの案にも選ぶ理由がある・データを消す・費用がかかる、など。CLAUDE.md の「人に判断を頼むとき」)
                - 引き継ぎが 2 回目で、前の回に頼んだことがまだ片付いていない
+               おすすめ以外の案に、それを選ぶ理由になる良い点が書けないものは、判断が要るものに数えない。聞かずにおすすめで仕上げ、何をしたかを PR に書く。
+               テストで確かめられないだけのものも数えない。確かめられないことを PR に書き、確かめる作業は 6・7 で頼む
                ただし、この issue の範囲の外の残りで「この PR はこの issue の範囲で仕上げ、残りは別の issue に回す」案があるものは、判断が要るものに数えない。
                人に聞かずにその案で仕上げる(4 で ready にしてよい)。回す先の issue への追記・issue の作成はこの環境ではできないので、PR にコメントを書いてから `needs-local` ラベルを付けて手元に頼む。
                コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> を付け、中身は、回す先(既にある issue の番号か、作る issue のタイトルと本文)と足す文。
@@ -182,8 +187,9 @@ jobs:
 
             ワークフロー(`.github/workflows/`)のファイルを変えるときは、次に従う。
             - 変えてよいのは、閉じる issue をリポジトリのオーナー(${{ github.repository_owner }})が書いていて、その「やること」がワークフローの変更のときだけ
-            - それでも、セキュリティに関わる変更(permissions・secret の扱い・起動のきっかけ(on)・外部への送信・外部のアクションの追加や版の変更・
-              Claude Code に渡す権限やツールを広げる)になるときは、変えずに上の「人に頼む」で、何をどう変えるかと懸念を書いて許可を求める
+            - それでも、セキュリティを広げる変更(permissions を足す・起動のきっかけ(on)を変える・外部への送信を足す・外部のアクションの追加や版の変更・
+              Claude Code に渡す権限やツールを広げる・Secret を渡す先や出す先を増やす)になるときは、変えずに上の「人に頼む」で、何をどう変えるかと懸念を書いて許可を求める。
+              セキュリティを締める変更(入力の検査を足す・ファイルの読める範囲を絞る・権限を減らす など)は、許可を求めない
             使えるコマンドは絞ってある(git は status・diff・log・show・add・commit と、`git push`・`git push origin HEAD`。gh は PR #${{ env.PR }} の view・diff・checks・ready・
             `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --add-label needs-manual`・`edit --remove-label ai-in-actions` と、`gh issue view`・`gh run view`)。この形のまま使う。
             返信・コメントの先頭には <!-- ai-dev:agent --> を付ける。決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
@@ -248,6 +254,12 @@ jobs:
             fi
           done
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
+
+      # recover で untrusted-hold.sh が止めた PR は、引き継いだ目印が無いので上では知らせない(決め方は untrusted-notify.sh。#494)
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$PR" "$since" || echo "::warning::#$PR を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"
 
       # claude[bot] が push したコミットでは、test.yml の pull_request の回が承認待ち(action_required)のまま走らず、必須のチェックが付かない(#365)。
       # 1 時間ごとの見回りを待たずに、ci-rerun.yml にこの PR を見させる(承認待ちの回を承認して走らせる。決め方は ci-rerun.sh)。

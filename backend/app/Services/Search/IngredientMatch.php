@@ -8,6 +8,7 @@ use App\Services\CategoryTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
+use UnexpectedValueException;
 
 /**
  * 選んだノードの集合と、レシピの材料が「一致する」かを、閉包表で判定する(docs/search.md の「新しい木での意味」。#161)。
@@ -81,8 +82,10 @@ class IngredientMatch
      */
     public function whereUsesAny(Builder $cocktails, array $nodeIds): Builder
     {
+        $matching = $this->matchingNodeIdList($nodeIds);
+
         return $cocktails->whereHas('ingredients', fn (Builder $ingredients) => $ingredients
-            ->whereIn('category_id', $this->matchingNodeIds($nodeIds)));
+            ->whereIn('category_id', $matching));
     }
 
     /**
@@ -91,17 +94,36 @@ class IngredientMatch
      * 1 つの材料がいくつもの条件を満たしてよい(旧も、カテゴリしか指定していない材料 1 行でそのカテゴリの条件を
      * 満たしていた)。そのため、ある条件のノードの祖先だけからなる条件は、結果を変えない。
      *
+     * 条件ごとに EXISTS を重ねず、どれかの条件と一致する材料の行を 1 回だけ読み、カクテルごとにまとめて、すべての条件と
+     * 一致する行があるかを見る。EXISTS を 20 個重ねると、MariaDB は 21 個の表の結合として順番を選ぶので、表の統計しだいで
+     * 遅い順番を選ぶ。移行後と同じ規模のデータを入れた直後(テスト)では、1 回に 1〜4 秒かかった(#96)。
+     *
      * @param  Builder<Cocktail>  $cocktails
      * @param  list<list<int>>  $conditions
      * @return Builder<Cocktail>
      */
     public function whereUsesEach(Builder $cocktails, array $conditions): Builder
     {
-        foreach ($conditions as $nodeIds) {
-            $this->whereUsesAny($cocktails, $nodeIds);
+        if ($conditions === []) {
+            return $cocktails;
         }
 
-        return $cocktails;
+        $lists = array_map(fn (array $nodeIds): array => $this->matchingNodeIdList($nodeIds), $conditions);
+        if (in_array([], $lists, true)) {
+            // 一致するノードの無い条件は、どのカクテルも満たせない
+            return $cocktails->whereRaw('1 = 0');
+        }
+
+        $matched = DB::table('cocktail_ingredients')
+            ->select('cocktail_id')
+            ->whereIn('category_id', array_values(array_unique(array_merge(...$lists))))
+            ->groupBy('cocktail_id');
+        foreach ($lists as $list) {
+            $placeholders = implode(', ', array_fill(0, count($list), '?'));
+            $matched->havingRaw("MAX(category_id IN ({$placeholders})) = 1", $list);
+        }
+
+        return $cocktails->whereIn($cocktails->qualifyColumn('id'), $matched);
     }
 
     /**
@@ -118,10 +140,40 @@ class IngredientMatch
      */
     public function whereMakeableWith(Builder $cocktails, array $nodeIds): Builder
     {
+        $matching = $this->matchingNodeIdList($nodeIds);
+        $other = self::idList($this->tree->otherNodeIds());
+
         return $cocktails->whereDoesntHave('ingredients', fn (Builder $ingredients) => $ingredients
             ->where('is_optional', false)
-            ->whereNotIn('category_id', $this->matchingNodeIds($nodeIds))
-            ->whereNotIn('category_id', $this->tree->otherNodeIds()));
+            ->whereNotIn('category_id', $matching)
+            ->whereNotIn('category_id', $other));
+    }
+
+    /**
+     * matchingNodeIds を先に引いて、ID の並びにしたもの。
+     *
+     * カクテルを絞る条件(whereUsesAny・whereUsesEach・whereMakeableWith)には、サブクエリではなくこの並びを渡す。
+     * サブクエリのままだと、閉包表の UNION と材料の表の結合の順番が表の統計しだいで変わり、移行後と同じ規模のデータを
+     * 入れた直後(テスト)では、あるもの検索が 1 回に 0.5〜1 秒かかった(#96)。ノードは多くても数百なので、先に引いても軽い。
+     *
+     * @param  list<int>  $nodeIds
+     * @return list<int>
+     */
+    private function matchingNodeIdList(array $nodeIds): array
+    {
+        return self::idList($this->matchingNodeIds($nodeIds));
+    }
+
+    /**
+     * 列 id のサブクエリを引いて、ID の並びにする。
+     *
+     * @return list<int>
+     */
+    private static function idList(QueryBuilder $ids): array
+    {
+        return array_values($ids->pluck('id')
+            ->map(fn (mixed $id): int => is_numeric($id) ? (int) $id : throw new UnexpectedValueException('ノードの ID が数でない'))
+            ->all());
     }
 
     /**
