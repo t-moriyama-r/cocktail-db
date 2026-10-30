@@ -36,7 +36,7 @@ main() {
 	reset
 	comment github-actions[bot] 2026-10-29T03:01:00Z "$HOLD_BODY"
 	run 7
-	expect TC-494-25 'needs-human がもう外れていれば知らせない' "$RC|$(posts)" '0|'
+	expect TC-494-25 'この回に頼むコメントを書いたが needs-human の付与に失敗していても、Slack に知らせる' "$RC|$(posts)" '0|notify:7:needs-human'
 
 	reset
 	labels needs-human
