@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import type { paths } from '../api/schema'
@@ -93,7 +93,8 @@ describe('DictionaryIndex', () => {
     renderIndex()
 
     expect(await screen.findByRole('heading', { level: 1, name: '用語辞典' })).toBeInTheDocument()
-    expect(document.title).toBe(`用語辞典 ｜ ${SITE_TITLE}`)
+    // タイトルは usePageTitle の useEffect で付くので、見出しが出た直後にはまだ付いていないことがある。付くまで待つ
+    await waitFor(() => expect(document.title).toBe(`用語辞典 ｜ ${SITE_TITLE}`))
   })
 
   test('TC-56-05: API がエラーを返したら共通のエラーの表示を出し、もう一度読み込むと一覧を出す', async () => {

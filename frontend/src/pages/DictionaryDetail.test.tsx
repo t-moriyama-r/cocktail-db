@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import type { components, paths } from '../api/schema'
@@ -88,7 +88,8 @@ describe('DictionaryDetail', () => {
     renderAt('/dictionary/31')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'ダッシュ(Dash)' })).toBeInTheDocument()
-    expect(document.title).toBe(`ダッシュ(Dash) ｜ ${SITE_TITLE}`)
+    // タイトルは usePageTitle の useEffect で付くので、見出しが出た直後にはまだ付いていないことがある。付くまで待つ
+    await waitFor(() => expect(document.title).toBe(`ダッシュ(Dash) ｜ ${SITE_TITLE}`))
   })
 
   test('TC-56-07: パンくずに、コンパスのアイコンと、分類の名前の一覧へのリンクを出す', async () => {
@@ -207,7 +208,8 @@ describe('DictionaryDetail', () => {
     expect(await within(moved).findByRole('link', { name: 'マティーニ' })).toBeInTheDocument()
     expect(within(moved).queryByRole('link', { name: 'ダイキリ' })).not.toBeInTheDocument()
     expect(sentUrls()).toContain('/cocktails/random?limit=7&method_id=4')
-    expect(document.title).toBe(`ステア(Stir) ｜ ${SITE_TITLE}`)
+    // タイトルは usePageTitle の useEffect で付くので、見出しが出た直後にはまだ付いていないことがある。付くまで待つ
+    await waitFor(() => expect(document.title).toBe(`ステア(Stir) ｜ ${SITE_TITLE}`))
   })
 
   test('TC-56-15: 技法の用語から、技法・グラスでない用語へ移ると、カクテルの欄が消える', async () => {
