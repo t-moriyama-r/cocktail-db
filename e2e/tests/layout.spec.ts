@@ -7,7 +7,7 @@ const viewports = [
 ]
 
 const paths = [
-  { path: '/', heading: 'Hello World from Laravel' },
+  { path: '/', heading: '宅飲みカクテルデータベース' },
   { path: '/nope', heading: 'ページが見つかりません' },
 ]
 
@@ -35,7 +35,7 @@ for (const { label, width, height } of viewports) {
 
 test('TC-295-06: ビルドした画面に変数と土台のスタイルが入っている', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
 
   const style = await page.evaluate(() => {
     const root = getComputedStyle(document.documentElement)

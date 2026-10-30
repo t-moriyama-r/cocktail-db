@@ -52,6 +52,23 @@ test('TC-307-17: 開くと材料が無いので検索を押せず、材料を 1 
   await expect(page.getByRole('dialog')).toBeHidden()
 })
 
+test('TC-307-20: トップのメニューの「カクテル検索」で条件検索のフォームへ移り、材料を選んで検索すると結果の画面へ移る', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('region', { name: 'Menu' }).getByRole('link', { name: 'カクテル検索' }).click()
+
+  const section = page.getByRole('region', { name: 'カクテル検索' })
+  await expect(section.getByRole('heading', { name: 'カクテル検索' })).toBeInViewport()
+  await expect(section.getByText('材料は必須です。')).toBeVisible()
+  const search = section.getByRole('button', { name: '検索', exact: true })
+  await expect(search).toBeDisabled()
+
+  await section.getByRole('checkbox', { name: 'ジン', exact: true }).check()
+  await expect(search).toBeEnabled()
+  await search.click()
+
+  await expect(page).toHaveURL('/result/Cocktails')
+})
+
 // 検索ボタンはモーダルの左下に固定する(旧の sendBtnFixed)。木を開いて長くしても、スクロールせずに見える。横スクロールも出ない
 for (const width of [375, 768, 1024, 1440]) {
   test(`TC-307-18: 幅 ${width}px で、検索ボタンがモーダルの下に見え、横スクロールが出ない`, async ({ page }) => {

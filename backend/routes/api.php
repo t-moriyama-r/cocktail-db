@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\BrandController;
+use App\Http\Controllers\Admin\CocktailController;
+use App\Http\Controllers\Admin\CocktailFormOptionsController;
 use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
@@ -83,6 +85,12 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('/passkeys', [PasskeyController::class, 'store']);
     Route::delete('/passkeys/{passkey}', [PasskeyController::class, 'destroy'])->where('passkey', '[0-9]{1,18}');
     Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
+
+    // カクテルの基本情報(#291)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
+    Route::post('/cocktails', [CocktailController::class, 'store']);
+    Route::get('/cocktails/{cocktail}', [CocktailController::class, 'show'])->where('cocktail', '[0-9]{1,18}');
+    Route::put('/cocktails/{cocktail}', [CocktailController::class, 'update'])->where('cocktail', '[0-9]{1,18}');
+    Route::get('/cocktail-form-options', CocktailFormOptionsController::class);
     Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}']);
     Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}']);
 

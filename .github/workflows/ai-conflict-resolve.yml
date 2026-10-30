@@ -125,6 +125,12 @@ jobs:
             echo "#$PR は pick の後に変わった(push・ラベル・解消)ので見送る"
             exit 0
           fi
+          # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+          # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+          if ! bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$PR"; then
+            echo "#$PR は信頼しない人が書いたものがある・確かめられなかったので見送る"
+            exit 0
+          fi
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "GitHub Actions の Claude Code が対応している PR" 2>/dev/null || true
           gh pr edit "$PR" -R "$REPO" --add-label ai-in-actions
           # GITHUB_TOKEN で付けたラベルでは pr-status.yml が起きないので、状態のラベルはここで付け替える
@@ -567,3 +573,10 @@ jobs:
       - name: 状態のラベルを付け替える
         if: always() && steps.tried.outcome == 'success'
         run: bash .github/scripts/pr-status.sh "$REPO" "$PR" || true
+
+      # resolve で untrusted-hold.sh が止めた PR は、試した印が無いので上の手順が動かない(決め方は untrusted-notify.sh。#494)
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        if: always()
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$PR" "$since" || echo "::warning::#$PR を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"

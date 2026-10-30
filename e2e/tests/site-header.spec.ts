@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 // ヘッダー(#99)。E2eSeeder のデータ(ノードのジン・ドライジン・ロンドンドライジン、カクテルのジントニック、銘柄 1 件)を使う。
 // 名前検索「ジン」は 5 件に当たり(ノード 3 件・カクテル 1 件と、材料にジンの配下の銘柄を使うジントニックの 1 件)、
-// 登録数(公開のカクテルの数)は 1
+// 登録数(公開のカクテルの数)は 8(トップの一覧の分を含む)
 const header = (page: Page) => page.getByRole('banner')
 const nameInput = (page: Page) => header(page).getByRole('searchbox', { name: '名前から検索' })
 
@@ -45,10 +45,10 @@ test('TC-99-25: 「検索をはじめる」でモーダルが開き、Close で�
   await expect(dialog).toBeHidden()
 })
 
-test('TC-99-26: 「現在の登録数：1」のリンクで、ランダムウォークの行き先(詳細のどれか)へ移る', async ({ page }) => {
+test('TC-99-26: 「現在の登録数：8」のリンクで、ランダムウォークの行き先(詳細のどれか)へ移る', async ({ page }) => {
   await page.goto('/helpme')
 
-  const link = header(page).getByRole('link', { name: '現在の登録数：1' })
+  const link = header(page).getByRole('link', { name: '現在の登録数：8' })
   await expect(link).toHaveAttribute('href', /^\/(detail\/cocktail|category|detail\/brand)\/\d+$/)
   const href = await link.getAttribute('href')
 
@@ -76,14 +76,14 @@ for (const { width, siteName, search, startRest, count } of widths) {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
     // 登録数は API の応答の後に出るので、出る幅では出るまで待つ
     if (count) {
-      await expect(header(page).getByText('現在の登録数：1')).toBeVisible()
+      await expect(header(page).getByText('現在の登録数：8')).toBeVisible()
     }
 
     const visible = (locator: ReturnType<Page['getByText']>) => locator.isVisible()
     expect(await visible(header(page).getByText('宅飲みカクテルデータベース', { exact: true }))).toBe(siteName)
     expect(await visible(header(page).getByText('検索', { exact: true }))).toBe(search)
     expect(await visible(header(page).getByText('をはじめる', { exact: true }))).toBe(startRest)
-    expect(await visible(header(page).getByText('現在の登録数：1'))).toBe(count)
+    expect(await visible(header(page).getByText('現在の登録数：8'))).toBe(count)
     // 空のときのボタンは、600px 未満で「-」、以上で「入力して下さい」
     expect(await visible(header(page).getByText('-', { exact: true }))).toBe(!search)
     expect(await visible(header(page).getByText('入力して下さい', { exact: true }))).toBe(search)
