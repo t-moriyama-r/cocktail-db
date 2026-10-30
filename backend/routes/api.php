@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\CocktailFormOptionsController;
 use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
 use App\Http\Controllers\Admin\CurrentAdminController;
+use App\Http\Controllers\Admin\DictionaryController;
 use App\Http\Controllers\Admin\LogoutController;
 use App\Http\Controllers\Admin\ParaphraseController;
 use App\Http\Controllers\Admin\PasskeyController;
@@ -101,4 +102,7 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('/brands', [BrandController::class, 'store']);
     Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
+
+    // 用語辞典(#315)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
+    Route::apiResource('dictionaries', DictionaryController::class)->where(['dictionary' => '[0-9]{1,18}']);
 });
