@@ -136,12 +136,14 @@ class SaveCocktailRequest extends FormRequest
             $seen = [];
             foreach ($aliases as $index => $alias) {
                 $aliasSearch = NameNormalizer::normalize($alias);
+                // DB の照合順序(utf8mb4_unicode_ci)は大文字小文字を区別しないので、unique に当たらないよう小文字にそろえて重複を見る
+                $foldedSearch = mb_strtolower($aliasSearch, 'UTF-8');
                 if ($aliasSearch === $nameSearch) {
                     $errors->add("aliases.{$index}", 'カクテルの名前と同じ別名です');
-                } elseif (isset($seen[$aliasSearch])) {
+                } elseif (isset($seen[$foldedSearch])) {
                     $errors->add("aliases.{$index}", '同じ別名がほかにあります');
                 }
-                $seen[$aliasSearch] = true;
+                $seen[$foldedSearch] = true;
             }
         };
     }
