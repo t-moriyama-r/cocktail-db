@@ -1161,6 +1161,8 @@ export interface components {
             volume: number;
             youtube: string | null;
             category: components["schemas"]["NodeRefResource"];
+            /** @description 根が先頭で、所属ノードが末尾(BrandSummaryResource の path と同じ並び) */
+            path: components["schemas"]["NodeRefResource"][];
         };
         /** NameSearchCocktailResource */
         NameSearchCocktailResource: {
@@ -1188,6 +1190,8 @@ export interface components {
             name: string;
             name_eng: string;
             parent: components["schemas"]["NodeRefResource"];
+            /** @description 根が先頭で、このノードが末尾(ノードの詳細の path と同じ並び) */
+            path: components["schemas"]["NodeRefResource"][];
         };
         /** NodeRefResource */
         NodeRefResource: {
