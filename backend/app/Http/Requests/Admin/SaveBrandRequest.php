@@ -2,12 +2,12 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\AdminFormInput;
 use App\Rules\NotRootCategory;
 use App\Services\AdminImageStore;
 use App\Support\YoutubeInput;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
-use InvalidArgumentException;
 
 /**
  * 銘柄の新規・更新(POST /api/admin/brands・PUT /api/admin/brands/{id}。#314)の入力。
@@ -17,19 +17,14 @@ use InvalidArgumentException;
  */
 class SaveBrandRequest extends FormRequest
 {
+    use AdminFormInput;
+
     /**
      * multipart(画像つき)では真偽値が文字列の "true"・"false" で届くので、boolean の規則が読める 1・0 に直す。
      */
     protected function prepareForValidation(): void
     {
-        $normalized = [];
-        foreach (['is_major', 'is_like'] as $key) {
-            $value = $this->input($key);
-            if (is_string($value) && in_array(strtolower($value), ['true', 'false'], true)) {
-                $normalized[$key] = strtolower($value) === 'true' ? 1 : 0;
-            }
-        }
-        $this->merge($normalized);
+        $this->normalizeBooleanStrings(['is_major', 'is_like']);
     }
 
     /**
@@ -67,41 +62,6 @@ class SaveBrandRequest extends FormRequest
      */
     public function after(): array
     {
-        return [
-            function (Validator $validator): void {
-                if ($validator->errors()->has('youtube')) {
-                    return;
-                }
-                try {
-                    YoutubeInput::videoId($this->youtubeInput());
-                } catch (InvalidArgumentException $e) {
-                    $validator->errors()->add('youtube', $e->getMessage());
-                }
-            },
-        ];
-    }
-
-    /**
-     * 入れた YouTube の URL か動画 ID。空なら null。
-     */
-    public function youtubeInput(): ?string
-    {
-        return $this->filled('youtube') ? $this->string('youtube')->toString() : null;
-    }
-
-    /**
-     * 整数の項目の値。空なら null。
-     */
-    public function nullableInt(string $key): ?int
-    {
-        return $this->filled($key) ? $this->integer($key) : null;
-    }
-
-    /**
-     * 文字列の項目の値。空なら null。
-     */
-    public function nullableString(string $key): ?string
-    {
-        return $this->filled($key) ? $this->string($key)->toString() : null;
+        return [$this->youtubeValidation()];
     }
 }
