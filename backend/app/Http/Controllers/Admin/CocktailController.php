@@ -10,7 +10,7 @@ use App\Services\AdminCocktailWriter;
 use Illuminate\Http\JsonResponse;
 
 /**
- * 管理画面のカクテルの基本情報(#291。画面は #127)。旧の DetailEditController@cocktail の置き換え(材料は #292)。
+ * 管理画面のカクテルの基本情報と材料(#291・#292。画面は #127・#128)。旧の DetailEditController@cocktail の置き換え。
  */
 class CocktailController extends Controller
 {
@@ -33,7 +33,7 @@ class CocktailController extends Controller
     }
 
     /**
-     * カクテルの基本情報を書き換える。材料と、材料から作る値(度数・材料の数)は変えない。
+     * カクテルの基本情報と材料を書き換える。材料から作る値(度数・材料の数・材料の組のハッシュ)も作り直す。
      */
     public function update(SaveCocktailRequest $request, AdminCocktailWriter $writer, int $cocktail): CocktailResource
     {

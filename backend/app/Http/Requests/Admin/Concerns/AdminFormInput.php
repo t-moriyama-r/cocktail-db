@@ -22,12 +22,21 @@ trait AdminFormInput
     {
         $normalized = [];
         foreach ($keys as $key) {
-            $value = $this->input($key);
-            if (is_string($value) && in_array(strtolower($value), ['true', 'false'], true)) {
-                $normalized[$key] = strtolower($value) === 'true' ? 1 : 0;
-            }
+            $normalized[$key] = self::booleanFromString($this->input($key));
         }
-        $this->merge($normalized);
+        $this->merge(array_filter($normalized, fn (mixed $value): bool => $value !== null));
+    }
+
+    /**
+     * 文字列の "true"・"false"(大文字・小文字を問わない)を 1・0 にする。それ以外の値は null(直さない)。
+     */
+    protected static function booleanFromString(mixed $value): ?int
+    {
+        if (! is_string($value) || ! in_array(strtolower($value), ['true', 'false'], true)) {
+            return null;
+        }
+
+        return strtolower($value) === 'true' ? 1 : 0;
     }
 
     /**
