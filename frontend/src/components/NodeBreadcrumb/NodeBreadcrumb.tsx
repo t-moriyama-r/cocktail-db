@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Link } from 'react-router'
 import type { components } from '../../api/schema'
+import { categoryPath } from '../../utils/detailPaths'
 import FontAwesomeIcon from '../CocktailTable/FontAwesomeIcon'
 import styles from './NodeBreadcrumb.module.css'
 
@@ -28,7 +29,7 @@ export default function NodeBreadcrumb({ nodes }: Props) {
       {nodes.map((node, index) => (
         <Fragment key={node.id}>
           {index > 0 && ' / '}
-          {index === 0 ? node.name : <Link to={`/category/${node.id}`}>{node.name}</Link>}
+          {index === 0 ? node.name : <Link to={categoryPath(node.id)}>{node.name}</Link>}
         </Fragment>
       ))}
     </nav>
