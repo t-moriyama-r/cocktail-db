@@ -286,7 +286,7 @@ else
 end
 
 each_string(doc) do |s|
-  err("絶対パスを書かない(公開リポジトリのため): #{s}") if s.match?(%r{(\A|[\s"'=:])(/home/|/Users/|/root/)})
+  err("絶対パスを書かない(公開リポジトリのため): #{s}") if s.match?(%r{(\A|[^A-Za-z0-9_.-])(/home/|/Users/|/root/)})
 end
 
 if $errors.any?
