@@ -1,0 +1,26 @@
+/* 名前検索の結果の画面。中身の幅に収める */
+.page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.title {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-left: var(--heading-border-left);
+  border-bottom: var(--heading-border-bottom);
+  background: var(--heading-bg);
+  color: var(--heading-color);
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+}
+
+.section {
+  margin-bottom: var(--space-5);
+}
+
+/* ノード・銘柄の件数(カクテルの欄の CocktailHitCount と同じ余白) */
+.hitCount {
+  margin: 0 0 var(--space-2);
+}

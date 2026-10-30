@@ -1,0 +1,40 @@
+/* 枠・縞は、カクテルの一覧の表・銘柄の一覧の表と同じ見た目にする */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  text-align: left;
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+.name {
+  max-width: 300px;
+}
+
+.nameEng {
+  width: 200px;
+}
+
+.parent {
+  max-width: 380px;
+}
+
+/* 600px 未満: 銘柄の一覧の表と同じく英名の列を出さない */
+@media (max-width: 599px) {
+  .nameEng {
+    display: none;
+  }
+}

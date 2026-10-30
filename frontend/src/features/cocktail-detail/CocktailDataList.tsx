@@ -4,7 +4,7 @@ import { sweetDegreeLabel } from '../../components/CocktailTable/sweetDegreeLabe
 import styles from './CocktailDetail.module.css'
 import type { CocktailDetailData } from './CocktailDetail.types'
 import { glassLabel, rateLabel, strengthPercent } from './cocktailDetailLabels'
-import { categoryPath, dictionaryPath } from './detailPaths'
+import { categoryPath, dictionaryPath } from '../../utils/detailPaths'
 
 type Props = {
   cocktail: CocktailDetailData

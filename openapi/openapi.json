@@ -4353,6 +4353,13 @@
                     },
                     "category": {
                         "$ref": "#/components/schemas/NodeRefResource"
+                    },
+                    "path": {
+                        "type": "array",
+                        "description": "\u6839\u304c\u5148\u982d\u3067\u3001\u6240\u5c5e\u30ce\u30fc\u30c9\u304c\u672b\u5c3e(BrandSummaryResource \u306e path \u3068\u540c\u3058\u4e26\u3073)",
+                        "items": {
+                            "$ref": "#/components/schemas/NodeRefResource"
+                        }
                     }
                 },
                 "required": [
@@ -4361,7 +4368,8 @@
                     "name_eng",
                     "volume",
                     "youtube",
-                    "category"
+                    "category",
+                    "path"
                 ],
                 "title": "NameSearchBrandResource"
             },
@@ -4470,13 +4478,21 @@
                     },
                     "parent": {
                         "$ref": "#/components/schemas/NodeRefResource"
+                    },
+                    "path": {
+                        "type": "array",
+                        "description": "\u6839\u304c\u5148\u982d\u3067\u3001\u3053\u306e\u30ce\u30fc\u30c9\u304c\u672b\u5c3e(\u30ce\u30fc\u30c9\u306e\u8a73\u7d30\u306e path \u3068\u540c\u3058\u4e26\u3073)",
+                        "items": {
+                            "$ref": "#/components/schemas/NodeRefResource"
+                        }
                     }
                 },
                 "required": [
                     "id",
                     "name",
                     "name_eng",
-                    "parent"
+                    "parent",
+                    "path"
                 ],
                 "title": "NameSearchNodeResource"
             },
