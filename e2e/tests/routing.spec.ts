@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test'
 
 // ビルドした画面を Laravel から配信し、URL を直に開いたとき(リロード・外からのリンク)にどの画面が出るかを確かめる
 const pages = [
-  { path: '/', heading: 'Hello World from Laravel' },
-  { path: '/index', heading: 'Hello World from Laravel' },
+  { path: '/', heading: '宅飲みカクテルデータベース' },
+  { path: '/index', heading: '宅飲みカクテルデータベース' },
   { path: '/helpme', heading: '当DBの更新ボランティア募集について' },
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', heading: '結果' },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', heading: '結果' },
@@ -35,5 +35,5 @@ test('TC-97-23: 404 の画面の「トップへ戻る」でトップの画面に
   await page.goto('/nope')
   await page.getByRole('link', { name: 'トップへ戻る' }).click()
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
 })

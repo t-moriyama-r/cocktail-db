@@ -6,11 +6,11 @@ import type { paths } from './api/schema'
 import { buildCocktailDetail } from './features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from './test/api'
 
-type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
 type DictionaryResponse = paths['/dictionaries/{dictionary}']['get']['responses'][200]['content']['application/json']
 type CategoryDetailResponse = paths['/categories/{category}']['get']['responses'][200]['content']['application/json']
 
-const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
+/** トップの画面の見出し(API の応答によらず出る) */
+const TOP_HEADING = '宅飲みカクテルデータベース'
 /** 用語の詳細の画面が出すもの(技法・グラスでない用語なので、カクテルの API は呼ばない) */
 const DICTIONARY: DictionaryResponse = {
   data: {
@@ -64,8 +64,7 @@ const expectHeading = async (name: string) => {
 
 describe('App のルーティング', () => {
   beforeEach(() => {
-    // トップの画面が GET /api/hello を、用語辞典の一覧・詳細の画面が GET /api/dictionaries・/api/dictionaries/{id} を呼ぶ
-    mockApi('get', '/hello', 200, HELLO)
+    // 用語辞典の一覧・詳細の画面が GET /api/dictionaries・/api/dictionaries/{id} を呼ぶ
     // 名前検索の結果の画面(#52)が GET /api/search を呼ぶ
     mockApi('get', '/search', 200, { cocktails: [], nodes: [], brands: [], ingredient_matches: [] })
     mockApi('get', '/dictionaries', 200, { data: [] })
@@ -74,6 +73,12 @@ describe('App のルーティング', () => {
     mockApi('get', '/categories/{category}', 200, CATEGORY)
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
+    // 詳細の画面は、同じ名前・材料が似た・同じベースのカクテルの API も呼ぶ。どれも 0 件を返す。
+    // 差し替えは `{cocktail}` を任意の 1 区切りに当て、後から登録したものを先に使うので、
+    // /cocktails/random は上の登録より後に登録する(登録しないと詳細の本文が返り、一覧が配列でなく落ちる。#569)
+    mockApi('get', '/cocktails/{cocktail}/same-name', 200, { data: [] })
+    mockApi('get', '/cocktails/{cocktail}/related', 200, { data: [] })
+    mockApi('get', '/cocktails/random', 200, { data: [] })
   })
 
   test.each([
@@ -81,7 +86,7 @@ describe('App のルーティング', () => {
     ['TC-97-02', '/index'],
   ])('%s: %s はトップの画面を出す', async (_id, path) => {
     renderAt(path)
-    await expectHeading(HELLO.message)
+    await expectHeading(TOP_HEADING)
   })
 
   test.each([
@@ -126,6 +131,6 @@ describe('App のルーティング', () => {
 
     fireEvent.click(await screen.findByRole('link', { name: 'トップへ戻る' }))
 
-    await expectHeading(HELLO.message)
+    await expectHeading(TOP_HEADING)
   })
 })
