@@ -86,10 +86,11 @@ it('TC-46-03: 用語の無い分類も、空の並びで返す', function () {
         ]]);
 });
 
-it('TC-46-04: 詳細は、名前・英名・分類・説明文(記法のまま)・動画・画像を返す', function () {
+// 説明文は #542 で区切りの並びにした(#46 のときは記法のまま返していた)。並びの中身は TC-542-01〜03 で確かめる
+it('TC-46-04: 詳細は、名前・英名・分類・説明文・動画・画像を返す', function () {
     $category = dictionaryCategory('器具', 'Tool', 4);
     $term = dictionaryTerm($category, 'シェイカー', 'Shaker', [
-        'description' => '@d1@で使う。'."\n".'2 行目', 'youtube' => 'abcdefghijk', 'youtube_start_seconds' => 61,
+        'description' => 'シェイクで使う。', 'youtube' => 'abcdefghijk', 'youtube_start_seconds' => 61,
         'image' => 'shaker.jpg', 'image_txt' => '出典', 'image_url' => 'https://example.com/',
     ]);
 
@@ -102,7 +103,7 @@ it('TC-46-04: 詳細は、名前・英名・分類・説明文(記法のまま)�
             'category' => ['id' => $category->id, 'name' => '器具', 'name_eng' => 'Tool'],
             'kind' => 'other',
             'method_id' => null,
-            'description' => '@d1@で使う。'."\n".'2 行目',
+            'description' => [['type' => 'text', 'text' => 'シェイクで使う。']],
             'youtube' => 'abcdefghijk',
             'youtube_start_seconds' => 61,
             'image' => 'shaker.jpg',
@@ -175,3 +176,36 @@ it('TC-46-10: 数字でない ID・桁があふれる ID・0 の詳細は 404(50
     '桁があふれる' => ['9999999999999999999'],
     '0' => ['0'],
 ]);
+
+// 説明文を、ほかの詳細と同じ区切りの並びで返す(#542。docs/decisions/description-segments.md)。
+// 旧の dictionaryDetail も Markup::generateDiscriptionArray で並びにしていた。並べ方の細かい決まりは DescriptionParser のテスト(#286)で確かめる
+
+it('TC-542-01: 詳細の説明文は、参照をリンクの区切りに、改行を文字の改行のままにした並びで返す', function () {
+    $category = dictionaryCategory('製法', 'Method', 1);
+    $shake = dictionaryTerm($category, 'シェイク', 'Shake', ['youtube' => 'abcdefghijk']);
+    $term = dictionaryTerm($category, 'ステア', 'Stir', ['description' => '@d'.$shake->id.'@とちがい、'."\n".'混ぜるだけ。']);
+
+    $this->getJson("/api/dictionaries/{$term->id}")
+        ->assertOk()
+        ->assertJsonPath('data.description', [
+            ['type' => 'dictionary', 'id' => $shake->id, 'text' => 'シェイク', 'has_youtube' => true],
+            ['type' => 'text', 'text' => 'とちがい、'."\n".'混ぜるだけ。'],
+        ]);
+});
+
+it('TC-542-02: 指す先の無い参照は取り除く', function () {
+    $category = dictionaryCategory('単位', 'Unit');
+    $term = dictionaryTerm($category, 'ダッシュ', 'Dash', ['description' => '約 1ml。@d999999@']);
+
+    $this->getJson("/api/dictionaries/{$term->id}")
+        ->assertOk()
+        ->assertJsonPath('data.description', [['type' => 'text', 'text' => '約 1ml。']]);
+});
+
+it('TC-542-03: 説明文が空の文字なら null', function () {
+    $term = dictionaryTerm(dictionaryCategory('単位', 'Unit'), 'ダッシュ', 'Dash', ['description' => '']);
+
+    $this->getJson("/api/dictionaries/{$term->id}")
+        ->assertOk()
+        ->assertJsonPath('data.description', null);
+});

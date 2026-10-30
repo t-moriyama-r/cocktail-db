@@ -217,5 +217,5 @@ jobs:
           if [[ ",$labels," != *",needs-human,"* && ",$labels," != *",needs-local,"* && ",$labels," != *",needs-manual,"* && ",$labels," != *",needs-approval,"* ]]; then
             gh workflow run ai-review-loop.yml -R "$REPO" -f number="$PR"
           fi
+          # 状態のラベルは、ai-auto-merge.yml のジョブが最後に出し直す(pr-status.yml は呼ばない。#534)
           gh workflow run ai-auto-merge.yml -R "$REPO" -f number="$PR"
-          gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
