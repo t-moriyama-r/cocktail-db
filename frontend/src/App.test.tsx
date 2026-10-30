@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, test } from 'vitest'
 import App from './App'
 import type { paths } from './api/schema'
+import { buildCocktailDetail } from './features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from './test/api'
 
 type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
@@ -45,6 +46,8 @@ describe('App のルーティング', () => {
     mockApi('get', '/hello', 200, HELLO)
     mockApi('get', '/dictionaries', 200, { data: [] })
     mockApi('get', '/dictionaries/{dictionary}', 200, DICTIONARY)
+    // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
+    mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
   })
 
   test.each([
@@ -62,12 +65,12 @@ describe('App のルーティング', () => {
     ['TC-97-06', '/result/Cocktails', '条件検索の結果'],
     ['TC-97-07', '/category/1', 'カテゴリの詳細'],
     ['TC-97-08', '/detail/brand/1', '銘柄の詳細'],
-    ['TC-97-09', '/detail/cocktail/1', 'カクテルの詳細'],
+    ['TC-97-09', '/detail/cocktail/1', 'マティーニ(Martini)'],
     ['TC-97-10', '/dictionary', '用語辞典'],
     ['TC-97-10', '/dictionary/', '用語辞典'],
     // 用語の詳細の題は用語の名前(#56)
     ['TC-97-11', '/dictionary/1', 'ダッシュ(Dash)'],
-    ['TC-97-20', '/Detail/Cocktail/1', 'カクテルの詳細'],
+    ['TC-97-20', '/Detail/Cocktail/1', 'マティーニ(Martini)'],
   ])('%s: %s は「%s」の画面を出す', async (_id, path, heading) => {
     renderAt(path)
     await expectHeading(heading)

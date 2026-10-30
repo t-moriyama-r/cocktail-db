@@ -428,6 +428,9 @@ export interface paths {
          *     空白(半角・全角)で分けた語は、どれかに当たれば一致(旧と同じ OR)。語は検索用の名前と同じ形にそろえてから
          *     探す。下書きのカクテルと、木の根(旧の種別)は返さない。種類ごとに ID の順で、ページに分けない(旧と同じ)。
          *
+         *     カクテルは別名(#82。旧に無い)の検索用の名前でも探す。名前では当たらず別名で当たったカクテルは、当たった別名を
+         *     matched_alias に返す(2 つ以上当たれば先に登録した方。名前で当たったカクテルは null)。
+         *
          *     ingredient_matches は、語を材料に使うカクテル(旧のインテリジェンスサーチ。#173)。語ごとに、名前が語そのものか
          *     語に「リキュール」(英数字だけの入力なら英名で、語に liqueur)を付けたものと完全一致するノード・銘柄を探し、
          *     ノードならそのノードと一致する材料(配下と、根を除く祖先)を、銘柄ならその銘柄を使うカクテルを返す。
@@ -961,6 +964,13 @@ export interface components {
             /** Format: date-time */
             updated_at: string | null;
             ingredients: components["schemas"]["CocktailIngredientResource"][];
+            /** @description 別名。登録した順 */
+            aliases: {
+                id: number;
+                name: string;
+            }[];
+            /** @description 材料の組がまったく同じ、ほかの公開しているカクテル。ID の順。一覧の表と同じ項目 */
+            same_recipe: components["schemas"]["CocktailSummaryResource"][];
         };
         /** CocktailIngredientResource */
         CocktailIngredientResource: {
@@ -1004,16 +1014,23 @@ export interface components {
          */
         CocktailSearchRequest: {
             /**
-             * @description 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は、受ける形を
-             *     決めてから足す。それまで受けると、OR 検索の結果を黙って返してしまう
+             * @description 方式。省くと or。having(#165)は手持ちの材料(category_ids)で作れるカクテル。and(#164)は
+             *     選んだノードのまとまりの並び(category_groups)で受ける
              * @enum {string|null}
              */
-            mode?: "or" | "having" | null;
+            mode?: "or" | "and" | "having" | null;
             /**
              * @description 選んだノード(or では探す材料、having では手持ちの材料)。根もよい(画面が部分木をすべて選んだときに畳んで送る。docs/search.md の「一致の定義」)
              *     件数の上限は、認証の要らない公開 API に巨大な配列を送られて検証と検索が重くなるのを防ぐため(docs/search.md)
+             *     and はまとまりの並び(category_groups)で受けるので、送られたら黙って捨てずに弾く(空の配列も弾くため、prohibited ではなく missing)
              */
-            category_ids: number[];
+            category_ids?: number[];
+            /**
+             * @description 選んだノードのまとまりの並び(and。#164)。画面が「同じ親から選んだもの」を 1 つのまとまりにして送り、
+             *     まとまりごとに「どれか 1 つを使う」で探す(docs/decisions/search-screen.md の 1)。まとまりの単位は画面が決める。
+             *     and 以外で送られたら、黙って捨てずに弾く。ID の総数の上限は category_ids と同じ(after で数える)
+             */
+            category_groups?: number[][];
             /**
              * @description 技法(#166)。カクテルの技法がこの中にあるものに絞る。省く・null・空の配列なら、すべての技法として扱う
              *     (旧は 1 つ以上が必須だった。docs/decisions/search-screen.md の 6)。無い技法の ID は弾かず、何にも一致しない
@@ -1144,6 +1161,26 @@ export interface components {
             volume: number;
             youtube: string | null;
             category: components["schemas"]["NodeRefResource"];
+        };
+        /** NameSearchCocktailResource */
+        NameSearchCocktailResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            is_major: boolean;
+            base: components["schemas"]["NodeRefResource"];
+            method: {
+                id: number;
+                name: string;
+            };
+            recipe_count: number;
+            strength: number;
+            sweet_degree: number | null;
+            rate: number | null;
+            youtube: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            matched_alias: string | null;
         };
         /** NameSearchNodeResource */
         NameSearchNodeResource: {
@@ -2012,7 +2049,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        cocktails: components["schemas"]["CocktailSummaryResource"][];
+                        cocktails: components["schemas"]["NameSearchCocktailResource"][];
                         nodes: components["schemas"]["NameSearchNodeResource"][];
                         brands: components["schemas"]["NameSearchBrandResource"][];
                         ingredient_matches: components["schemas"]["CocktailSummaryResource"][];

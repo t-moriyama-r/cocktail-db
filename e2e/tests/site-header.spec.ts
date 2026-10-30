@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
 // ヘッダー(#99)。E2eSeeder のデータ(ノードのジン・ドライジン・ロンドンドライジン、カクテルのジントニック、銘柄 1 件)を使う。
-// 名前検索「ジン」は 4 件に当たり、登録数(公開のカクテルの数)は 1
+// 名前検索「ジン」は 5 件に当たり(ノード 3 件・カクテル 1 件と、材料にジンの配下の銘柄を使うジントニックの 1 件)、
+// 登録数(公開のカクテルの数)は 1
 const header = (page: Page) => page.getByRole('banner')
 const nameInput = (page: Page) => header(page).getByRole('searchbox', { name: '名前から検索' })
 
@@ -10,7 +11,7 @@ test('TC-99-23: 名前に「ジン」と入れると件数が出て、ボタン�
 
   await expect(header(page).getByRole('button', { name: '入力して下さい' })).toBeDisabled()
   await nameInput(page).fill('ジン')
-  const button = header(page).getByRole('button', { name: '4件ヒット' })
+  const button = header(page).getByRole('button', { name: '5件ヒット' })
   await expect(button).toBeEnabled()
 
   await button.click()
@@ -27,7 +28,7 @@ test('TC-99-24: 件数が出たあと Enter でも移る。禁止文字では「
   await expect(nameInput(page)).toHaveValue('')
 
   await nameInput(page).fill('ジン')
-  await expect(header(page).getByRole('button', { name: '4件ヒット' })).toBeEnabled()
+  await expect(header(page).getByRole('button', { name: '5件ヒット' })).toBeEnabled()
   await nameInput(page).press('Enter')
 
   await expect(page).toHaveURL(`/result/FromNameResult/${encodeURIComponent('ジン')}`)

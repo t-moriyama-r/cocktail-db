@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
 // 用語辞典の一覧・詳細(#56)。E2eSeeder の seedDictionary のデータを使う。
-// 分類は 製法(ビルド・シェイク)・グラス(カクテル・グラス)・スタイル(用語なし)・単位(ひとつまみ・ティースプーン・ダッシュ)。
-// 技法のビルドとグラスのカクテル・グラスは、カクテルのジントニックに結び付いている
+// 分類は 製法(ビルド・シェイク)・グラス(タンブラー)・スタイル(用語なし)・単位(ひとつまみ・ティースプーン・ダッシュ)。
+// 技法のビルドとグラスのタンブラーは、カクテルのジントニックに結び付いている
 const COCKTAILS_HEADING = 'これを使ったカクテル(ランダム7種)'
 
 /** 送った GET /api/cocktails/random のクエリを、送った順に集める */
@@ -59,9 +59,9 @@ test('TC-56-19: 説明文のリンクで技法の用語からグラスの用語�
   await page.getByRole('link', { name: 'ビルド(Build)' }).click()
   await expect(page.getByRole('region', { name: COCKTAILS_HEADING }).getByRole('link', { name: 'ジントニック' })).toBeVisible()
 
-  await page.getByRole('link', { name: 'カクテル・グラス', exact: true }).click()
+  await page.getByRole('link', { name: 'タンブラー', exact: true }).click()
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('カクテル・グラス(Cocktail glass)')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('タンブラー(Tumbler)')
   await expect(page.getByRole('region', { name: COCKTAILS_HEADING }).getByRole('link', { name: 'ジントニック' })).toBeVisible()
   await expect.poll(() => randomQueries.length).toBe(2)
   expect(randomQueries[1]).toMatch(/^\?limit=7&glass_id=\d+$/)

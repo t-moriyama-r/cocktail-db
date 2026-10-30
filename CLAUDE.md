@@ -43,7 +43,7 @@ vendor/bin/pint                       # コード整形(Laravel Pint)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` が `branch-flow` だけ、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。`staging`・`release` は「マージ前にブランチを最新にする」(`strict`)も求めない。昇格の PR の head は `develop`(`staging`)そのもので常に先へ進み、CI の必須のチェックや `strict` があると、進むたびに CI の待ちでマージが止まるため(中身は `develop` に入る前に PR ごとに CI を通っている。#506)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` が `branch-flow` だけ、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。`staging`・`release` は「マージ前にブランチを最新にする」(`strict`)も求めない。昇格の PR の head は `develop`(`staging`)そのもので常に先へ進み、CI の必須のチェックや `strict` があると、進むたびに CI の待ちでマージが止まるため(中身は `develop` に入る前に PR ごとに CI を通っている。#506)。`develop` は、ルールセットで承認 1 件も求め、オーナー(リポジトリの admin)だけを除外する。オーナー以外が作った PR は、オーナーが承認しないとマージできない。自動マージ(`ai-auto-merge.yml`)は、オーナーの PAT(secret `AUTO_MERGE_TOKEN`)でマージして除外を効かせる(#540)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 
@@ -198,6 +198,13 @@ GitHub・Slack・ターミナルの自動リンクは、空白までを URL と�
 ## 人に判断を頼むとき
 
 人に決めてもらうこと(`needs-human`・`needs-decision` の頼むコメント、issue の「判断が要ること」、手元のエージェントがターミナルで聞くとき)は、文章を読み込まなくても、何を決めるのか・案ごとに何が変わるのかがつかめる形で頼む。文章だけの説明は、理解するまでに時間がかかるため。
+
+頼む前に、issue に回せば済むものではないかを確かめる。PR の途中で見つかった残りの作業に「この issue の範囲で仕上げ、残りは別の issue に回す」案があるなら、人に聞かずにその案で進める(例: #538 で、無い ID の 404 の画面をこの PR で出すか、詳細の画面の issue に回すかを聞いた。回す案で済むので、聞かずに回せばよかった)。
+
+- 回す先の issue があれば、その受け入れ条件に足す。無ければ issue を作る(タイトルの接頭辞・`area:*`・依存の書き方は、ほかの issue と同じ)
+- PR には、何をどの issue に回したかをリンク付きで書く。閉じる issue の受け入れ条件を別の issue に移したときは、移したことを必ず書く
+- Actions の Claude Code は issue を作れない・書けないので、回す先の issue への追記・作成を、`needs-local kind=other` で手元に頼む(人の判断ではない)
+- 回すと決まりを破るもの・回しても困るものは、今までどおり聞く: 意図の書けない「旧との差分」(上の「旧との差分」)、`needs-review` の見た目の案、データを消す・費用がかかるもの、回した先が入るまで利用者に壊れた画面・誤ったデータが出るもの
 
 頼むコメントは、上から次の順に書く。
 

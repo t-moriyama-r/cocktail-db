@@ -3,6 +3,7 @@
 use App\Models\Category;
 use App\Models\LegacyIdMap;
 use App\Services\CategoryTree;
+use App\Services\RecipeSignature;
 use Illuminate\Database\Connection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -274,6 +275,28 @@ it('TC-31-14: recipe_count を旧の値でなく、移した材料から数え�
     expect(DB::table('cocktails')->orderBy('id')->pluck('recipe_count', 'id')->map(cocktailColumnInt(...))->all())
         ->toBe([1 => 2, 2 => 4, 3 => 0])
         ->and(DB::table('cocktails')->where('id', 2)->value('updated_at'))->toBe('2021-02-03 04:05:06');
+});
+
+it('TC-82-28: 移した材料から recipe_signature を作り、材料の組が同じで名前の違うカクテルは別々のまま同じ値にする(#28 の 10)', function () {
+    $legacy = DB::connection('legacy');
+    // カクテル 1 と同じ材料の組を、違う順で持つ別の名前のカクテル 4
+    $copy = (array) $legacy->table('t_cocktails')->where('id', 1)->first();
+    $legacy->table('t_cocktails')->insert([...$copy, 'id' => 4, 'name' => 'ジン・トニック(別の名前)']);
+    $recipes = $legacy->table('t_recipies')->where('cocktail_id', 1)->get()->reverse();
+    foreach ($recipes as $recipe) {
+        $legacy->table('t_recipies')->insert([...(array) $recipe, 'cocktail_id' => 4]);
+    }
+
+    importLegacyCocktails($this)->assertExitCode(0)->run();
+
+    $signatures = DB::table('cocktails')->orderBy('id')->pluck('recipe_signature', 'id')->all();
+    expect(array_keys($signatures))->toBe([1, 2, 3, 4])
+        ->and($signatures[1])->toBeString()
+        ->and($signatures[4])->toBe($signatures[1])
+        ->and($signatures[2])->toBeString()->not->toBe($signatures[1])
+        // カクテル 3 は材料が無い
+        ->and($signatures[3])->toBeNull()
+        ->and(array_filter($signatures))->toBe(app(RecipeSignature::class)->signaturesByCocktail());
 });
 
 it('TC-31-15: 2 回流しても、カクテル・材料・ID の対応が 1 回目と同じ', function () {

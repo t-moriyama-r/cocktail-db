@@ -34,6 +34,13 @@
   /* ヘッダーの名前検索のボタン(#99)。押せないときの地と、禁止文字を含むときの「Error」の地。どちらも文字との差は 4.5:1 以上 */
   --color-disabled-bg: #e0e0e0; /* 文字は --color-text-muted(4.69:1) */
   --color-danger: #c62828; /* 文字は --color-on-accent(5.62:1) */
+  /* カクテルの詳細(#108)。ベースなどの欄・材料の欄の左の線と、Note の上の線(旧 Detail/CocktailDetail.vue と同じ値。文字ではないので 4.5:1 の対象外) */
+  --color-detail-data-line: #006699;
+  --color-detail-recipe-line: #ff6600;
+  --color-detail-note-line: #98d4d6;
+  /* カクテルの詳細の「§Description§」の区切りの文字(#108) */
+  /* 旧と同じ値。白地で 4.11:1 と 4.5:1 に届かないが、旧と見た目を変える決まり(旧との差分)が無いので旧に合わせている */
+  --color-section-label: #1177ff;
   /* モーダル(#99 の条件検索)の後ろを暗くする色(旧の Vuetify の v-overlay と同じ濃さ) */
   --color-overlay: rgb(33 33 33 / 46%);
   /* 用語辞典(#56)の一覧の分類の見出しの線(旧 Dictionary/index.vue と同じ値。ほかの見出しの --color-heading-line とは旧でも違った) */

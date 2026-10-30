@@ -10,10 +10,11 @@ const pages = [
   { path: '/result/Cocktails', heading: '条件検索の結果' },
   { path: '/category/1', heading: 'カテゴリの詳細' },
   { path: '/detail/brand/1', heading: '銘柄の詳細' },
-  { path: '/detail/cocktail/1', heading: 'カクテルの詳細' },
+  // E2eSeeder のジントニック(#108 で中身を出すようにした)
+  { path: '/detail/cocktail/1', heading: 'ジントニック(Gin and Tonic)' },
   { path: '/dictionary', heading: '用語辞典' },
   // E2eSeeder の用語辞典で ID 1 の用語(#56)
-  { path: '/dictionary/1', heading: 'カクテル・グラス(Cocktail glass)' },
+  { path: '/dictionary/1', heading: 'タンブラー(Tumbler)' },
 ]
 
 for (const { path, heading } of pages) {
