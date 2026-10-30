@@ -175,6 +175,7 @@ jobs:
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
           printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
+          chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
@@ -481,6 +482,7 @@ jobs:
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
           printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
+          chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6

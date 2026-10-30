@@ -128,7 +128,9 @@ jobs:
       # PR のブランチの checkout が .ai-dev を消すので、Claude Code に読ませるものを書き出すスクリプトを作業ディレクトリの外に置く
       - name: スクリプトを作業ディレクトリの外に置く
         if: steps.live.outputs.run
-        run: cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
+        run: |
+          cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
+          chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
       - uses: actions/checkout@v6
