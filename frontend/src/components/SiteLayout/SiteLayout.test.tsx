@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import App from '../../App'
+import { buildCocktailDetail } from '../../features/cocktail-detail/buildCocktailDetail'
+import { mockApi } from '../../test/api'
 
 const renderAt = (path: string) =>
   render(
@@ -13,6 +15,13 @@ const renderAt = (path: string) =>
 const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
+  beforeEach(() => {
+    // 用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
+    mockApi('get', '/dictionaries', 200, { data: [] })
+    // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
+    mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
+  })
+
   test('TC-296-01: フッターに著作の表示と、作者のサイトへのリンク(新しいタブ)がある', async () => {
     renderAt('/')
 
@@ -37,13 +46,13 @@ describe('共通の枠(SiteLayout)', () => {
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
 
-    expect(await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })).toBeInTheDocument()
   })
 
   test.each([
     ['/', '宅飲みカクテルデータベース'],
-    ['/helpme', '更新ボランティア募集'],
-    ['/detail/cocktail/1', 'カクテルの詳細'],
+    ['/helpme', '当DBの更新ボランティア募集について'],
+    ['/detail/cocktail/1', 'マティーニ(Martini)'],
     ['/nope', 'ページが見つかりません'],
   ])('TC-296-04: %s でも、ヘッダーの場所とフッターの中に画面を出す', async (path, heading) => {
     renderAt(path)
@@ -84,7 +93,7 @@ describe('共通の枠(SiteLayout)', () => {
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
 
-    await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })
+    await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })
     expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
   })
 })

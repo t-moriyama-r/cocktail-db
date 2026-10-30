@@ -148,8 +148,10 @@ jobs:
                 "\($t.head)(\($repo))",
                 "",
                 # 見出しのリンクから、返事をするコメントへ直接飛べるようにする。目印の無いコメント(人のいちばん新しい
-                # コメント)は頼む中身とは限らないので、そのときは PR・issue を指す
-                "*\($target.kind)*: \(link($marked.html_url // $target.url; "#\($number) \($target.title)"))",
+                # コメント)は頼む中身とは限らないので、そのときは PR・issue を指す。
+                # PR はタイトルの issue-<番号> と下の「対応 issue」で見分けるので、PR の番号は出さない(#444)
+                "*\($target.kind)*: \(link($marked.html_url // $target.url;
+                  if $target.kind == "PR" then $target.title else "#\($number) \($target.title)" end))",
                 (if $target.kind == "PR" then
                   "*対応 issue*: " + (if ($issues | length) > 0
                     then ($issues | map(link(.url; "#\(.number) \(.title)")) | join("、"))
@@ -270,8 +272,10 @@ jobs:
                   | ($items | map(select(.label == $label)) | sort_by(-(.days // 0), .number)) as $list
                   | select($list | length > 0)
                   | "", $t[$label].head, $t[$label].act,
-                    # 見出しのリンクも、頼むコメントがあればそこへ向ける(無ければ .ask.url は PR・issue)
-                    ($list[] | "• \(link(.ask.url; "\(.kind) #\(.number) \(.title)"))\(waited)"
+                    # 見出しのリンクも、頼むコメントがあればそこへ向ける(無ければ .ask.url は PR・issue)。
+                    # PR はタイトルの issue-<番号> で見分けるので、PR の番号は出さない(#444)
+                    ($list[] | "• \(link(.ask.url;
+                        if .kind == "PR" then "PR \(.title)" else "\(.kind) #\(.number) \(.title)" end))\(waited)"
                       + (if .ask.text != "" then "\n      \(link(.ask.url; .ask.text))" else "" end)))
               ] | join("\n"))
             }

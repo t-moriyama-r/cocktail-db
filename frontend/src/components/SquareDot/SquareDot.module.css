@@ -1,0 +1,8 @@
+/* 旧の square_dot(二重線の小さな四角) */
+.squareDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 var(--space-1);
+  border: 3px double currentColor;
+}
