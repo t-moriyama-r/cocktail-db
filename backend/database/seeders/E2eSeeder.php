@@ -6,6 +6,7 @@ use App\Enums\CategoryRole;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
 use App\Models\Method;
 use App\Services\CategoryTree;
 use Illuminate\Database\Seeder;
@@ -19,23 +20,26 @@ class E2eSeeder extends Seeder
     public function run(): void
     {
         $nodes = $this->seedIngredientTree(app(CategoryTree::class));
-        $this->seedHeaderData($nodes['gin'], $nodes['beefeater']);
+        $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint']);
     }
 
     /**
      * ヘッダー(#99)の E2E 用のカクテルと銘柄。登録数(公開のカクテルの数)を 1 にし、ランダムウォークがどの種類
      * (カクテル・ノード・銘柄)を選んでも行き先があるようにする。
      * 名前検索「ジン」は、ノードのジン・ドライジン・ロンドンドライジンとカクテルのジントニックの 4 件に当たる(銘柄の名前にはジンを入れない)。
+     * 名前検索の結果の画面(#52)の E2E 用に、ジントニックの材料にミントを入れる。名前検索「ミント」は、ノードのミントと、
+     * 材料名で当たったカクテル(ジントニック)の 2 件に当たる(材料にジンは入れないので、「ジン」の 4 件は変わらない)。
      */
-    private function seedHeaderData(Category $gin, Category $beefeater): void
+    private function seedHeaderData(Category $gin, Category $beefeater, Category $mint): void
     {
-        Cocktail::factory()->create([
+        $ginTonic = Cocktail::factory()->create([
             'name' => 'ジントニック',
             'name_search' => 'ジントニック',
             'name_eng' => 'Gin and Tonic',
             'base_category_id' => $gin->id,
             'method_id' => Method::factory()->create(['name' => 'ビルド', 'name_eng' => 'Build'])->id,
         ]);
+        CocktailIngredient::factory()->create(['cocktail_id' => $ginTonic->id, 'category_id' => $mint->id, 'position' => 1]);
         Brand::factory()->create([
             'category_id' => $beefeater->id,
             'name' => 'ビーフィーター 40度',
@@ -49,7 +53,7 @@ class E2eSeeder extends Seeder
      * (蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)。
      * 閉包表は CategoryTree 経由でだけ書き換える決まりなので、ノードは addNode で作る。
      *
-     * @return array{gin: Category, beefeater: Category} ヘッダーのデータ(seedHeaderData)が使うノード
+     * @return array{gin: Category, beefeater: Category, mint: Category} ヘッダーのデータ(seedHeaderData)が使うノード
      */
     private function seedIngredientTree(CategoryTree $tree): array
     {
@@ -70,8 +74,8 @@ class E2eSeeder extends Seeder
 
         $node(null, 'ソフトドリンク', CategoryRole::SoftDrink);
         $other = $node(null, 'その他', CategoryRole::Other);
-        $node($other, 'ミント');
+        $mint = $node($other, 'ミント');
 
-        return ['gin' => $gin, 'beefeater' => $beefeater];
+        return ['gin' => $gin, 'beefeater' => $beefeater, 'mint' => $mint];
     }
 }

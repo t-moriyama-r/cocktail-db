@@ -16,7 +16,7 @@ test('TC-99-23: 名前に「ジン」と入れると件数が出て、ボタン�
   await button.click()
 
   await expect(page).toHaveURL(`/result/FromNameResult/${encodeURIComponent('ジン')}`)
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('名前検索の結果')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('結果')
 })
 
 test('TC-99-24: 件数が出たあと Enter でも移る。禁止文字では「Error」になり、押すと入力が空になる', async ({ page }) => {
