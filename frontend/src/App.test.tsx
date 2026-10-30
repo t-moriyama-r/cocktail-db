@@ -65,6 +65,8 @@ const expectHeading = async (name: string) => {
 describe('App のルーティング', () => {
   beforeEach(() => {
     // 用語辞典の一覧・詳細の画面が GET /api/dictionaries・/api/dictionaries/{id} を呼ぶ
+    // 名前検索の結果の画面(#52)が GET /api/search を呼ぶ
+    mockApi('get', '/search', 200, { cocktails: [], nodes: [], brands: [], ingredient_matches: [] })
     mockApi('get', '/dictionaries', 200, { data: [] })
     mockApi('get', '/dictionaries/{dictionary}', 200, DICTIONARY)
     // カテゴリの詳細の画面が GET /api/categories/{id} を呼ぶ(#105)
@@ -83,8 +85,8 @@ describe('App のルーティング', () => {
 
   test.each([
     ['TC-97-03', '/helpme', '当DBの更新ボランティア募集について'],
-    ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '名前検索の結果'],
-    ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '名前検索の結果'],
+    ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '結果'],
+    ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '結果'],
     ['TC-97-06', '/result/Cocktails', '条件検索の結果'],
     ['TC-97-07', '/category/1', '蒸留酒(Spirits)'],
     ['TC-97-08', '/detail/brand/1', '銘柄の詳細'],
