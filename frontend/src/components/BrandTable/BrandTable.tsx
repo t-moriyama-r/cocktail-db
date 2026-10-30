@@ -6,6 +6,7 @@ import { affiliationNodes } from './affiliationNodes'
 import { nextBrandSort, sortBrands } from './sortBrands'
 import FontAwesomeIcon from '../CocktailTable/FontAwesomeIcon'
 import SortableHeader from '../CocktailTable/SortableHeader'
+import { brandPath, categoryPath } from '../../utils/detailPaths'
 import { youtubeWatchUrl } from '../../utils/youtubeWatchUrl'
 
 /**
@@ -102,12 +103,4 @@ function Affiliation({ path }: { path: readonly BrandTableNode[] }) {
 /** 度数は旧と同じく値のまま出し、無い(と 0 の)ときは空にする(旧は `volume || ""`) */
 function strengthText(strength: number | null): string {
   return strength ? String(strength) : ''
-}
-
-function brandPath(id: number): string {
-  return `/detail/brand/${id}`
-}
-
-function categoryPath(id: number): string {
-  return `/category/${id}`
 }
