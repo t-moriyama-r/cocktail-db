@@ -33,6 +33,11 @@ on:
       force:
         type: boolean
         default: false
+      run_tests:
+        # 出す前にテスト(test.yml)を流すか。同じコミットを PR の CI で通しているなら、流し直しは分数を使うだけになる
+        description: 出す前にテストを流す
+        type: boolean
+        default: true
     secrets:
       DB_PASSWORD:
         required: true
@@ -103,12 +108,16 @@ jobs:
 
   test:
     needs: check
-    if: needs.check.outputs.deploy == 'true'
+    if: needs.check.outputs.deploy == 'true' && inputs.run_tests
     uses: ./.github/workflows/test.yml
 
   deploy:
     needs: [check, test]
-    if: needs.check.outputs.deploy == 'true'
+    # needs のジョブが飛ばされると、既定ではこのジョブも飛ばされる。テストを流さない回(run_tests が false)でも出せるよう、
+    # テストは「成功」か「流さない設定で飛ばした」ときに通す。テストが落ちた・取り消されたときは出さない
+    if: >-
+      !cancelled() && needs.check.result == 'success' && needs.check.outputs.deploy == 'true'
+      && (needs.test.result == 'success' || (needs.test.result == 'skipped' && !inputs.run_tests))
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment }}

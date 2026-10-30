@@ -10,7 +10,8 @@ const pages = [
   { path: '/result/Cocktails', heading: '条件検索の結果' },
   { path: '/category/1', heading: 'カテゴリの詳細' },
   { path: '/detail/brand/1', heading: '銘柄の詳細' },
-  { path: '/detail/cocktail/1', heading: 'カクテルの詳細' },
+  // E2eSeeder のジントニック(#108 で中身を出すようにした)
+  { path: '/detail/cocktail/1', heading: 'ジントニック(Gin and Tonic)' },
   { path: '/dictionary', heading: '用語辞典' },
   { path: '/dictionary/1', heading: '用語の詳細' },
 ]
@@ -55,7 +56,7 @@ test('TC-111-20: 詳細ページの HTML(JS を動かす前)に、名前の titl
   const response = await request.get('/detail/cocktail/1')
   expect(response.status()).toBe(200)
   const html = await response.text()
-  expect(html).toContain('<title>ジン・トニック(Gin and Tonic) ｜ 宅飲みカクテルデータベース(RC)</title>')
-  expect(html).toContain('<meta name="description" content="ジンをトニックウォーターで割った、すっきりした一杯。">')
+  expect(html).toContain('<title>ジントニック(Gin and Tonic) ｜ 宅飲みカクテルデータベース(RC)</title>')
+  expect(html).toContain('<meta name="description" content="定番のロングカクテル。">')
   expect(html).toMatch(/<link rel="canonical" href="[^"]*\/detail\/cocktail\/1">/)
 })

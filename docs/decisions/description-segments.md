@@ -1,6 +1,6 @@
 # 説明文を、リンクの区切りの並びにして返す(公開 API)
 
-#286 で決めたこと。記法そのもの(`@n<ノードの ID>@`・`@c`・`@b`・`@d`)は #285 で決めた([description-references.md](description-references.md))。変換は `App\Support\DescriptionParser` が受け持ち、説明文(`description`)とカクテルの補足(`note`)を返す公開 API は、これを通して返す。いま通しているのは、カクテルの詳細(`GET /api/cocktails/{id}`)と、管理者のプレビュー(`GET /api/admin/cocktails/{id}/preview`)と、新着動画(`GET /api/cocktails/latest-video`。#39)と、ノードの詳細(`GET /api/categories/{id}`。#42)と、銘柄の詳細(`GET /api/brands/{id}`。#43)。用語(#46)の API は、作るときに通す。
+#286 で決めたこと。記法そのもの(`@n<ノードの ID>@`・`@c`・`@b`・`@d`)は #285 で決めた([description-references.md](description-references.md))。変換は `App\Support\DescriptionParser` が受け持ち、説明文(`description`)とカクテルの補足(`note`)を返す公開 API は、これを通して返す。いま通しているのは、カクテルの詳細(`GET /api/cocktails/{id}`)と、管理者のプレビュー(`GET /api/admin/cocktails/{id}/preview`)と、新着動画(`GET /api/cocktails/latest-video`。#39)と、ノードの詳細(`GET /api/categories/{id}`。#42)と、銘柄の詳細(`GET /api/brands/{id}`。#43)と、用語の詳細(`GET /api/dictionaries/{id}`。#46 で作り、#542 で通した)。
 
 ## 決まったこと
 

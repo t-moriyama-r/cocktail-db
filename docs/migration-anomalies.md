@@ -208,7 +208,17 @@ FROM affiliates;
 
 材料の組(カテゴリ・ミドル・銘柄・量・任意)がまったく同じで、名前の違うカクテルが 45 組(95 カクテル)ある。
 
-- **扱い**: 別々のまま移す。別名と同じレシピの表示は #82・#83 で作る
+- **扱い**: 別々のまま移す。同じレシピは移行で材料から作る `cocktails.recipe_signature` の一致で引き、詳細の `same_recipe` で互いに案内する(#82。[schema.md](schema.md) の「`recipe_signature`」)。別名は #82(表と検索)・#83(管理画面での編集)
+- **移行の後に確かめる**: 新しい DB で、下の SQL と同じ数え方(同じ名前を 1 件と数える)で 45 組になるか。新しい DB では次で数える
+
+```sql
+-- 新しい DB。recipe_signature が同じで名前の違うカクテルの組
+SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
+  SELECT recipe_signature, COUNT(DISTINCT name) AS n FROM cocktails
+  WHERE recipe_signature IS NOT NULL
+  GROUP BY recipe_signature HAVING COUNT(DISTINCT name) > 1
+) g;
+```
 - **13 との順序**: 13(名前も材料も同じものをまとめる)を先に行い、まとめた後の状態で 10 を数える。たとえば同じ材料の組で名前が A・A・B の 3 件なら、A・A が 1 件にまとまり、A と B の 2 件が 10 の「別々のまま移す」対象になる。下の SQL は同じ名前を 1 件と数える。組の数(45)はまとめても変わらず、カクテルの数は 13 でまとまる分だけ 95 より減る(まとめた後の数は、手元のダンプで流して確かめる)
 
 ```sql
