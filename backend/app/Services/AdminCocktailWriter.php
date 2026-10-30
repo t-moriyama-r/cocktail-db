@@ -119,7 +119,7 @@ class AdminCocktailWriter
                 ->get(['id', 'name', 'name_search']);
 
             foreach ($others as $other) {
-                $where = $other->name_search === $alias->name_search ? '名前' : '別名';
+                $where = mb_strtolower($other->name_search) === mb_strtolower($alias->name_search) ? '名前' : '別名';
                 $warnings[] = [
                     'field' => "aliases.{$index}",
                     'message' => "「{$other->name}」の{$where}と同じです",
