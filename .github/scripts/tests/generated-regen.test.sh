@@ -21,8 +21,8 @@ STATUS=0
 main() {
 	tc_01_no_marker
 	tc_02_marker_written
-	tc_03_marker_tracked
-	tc_04_marker_symlink
+	tc_03_marker_by_other
+	tc_04_marker_before_run
 	tc_05_head_differs
 	tc_06_collect_changed
 	tc_07_collect_unchanged
@@ -43,45 +43,49 @@ main() {
 
 # --- ケース -----------------------------------------------------------------
 
+# request に渡すコメントの JSON を作る(1 件ずつ「書いた人<TAB>時刻<TAB>本文」)
+comments() {
+	local out=$1 line
+	shift
+	for line in "$@"; do
+		IFS=$'\t' read -r login at body <<<"$line"
+		jq -n --arg l "$login" --arg a "$at" --arg b "$body" '{user: {login: $l}, created_at: $a, body: $b}'
+	done | jq -s . > "$out"
+}
+
+HEAD_A=1111111111111111111111111111111111111111
+HEAD_B=2222222222222222222222222222222222222222
+STARTED=2026-10-30T10:00:00Z
+
 tc_01_no_marker() {
-	repo
-	run_in "$REPO_DIR" request .ai-regenerate-request "$(head_of "$REPO_DIR")"
-	expect "TC-495-01: 印が無ければ何も出さない" test -z "$OUTPUT" -a "$STATUS" -eq 0
+	comments "$WORK/c1.json" $'claude[bot]\t2026-10-30T10:05:00Z\t<!-- ai-dev:agent --> 指摘に対応した'
+	run_in "$WORK" request "$WORK/c1.json" "$STARTED" "$HEAD_A"
+	expect "TC-495-01: 目印が無ければ何も出さない" test -z "$OUTPUT" -a "$STATUS" -eq 0
 }
 
 tc_02_marker_written() {
-	repo
-	echo "API の形を変えた" > "$REPO_DIR/.ai-regenerate-request"
-	run_in "$REPO_DIR" request .ai-regenerate-request "$(head_of "$REPO_DIR")"
-	expect "TC-495-02: 印があり、HEAD が PR の head と同じなら、その head を出す" test "$OUTPUT" = "$(head_of "$REPO_DIR")"
-	expect_err "TC-495-02: 印の理由をログに出す" "API の形を変えた"
+	comments "$WORK/c2.json" $'claude[bot]\t2026-10-30T10:05:00Z\t<!-- ai-dev:agent --> <!-- ai-dev:regenerate head='"$HEAD_A"$' --> 生成ファイルの作り直しを後のジョブに頼んだ'
+	run_in "$WORK" request "$WORK/c2.json" "$STARTED" "$HEAD_A"
+	expect "TC-495-02: この回に Claude Code が書いた目印の head が PR の head と同じなら、その head を出す" test "$OUTPUT" = "$HEAD_A"
 }
 
-tc_03_marker_tracked() {
-	repo
-	echo x > "$REPO_DIR/.ai-regenerate-request"
-	git -C "$REPO_DIR" add .ai-regenerate-request
-	git -C "$REPO_DIR" commit -qm marker
-	run_in "$REPO_DIR" request .ai-regenerate-request "$(head_of "$REPO_DIR")"
-	expect "TC-495-03: PR のコードに入っている印では作り直さない" test -z "$OUTPUT"
-	expect_err "TC-495-03: 作り直さない理由を警告で出す" "::warning::"
+tc_03_marker_by_other() {
+	comments "$WORK/c3.json" $'someone\t2026-10-30T10:05:00Z\t<!-- ai-dev:regenerate head='"$HEAD_A"$' -->'
+	run_in "$WORK" request "$WORK/c3.json" "$STARTED" "$HEAD_A"
+	expect "TC-495-03: Claude Code 以外が書いた目印では作り直さない" test -z "$OUTPUT"
 }
 
-tc_04_marker_symlink() {
-	repo
-	echo x > "$WORK/elsewhere"
-	ln -s "$WORK/elsewhere" "$REPO_DIR/.ai-regenerate-request"
-	run_in "$REPO_DIR" request .ai-regenerate-request "$(head_of "$REPO_DIR")"
-	expect "TC-495-04: 印がリンクなら作り直さない" test -z "$OUTPUT"
-	expect_err "TC-495-04: 作り直さない理由を警告で出す" "::warning::"
+tc_04_marker_before_run() {
+	comments "$WORK/c4.json" $'claude[bot]\t2026-10-30T09:55:00Z\t<!-- ai-dev:regenerate head='"$HEAD_A"$' -->'
+	run_in "$WORK" request "$WORK/c4.json" "$STARTED" "$HEAD_A"
+	expect "TC-495-04: この回より前に書いた目印では作り直さない" test -z "$OUTPUT"
 }
 
 tc_05_head_differs() {
-	repo
-	echo x > "$REPO_DIR/.ai-regenerate-request"
-	run_in "$REPO_DIR" request .ai-regenerate-request 0123456789abcdef0123456789abcdef01234567
-	expect "TC-495-05: HEAD が PR の head と違えば作り直さない" test -z "$OUTPUT"
-	expect_err "TC-495-05: 作り直さない理由を警告で出す" "PR の head(0123456)と違う"
+	comments "$WORK/c5.json" $'claude[bot]\t2026-10-30T10:05:00Z\t<!-- ai-dev:regenerate head='"$HEAD_A"$' -->'
+	run_in "$WORK" request "$WORK/c5.json" "$STARTED" "$HEAD_B"
+	expect "TC-495-05: 目印の head が PR の head と違えば作り直さない" test -z "$OUTPUT"
+	expect_err "TC-495-05: 作り直さない理由を警告で出す" "PR の head(2222222)と違う"
 }
 
 tc_06_collect_changed() {

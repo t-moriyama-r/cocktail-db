@@ -14,7 +14,8 @@
 # - resume・review とも、見た目の案を人に選んでもらう PR で見た目が決まった・変わったときは、PR 本文の「最終的にどうなったか(証跡)」の節を文字で書き、
 #   撮ってほしいものをコメントして needs-local(見回り待ち)を付ける(この環境では画面を撮れない。撮って貼るのは手元のエージェント。CLAUDE.md の手順 5)
 # - regenerate・regen-push: resume・review の Claude Code が生成ファイル(openapi/openapi.json・frontend/src/api/schema.ts)の作り直しが要ると判断したら
-#   (develop を取り込んで生成ファイルが衝突した・API の形を変えた)、人・手元に頼まずに印のファイル(.ai-regenerate-request)を書く。
+#   (develop を取り込んで生成ファイルが衝突した・API の形を変えた)、人・手元に頼まずに、push した head を書いた目印(<!-- ai-dev:regenerate head=… -->)をコメントに書く。
+#   目印を読むのは、PR のコードを取り出さない regen-request(特権のあるジョブで、PR のコードを置いた作業ツリーの上で手順を動かさないため)。
 #   Claude Code には PR のコード(composer・npm のスクリプト)を動かさせない(--allowedTools に PHP・npm は入れない)ので、
 #   読むだけの権限の regenerate が、Claude Code の push した head を persist-credentials: false で checkout して作り直し(ai-conflict-resolve.yml の regenerate と同じ手順。
 #   .github/scripts/generated-regen.sh)、PR のコードを動かさない regen-push が、その間に head が動いていなければ GITHUB_TOKEN で push する。
@@ -92,8 +93,8 @@ jobs:
     outputs:
       before: ${{ steps.labels.outputs.before }}
       skip: ${{ steps.target.outputs.skip }}
-      # Claude Code が生成ファイルの作り直しを頼んだとき、作り直す head(regenerate・regen-push が使う)
-      regen_head: ${{ steps.regen.outputs.head }}
+      # Claude Code を動かす前の時刻(regen-request が、この後に書いた目印だけを読む)
+      started: ${{ steps.start.outputs.at }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -161,11 +162,6 @@ jobs:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
 
-      # 作り直しの印(.ai-regenerate-request)を Claude Code が git add で拾ってコミットしないよう、この作業ツリーだけで無視させる
-      - name: 作り直しの印を git に無視させる
-        if: steps.target.outputs.skip != 'true'
-        run: echo /.ai-regenerate-request >> .git/info/exclude
-
       - uses: anthropics/claude-code-action@v1
         id: claude
         if: steps.target.outputs.skip != 'true'
@@ -217,9 +213,9 @@ jobs:
               コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=push --> を付ける。ワークフロー以外の直しは、これまでどおりコミットして push する
             生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の作り直しが要るとき(develop を取り込んで生成ファイルが衝突した・API の形(ルート・リクエスト・レスポンス)を変えた)は、
             人にも手元にも頼まない。生成ファイルは手で書き換えない(develop の取り込みで衝突したら `git checkout --theirs <ファイル>` で develop の版を取って `git add <ファイル>` する)。
-            ほかの直しをコミットして PR のブランチに push してから、作業ディレクトリの直下に `.ai-regenerate-request` というファイルを Write で書く(中身は、作り直しが要る理由を 1 行)。
-            このファイルはコミットしない。このワークフローの後のジョブが、push した head から CLAUDE.md の「API を変えたら」の手順で作り直して push する
-            (作り直せなかったときだけ、後のジョブが `needs-local` で手元に頼む)。この回のコメントには「生成ファイルの作り直しを後のジョブに頼んだ」と書き添える。
+            ほかの直しをコミットして PR のブランチに push してから、この回のコメントに、push した head(`git rev-parse HEAD` の 40 桁)を書いた目印 `<!-- ai-dev:regenerate head=<40 桁の sha> -->` を入れ、
+            「生成ファイルの作り直しを後のジョブに頼んだ」と理由を書き添える。このワークフローの後のジョブが、目印の head がいまの PR の head と同じときだけ、
+            その head から CLAUDE.md の「API を変えたら」の手順で作り直して push する(作り直せなかったときだけ、後のジョブが `needs-local` で手元に頼む)。
             この環境では流せないコマンドが要る、ほかの作業(依存のインストール、`package-lock.json` の作り直しなど)は、
             人の判断ではないので `needs-human` ではなく `needs-local` で手元に頼む。push せずに、手元でそのまま流せる手順(取り込むブランチ・流すコマンド・流すテスト)を
             PR にコメントし、`needs-local` を付けて終える。コメントの先頭には <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> を付ける
@@ -257,15 +253,6 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash .ai-dev/.github/scripts/claude-idle.sh resume "$REPO" "$PR" "$RAN" "$BEFORE_SHA" "$STARTED_AT"
 
-      # Claude Code が生成ファイルの作り直しを頼んだか(印のファイル)。頼んでいれば、作り直す head を regenerate に渡す。
-      # 使うのは、この回に Claude Code が書いた(git で追跡していない)印で、作業ツリーの HEAD が PR の head と同じときだけ(generated-regen.sh の request)
-      - name: 生成ファイルの作り直しを頼まれたか
-        id: regen
-        if: success() && steps.target.outputs.skip != 'true'
-        run: |
-          pr_head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
-          head=$(bash .ai-dev/.github/scripts/generated-regen.sh request .ai-regenerate-request "$pr_head")
-          echo "head=$head" >> "$GITHUB_OUTPUT"
 
   notify-resume:
     # 生成ファイルを作り直した回は、その push の後に CI・レビューを頼む
@@ -366,8 +353,6 @@ jobs:
       # Claude Code が仕事をしないまま終わり、既定のブランチで起こし直す(claude-idle.sh が retry と決めた)
       retry: ${{ steps.idle.outputs.result == 'retry' }}
       sha: ${{ steps.idle.outputs.sha }}
-      # Claude Code が生成ファイルの作り直しを頼んだとき、作り直す head(regenerate・regen-push が使う)
-      regen_head: ${{ steps.regen.outputs.head }}
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -452,11 +437,6 @@ jobs:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
 
-      # 作り直しの印(.ai-regenerate-request)を Claude Code が git add で拾ってコミットしないよう、この作業ツリーだけで無視させる
-      - name: 作り直しの印を git に無視させる
-        if: steps.pr.outputs.run
-        run: echo /.ai-regenerate-request >> .git/info/exclude
-
       - uses: anthropics/claude-code-action@v1
         id: claude
         if: steps.pr.outputs.run
@@ -516,9 +496,9 @@ jobs:
 
             生成ファイル(`openapi/openapi.json`・`frontend/src/api/schema.ts`)の作り直しが要るとき(develop を取り込んで生成ファイルが衝突した・API の形(ルート・リクエスト・レスポンス)を変えた)は、
             人にも手元にも頼まない。生成ファイルは手で書き換えない(develop の取り込みで衝突したら `git checkout --theirs <ファイル>` で develop の版を取って `git add <ファイル>` する)。
-            ほかの直しをコミットして PR のブランチに push してから、作業ディレクトリの直下に `.ai-regenerate-request` というファイルを Write で書く(中身は、作り直しが要る理由を 1 行)。
-            このファイルはコミットしない。このワークフローの後のジョブが、push した head から CLAUDE.md の「API を変えたら」の手順で作り直して push する
-            (作り直せなかったときだけ、後のジョブが `needs-local` で手元に頼む)。この回のコメントには「生成ファイルの作り直しを後のジョブに頼んだ」と書き添える。
+            ほかの直しをコミットして PR のブランチに push してから、この回のコメントに、push した head(`git rev-parse HEAD` の 40 桁)を書いた目印 `<!-- ai-dev:regenerate head=<40 桁の sha> -->` を入れ、
+            「生成ファイルの作り直しを後のジョブに頼んだ」と理由を書き添える。このワークフローの後のジョブが、目印の head がいまの PR の head と同じときだけ、
+            その head から CLAUDE.md の「API を変えたら」の手順で作り直して push する(作り直せなかったときだけ、後のジョブが `needs-local` で手元に頼む)。
 
             手元に頼むもの(この環境ではできないが、人の判断は要らない作業。画面の撮影・ワークフローを変えたコミットの push・
             この環境では流せないコマンドが要る、生成ファイルの作り直しのほかの作業(依存のインストール、`package-lock.json` の作り直しなど))があったら、
@@ -569,28 +549,54 @@ jobs:
           echo "result=$result" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # Claude Code が生成ファイルの作り直しを頼んだか(印のファイル)。頼んでいれば、作り直す head を regenerate に渡す。
-      # 使うのは、この回に Claude Code が書いた(git で追跡していない)印で、作業ツリーの HEAD が PR の head と同じときだけ(generated-regen.sh の request)
-      - name: 生成ファイルの作り直しを頼まれたか
-        id: regen
-        if: success() && steps.pr.outputs.run
-        run: |
-          pr_head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
-          head=$(bash .ai-dev/.github/scripts/generated-regen.sh request .ai-regenerate-request "$pr_head")
-          echo "head=$head" >> "$GITHUB_OUTPUT"
-
       # 印が残ると、ai-review-sweep.yml が対応中とみなし、拾い直すのが遅れる
       - name: 途中で止まったら、対応中の印を外す
         if: (failure() || cancelled()) && steps.pr.outputs.run
         run: gh pr edit "$PR" -R "$REPO" --remove-label ai-in-actions || true
+
+  # Claude Code が生成ファイルの作り直しを頼んだか(コメントの目印)。頼んでいれば、作り直す head を regenerate・regen-push に渡す。
+  # PR のコードを取り出さず、API でコメントを読むだけにする。使うのは、この回に Claude Code(claude[bot])が書いた目印で、
+  # 目印の head がいまの PR の head と同じときだけ(generated-regen.sh の request)
+  regen-request:
+    needs: [resume, review]
+    if: >-
+      always()
+      && ((needs.resume.result == 'success' && needs.resume.outputs.started != '')
+        || (needs.review.result == 'success' && needs.review.outputs.started != ''))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      head: ${{ steps.request.outputs.head }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.issue.number || github.event.pull_request.number || inputs.number }}
+      STARTED: ${{ needs.resume.outputs.started || needs.review.outputs.started }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: 生成ファイルの作り直しを頼まれたか
+        id: request
+        run: |
+          gh api --paginate --slurp "repos/$REPO/issues/$PR/comments?per_page=100" | jq '[.[][]]' > "$RUNNER_TEMP/comments.json"
+          pr_head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
+          head=$(bash .github/scripts/generated-regen.sh request "$RUNNER_TEMP/comments.json" "$STARTED" "$pr_head")
+          echo "head=$head" >> "$GITHUB_OUTPUT"
 
   # Claude Code が頼んだ生成ファイルの作り直しを、Claude Code の push した head のコードから行う(ai-conflict-resolve.yml の regenerate と同じ手順。test.yml の backend・frontend と同じ準備)。
   # PR のコード(composer・npm のスクリプト)を動かすので、読むだけの権限にし、トークンを checkout に残さない(RC-04)。
   # 作り直したファイルはアーティファクトで regen-push に渡し、push は PR のコードを動かさない regen-push が行う。
   # 頼まれなかった回はジョブごと飛ばす(services の MariaDB も立たない)
   regenerate:
-    needs: [resume, review]
-    if: always() && (needs.resume.outputs.regen_head != '' || needs.review.outputs.regen_head != '')
+    needs: regen-request
+    if: always() && needs.regen-request.outputs.head != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -610,7 +616,7 @@ jobs:
           --health-retries=20
     env:
       PR: ${{ github.event.issue.number || github.event.pull_request.number || inputs.number }}
-      HEAD_SHA: ${{ needs.resume.outputs.regen_head || needs.review.outputs.regen_head }}
+      HEAD_SHA: ${{ needs.regen-request.outputs.head }}
       # 依存ライブラリのインストールで動くコードに、トークンを渡さない
       GH_TOKEN: ''
       DB_CONNECTION: mariadb
@@ -674,8 +680,8 @@ jobs:
   # regenerate が作り直した生成ファイルを、PR のブランチに push する(このジョブは PR のコードを動かさない)。
   # 作り直した後に head が動いていれば push しない(理由はログに出す)。作り直せなかったら、needs-local で手元に頼む(判断ではない)
   regen-push:
-    needs: [resume, review, regenerate]
-    if: always() && (needs.resume.outputs.regen_head != '' || needs.review.outputs.regen_head != '')
+    needs: [regen-request, regenerate]
+    if: always() && needs.regen-request.outputs.head != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write

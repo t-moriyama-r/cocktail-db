@@ -8,7 +8,7 @@
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
 #   test.yml の backend・frontend と同じ準備(PHP 8.5・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
-#   作り直しの手順と push してよいかの決め方は、ai-review-loop.yml の regenerate・regen-push と共通(.github/scripts/generated-regen.sh。#495)。
+#   作り直した生成ファイルの集め方と push してよいかの決め方は、ai-review-loop.yml の regenerate・regen-push と共通(.github/scripts/generated-regen.sh。#495)。
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
@@ -367,10 +367,23 @@ jobs:
         with:
           node-version: '22'
 
-      # CLAUDE.md の「API を変えたら」と同じ手順(Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す)
-      - name: 生成ファイルを作り直す
+      # CLAUDE.md の「API を変えたら」と同じ手順。Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す
+      - name: openapi.json を作り直す
         if: steps.need.outputs.head
-        run: bash .ai-dev/.github/scripts/generated-regen.sh build work
+        working-directory: work/backend
+        run: |
+          composer install --no-interaction --prefer-dist
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+          php artisan scramble:export --path=../openapi/openapi.json
+
+      - name: FE の型(schema.ts)を作り直す
+        if: steps.need.outputs.head
+        working-directory: work/frontend
+        run: |
+          npm ci
+          npm run gen:api
 
       # 変わった生成ファイルだけを after に渡す。作り直しても変わらなければ(develop の版のままで合っていた)渡すものは無い
       - name: 作り直したファイルを集める

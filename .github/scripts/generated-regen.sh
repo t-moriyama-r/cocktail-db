@@ -3,22 +3,21 @@
 # ai-conflict-resolve.yml(develop を取り込んで生成ファイルが衝突した)と ai-review-loop.yml(Claude Code が作り直しを頼んだ)が使う。
 #
 # 使い方:
-#   generated-regen.sh request <印のファイル> <PR の head>   … Claude Code が作り直しを頼んだか。頼んでいれば、作り直す head を標準出力に出す
+#   generated-regen.sh request <PR のコメントの JSON> <この回を始めた時刻> <PR の head>   … Claude Code が作り直しを頼んだか。頼んでいれば、作り直す head を標準出力に出す
 #   generated-regen.sh build <PR を checkout したディレクトリ>   … CLAUDE.md の「API を変えたら」の手順で作り直す(PR のコードを動かす)
 #   generated-regen.sh collect <PR を checkout したディレクトリ> <書き出し先> <head>   … 作り直して変わった生成ファイルを書き出し先に集める
 #   generated-regen.sh check <書き出し先> <いまの PR の head>   … push してよいかを 1 行で出す
 #
-# 流れ: Claude Code(書き込みの権限のジョブ)は PHP・npm を使えないので、作り直しが要ると判断したら印のファイルを書くだけにする。
+# 流れ: Claude Code(書き込みの権限のジョブ)は PHP・npm を使えないので、作り直しが要ると判断したら、push した head を書いた目印
+# (<!-- ai-dev:regenerate head=<40 桁の sha> -->)をコメントに書くだけにする。目印は PR のコードを取り出さないジョブが API で読む。
 # 読むだけの権限(contents: read)のジョブが PR の head を persist-credentials: false で checkout して build・collect し、
 # 書き出し先をアーティファクトで渡す。書き込みの権限のジョブは PR のコードを動かさず、check で確かめてから push する(RC-04)。
 #
-# request(印のファイルのある作業ツリーで流す):
-#   - 印のファイルが無い → 何も出さない(作り直さない)
-#   - 印のファイルが通常のファイルでない(リンクなど)・git で追跡している(PR のコードに入っている) → 警告を出して何も出さない
-#     (PR のコードに印を入れておけば、誰でも作り直しを起こせてしまうため。作り直すのは Claude Code がこの回に書いた印だけ)
-#   - 作業ツリーの HEAD が PR の head と違う(Claude Code の push が拒否された・その間に誰かが push した) → 警告を出して何も出さない
+# request(PR のコメントを API で取った JSON の配列で流す):
+#   - この回を始めた時刻より後に、Claude Code(REQUEST_BOT。既定は claude[bot])が書いた目印が無い → 何も出さない(作り直さない)
+#     (ほかの人・前の回の目印では作り直さない。目印を書けば誰でも作り直しを起こせてしまうため)
+#   - いちばん新しい目印の head が PR の head と違う(Claude Code の push が拒否された・その間に誰かが push した) → 警告を出して何も出さない
 #   - それ以外 → PR の head を出す
-#   印のファイルの中身(作り直しが要る理由。1 行)は、ログに出すだけ
 #
 # check の出力(1 行。タブ区切り):
 #   moved      … 作り直した後に head が進んだ。push しない(理由はログに出す)
@@ -31,29 +30,25 @@ set -euo pipefail
 
 # 決まった手順(CLAUDE.md の「API を変えたら」)で作り直せる生成ファイル。呼び出し側が環境変数で渡せる
 GENERATED_FILES=${GENERATED_FILES:-openapi/openapi.json frontend/src/api/schema.ts}
-USAGE="使い方: generated-regen.sh request <印のファイル> <PR の head> | build <dir> | collect <dir> <書き出し先> <head> | check <書き出し先> <いまの head>"
+# 作り直しの目印を書く Claude Code のアカウント
+REQUEST_BOT=${REQUEST_BOT:-claude[bot]}
+USAGE="使い方: generated-regen.sh request <コメントの JSON> <始めた時刻> <PR の head> | build <dir> | collect <dir> <書き出し先> <head> | check <書き出し先> <いまの head>"
 
 regen_request() {
-  local marker=$1 pr_head=$2 local_head reason
-  if [ ! -e "$marker" ] && [ ! -L "$marker" ]; then
+  local comments=$1 started=$2 pr_head=$3 head
+  head=$(jq -r --arg s "$started" --arg bot "$REQUEST_BOT" '
+    [.[] | select(.user.login == $bot and .created_at >= $s)
+      | (.body // "") | capture("<!-- ai-dev:regenerate head=(?<h>[0-9a-f]{40}) -->")? | .h]
+    | last // empty' "$comments")
+  if [ -z "$head" ]; then
     echo "生成ファイルの作り直しは頼まれていない" >&2
     return 0
   fi
-  if [ -L "$marker" ] || [ ! -f "$marker" ]; then
-    echo "::warning::作り直しの印 $marker が通常のファイルでないので、作り直さない" >&2
+  if [ "$head" != "$pr_head" ]; then
+    echo "::warning::作り直しを頼まれたが、目印の head(${head:0:7})が PR の head(${pr_head:0:7})と違う(push されていない・その間に push された)ので、作り直さない" >&2
     return 0
   fi
-  if git ls-files --error-unmatch -- "$marker" >/dev/null 2>&1; then
-    echo "::warning::作り直しの印 $marker が PR のコードに入っている(この回に Claude Code が書いたものではない)ので、作り直さない" >&2
-    return 0
-  fi
-  reason=$(head -n 1 "$marker" | tr -d '\r' | cut -c 1-200)
-  local_head=$(git rev-parse HEAD)
-  if [ -z "$pr_head" ] || [ "$local_head" != "$pr_head" ]; then
-    echo "::warning::作り直しを頼まれたが、作業ツリーの HEAD(${local_head:0:7})が PR の head(${pr_head:0:7})と違う(push されていない・その間に push された)ので、作り直さない" >&2
-    return 0
-  fi
-  echo "生成ファイルの作り直しを頼まれた(${pr_head:0:7}): ${reason:-理由の記載なし}" >&2
+  echo "生成ファイルの作り直しを頼まれた(${pr_head:0:7})" >&2
   echo "$pr_head"
 }
 
@@ -132,7 +127,7 @@ regen_check() {
 main() {
   local mode=${1:-}
   case "$mode" in
-    request) [ $# -eq 3 ] || { echo "$USAGE" >&2; return 2; }; regen_request "$2" "$3" ;;
+    request) [ $# -eq 4 ] || { echo "$USAGE" >&2; return 2; }; regen_request "$2" "$3" "$4" ;;
     build) [ $# -eq 2 ] || { echo "$USAGE" >&2; return 2; }; regen_build "$2" ;;
     collect) [ $# -eq 4 ] || { echo "$USAGE" >&2; return 2; }; regen_collect "$2" "$3" "$4" ;;
     check) [ $# -eq 3 ] || { echo "$USAGE" >&2; return 2; }; regen_check "$2" "$3" ;;
