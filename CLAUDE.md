@@ -29,7 +29,7 @@
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
 | `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行と、旧 DB のダンプの確かめ(`docs/legacy-local.md` から呼ぶ)) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
-| `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`、画面のスタイルの書き方と見た目の基準は `docs/design/style.md`) | — |
+| `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`、画面のスタイルの書き方と見た目の基準は `docs/design/style.md`、証跡を頼むコメントの形は `docs/evidence-request.md`) | — |
 
 ### BE のテスト
 
@@ -148,7 +148,7 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(npm ru
    - 撮るときは、テストの表・頼むコメントの期待値と見比べるだけで終えない。期待値は実装した人の想定なので、それだけでは想定の外の崩れに気づけない(#518)。毎回、次の観点も確かめて、結果を「## 証跡」に 1 行ずつ書く。画面: 撮る幅ごとに横スクロールが出ないか(`document.documentElement.scrollWidth` が画面の幅以下か)・文字や部品がはみ出していないか・コンソールにエラーが出ていないか・想定していない 4xx・5xx の通信が無いか。API: 想定していない 500 が無いか・エラーの応答に秘密の値やスタックトレースが出ていないか
    - 撮る途中で気づいて、この PR では直さないことは、本文の「### 気づいたこと」の見出しの下に箇条書きで書き、項目ごとに issue を作って参照(`#<番号>` か issue の URL)を書く。書くだけで残すと、誰も拾わないままマージされる(#512 の 375px の横スクロール)。この PR の中で直すかどうかの判断が要るものは、issue にせず `needs-human` で聞く
    - 文書・テスト・CI の設定だけの変更は撮らなくてよいが、撮らない理由を「## 証跡」に書く(CI の変更は CI の画面を撮る)
-   - 撮れない環境(ブラウザ・PHP が無いなど)では、「撮れなかった」と書いて ready にしない。draft のまま、何を撮ってほしいかを PR にコメントして `needs-local`(見回り待ち。人の判断も手も要らない)を付ける。コメントの先頭には `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` を付ける(`ai-draft-sweep.yml` は `needs-local` の付いた draft を拾わない。手元の見回りが撮って貼る)
+   - 撮れない環境(ブラウザ・PHP が無いなど)では、「撮れなかった」と書いて ready にしない。draft のまま、何を撮ってほしいかを PR にコメントして `needs-local`(見回り待ち。人の判断も手も要らない)を付ける。撮ってほしいものは、コメントに ` ```evidence ` のブロック(YAML)で書き、投稿の前に `bash .github/scripts/evidence-request.sh <本文のファイル>` で確かめる(形は `docs/evidence-request.md`。#599)。コメントの先頭には `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` を付ける(`ai-draft-sweep.yml` は `needs-local` の付いた draft を拾わない。手元の見回りが撮って貼る)
    - `evidence-gate.yml` が、ready の PR でこれを確かめる(決め方は `.github/scripts/evidence-gate.sh`。`frontend/src/` の `.tsx`・`.css` を変えた PR では、4 つの区切りそれぞれに入る幅が「## 証跡」に書かれているかも見る。本文の「気づいたこと」の見出しの下の項目に、issue の参照が無ければ落とす)。赤のあいだは `ai-auto-merge.yml` がマージしない
    - **見た目の案を人に選んでもらう PR**(閉じる issue に `needs-review` が付き、PR 本文で色・余白・レイアウト・スタイルの方式などの案を並べて選んでもらうもの。例: #348)は、決着したら、本文に「最終的にどうなったか(証跡)」の節を置き、同じ中身を PR の最後のコメントにも貼る。選ぶ前の案の画像だけでは、何に決まって最終的にどう見えるのかが PR から分からないため
    - 節に書くのは、決まったこと(どのコメントで誰が決めたか)、まだ決まっていないこと、決まった後に変えたところ(レビュー対応で色を変えた、など)、最終の見た目の証跡(決める前 → 最終の比較画像と、最終の見た目の動画)。見た目が変わるたびに(人の判断を反映した・レビュー対応で直した)撮り直して差し替える

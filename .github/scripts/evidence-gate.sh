@@ -7,6 +7,8 @@
 # 静止画(比較画像)と修正前・修正後の動画で見せる決まり(CLAUDE.md の「ブランチ・コミット・PR」の 5)。
 # 「撮れなかった」と書いて ready にした PR がレビューに回った(#368)ので、文章ではなく貼られたものを数える。
 # 動画は GitHub が行だけの URL を再生できる形にするので、<img> に埋めていない行だけの user-attachments の URL を数える。
+# Actions で撮った証跡は、検査する PR のリポジトリの evidence ブランチ(https://raw.githubusercontent.com/<owner>/<repo>/evidence/ の下)に置く(#487)。
+# そこの画像(<img src>・![](…))は静止画、.mp4 への Markdown のリンクか行だけの URL は動画として数える(#598)。
 # コードを変えていない PR は撮らなくてよいが、書き忘れと区別するため、撮らない理由が書いてあることは確かめる
 # 画面のコード(frontend/src/ の .tsx・.css)を変えた PR は、幅の区切り(xs・sm・md・lg。docs/design/style.md の「幅の区切り」)の
 # どれかで崩れていても気づけるよう、区切りごとに撮る決まり(#432)。節に、4 つの区切りそれぞれに入る幅(<数字>px)が書かれているかを見る。
@@ -98,8 +100,17 @@ elif [ -z "$code" ]; then
 	[ -n "$(tr -d '[:space:]' <<<"$section")" ] || problems+=('コードを変えていない PR でも、「## 証跡」に撮らない理由(文書だけ・テストだけ など)を書く')
 else
 	images=$(grep -cE '<img [^>]*src="https://github\.com/user-attachments/|!\[[^]]*\]\(https://github\.com/user-attachments/' <<<"$section" || true)
-	# 同じ URL を何行書いても 1 本と数える
-	videos=$(grep -E '^[[:space:]]*https://github\.com/user-attachments/assets/[^[:space:]]+[[:space:]]*$' <<<"$section" | tr -d ' \t' | sort -u | wc -l || true)
+	# Actions で撮って evidence ブランチに置いた証跡(#487)も数える。検査する PR のリポジトリの evidence ブランチの下だけで、
+	# ほかのリポジトリ・ほかのブランチの raw.githubusercontent.com は数えない(#598)。リポジトリ名の . は正規表現で 1 文字に当たるので逃がす
+	evidence="https://raw\.githubusercontent\.com/${repo//./\\.}/evidence/"
+	evidence_images=$(grep -cE "<img [^>]*src=\"${evidence}|!\\[[^]]*\\]\\(${evidence}" <<<"$section" || true)
+	images=$((images + evidence_images))
+	# 同じ URL を何行書いても 1 本と数える。evidence ブランチの .mp4 は、行だけの URL か Markdown のリンク([…](….mp4)。![…](…) は除く)を数える
+	videos=$({
+		grep -E '^[[:space:]]*https://github\.com/user-attachments/assets/[^[:space:]]+[[:space:]]*$' <<<"$section" || true
+		grep -E "^[[:space:]]*${evidence}[^[:space:]]+\\.mp4[[:space:]]*\$" <<<"$section" || true
+		grep -oE "(^|[^!])\\[[^]]*\\]\\(${evidence}[^)[:space:]]+\\.mp4\\)" <<<"$section" | sed -E 's/^.*\]\(//; s/\)$//' || true
+	} | tr -d ' \t' | sort -u | wc -l)
 	# 説明の文中の「撮れず」では落とさない。行の頭(箇条書き・太字の記号の後)で宣言している行だけ見る
 	declared=$(grep -E '^[[:space:]]*([-*>]|[0-9]+\.)?[[:space:]]*(\*\*)?(未撮影|撮れなかった|撮れず)' <<<"$section" || true)
 	if [ -n "$declared" ]; then

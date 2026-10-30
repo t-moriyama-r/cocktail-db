@@ -4,8 +4,8 @@
 #
 #   bash ops/backup/tests/daily-backup.test.sh
 #
-# daily-backup.sh は同じディレクトリの dump-db.sh・verify-restore.sh・archive-storage.sh・prune-backups.sh を呼ぶ。
-# 一時ディレクトリに daily-backup.sh と本物の prune-backups.sh を写し、ほかの 3 つを、呼ばれた順と引数を
+# daily-backup.sh は同じディレクトリの dump-db.sh・verify-restore.sh・archive-storage.sh・offsite-upload.sh・
+# prune-backups.sh を呼ぶ。一時ディレクトリに daily-backup.sh と本物の prune-backups.sh を写し、ほかの 4 つを、呼ばれた順と引数を
 # 書き残して決めた終了コードを返す偽物に置き換えて流す。
 
 set -uo pipefail
@@ -27,6 +27,11 @@ run_tests() {
   tc_archive_dir_mismatch
   tc_usage_errors
   tc_no_process_substitution
+  tc_offsite_after_set
+  tc_offsite_failure_still_prunes
+  tc_offsite_skipped_when_set_incomplete
+  tc_offsite_with_verify_failure
+  tc_offsite_usage_error
 
   printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"
   [[ $FAILED -eq 0 ]]
@@ -139,6 +144,72 @@ tc_no_process_substitution() {
   check "TC-17-27: サーバーで動くスクリプト(ops/backup/*.sh)は、プロセス置換(<(…))を使わない" "$ok"
 }
 
+tc_offsite_after_set() {
+  local case_dir status ok=1
+  case_dir=$(new_case)
+  seed_old_sets "$case_dir"
+  run_daily "$case_dir" --offsite "$case_dir/offsite.conf" --daily 2 --weekly 0
+  status=$?
+  [[ $status -eq 0 ]] || ok=0
+  [[ $(calls "$case_dir") == "dump archive offsite" ]] || ok=0
+  grep -qxF "offsite $case_dir/offsite.conf $case_dir/backups/db/app-20261027-030000.sql.gz $case_dir/backups/storage/20261027-030500.tar.gz" "$case_dir/calls.log" || ok=0
+  [[ $(count_files "$case_dir/backups/db" sql.gz) -eq 2 ]] || ok=0
+  grep -q 'B2 に送った' "$case_dir/out.log" || ok=0
+  check "TC-373-14: --offsite を付けると、その日の組を作った後に、設定ファイル・その日のダンプ・アーカイブで offsite-upload.sh を呼び、世代を消して 0 で終わる" "$ok"
+}
+
+tc_offsite_failure_still_prunes() {
+  local case_dir status ok=1
+  case_dir=$(new_case)
+  seed_old_sets "$case_dir"
+  FAKE_OFFSITE_STATUS=3 run_daily "$case_dir" --offsite "$case_dir/offsite.conf" --daily 2 --weekly 0
+  status=$?
+  [[ $status -eq 3 ]] || ok=0
+  # 送れなくても、サーバーの古い世代は消す
+  [[ $(count_files "$case_dir/backups/db" sql.gz) -eq 2 ]] || ok=0
+  [[ $(count_files "$case_dir/backups/storage" tar.gz) -eq 2 ]] || ok=0
+  grep -q 'B2 に送れなかった(offsite-upload.sh の終了コード 3)' "$case_dir/out.log" || ok=0
+  grep -q '古い世代は消したが、B2 に送れなかった(終了コード 3)' "$case_dir/out.log" || ok=0
+  check "TC-373-15: B2 に送れないと、サーバーの古い世代は消したうえで、ログに残して 3 で終わる" "$ok"
+}
+
+tc_offsite_skipped_when_set_incomplete() {
+  local case_dir ok=1
+  case_dir=$(new_case)
+  FAKE_ARCHIVE_STATUS=2 run_daily "$case_dir" --offsite "$case_dir/offsite.conf"
+  [[ $? -eq 2 ]] || ok=0
+  [[ $(calls "$case_dir") == "dump archive" ]] || ok=0
+  case_dir=$(new_case)
+  FAKE_ARCHIVE_ROOT="$case_dir/elsewhere" run_daily "$case_dir" --offsite "$case_dir/offsite.conf"
+  [[ $? -eq 1 ]] || ok=0
+  [[ $(calls "$case_dir") == "dump archive" ]] || ok=0
+  case_dir=$(new_case)
+  FAKE_DUMP_STATUS=1 run_daily "$case_dir" --offsite "$case_dir/offsite.conf"
+  [[ $? -eq 1 ]] || ok=0
+  [[ $(calls "$case_dir") == "dump" ]] || ok=0
+  check "TC-373-16: ダンプ・退避が取れなかった日(失敗・退避先の食い違い)は、B2 に送らない" "$ok"
+}
+
+tc_offsite_with_verify_failure() {
+  local case_dir ok=1
+  case_dir=$(new_case)
+  seed_old_sets "$case_dir"
+  FAKE_VERIFY_STATUS=2 FAKE_OFFSITE_STATUS=3 run_daily "$case_dir" --verify-restore app_verify --offsite "$case_dir/offsite.conf" --daily 1 --weekly 0
+  [[ $? -eq 2 ]] || ok=0
+  [[ $(calls "$case_dir") == "dump verify archive offsite" ]] || ok=0
+  [[ $(count_files "$case_dir/backups/db" sql.gz) -eq 4 ]] || ok=0
+  check "TC-373-17: 復元の確かめが通らない日も組はそろっているので B2 に送り、古い世代は消さず、終了コードは復元の確かめの 2 を優先する" "$ok"
+}
+
+tc_offsite_usage_error() {
+  local case_dir ok=1
+  case_dir=$(new_case)
+  run_daily "$case_dir" --offsite && ok=0
+  run_daily "$case_dir" --offsite --daily 1 && ok=0
+  [[ ! -s $case_dir/calls.log ]] || ok=0
+  check "TC-373-18: 値の無い --offsite では、ダンプを始める前に 1 で止まる" "$ok"
+}
+
 # ---- 補助 ----
 
 BIN=$WORK/bin
@@ -174,6 +245,12 @@ for ext in tar.gz tar.gz.sha256 check.tsv; do printf 'x\n' >"$root/storage/20261
 echo "archive: $root/storage/20261027-030500.tar.gz"
 echo "missing: 0"
 exit "${FAKE_ARCHIVE_STATUS:-0}"
+EOF
+
+  cat >"$BIN/offsite-upload.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'offsite %s\n' "$*" >>"$FAKE_CALLS"
+exit "${FAKE_OFFSITE_STATUS:-0}"
 EOF
 }
 
@@ -226,5 +303,5 @@ check() {
   fi
 }
 
-export FAKE_DUMP_STATUS FAKE_VERIFY_STATUS FAKE_ARCHIVE_STATUS FAKE_ARCHIVE_ROOT
+export FAKE_DUMP_STATUS FAKE_VERIFY_STATUS FAKE_ARCHIVE_STATUS FAKE_ARCHIVE_ROOT FAKE_OFFSITE_STATUS
 run_tests

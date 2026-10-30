@@ -26,20 +26,27 @@ class CocktailController extends Controller
 
     /**
      * カクテルを作る。下書きか公開かは is_draft で決める(docs/decisions/admin-screens.md の 1)。
+     * 別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
      */
     public function store(SaveCocktailRequest $request, AdminCocktailWriter $writer): JsonResponse
     {
-        return CocktailResource::make($writer->save(null, $request))
+        $saved = $writer->save(null, $request);
+
+        return CocktailResource::make($saved)
+            ->additional(['warnings' => $writer->aliasWarnings($saved)])
             ->response()
             ->setStatusCode(201);
     }
 
     /**
-     * カクテルの基本情報を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。
+     * カクテルの基本情報と別名を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。
+     * 別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
      */
     public function update(SaveCocktailRequest $request, AdminCocktailWriter $writer, int $cocktail): CocktailResource
     {
-        return CocktailResource::make($writer->save(Cocktail::query()->findOrFail($cocktail), $request));
+        $saved = $writer->save(Cocktail::query()->findOrFail($cocktail), $request);
+
+        return CocktailResource::make($saved)->additional(['warnings' => $writer->aliasWarnings($saved)]);
     }
 
     /**

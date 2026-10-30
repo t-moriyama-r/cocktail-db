@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import Top from './Top'
 import type { paths } from '../api/schema'
@@ -53,7 +53,7 @@ const mockLists = () => {
   })
 }
 
-/** 検索フォームの置き場所に仮に置いた材料の欄(#305)が呼ぶ API。この画面のテストでは中身を見ないので空の木にする */
+/** 条件検索のフォーム(#307)が呼ぶ API。フォームの中身を見ないテストでは空の木にする */
 const mockSearchForm = () => mockApi('get', '/search-form', 200, { categories: [], methods: [] })
 
 const renderTop = () =>
@@ -164,9 +164,9 @@ describe('トップページの新着動画', () => {
 
     renderTop()
 
-    // 新着動画と 3 つの一覧(新着・おすすめ・ランダム)が、それぞれ読み込み中を出す
+    // 新着動画と 3 つの一覧(新着・おすすめ・ランダム)と条件検索のフォーム(#307)が、それぞれ読み込み中を出す
     const loading = screen.getAllByRole('status')
-    expect(loading).toHaveLength(4)
+    expect(loading).toHaveLength(5)
     for (const el of loading) expect(el).toHaveTextContent('読み込み中…')
     // 500 の本文はスキーマに無いので型を当てない
     await act(async () => first.resolve(jsonResponse({ message: 'Server Error' }, 500)))
@@ -324,5 +324,43 @@ describe('トップページの 3 つの一覧', () => {
     expect(within(listSection(RANDOM)).queryByRole('table')).not.toBeInTheDocument()
     expect(await within(listSection(RECENT)).findByRole('table')).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: '新作動画' })).toBeInTheDocument()
+  })
+})
+
+function LocationProbe() {
+  const { pathname } = useLocation()
+  return <output data-testid="location">{pathname}</output>
+}
+
+describe('トップページの条件検索のフォーム', () => {
+  test('TC-307-19: メニューの「カクテル検索」の飛び先に条件検索のフォームを出し、材料を選んで検索すると結果の画面へ移る', async () => {
+    mockApi('get', '/cocktails/latest-video', 200, LATEST_VIDEO)
+    mockLists()
+    mockApi('get', '/search-form', 200, {
+      categories: [{ id: 1, name: '蒸留酒', is_major: true, root_role: null, children: [{ id: 10, name: 'ジン', is_major: true, root_role: null, children: [] }] }],
+      methods: [{ id: 1, name: 'ビルド' }],
+    })
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Top />} />
+          <Route path="*" element={null} />
+        </Routes>
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+
+    const anchor = container.querySelector('#cocktailform_anchor')
+    expect(anchor).not.toBeNull()
+    const form = within(anchor as HTMLElement)
+    expect(await form.findByRole('heading', { name: 'カクテル検索' })).toBeInTheDocument()
+    expect(form.getByText('材料は必須です。')).toBeInTheDocument()
+    expect(form.getByRole('button', { name: '検索' })).toBeDisabled()
+
+    fireEvent.click(form.getByRole('checkbox', { name: 'ジン' }))
+    fireEvent.click(form.getByRole('button', { name: '検索' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/result\/Cocktails$/)
   })
 })
