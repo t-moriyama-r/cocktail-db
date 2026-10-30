@@ -121,12 +121,14 @@
   width: 1.25em;
 }
 
-.submitBar {
+/* 検索ボタンの行。「材料は必須です。」と同じ帯に入れても、上の空きは前と同じ 24px */
+.submitRow {
   margin-top: var(--space-4);
 }
 
 /* モーダルの中では、検索ボタンを左下に固定する(旧の sendBtnFixed)。下にスクロールしても見えるよう、枠の下端に貼り付ける。
-   帯の地は透かし、ボタンの無いところを押すと後ろの材料の欄に届くようにする */
+   「材料は必須です。」も同じ帯に入れて一緒に貼り付け、ボタンの後ろに隠れないようにする(#576)。
+   帯の地は透かし、ボタン・文言の無いところを押すと後ろの材料の欄に届くようにする */
 .submitBarFixed {
   position: sticky;
   bottom: 0;
@@ -134,7 +136,8 @@
   pointer-events: none;
 }
 
-.submitBarFixed > * {
+.submitBarFixed .error,
+.submitBarFixed .submit {
   pointer-events: auto;
 }
 
@@ -145,6 +148,11 @@
   color: var(--color-danger);
   border: 1px solid var(--color-danger);
   border-radius: var(--radius);
+}
+
+/* 貼り付けたときは、後ろの材料の欄が透けて文言が読みにくくならないよう、地を塗る */
+.submitBarFixed .error {
+  background: var(--color-surface);
 }
 
 /* 旧の検索ボタン(x-large・rounded・primary)。地は差し色(docs/design/style.md の「検索のボタン」) */
