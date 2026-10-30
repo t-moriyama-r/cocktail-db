@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { toApiResult, type ApiResult } from '../../api/apiResult'
 import { api } from '../../api/client'
-import { ADMIN_MENU } from './adminMenu'
+import { ADMIN_MENU_ITEMS } from './adminMenuItems'
 import { ADMIN_LOGIN_PATH } from './adminPaths'
 import styles from './AdminLayout.module.css'
 
 type LogoutState = { kind: 'idle' } | { kind: 'pending' } | Exclude<ApiResult<void>, { kind: 'success' }>
 
 /**
- * 管理画面のメニュー。並べる画面は adminMenu.ts の ADMIN_MENU で、最後にログアウトを出す
+ * 管理画面のメニュー。並べる画面は adminMenuItems.ts の ADMIN_MENU_ITEMS で、最後にログアウトを出す
  * (旧のメニューにはログアウトが無かった。#119)。
  */
 export default function AdminMenu() {
@@ -31,7 +31,7 @@ export default function AdminMenu() {
   return (
     <nav className={styles.menu} aria-label="管理画面のメニュー">
       <ul className={styles.menuList}>
-        {ADMIN_MENU.map((item) => (
+        {ADMIN_MENU_ITEMS.map((item) => (
           <li key={item.path}>
             <NavLink className={styles.menuLink} to={item.path}>
               {item.label}
