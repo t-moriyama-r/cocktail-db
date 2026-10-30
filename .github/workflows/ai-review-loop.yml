@@ -735,43 +735,42 @@ jobs:
             *) echo "#$PR は push しない($result)" ;;
           esac
 
-      - uses: actions/checkout@v6
-        if: steps.decide.outputs.push
-        with:
-          ref: ${{ steps.decide.outputs.branch }}
-          path: .ai-push
-          persist-credentials: false
-
-      # GITHUB_TOKEN で push する(Claude の App のトークンは claude-code-action の外では使えない)。このコミットは生成ファイルしか変えないので、
-      # ワークフローのファイルへの書き込み権限は要らない。トークンは checkout に残さず、push のときだけ渡す。
-      # push が拒否されたら(その間に誰かが push した)、push せずに終える
+      # PR のブランチは取り出さず、Git Data API で、作り直した head の上に生成ファイルだけを変えたコミットを作って ref を進める。
+      # 特権のあるジョブで PR のコードを作業ツリーに置かないため。トークンは GITHUB_TOKEN(Claude の App のトークンは claude-code-action の外では使えない)。
+      # このコミットは生成ファイルしか変えないので、ワークフローのファイルへの書き込み権限は要らない。
+      # ref の更新は fast-forward だけを許すので、作り直した後に誰かが push していれば失敗し、push せずに終える
       - name: 作り直した生成ファイルを push する
         id: push
         if: steps.decide.outputs.push
         continue-on-error: true
-        working-directory: .ai-push
         env:
           BRANCH: ${{ steps.decide.outputs.branch }}
         run: |
-          if [ "$(git rev-parse HEAD)" != "$(cat ../.ai-regen/head)" ]; then
-            echo "#$PR 作り直した後に $(git rev-parse --short HEAD) が push されたので、push しない"
-            exit 0
-          fi
-          mapfile -t files < ../.ai-regen/changed
-          for f in "${files[@]}"; do cp "../.ai-regen/files/$f" "$f"; done
-          git add -- "${files[@]}"
+          base=$(cat .ai-regen/head)
+          mapfile -t files < .ai-regen/changed
+          items='[]'
+          for f in "${files[@]}"; do
+            blob=$(jq -n --rawfile c ".ai-regen/files/$f" '{content: $c, encoding: "utf-8"}' \
+              | gh api -X POST "repos/$REPO/git/blobs" --input - --jq .sha)
+            items=$(jq -c --arg p "$f" --arg s "$blob" '. + [{path: $p, mode: "100644", type: "blob", sha: $s}]' <<<"$items")
+          done
+          base_tree=$(gh api "repos/$REPO/git/commits/$base" --jq .tree.sha)
+          tree=$(jq -n --arg b "$base_tree" --argjson t "$items" '{base_tree: $b, tree: $t}' \
+            | gh api -X POST "repos/$REPO/git/trees" --input - --jq .sha)
           # コミットメッセージは CLAUDE.md の形(issue 番号はブランチ名 issue-<番号>-… から。無ければ付けない)
           n=$(sed -nE 's/^issue-([0-9]+)-.*/\1/p' <<<"$BRANCH")
-          msg=("-m" "${n:+issue-$n: }生成ファイルを作り直す(${files[*]})")
-          if [ -n "$n" ]; then msg+=("-m" "Refs #$n"); fi
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q "${msg[@]}"
-          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
-          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" push origin "HEAD:$BRANCH"
-          new_head=$(git rev-parse HEAD)
+          msg="${n:+issue-$n: }生成ファイルを作り直す(${files[*]})"
+          if [ -n "$n" ]; then msg+=$'\n\n'"Refs #$n"; fi
+          new_head=$(jq -n --arg m "$msg" --arg t "$tree" --arg p "$base" '{message: $m, tree: $t, parents: [$p]}' \
+            | gh api -X POST "repos/$REPO/git/commits" --input - --jq .sha)
+          if ! gh api -X PATCH "repos/$REPO/git/refs/heads/$BRANCH" -f sha="$new_head" -F force=false >/dev/null; then
+            echo "#$PR 作り直した後に $BRANCH が進んだので、push しない"
+            exit 0
+          fi
           echo "head=$new_head" >> "$GITHUB_OUTPUT"
           gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent -->
           Claude Code に頼まれた生成ファイルを、決まった手順(CLAUDE.md の「API を変えたら」)で作り直して push した(${new_head:0:7})。
-          $(sed 's/^/- /' ../.ai-regen/changed)"
+          $(sed 's/^/- /' .ai-regen/changed)"
 
       # GITHUB_TOKEN の push では test.yml が起きず、起きても承認待ち(action_required)のまま走らないことがある(#227・#365)。
       # 少し待って回ができるのを待ち、承認待ちの回があれば ci-rerun.sh が承認し、回が無ければ PR を閉じて開き直す(ai-conflict-resolve.yml の after と同じ)。
