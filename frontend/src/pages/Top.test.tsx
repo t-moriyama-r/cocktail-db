@@ -328,12 +328,12 @@ describe('トップページの 3 つの一覧', () => {
 })
 
 function LocationProbe() {
-  const { pathname } = useLocation()
-  return <output data-testid="location">{pathname}</output>
+  const { pathname, search } = useLocation()
+  return <output data-testid="location">{`${pathname}${search}`}</output>
 }
 
 describe('トップページの条件検索のフォーム', () => {
-  test('TC-307-19: メニューの「カクテル検索」の飛び先に条件検索のフォームを出し、材料を選んで検索すると結果の画面へ移る', async () => {
+  test('TC-307-19・TC-102-19: メニューの「カクテル検索」の飛び先に条件検索のフォームを出し、材料を選んで検索すると、条件を URL に入れて結果の画面へ移る', async () => {
     mockApi('get', '/cocktails/latest-video', 200, LATEST_VIDEO)
     mockLists()
     mockApi('get', '/search-form', 200, {
@@ -361,6 +361,7 @@ describe('トップページの条件検索のフォーム', () => {
     fireEvent.click(form.getByRole('checkbox', { name: 'ジン' }))
     fireEvent.click(form.getByRole('button', { name: '検索' }))
 
-    expect(screen.getByTestId('location')).toHaveTextContent(/^\/result\/Cocktails$/)
+    // 条件を URL のクエリに入れて移る(#102)。ジンは蒸留酒のただ 1 つの子なので、蒸留酒 1 つに畳む
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/result\/Cocktails\?n=1$/)
   })
 })

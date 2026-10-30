@@ -61,8 +61,8 @@ const searchForm: paths['/search-form']['get']['responses'][200]['content']['app
 
 /** 今の URL を出す(移った先を確かめるため) */
 function LocationProbe() {
-  const { pathname } = useLocation()
-  return <output data-testid="location">{pathname}</output>
+  const { pathname, search } = useLocation()
+  return <output data-testid="location">{`${pathname}${search}`}</output>
 }
 
 const renderAt = (path: string) =>
@@ -331,7 +331,7 @@ describe('ヘッダー(SiteHeader)', () => {
       expect(location()).toHaveTextContent(/^\/$/)
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
-    test('TC-307-15: モーダルの中に条件検索のフォームを出し、材料を選んで検索すると結果の画面へ移って閉じる', async () => {
+    test('TC-307-15・TC-102-19: モーダルの中に条件検索のフォームを出し、材料を選んで検索すると、条件を URL に入れて結果の画面へ移って閉じる', async () => {
       renderAt('/helpme')
       fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
       const dialog = within(screen.getByRole('dialog', { name: 'カクテル検索' }))
@@ -341,7 +341,8 @@ describe('ヘッダー(SiteHeader)', () => {
       fireEvent.click(dialog.getByRole('checkbox', { name: 'ジン' }))
       fireEvent.click(dialog.getByRole('button', { name: '検索' }))
 
-      expect(location()).toHaveTextContent(/^\/result\/Cocktails$/)
+      // 条件を URL のクエリに入れて移る(#102)。ジンは蒸留酒のただ 1 つの子なので、蒸留酒 1 つに畳む
+      expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1$/)
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 

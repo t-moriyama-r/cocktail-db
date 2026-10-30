@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 import FontAwesomeIcon from '../components/CocktailTable/FontAwesomeIcon'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 import CocktailSearch from '../features/search/CocktailSearch'
@@ -18,7 +17,6 @@ import styles from '../features/top/Top.module.css'
 export default function Top() {
   usePageTitle('トップページ')
   const [searchValues, setSearchValues] = useState<SearchFormValues>(defaultSearchFormValues)
-  const navigate = useNavigate()
 
   return (
     <main className={styles.top}>
@@ -40,8 +38,6 @@ export default function Top() {
         <CocktailSearch
           values={searchValues}
           onValuesChange={setSearchValues}
-          // 条件を URL に入れて結果の画面で検索するのは #102。それまでは結果の画面へ移るだけ
-          onSubmit={() => navigate('/result/Cocktails')}
         />
       </section>
     </main>

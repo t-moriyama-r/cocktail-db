@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import CocktailSearch from '../../features/search/CocktailSearch'
-import { defaultSearchFormValues, type SearchFormValues } from '../../features/search/searchForm'
+import { useSearchFormValues } from '../../features/search/searchFormValuesContext'
 import FontAwesomeIcon from '../CocktailTable/FontAwesomeIcon'
 import NameSearchField from './NameSearchField'
 import RegisteredCount from './RegisteredCount'
@@ -16,14 +16,14 @@ const SITE_NAME = '宅飲みカクテルデータベース'
  *
  * - サイト名: カクテルのアイコンと名前。名前は幅 960px 以上だけ出す
  * - 「検索をはじめる」: 幅 600px 以上で「検索」、960px 以上で「をはじめる」も出す。押すと条件検索のモーダルを開く。
- *   モーダルの中は条件検索のフォーム(#307)。フォームの値はここで持ち、閉じて開き直しても残す(旧の v-dialog も中身を残していた)
+ *   モーダルの中は条件検索のフォーム(#307)。フォームの値は SearchFormValuesProvider が持ち、閉じて開き直しても残す
+ *   (旧の v-dialog も中身を残していた)。結果の画面を開くと、URL から戻した条件が入る(#102)
  * - 登録数: 幅 600px 以上だけ出す
  */
 export default function SiteHeader() {
   const [modalOpen, setModalOpen] = useState(false)
   const closeModal = useCallback(() => setModalOpen(false), [])
-  const [searchValues, setSearchValues] = useState<SearchFormValues>(defaultSearchFormValues)
-  const navigate = useNavigate()
+  const { values: searchValues, setValues: setSearchValues } = useSearchFormValues()
 
   // 画面を移ったらモーダルを閉じる(フォームで検索して結果の画面へ移ったとき、など)。
   // 描画の中で前の URL と比べて閉じる(React の「前の値から state を直す」書き方。effect で閉じると、閉じる前の描画が 1 回余分に入る)
@@ -56,11 +56,8 @@ export default function SiteHeader() {
             values={searchValues}
             onValuesChange={setSearchValues}
             inModal
-            // 条件を URL に入れて結果の画面で検索するのは #102。それまでは結果の画面へ移って閉じるだけ
-            onSubmit={() => {
-              navigate('/result/Cocktails')
-              closeModal()
-            }}
+            // 結果の画面へ移ると URL が変わって閉じるが、同じ条件で押し直したときは URL が変わらないので、ここでも閉じる
+            onSearched={closeModal}
             onNavigate={closeModal}
           />
         </SearchModal>

@@ -34,7 +34,7 @@ test('TC-305-12: 深さ 5 のノードを開いてチェックでき、名前を
   await expect(page.getByRole('checkbox', { name: 'ビーフィーター' })).toBeChecked()
 })
 
-test('TC-307-17: 開くと材料が無いので検索を押せず、材料を 1 つ選ぶと押せ、押すと結果の画面へ移って閉じる', async ({ page }) => {
+test('TC-307-17・TC-102-19: 開くと材料が無いので検索を押せず、材料を 1 つ選ぶと押せ、押すと条件を URL に入れて結果の画面へ移って閉じる', async ({ page }) => {
   await page.goto('/helpme')
   const dialog = await openSearchModal(page)
 
@@ -48,11 +48,12 @@ test('TC-307-17: 開くと材料が無いので検索を押せず、材料を 1 
   await expect(search).toBeEnabled()
   await search.click()
 
-  await expect(page).toHaveURL('/result/Cocktails')
+  // 条件を URL のクエリに入れて移る(#102)。ノードの ID は決め打ちしない
+  await expect(page).toHaveURL(/\/result\/Cocktails\?n=\d+$/)
   await expect(page.getByRole('dialog')).toBeHidden()
 })
 
-test('TC-307-20: トップのメニューの「カクテル検索」で条件検索のフォームへ移り、材料を選んで検索すると結果の画面へ移る', async ({ page }) => {
+test('TC-307-20・TC-102-19: トップのメニューの「カクテル検索」で条件検索のフォームへ移り、材料を選んで検索すると条件を URL に入れて結果の画面へ移る', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('region', { name: 'Menu' }).getByRole('link', { name: 'カクテル検索' }).click()
 
@@ -66,7 +67,8 @@ test('TC-307-20: トップのメニューの「カクテル検索」で条件検
   await expect(search).toBeEnabled()
   await search.click()
 
-  await expect(page).toHaveURL('/result/Cocktails')
+  // 条件を URL のクエリに入れて移る(#102)。ノードの ID は決め打ちしない
+  await expect(page).toHaveURL(/\/result\/Cocktails\?n=\d+$/)
 })
 
 // 検索ボタンはモーダルの左下に固定する(旧の sendBtnFixed)。木を開いて長くしても、スクロールせずに見える。横スクロールも出ない

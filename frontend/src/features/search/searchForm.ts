@@ -2,7 +2,7 @@ import { emptySelection, type TreeSelection } from './selection'
 
 /**
  * 条件検索のフォーム(#307)の値と、検証・送る条件を作る純関数。
- * 画面の部品は CocktailSearchForm.tsx。条件を URL に入れて送るのは #102。
+ * 画面の部品は CocktailSearchForm.tsx。条件を URL に入れる・API の形に直すのは searchQuery.ts(#102)。
  */
 
 /** 検索方法(API の mode。#163)。旧と同じく OR 検索・AND 検索・あるもの検索 */
@@ -55,7 +55,7 @@ export function toggleMethod(values: SearchFormValues, id: number, checked: bool
   return { ...values, uncheckedMethodIds: unchecked }
 }
 
-/** 検索ボタンで渡す条件。API の形(category_ids・category_groups など)に直して送るのは #102 */
+/** 検索ボタンで渡す条件。URL のクエリと API の形(category_ids・category_groups など)に直すのは searchQuery.ts(#102) */
 export type SearchConditions = {
   readonly mode: SearchMode
   readonly isEasy: boolean
