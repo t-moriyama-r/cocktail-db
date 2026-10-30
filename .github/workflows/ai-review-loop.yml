@@ -168,7 +168,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', vars.CLAUDE_ACCOUNT)] }}
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh api graphql:*),Bash(gh api -X PATCH repos/*/pulls/*),Bash(gh api repos/*/pulls/*),Bash(gh api repos/*/issues/*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、人に次のどちらかを頼んでいた。
             - AI レビュアーの指摘についての判断(頼んだコメントに <!-- ai-dev:needs-human --> が付いている)
@@ -444,7 +444,7 @@ jobs:
           claude_args: |
             --max-turns 80
             --model ${{ vars.CLAUDE_LIGHT_MODEL || 'claude-sonnet-5-5' }}
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh api graphql:*),Bash(gh api -X PATCH repos/*/pulls/*),Bash(gh api repos/*/pulls/*),Bash(gh api repos/*/issues/*),Bash(gh issue view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} で、AI レビュアーのレビューが終わった: ${{ github.event.review.html_url || github.event.comment.html_url || '(代わりの Claude がレビューした、または見回りで返されていない指摘が見つかった)' }}
             未解決のレビュースレッド(最初のコメントが coderabbitai のもの、または github-actions で <!-- ai-dev:claude-review --> を含むもの)を
