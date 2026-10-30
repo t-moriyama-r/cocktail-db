@@ -48,6 +48,7 @@
 - 詳細の `og:url`: 旧は `APP_URL/detail/<種類>/<ID>` を組み立てていた(カテゴリは `/detail/category/<ID>`) → 新は canonical と同じ(カテゴリは `/category/<ID>`)
 - `og:description`: 旧は説明文の参照を名前にし、改行を `<br />` のまま入れ、字数で切らず、説明文が空なら空にしていた → 新は `<meta name="description">` と同じ文にする(#111 の問い 1 の A)
 - 詳細の `og:image`: 旧は画像の列が空なら、カテゴリ・ミドル・銘柄はアフィリエイトの画像を使い、それも無ければ空にしていた。画像の列が外部の URL でも前に `storage/` を付けていた → 新は外部の URL はそのまま、空なら既定の画像にする(アフィリエイトの画像は使わない。オーナーの判断待ち)
+- 画像のファイル名: 旧はエンコードせずに URL にしていた(`asset()`) → 新はパスの区切りごとに URL エンコードする(空白や日本語の入ったファイル名でも、SNS が取りに来られる URL にするため)
 - サイト共通の `og:image`・`twitter:image`: 旧は空 → 新は既定の画像
 - 無い ID の詳細(SNS のクローラー): 旧は SNS 向けの HTML で、`og:title` をサイト名、`og:description` を「読んで楽しい、を目指して作ったお酒のデータベース。」、`og:url` を詳細の URL にしていた → 新は 404 で、詳細でないページと同じサイト共通の値
 - `itemprop`(Google 向けの name・description・image): 旧は SNS 向けの HTML に出していた → 新は出さない(検索エンジン向けの title・description・canonical は #111 で入れた)
