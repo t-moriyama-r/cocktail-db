@@ -23,7 +23,7 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
 .github/workflows/branch-flow.yml  staging・release への PR の元のブランチ(release 向けはタイトルの版も)を確かめる
 .github/workflows/release-tag.yml  release にマージした PR のタイトルの版で、タグと GitHub Release を作る
-.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画。画面を変えた PR は幅の区切りごと)があるかを確かめる
+.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画。画面を変えた PR は幅の区切りごと)があるかを確かめる。本文の「気づいたこと」が issue につながっているかは、コードを変えていない文書だけの PR でも確かめる
 ```
 
 サーバー上の配置:
@@ -106,7 +106,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
 - `staging`・`release` への PR のタイトルは、`staging` 向けが作った日(`【運用】staging 2026-10-26`)、`release` 向けが本番に出す版(`【運用】release v1.2.0`。SemVer)。`release` にマージすると、その版のタグと GitHub Release ができる(`release-tag.yml`)。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9
-- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
+- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み。指摘は昇格の PR では直さず、妥当なものは 1 件ずつ `develop` で直す issue にし、妥当でないものは理由を書き、公開できないセキュリティ指摘は issue やコメントに内容を書かず、下書きの security advisory にする)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 
 ## デプロイ
@@ -141,10 +141,10 @@ Basic 認証で閉じた確認用の環境が 2 つある。中身は `.github/w
 | dev | https://cocktail-dev.trc-vlackhistory.net/ | `develop` | `deploy-dev.yml` | `~/cocktail-db-dev` | `<user>_cocktail_dev` |
 | stg(ステージング) | https://cocktail-stg.trc-vlackhistory.net/ | `staging` | `deploy-stg.yml` | `~/cocktail-db-stg` | `<user>_cocktail_stg` |
 
-- **dev**: `develop` に push される(PR がマージされる)たびに出す。`ai-auto-merge.yml` のマージは `GITHUB_TOKEN` なので push のワークフローが起きず、マージの後に `ai-auto-merge.yml` が `deploy-dev.yml` を直接呼ぶ。マージされた変更を、ステージングに出す前に画面で確かめる
+- **dev**: `develop` に push される(PR がマージされる)たびに出す。`ai-auto-merge.yml` が secret `AUTO_MERGE_TOKEN`(オーナーの PAT)でマージしたときもこの push で出す。secret が無く `GITHUB_TOKEN` でマージしたときは push のワークフローが起きないので、マージの後に `ai-auto-merge.yml` が `deploy-dev.yml` を直接呼ぶ(#540)。マージされた変更を、ステージングに出す前に画面で確かめる
 - **stg**: `staging` にマージしたときに出す。`develop` から `staging` への PR を作り、その差分(前回ステージングに出したところからの変更)を見てマージする
 - **出し直したいとき**: Actions の「deploy-dev」「deploy-stg」→「Run workflow」(ブランチはそれぞれ `develop`・`staging`)、または `gh workflow run deploy-dev.yml --ref develop`・`gh workflow run deploy-stg.yml --ref staging`。前回出したコミット(サーバーの `~/<アプリ本体>/REVISION`)と同じなら出さないので、同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)。決まったブランチ以外からは出さない
-- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `migrate` → `optimize` → 動作確認)。動作確認では、資格情報なしで 401 になることも確かめる
+- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `storage:link` → `migrate` → `optimize` → 動作確認)。ただし dev は、最初のテストを流さない(`deploy-dev.yml` の `run_tests: false`。develop に入るコミットは PR の CI で通しているため。#535)。rsync は本番と同じく `public/storage`(`storage:link` が作る画像のリンク)を消さない。動作確認では、資格情報なしで 401 になることも確かめる
 - `.env` はデプロイのたびに Secret から作り直す(手で直さない)。`APP_KEY` だけは初回にサーバーで作ったものを使い続ける
 - Basic 認証の資格情報は dev と stg で同じ。ユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`・`public_html/cocktail-db-stg`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
 

@@ -33,6 +33,11 @@ on:
       force:
         type: boolean
         default: false
+      run_tests:
+        # 出す前にテスト(test.yml)を流すか。同じコミットを PR の CI で通しているなら、流し直しは分数を使うだけになる
+        description: 出す前にテストを流す
+        type: boolean
+        default: true
     secrets:
       DB_PASSWORD:
         required: true
@@ -103,12 +108,16 @@ jobs:
 
   test:
     needs: check
-    if: needs.check.outputs.deploy == 'true'
+    if: needs.check.outputs.deploy == 'true' && inputs.run_tests
     uses: ./.github/workflows/test.yml
 
   deploy:
     needs: [check, test]
-    if: needs.check.outputs.deploy == 'true'
+    # needs のジョブが飛ばされると、既定ではこのジョブも飛ばされる。テストを流さない回(run_tests が false)でも出せるよう、
+    # テストは「成功」か「流さない設定で飛ばした」ときに通す。テストが落ちた・取り消されたときは出さない
+    if: >-
+      !cancelled() && needs.check.result == 'success' && needs.check.outputs.deploy == 'true'
+      && (needs.test.result == 'success' || (needs.test.result == 'skipped' && !inputs.run_tests))
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment }}
@@ -148,12 +157,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           echo "${{ vars.MIXHOST_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-      # .env・storage(ログ・セッション)・REVISION はサーバー側のものを残す
+      # .env・storage(ログ・セッション・アップロードした画像)・REVISION はサーバー側のものを残す。
+      # public/storage は storage:link が作るリンクで、手元のビルドには無いので、--delete で消させない(deploy.yml と同じ)
       - name: Upload with rsync
         run: |
           rsync -az --delete \
             --exclude '.env' \
             --exclude 'storage/' \
+            --exclude 'public/storage' \
             --exclude 'REVISION' \
             --exclude 'public/.well-known/' \
             --exclude 'tests/' \
@@ -210,6 +221,9 @@ jobs:
             set -e
             cd ~/${APP_DIR}
             mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
+            # 画像を /storage/<ファイル名> で配信するためのリンク(public/storage → storage/app/public)。
+            # 既にあれば作らずに 0 で終わる(deploy.yml と同じ)
+            php artisan storage:link
             php artisan migrate --force
             php artisan optimize
           "

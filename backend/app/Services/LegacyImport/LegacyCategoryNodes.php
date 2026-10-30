@@ -8,6 +8,8 @@ use UnexpectedValueException;
 /**
  * 旧のカテゴリ・ミドルの ID から、カテゴリ木を移した(#29)先のノードの ID を引く。
  *
+ * 移行の importer(銘柄・カクテルの材料・アフィリエイト・説明文の参照)は、ノードをここで引く(#489)。
+ *
  * 旧の銘柄・材料の行はカテゴリとミドルの両方の列を持ち、ミドルの親とカテゴリが合わない行がある
  * (docs/migration-anomalies.md の 3・4)。#28 でミドルの親に合わせると決めたので、ミドルがあればカテゴリの列は見ない。
  */
@@ -28,18 +30,25 @@ final class LegacyCategoryNodes
     /**
      * 旧の行のカテゴリ・ミドルの列から、移した先のノードを引く。ミドルが無い(null か 0)ときはカテゴリのノード。
      *
+     * 列の名前は旧の表ごとに違う(銘柄・材料は category / middle_category、アフィリエイトは category_id / middle_id)。
+     *
      * @param  array<mixed>  $row
      * @param  string  $context  見つからないときの例外に添える、どの行から引いたか
      *
      * @throws UnexpectedValueException 移した先のノードが無いとき
      */
-    public function forRow(array $row, string $legacyTable, string $context): int
-    {
-        $middleId = LegacyRows::nullableId($row, 'middle_category', $legacyTable);
+    public function forRow(
+        array $row,
+        string $legacyTable,
+        string $context,
+        string $categoryColumn = 'category',
+        string $middleColumn = 'middle_category',
+    ): int {
+        $middleId = LegacyRows::nullableId($row, $middleColumn, $legacyTable);
 
         return $middleId !== null
             ? $this->nodeId(self::LEGACY_MIDDLE, $middleId, $context)
-            : $this->nodeId(self::LEGACY_CATEGORY, LegacyRows::int($row, 'category', $legacyTable), $context);
+            : $this->nodeId(self::LEGACY_CATEGORY, LegacyRows::int($row, $categoryColumn, $legacyTable), $context);
     }
 
     /**
@@ -63,7 +72,17 @@ final class LegacyCategoryNodes
      */
     public function nodeId(string $legacyTable, int $legacyId, string $context): int
     {
-        return $this->nodeIds[$legacyTable][$legacyId]
+        return $this->find($legacyTable, $legacyId)
             ?? throw new UnexpectedValueException("{$context} が指す {$legacyTable} の id {$legacyId} を移した先のノードが無い(カテゴリ木を先に移す)");
+    }
+
+    /**
+     * 旧のカテゴリ・ミドルの ID から、移した先のノードの ID を引く。対応が無ければ null(旧で消えた行を指していたときなど)。
+     *
+     * @param  self::LEGACY_CATEGORY|self::LEGACY_MIDDLE  $legacyTable
+     */
+    public function find(string $legacyTable, int $legacyId): ?int
+    {
+        return $this->nodeIds[$legacyTable][$legacyId] ?? null;
     }
 }

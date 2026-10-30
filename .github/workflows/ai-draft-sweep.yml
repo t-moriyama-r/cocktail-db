@@ -8,7 +8,7 @@
 #   Actions では仕上げられないものは、何が足りないかをコメントし、判断が要るなら needs-human、修正前後の証跡が要る
 #   (この環境では撮れない)だけなら needs-local(見回り待ち。PC を開いたときに手元の見回りが撮る)、人が手を動かさないと進まない
 #   作業(Secret の設定など)だけなら needs-manual(手元の作業待ち)を付ける
-# - notify: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
+# - notify: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)
@@ -163,6 +163,10 @@ jobs:
                - 仕様の解釈・設計の選択など、判断が要る
                - データを消す・費用がかかる・テストで確かめられない
                - 引き継ぎが 2 回目で、前の回に頼んだことがまだ片付いていない
+               ただし、この issue の範囲の外の残りで「この PR はこの issue の範囲で仕上げ、残りは別の issue に回す」案があるものは、判断が要るものに数えない。
+               人に聞かずにその案で仕上げる(4 で ready にしてよい)。回す先の issue への追記・issue の作成はこの環境ではできないので、PR にコメントを書いてから `needs-local` ラベルを付けて手元に頼む。
+               コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> を付け、中身は、回す先(既にある issue の番号か、作る issue のタイトルと本文)と足す文。
+               閉じる issue の受け入れ条件を別の issue に移すときは、移したことを PR 本文とこのコメントに書く(CLAUDE.md の「人に判断を頼むとき」)。6 の撮影も頼むときは、6 のコメントに書き足して kind=evidence にする
                人に頼むときは、PR にコメントを書いてから `needs-human` ラベルを付け、`ai-in-actions` ラベルを外して終える(Slack に通知が行く)。
                コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-human --> を付け、中身は、引き継いでしたことと、人にしてほしいこと・決めてほしいこと。
                決めてほしいことは選択肢 2〜3 個で(それぞれの良い点・悪い点、おすすめと理由)、設計の用語や記号に頼らず話し言葉で、
@@ -237,12 +241,12 @@ jobs:
       # 候補は needs-human・needs-local・needs-manual の付いていない PR だけなので、引き継いだ PR にいま付いていれば、引き継いだ Claude Code が付けたもの。
       # recover で見送った PR(pick の後に人が needs-human を付けたなど)は、付けた側が知らせているので知らせない。
       # matrix のジョブの output は 1 つしか残らないので、引き継いだかは recover が付ける目印のコメントで見分ける
-      - name: 新しく付いた needs-human・needs-local・needs-manual を Slack に知らせ、状態のラベルを付け替えさせる
+      - name: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替えさせる
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json labels,comments)
           recovered=$(jq --arg mark "<!-- ai-dev:draft-sweep sha=$PICKED_HEAD -->" 'any(.comments[]; .body | contains($mark))' <<<"$pr")
           labels=$(jq -r '[.labels[].name] | join(",")' <<<"$pr")
-          for label in needs-human needs-local needs-manual; do
+          for label in needs-human needs-manual; do
             if [ "$recovered" = true ] && [[ ",$labels," == *",$label,"* ]]; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
             fi

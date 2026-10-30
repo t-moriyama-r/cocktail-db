@@ -7,11 +7,11 @@
 #   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(見回り待ち。PC を開いたときに手元の見回りが片付ける)を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
-#   test.yml の backend・frontend と同じ準備(PHP 8.4・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
+#   test.yml の backend・frontend と同じ準備(PHP 8.5・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
-#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local・needs-manual は Slack に知らせ、状態のラベルを付け替える
+#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-manual は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
@@ -350,17 +350,17 @@ jobs:
       - uses: shivammathur/setup-php@v2
         if: steps.need.outputs.head
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
 
+      # この回は既定のブランチの文脈(schedule・workflow_dispatch)で PR のコードを動かす。ここで保存したキャッシュは既定のブランチの分として
+      # デプロイ(deploy.yml・deploy-env.yml)にも読まれるので、キャッシュは使わない(cache を書かない。#508)
       - uses: actions/setup-node@v7
         if: steps.need.outputs.head
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: work/frontend/package-lock.json
 
       # CLAUDE.md の「API を変えたら」と同じ手順。Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す
       - name: openapi.json を作り直す
@@ -578,8 +578,8 @@ jobs:
           develop(${BASE:0:7})の取り込みを試したが、コンフリクトを解消できないまま止まった。develop が進んだときに試し直す。急ぐときは手元で develop を取り込んで push してほしい。"
           fi
 
-          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local・needs-manual のどれかが付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
-          for label in needs-human needs-local needs-manual; do
+          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local・needs-manual のどれかが付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ(needs-local は人がすることが無いので知らせない。#516)
+          for label in needs-human needs-manual; do
             if jq -e --arg l "$label" '.labels | any(.name == $l)' <<<"$pr" >/dev/null \
               && grep -F "$mark" <<<"$comments" | grep -qF "ai-dev:$label"; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"

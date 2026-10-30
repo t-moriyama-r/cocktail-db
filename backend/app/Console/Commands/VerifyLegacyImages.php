@@ -2,11 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Support\PublicDiskImage;
 use Illuminate\Console\Command;
-use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use League\Flysystem\FilesystemException;
 
 /**
  * 旧 DB(接続 legacy)の画像の列が指すファイルが、新アプリの public ディスク
@@ -33,9 +32,9 @@ final class VerifyLegacyImages extends Command
         $external = 0;
         $missing = [];
         foreach ($this->imageReferences() as [$table, $id, $image]) {
-            if (preg_match('#^https?://#i', $image) === 1) {
+            if (PublicDiskImage::isExternal($image)) {
                 $external++;
-            } elseif ($this->exists($disk, $image)) {
+            } elseif (PublicDiskImage::exists($disk, $image)) {
                 $found++;
             } else {
                 $missing[] = [$table, $id, $image];
@@ -77,17 +76,5 @@ final class VerifyLegacyImages extends Command
         }
 
         return $references;
-    }
-
-    /**
-     * `../` や制御文字を含む値は Flysystem が例外にするので、確かめずに無いものとして扱う。
-     */
-    private function exists(Filesystem $disk, string $path): bool
-    {
-        try {
-            return $disk->exists($path);
-        } catch (FilesystemException) {
-            return false;
-        }
     }
 }
