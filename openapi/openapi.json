@@ -851,7 +851,7 @@
             },
             "put": {
                 "operationId": "cocktail.update",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u3068\u3001\u6750\u6599\u304b\u3089\u4f5c\u308b\u5024(\u5ea6\u6570\u30fb\u6750\u6599\u306e\u6570)\u306f\u5909\u3048\u306a\u3044\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u3068\u6750\u6599\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u6750\u6599\u304b\u3089\u4f5c\u308b\u5024(\u5ea6\u6570\u30fb\u6750\u6599\u306e\u6570\u30fb\u6750\u6599\u306e\u7d44\u306e\u30cf\u30c3\u30b7\u30e5)\u3082\u4f5c\u308a\u76f4\u3059\u3002",
                 "tags": [
                     "Cocktail"
                 ],
@@ -2893,6 +2893,37 @@
                 ],
                 "title": "AffiliateResource"
             },
+            "App.Http.Resources.Admin.CocktailIngredientResource": {
+                "type": "object",
+                "properties": {
+                    "category_id": {
+                        "type": "integer",
+                        "description": "\u6750\u6599\u306e\u30ce\u30fc\u30c9"
+                    },
+                    "brand_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "\u9298\u67c4\u3002\u9298\u67c4\u3092\u6c7a\u3081\u306a\u3044\u6750\u6599\u3067\u306f null"
+                    },
+                    "amount": {
+                        "type": "string",
+                        "description": "\u91cf(\u6574\u3048\u305f\u5f8c\u306e\u5024)"
+                    },
+                    "is_optional": {
+                        "type": "boolean",
+                        "description": "\u4efb\u610f\u306e\u6750\u6599\u304b"
+                    }
+                },
+                "required": [
+                    "category_id",
+                    "brand_id",
+                    "amount",
+                    "is_optional"
+                ],
+                "title": "App.Http.Resources.Admin.CocktailIngredientResource"
+            },
             "App.Http.Resources.Admin.CocktailListItemResource": {
                 "type": "object",
                 "properties": {
@@ -4114,6 +4145,13 @@
                             "null"
                         ]
                     },
+                    "ingredients": {
+                        "type": "array",
+                        "description": "\u6750\u6599\u3002\u30ec\u30b7\u30d4\u306e\u9806(position \u306e\u6607\u9806)\u3067\u3001\u4fdd\u5b58\u306e\u3068\u304d\u306b\u9001\u308b\u5f62(#292)",
+                        "items": {
+                            "$ref": "#/components/schemas/App.Http.Resources.Admin.CocktailIngredientResource"
+                        }
+                    },
                     "updated_at": {
                         "type": [
                             "string",
@@ -4144,6 +4182,7 @@
                     "image",
                     "image_txt",
                     "image_url",
+                    "ingredients",
                     "updated_at"
                 ],
                 "title": "CocktailResource"
@@ -5189,7 +5228,7 @@
             },
             "SaveCocktailRequest": {
                 "type": "object",
-                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u57fa\u672c\u60c5\u5831\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002#291)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u3068\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u6750\u6599\u306f #292 \u3067\u8db3\u3059\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
+                "description": "\u30ab\u30af\u30c6\u30eb\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002\u57fa\u672c\u60c5\u5831\u306f #291\u3001\u6750\u6599\u306f #292)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u30fb\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3068\u3001\u6750\u6599\u306e\u4ef6\u6570\u306e\u4e0a\u9650\u30fb\u30ce\u30fc\u30c9\u3068\u9298\u67c4\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
                 "properties": {
                     "base_category_id": {
                         "type": "integer",
@@ -5315,6 +5354,41 @@
                     },
                     "remove_image": {
                         "type": "boolean"
+                    },
+                    "ingredients": {
+                        "type": "array",
+                        "description": "\u6750\u6599\u306e\u884c(#292)\u3002\u4e26\u3073\u306f\u914d\u5217\u306e\u9806\u3067\u3001\u4fdd\u5b58\u306e\u3068\u304d\u306b position \u3092 1 \u304b\u3089\u632f\u308b",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "category_id": {
+                                    "type": "integer",
+                                    "description": "\u6750\u6599\u306e\u30ce\u30fc\u30c9\u3002\u3069\u306e\u6df1\u3055\u306e\u30ce\u30fc\u30c9\u3067\u3082\u3088\u3044\u304c\u3001\u6839(\u65e7\u306e\u7a2e\u5225)\u306f\u9078\u3079\u306a\u3044(#153)"
+                                },
+                                "brand_id": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ],
+                                    "description": "\u9298\u67c4\u3002\u6c7a\u3081\u306a\u3044\u6750\u6599\u3067\u306f\u7a7a\u3002\u9298\u67c4\u304c\u3042\u308c\u3070\u3001\u30ce\u30fc\u30c9\u306f\u9298\u67c4\u306e\u6240\u5c5e\u30ce\u30fc\u30c9\u306b\u3059\u308b(#19)"
+                                },
+                                "amount": {
+                                    "type": "string",
+                                    "description": "\u91cf\u3002\u66f8\u5f0f\u306f\u78ba\u304b\u3081\u305a\u3001\u4fdd\u5b58\u306e\u3068\u304d\u306b\u6574\u3048\u308b(docs/decisions/admin-screens.md \u306e\u6c7a\u307e\u3063\u305f\u3053\u3068 4\u3002\u65e7\u3068\u540c\u3058)\u3002\n\u6574\u3048\u305f\u5f8c\u306e\u9577\u3055(\u5217\u306e\u9577\u3055 20)\u306f\u4fdd\u5b58\u306e\u3068\u304d\u306b\u78ba\u304b\u3081\u308b",
+                                    "maxLength": 20
+                                },
+                                "is_optional": {
+                                    "type": "boolean",
+                                    "description": "\u4efb\u610f\u306e\u6750\u6599\u304b\u3002\u9001\u3089\u306a\u3051\u308c\u3070\u4efb\u610f\u3067\u306a\u3044(\u65e7\u3068\u540c\u3058)"
+                                }
+                            },
+                            "required": [
+                                "category_id",
+                                "amount"
+                            ]
+                        },
+                        "minItems": 2,
+                        "maxItems": 20
                     }
                 },
                 "required": [
@@ -5323,7 +5397,8 @@
                     "name_eng",
                     "method_id",
                     "is_major",
-                    "is_draft"
+                    "is_draft",
+                    "ingredients"
                 ],
                 "title": "SaveCocktailRequest"
             },
