@@ -48,12 +48,12 @@ describe('共通の枠(SiteLayout)', () => {
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
 
-    expect(await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })).toBeInTheDocument()
   })
 
   test.each([
     ['/', 'Hello World from Laravel'],
-    ['/helpme', '更新ボランティア募集'],
+    ['/helpme', '当DBの更新ボランティア募集について'],
     ['/detail/cocktail/1', 'カクテルの詳細'],
     ['/nope', 'ページが見つかりません'],
   ])('TC-296-04: %s でも、ヘッダーの場所とフッターの中に画面を出す', async (path, heading) => {
@@ -95,7 +95,7 @@ describe('共通の枠(SiteLayout)', () => {
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
 
-    await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })
+    await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })
     expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
   })
 })

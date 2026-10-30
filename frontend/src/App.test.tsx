@@ -36,7 +36,7 @@ describe('App のルーティング', () => {
   })
 
   test.each([
-    ['TC-97-03', '/helpme', '更新ボランティア募集'],
+    ['TC-97-03', '/helpme', '当DBの更新ボランティア募集について'],
     ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '名前検索の結果'],
     ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '名前検索の結果'],
     ['TC-97-06', '/result/Cocktails', '条件検索の結果'],

@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test'
 const pages = [
   { path: '/', heading: 'Hello World from Laravel' },
   { path: '/index', heading: 'Hello World from Laravel' },
-  { path: '/helpme', heading: '更新ボランティア募集' },
+  { path: '/helpme', heading: '当DBの更新ボランティア募集について' },
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', heading: '名前検索の結果' },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', heading: '名前検索の結果' },
   { path: '/result/Cocktails', heading: '条件検索の結果' },

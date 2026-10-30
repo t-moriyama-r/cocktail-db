@@ -44,7 +44,7 @@ test('TC-296-09: 画面を移るとタイトルが変わる', async ({ page }) =
   await expect(page).toHaveTitle(`トップページ ｜ ${SITE_TITLE}`)
 
   await footer(page).getByRole('link', { name: '更新ボランティア募集中...' }).click()
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   await expect(page).toHaveTitle(SITE_TITLE)
 })
 
@@ -72,7 +72,7 @@ test('TC-296-10: 下までスクロールしてからフッターのリンクで
 
   await footer(page).getByRole('link', { name: '更新ボランティア募集中...' }).click()
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   expect(await scrollY(page)).toBe(0)
 })
 
@@ -81,7 +81,7 @@ test('TC-296-11: ブラウザの「戻る」で戻っても、一番上から出
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
   await scrollToBottomOfTallPage(page)
   await footer(page).getByRole('link', { name: '更新ボランティア募集中...' }).click()
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
 
@@ -93,7 +93,7 @@ test('TC-296-11: ブラウザの「戻る」で戻っても、一番上から出
 
 test('TC-296-12: いま開いている URL へのリンクを押しても、スクロールの位置は変えない', async ({ page }) => {
   await page.goto('/helpme')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   await scrollToBottomOfTallPage(page)
   const before = await scrollY(page)
 

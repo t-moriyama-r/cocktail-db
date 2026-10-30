@@ -339,7 +339,7 @@ describe('ヘッダー(SiteHeader)', () => {
       mockApiHandler('get', '/cocktails/count', handler)
       renderAt('/helpme')
 
-      await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })
+      await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })
       await act(async () => {})
       expect(header().queryByText(/現在の登録数/)).not.toBeInTheDocument()
     })

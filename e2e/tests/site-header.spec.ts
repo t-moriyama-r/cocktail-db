@@ -72,7 +72,7 @@ for (const { width, siteName, search, startRest, count } of widths) {
   }) => {
     await page.setViewportSize({ width, height: 720 })
     await page.goto('/helpme')
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
     // 登録数は API の応答の後に出るので、出る幅では出るまで待つ
     if (count) {
       await expect(header(page).getByText('現在の登録数：1')).toBeVisible()
