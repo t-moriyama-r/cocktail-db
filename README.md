@@ -51,7 +51,7 @@ php artisan serve            # http://127.0.0.1:8000
 # FE(別のターミナル)
 cd frontend
 npm install
-npm run dev                  # http://localhost:5173 。/api は Laravel に流れる
+npm run dev                  # http://localhost:5173 。/api と /storage(画像)は Laravel に流れる
 ```
 
 Laravel から本番と同じ形で確かめるときは、`frontend` で `npm run build` してから http://127.0.0.1:8000 を開く。
