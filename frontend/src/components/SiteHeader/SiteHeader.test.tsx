@@ -42,7 +42,7 @@ const brandHit = (id: number): components['schemas']['NameSearchBrandResource'] 
 })
 
 const hits = (cocktails: number, nodes = 0, brands = 0, ingredientMatches = 0): NameSearchResponse => ({
-  cocktails: Array.from({ length: cocktails }, (_, i) => cocktail(i + 1)),
+  cocktails: Array.from({ length: cocktails }, (_, i) => ({ ...cocktail(i + 1), matched_alias: null })),
   nodes: Array.from({ length: nodes }, (_, i) => nodeHit(i + 1)),
   brands: Array.from({ length: brands }, (_, i) => brandHit(i + 1)),
   ingredient_matches: Array.from({ length: ingredientMatches }, (_, i) => cocktail(i + 101)),

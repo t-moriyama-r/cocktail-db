@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Support\DescriptionParser;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -12,6 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * 説明文(description)・補足(note)は、文字とリンクの区切りの並び(DescriptionParser。#286)にして返す。
  * 画像(image)は保存した値のまま返す(public ディスクのファイル名か、外部の URL。AdminImageStore)。
+ * 別名(aliases)と、材料の組がまったく同じ公開しているカクテル(same_recipe)も返す(#82)。
  *
  * @property Cocktail $resource
  */
@@ -23,7 +25,7 @@ class CocktailDetailResource extends JsonResource
     public function toArray(Request $request): array
     {
         $cocktail = $this->resource->loadMissing([
-            'baseCategory', 'method', 'glass', 'ice', 'ingredients.category', 'ingredients.brand',
+            'baseCategory', 'method', 'glass', 'ice', 'ingredients.category', 'ingredients.brand', 'aliases',
         ]);
         $method = $cocktail->requiredMethod();
         $glass = $cocktail->glass;
@@ -73,6 +75,15 @@ class CocktailDetailResource extends JsonResource
             'created_at' => $cocktail->created_at,
             'updated_at' => $cocktail->updated_at,
             'ingredients' => CocktailIngredientResource::collection($cocktail->ingredients),
+            // 別名。登録した順
+            'aliases' => $cocktail->aliases->map(fn (CocktailAlias $alias): array => [
+                'id' => $alias->id,
+                'name' => $alias->name,
+            ])->values()->all(),
+            // 材料の組がまったく同じ、ほかの公開しているカクテル。ID の順。一覧の表と同じ項目
+            'same_recipe' => CocktailSummaryResource::collection(
+                $cocktail->sameRecipeCocktails()->load(['baseCategory', 'method']),
+            ),
         ];
     }
 }
