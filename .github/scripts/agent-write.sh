@@ -28,12 +28,14 @@ agent_write() {
     reply)
       [ $# -eq 3 ] || usage
       thread_id "$2"
+      same_pr "$2" "$REPO" "$PR"
       body_file "$3"
       reply "$2" "$3"
       ;;
     resolve)
       [ $# -eq 2 ] || usage
       thread_id "$2"
+      same_pr "$2" "$REPO" "$PR"
       gh api graphql -f id="$2" -f query='
         mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { id } } }' \
         --jq '"resolved \(.data.resolveReviewThread.thread.id)"'
@@ -57,6 +59,18 @@ usage() {
 thread_id() {
   if ! [[ $1 =~ ^PRRT_[A-Za-z0-9_-]+$ ]]; then
     echo "スレッドの ID は PRRT_ で始まる ID を渡す: $1" >&2
+    exit 2
+  fi
+}
+
+# スレッドが対象の PR のものかを確かめる(node ID はリポジトリをまたいで効くので、別の PR のスレッドを書かせない)。返すのは真偽だけ
+same_pr() {
+  local id=$1 repo=$2 pr=$3 got
+  got=$(gh api graphql -f id="$id" -f query='
+    query($id: ID!) { node(id: $id) { ... on PullRequestReviewThread { pullRequest { number repository { nameWithOwner } } } } }' \
+    --jq '.data.node.pullRequest | "\(.repository.nameWithOwner)#\(.number)"' 2>/dev/null || true)
+  if [ "$got" != "$repo#$pr" ]; then
+    echo "そのスレッドは対象の PR のものではない" >&2
     exit 2
   fi
 }
