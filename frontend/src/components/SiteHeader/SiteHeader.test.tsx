@@ -61,8 +61,8 @@ const searchForm: paths['/search-form']['get']['responses'][200]['content']['app
 
 /** 今の URL を出す(移った先を確かめるため) */
 function LocationProbe() {
-  const { pathname } = useLocation()
-  return <output data-testid="location">{pathname}</output>
+  const { pathname, search } = useLocation()
+  return <output data-testid="location">{`${pathname}${search}`}</output>
 }
 
 const renderAt = (path: string) =>
@@ -341,7 +341,8 @@ describe('ヘッダー(SiteHeader)', () => {
       fireEvent.click(dialog.getByRole('checkbox', { name: 'ジン' }))
       fireEvent.click(dialog.getByRole('button', { name: '検索' }))
 
-      expect(location()).toHaveTextContent(/^\/result\/Cocktails$/)
+      // 条件を URL のクエリに入れて移る(#102)。ジンは蒸留酒のただ 1 つの子なので、蒸留酒 1 つに畳む
+      expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1$/)
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 

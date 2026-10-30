@@ -1,12 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import type { components } from '../../api/schema'
 import { jsonResponse, mockApi, mockApiHandler } from '../../test/api'
 import CocktailSearch from './CocktailSearch'
-import { defaultSearchFormValues, type SearchConditions, type SearchFormValues } from './searchForm'
-import { buildSelectionTree, toSendIds } from './selection'
+import { defaultSearchFormValues, type SearchFormValues } from './searchForm'
 
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
 type SearchFormMethod = components['schemas']['SearchFormMethodResource']
@@ -35,20 +34,20 @@ const methods: SearchFormMethod[] = [
   { id: 6, name: 'ホット' },
 ]
 
-const tree = buildSelectionTree(categories)
+/** 今の URL を出す(検索ボタンで移った先と、URL に入れた条件を確かめるため) */
+function LocationProbe() {
+  const { pathname, search } = useLocation()
+  // output は status の役割を持ち、読み込み中の表示(status)と取り違えるので div にする
+  return <div data-testid="location">{`${pathname}${search}`}</div>
+}
 
-/** フォームの値を持つ親(ヘッダーの代わり)。検索ボタンで渡された条件を画面に出す */
+/** フォームの値を持つ親(ヘッダーの代わり)。検索ボタンで移った先の URL を画面に出す */
 function Harness({ searching = false }: { searching?: boolean }) {
   const [values, setValues] = useState<SearchFormValues>(defaultSearchFormValues)
-  const [submitted, setSubmitted] = useState<SearchConditions | null>(null)
   return (
     <MemoryRouter>
-      <CocktailSearch values={values} onValuesChange={setValues} onSubmit={setSubmitted} searching={searching} />
-      {submitted !== null && (
-        <output data-testid="submitted">
-          {JSON.stringify({ ...submitted, selection: toSendIds(tree, submitted.selection) })}
-        </output>
-      )}
+      <CocktailSearch values={values} onValuesChange={setValues} searching={searching} />
+      <LocationProbe />
     </MemoryRouter>
   )
 }
@@ -61,7 +60,8 @@ const renderForm = async (props: { searching?: boolean } = {}) => {
 
 const searchButton = () => screen.getByRole('button', { name: '検索' })
 const methodBox = (name: string) => within(screen.getByRole('group', { name: '製法' })).getByRole('checkbox', { name })
-const submitted = () => JSON.parse(screen.getByTestId('submitted').textContent ?? 'null')
+/** 検索ボタンで移った先の URL(#102 で、条件を URL のクエリに入れて結果の画面へ移るようにした) */
+const submittedUrl = () => screen.getByTestId('location').textContent
 
 describe('CocktailSearchForm', () => {
   test('TC-307-06: 開くと既定値(OR 検索・かんたん検索なし・技法はすべて・材料なし)で、検索ボタンを押せず「材料は必須です。」を出す', async () => {
@@ -127,7 +127,8 @@ describe('CocktailSearchForm', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/製法は必須/)).not.toBeInTheDocument()
     fireEvent.click(searchButton())
-    expect(submitted().methodIds).toEqual([])
+    // 技法を 0 個にしたことは、空の m で URL に残す
+    expect(submittedUrl()).toBe('/result/Cocktails?n=11&m=')
   })
 
   test('TC-307-11: 検索ボタンで、選んだ検索方法・かんたん検索・技法・材料を渡す', async () => {
@@ -140,7 +141,7 @@ describe('CocktailSearchForm', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'トニックウォーター' }))
     fireEvent.click(searchButton())
 
-    expect(submitted()).toEqual({ mode: 'and', isEasy: true, methodIds: [1, 2, 3, 4, 5], selection: [10, 30] })
+    expect(submittedUrl()).toBe('/result/Cocktails?n=10,30&mode=and&easy=1&m=1,2,3,4,5')
   })
 
   test('TC-307-12: 「リセット」で既定値に戻る。2 回押しても技法の ID は重ならない', async () => {
@@ -161,10 +162,10 @@ describe('CocktailSearchForm', () => {
     expect(screen.getByRole('checkbox', { name: 'ラム' })).not.toBeChecked()
     expect(searchButton()).toBeDisabled()
 
-    // 材料だけ選んで送ると、技法は 6 つちょうど(旧はリセットのたびに ID が重なって増えた)
+    // 材料だけ選んで送ると、技法は 6 つちょうど(旧はリセットのたびに ID が重なって増えた)。すべての技法なので m は書かない
     fireEvent.click(screen.getByRole('checkbox', { name: 'ジン' }))
     fireEvent.click(searchButton())
-    expect(submitted()).toEqual({ mode: 'or', isEasy: false, methodIds: [1, 2, 3, 4, 5, 6], selection: [11] })
+    expect(submittedUrl()).toBe('/result/Cocktails?n=11')
   })
 
   test('TC-307-13: 検索中は、検索ボタンに読み込み中の表示を出す', async () => {
