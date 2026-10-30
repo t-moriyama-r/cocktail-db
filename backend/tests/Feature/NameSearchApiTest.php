@@ -246,10 +246,19 @@ it('TC-172-13: 1 件ごとに、一覧に出す項目を返す', function () {
             [
                 'id' => $gin->id, 'name' => 'ジン', 'name_eng' => 'Gin',
                 'parent' => ['id' => $liquor->id, 'name' => '蒸留酒', 'name_eng' => 'Spirits'],
+                'path' => [
+                    ['id' => $liquor->id, 'name' => '蒸留酒', 'name_eng' => 'Spirits'],
+                    ['id' => $gin->id, 'name' => 'ジン', 'name_eng' => 'Gin'],
+                ],
             ],
             [
                 'id' => $dryGin->id, 'name' => 'ドライ・ジン', 'name_eng' => 'Dry Gin',
                 'parent' => ['id' => $gin->id, 'name' => 'ジン', 'name_eng' => 'Gin'],
+                'path' => [
+                    ['id' => $liquor->id, 'name' => '蒸留酒', 'name_eng' => 'Spirits'],
+                    ['id' => $gin->id, 'name' => 'ジン', 'name_eng' => 'Gin'],
+                    ['id' => $dryGin->id, 'name' => 'ドライ・ジン', 'name_eng' => 'Dry Gin'],
+                ],
             ],
         ])
         ->assertJsonPath('brands', [[
@@ -259,7 +268,26 @@ it('TC-172-13: 1 件ごとに、一覧に出す項目を返す', function () {
             'volume' => 37.5,
             'youtube' => 'abc123',
             'category' => ['id' => $dryGin->id, 'name' => 'ドライ・ジン', 'name_eng' => 'Dry Gin'],
+            'path' => [
+                ['id' => $liquor->id, 'name' => '蒸留酒', 'name_eng' => 'Spirits'],
+                ['id' => $gin->id, 'name' => 'ジン', 'name_eng' => 'Gin'],
+                ['id' => $dryGin->id, 'name' => 'ドライ・ジン', 'name_eng' => 'Dry Gin'],
+            ],
         ]]);
+});
+
+it('TC-52-01: ノードと銘柄の path は、深い木でも根から順に、すべての祖先と末尾の自分(銘柄なら所属ノード)を返す', function () {
+    $liquor = nameSearchNode(null, '蒸留酒', 'Spirits');
+    $rum = nameSearchNode($liquor, 'ラム', 'Rum');
+    $white = nameSearchNode($rum, 'ホワイトラム', 'White Rum');
+    $cuban = nameSearchNode($white, 'キューバンホワイトラム', 'Cuban White Rum');
+    nameSearchBrand('ハバナクラブ ラム', 'Havana Club', ['category_id' => $cuban->id]);
+    $ref = fn (Category $node): array => ['id' => $node->id, 'name' => $node->name, 'name_eng' => $node->name_eng];
+
+    nameSearch($this, 'キューバン')->assertOk()
+        ->assertJsonPath('nodes.0.path', [$ref($liquor), $ref($rum), $ref($white), $ref($cuban)]);
+    nameSearch($this, 'ハバナ')->assertOk()
+        ->assertJsonPath('brands.0.path', [$ref($liquor), $ref($rum), $ref($white), $ref($cuban)]);
 });
 
 // 材料名からカクテルを探す欄(ingredient_matches。#173)。

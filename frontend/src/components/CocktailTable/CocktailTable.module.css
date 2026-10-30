@@ -57,6 +57,13 @@
   color: var(--color-text-muted);
 }
 
+/* 別名で当たったときに名前の後ろに添える別名(#52) */
+.alias {
+  margin-left: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
 .recipeCount {
   text-align: center;
 }
