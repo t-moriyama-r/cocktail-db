@@ -1,0 +1,63 @@
+.field {
+  /* 色の地(水色・灰色)の上で名前のリンクが 4.5:1 を満たすよう、欄の中だけリンクの色を濃くする(#23527c で 6.91:1・7.04:1。#298 と同じ) */
+  --color-link: var(--color-link-hover);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* 旧の「レシピ選択」の見出し(左 3px・下 1px の線)に寄せる */
+.legend {
+  width: 100%;
+  margin-bottom: var(--space-2);
+  padding: 0 0 0 var(--space-2);
+  font-size: var(--font-size-lg);
+  border-left: 3px solid var(--color-heading-line);
+  border-bottom: 1px solid var(--color-heading-line);
+}
+
+/* 根(旧の種別)ごとの帯。背景の色は旧の kind_1〜kind_5 と同じ */
+.liquorRoot,
+.softDrinkRoot,
+.otherRoot {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.liquorRoot {
+  background: var(--color-ingredient-liquor-bg);
+}
+
+.softDrinkRoot {
+  background: var(--color-ingredient-soft-drink-bg);
+}
+
+.otherRoot {
+  background: var(--color-ingredient-other-bg);
+}
+
+/* 「全てチェック」「全てはずす」「メジャーでない項目の表示／非表示」。旧は「レシピ選択」の見出しの横に並べていた */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.actionButton {
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* 表示に切り替えているあいだは、押した状態と分かるよう地の色を変える */
+.actionButton[aria-pressed='true'] {
+  background: var(--color-row-alt);
+  border-color: var(--color-heading-line);
+}

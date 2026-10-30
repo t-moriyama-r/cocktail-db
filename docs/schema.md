@@ -17,6 +17,7 @@
 | `brands` | 銘柄 | `m_brand` | 旧 ID のまま | #22 |
 | `cocktails` | カクテル | `t_cocktails` | 旧 ID のまま | #22 |
 | `cocktail_ingredients` | カクテルの材料 | `t_recipies` | — | #22 |
+| `cocktail_aliases` | カクテルの別名 | 無し(新設) | — | #82 |
 | `affiliates` | アフィリエイトの商品 | `affiliates` | 振る(旧は複合キー) | #23 |
 | `methods` | 技法 | `m_method` | 旧 ID のまま | #23 |
 | `ices` | 氷 | `m_ice` | 旧 ID のまま | #23 |
@@ -159,6 +160,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `is_draft` | `boolean` | | 下書きか(既定 false) | `is_draft`(`int`。値は 0・1 だけ) |
 | `is_major` | `boolean` | | | `is_major` |
 | `recipe_count` | `unsignedTinyInteger` | | 材料の数(下の「`recipe_count`」) | 旧の値は使わず数え直す |
+| `recipe_signature` | `char(64)` | ○ | 材料の組のハッシュ(下の「`recipe_signature`」)。材料の無いカクテルは null | 無し。移行で材料から作る |
 | `instagram` | `string(255)` | ○ | | `instagram` |
 | `youtube` | `string(255)` | ○ | | `youtube` |
 | `youtube_created_at` | `dateTime` | ○ | 動画の公開日時 | `cc_youtube_created_at`(**列の名前を変える**。ほかの表と揃える) |
@@ -168,10 +170,10 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `image_url` | `text` | ○ | | `image_url` |
 | `created_at`・`updated_at` | `timestamps()` | ○ | | `created_at`・`updated_at` |
 
-インデックス: `name`・`name_eng`・`name_search`・`base_category_id`・`method_id`・`glass_dictionary_id`・`is_draft`・`is_major`・`rate`・`youtube_created_at`・`recipe_count`(旧と同じ列)と、外部キーのための `ice_id`(MariaDB は外部キーの列に索引が要る。#325)。
+インデックス: `name`・`name_eng`・`name_search`・`base_category_id`・`method_id`・`glass_dictionary_id`・`is_draft`・`is_major`・`rate`・`youtube_created_at`・`recipe_count`(旧と同じ列)と、外部キーのための `ice_id`(MariaDB は外部キーの列に索引が要る。#325)、同じレシピのカクテルを引く `recipe_signature`(#82)。
 
 - 旧の `updated_at` は `ON UPDATE current_timestamp()` だった。新しい DB では Eloquent が更新する
-- 別名(`cocktail_aliases`)と同じレシピの判定(`cocktails.recipe_signature`)は #82 で書き足す
+- 別名は `cocktail_aliases`(下)、同じレシピの判定は `recipe_signature`(下)。どちらも #82
 
 #### `recipe_count`
 
@@ -180,6 +182,15 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 - **定義**: カクテルの材料のうち、任意でなく(`is_optional = false`)、役割が `other` の根の部分木に入っていないものの数。かんたん検索は `recipe_count <= 3`
 - **持ち方**: 列に持ち、**`RecipeCounter`(#156)だけが更新する**。更新のきっかけは、材料の保存(#130)・部分木を根をまたいで移したとき(`CategoryTree::moveSubtree` が数え直す。#156・#122)・銘柄の所属を変えたとき(#64)・移行(#31)・数え直しのコマンド(`cocktails:recount`。#74)
 - 旧の値は使わない(旧は 2 つの数え方が混ざっている)。移行の後に数え直す
+
+#### `recipe_signature`
+
+材料の組がまったく同じカクテル(同じレシピのカクテル。旧データに 45 組ある。[migration-anomalies.md](migration-anomalies.md) の 10)を引くための値(#82)。同じレシピのカクテルは 1 件にまとめず、別々のまま残し、詳細(`GET /api/cocktails/{id}` の `same_recipe`)で互いに案内する。
+
+- **中身**: 材料の行ごとの (`category_id`・`brand_id`・`amount`・`is_optional`) を並べたものの SHA-256(16 進 64 文字)。行の並び順(`position`)は見ない(行を並べ替えてから作る)。同じ行が 2 つあれば 2 つと数える。量は保存した文字のまま比べる(`30ml` と `30 ml` は違うレシピ)。材料の無いカクテルは null で、どのカクテルとも同じレシピにしない
+- **比べ方**: 同じレシピのカクテルは、この列が同じ公開しているカクテル(下書きを除く)。索引を張る
+- **持ち方**: 列に持ち、**`RecipeSignature`(`app/Services/RecipeSignature.php`)だけが更新する**。作り直すきっかけは、材料の保存(#130)・銘柄の所属を変えたとき(材料のノードが変わる。`AdminBrandWriter`。#415 で決めた)・移行(#31)。列を足したマイグレーションは、今ある材料から値を入れる
+- 作り直しを呼び忘れた書き換えは、`data:verify`(#157)が材料から作り直した値と比べて見つける
 
 ### `cocktail_ingredients`
 
@@ -204,6 +215,21 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 - 銘柄の所属を変えたとき(#64)は、その銘柄を使う材料・アフィリエイトの `category_id` も同じトランザクションで書き換え、`recipe_count` を数え直す
 - **旧データとぶつかる**: [migration-anomalies.md](migration-anomalies.md) の 11(#257)で、「カテゴリしか指定していない材料の行に、そのカテゴリのミドルの下の銘柄が付いている」62 行をそのまま移すと決めた。そのまま移すと、この 62 行は材料のノード(カテゴリ)と銘柄の所属(ミドル)が違い、この規則と `data:verify` に引っかかる。どうするかは**人に確認**(下の「人に確認すること」の 1)
 
+### `cocktail_aliases`
+
+カクテルの別名(#82。旧には無い)。同じカクテルが別の名前で呼ばれるとき(レゲエ・パンチ = ピーチウーロン)に、別名でも名前の横断検索(`GET /api/search`。[name-search.md](decisions/name-search.md) の「別名で探す(#82)」)で見つかるようにする。管理画面での編集は #83。
+
+| 列 | 型 | null | 中身 |
+|---|---|---|---|
+| `id` | `id()` | | |
+| `cocktail_id` | `foreignId` → `cocktails` | | 別名を持つカクテル。カクテルを消すと別名も消える(`ON DELETE CASCADE`) |
+| `name` | `string(255)` | | 別名 |
+| `name_search` | `string(255)` | | 検索用に正規化した別名(#44 の `NameNormalizer`) |
+
+- インデックスは `name_search`。(`cocktail_id`, `name_search`) に unique(同じカクテルに、検索用の名前が同じ別名を 2 つ持たせない)
+- 作成・更新日時は持たない
+- 詳細(`GET /api/cocktails/{id}`)は、別名を登録した順(ID の順)に `aliases` で返す
+
 ## アフィリエイト
 
 ### `affiliates`
@@ -225,7 +251,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `amazon_detail_url` | `text` | ○ | | `amazon_detail_url` |
 | `amazon_search_url` | `text` | ○ | | `amazon_search_url` |
 | `amazon_fetched_at` | `dateTime` | ○ | Amazon の値を取った時刻(#247) | `updated_at`(#32) |
-| `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url` から取る(取れるかは #32 で確かめる) |
+| `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url`(アフィリエイトの転送の URL)の `pc=` に入った商品のページ `item.rakuten.co.jp/<店舗>/<管理番号>/` から `<店舗>:<管理番号>` を取る(#32。旧の 450 行すべてで取れた。API の `itemCode` と同じ値かは、取り直し(#249)で呼ぶまで確かめていない) |
 | `rakuten_title` | `text` | ○ | | `rakuten_title` |
 | `rakuten_price` | `unsignedInteger` | ○ | | `rakuten_price` |
 | `rakuten_image_url` | `text` | ○ | | `rakuten_image_url` |
@@ -337,6 +363,19 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `credential` | `json` | | 公開鍵・署名の回数・AAGUID など(webauthn-lib の `CredentialRecord` の JSON)。MariaDB では `longtext` になる |
 | `last_used_at` | `timestamp` | ○ | 最後にログインに使った時刻。登録しただけなら null |
 | `created_at`・`updated_at` | `timestamps()` | ○ | `created_at` が登録した日時 |
+
+## 説明文の参照の記法
+
+説明文(`categories`・`methods`・`dictionaries`・`brands`・`cocktails` の `description` と、`cocktails.note`)には、ほかのページへの参照を `@<種類><ID>@` の記法で埋め込む(#285。決めたことは [description-references.md](decisions/description-references.md))。ID は 0 で始まらない数字。大文字(`@N12@` など)も小文字と同じ意味。
+
+| 種類 | 指す先 | ID | 旧の記法 |
+|---|---|---|---|
+| `n` | ノード(`categories`) | ノードの ID | `@p<カテゴリの旧 ID>@`・`@m<ミドルの旧 ID>@`。移行(`legacy:import --only=descriptions`)で legacy_id_maps を引いて `@n` にする。対応の無い ID は記法を取り除く |
+| `c` | カクテル | 旧 ID のまま | `@c`(大文字の `@C` は移行で小文字にする。`b`・`d` も同じ) |
+| `b` | 銘柄 | 旧 ID のまま | `@b` |
+| `d` | 用語(`dictionaries`) | 旧 ID のまま | `@d` |
+
+画面に出すときの区切り方は [description-segments.md](decisions/description-segments.md)(#286)、管理画面で保存するときの変換は [description-markup.md](decisions/description-markup.md)(#287)。指す先が無い参照と、旧の記法の残りは、`data:verify` が見つける。
 
 ## YouTube の開始位置
 

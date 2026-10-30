@@ -72,6 +72,20 @@ export function toggleNode(tree: SelectionTree, selection: TreeSelection, id: nu
   return next
 }
 
+/**
+ * 「全てチェック」の後の状態(#306。#282 の決まったこと 3)。見えているノードのうち木の葉を選び、前の選択は捨てる。
+ * 隠れているノード(visibleIds に無いもの)は選ばない。見えているノードでも、子がすべて隠れていれば、
+ * 子(隠れている)を選ぶことになるので選ばない。木に無い ID は捨てる
+ */
+export function selectVisibleLeaves(tree: SelectionTree, visibleIds: Iterable<number>): TreeSelection {
+  const selection = new Set<number>()
+  for (const id of visibleIds) {
+    const leaves = tree.leavesOf.get(id)
+    if (leaves !== undefined && leaves.length === 1 && leaves[0] === id) selection.add(id)
+  }
+  return selection
+}
+
 /** ノードごとの表示(チェック・一部・なし)。木にあるすべてのノードの分を返す */
 export function checkStates(tree: SelectionTree, selection: TreeSelection): ReadonlyMap<number, CategoryTreeCheckState> {
   const states = new Map<number, CategoryTreeCheckState>()

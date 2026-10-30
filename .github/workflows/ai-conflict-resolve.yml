@@ -4,14 +4,15 @@
 # - pick: シェルで候補を絞る(.github/scripts/conflict-candidates.sh。見送った理由はジョブのログに出す)
 # - resolve: 候補ごとに Claude Code が develop を取り込み、両方の意図を残して解消し、PR のブランチに push する(rebase・force push はしない)。
 #   両方の意図を残せない衝突は push せず、何を決めてほしいかを PR にコメントして needs-human を付ける。
-#   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(手元の作業待ち)を付ける。
+#   生成したファイルの衝突など、判断は要らないがこの環境では片付けられない(作り直すコマンドを流せない)ものは、手順をコメントして needs-local(見回り待ち。PC を開いたときに手元の見回りが片付ける)を付ける。
 #   ワークフローのファイルの衝突も解消できるよう、App のトークンに workflows: write を要求する
 # - regenerate: 衝突した生成ファイル(GENERATED_FILES)は、人に頼まずに Claude Code に develop の版を取らせ、resolve が push した head のコードから
-#   test.yml の backend・frontend と同じ準備(PHP 8.4・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
+#   test.yml の backend・frontend と同じ準備(PHP 8.5・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
+#   作り直した生成ファイルの集め方と push してよいかの決め方は、ai-review-loop.yml の regenerate・regen-push と共通(.github/scripts/generated-regen.sh。#495)。
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
 # - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
 #   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
-#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-local は Slack に知らせ、状態のラベルを付け替える
+#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-manual は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
@@ -45,6 +46,7 @@ env:
   GH_TOKEN: ${{ github.token }}
   REPO: ${{ github.repository }}
   # 決まった手順(CLAUDE.md の「API を変えたら」)で作り直せる生成ファイル。衝突しても人に頼まず、regenerate が作り直す
+  # (generated-regen.sh にも同じ一覧を既定値として持たせている。変えるときは両方を変える)
   GENERATED_FILES: openapi/openapi.json frontend/src/api/schema.ts
 
 jobs:
@@ -121,6 +123,12 @@ jobs:
           now=$(bash .ai-dev/.github/scripts/conflict-candidates.sh "$REPO" "$PR")
           if [ "$(jq -r '.[0].head // ""' <<<"$now")" != "$PICKED_HEAD" ]; then
             echo "#$PR は pick の後に変わった(push・ラベル・解消)ので見送る"
+            exit 0
+          fi
+          # Claude Code は PR・issue のコメントを読んで、書き込みのできる権限で動く。外部の人のコメントで指示を渡されないよう、
+          # オーナー・コラボレーター・決まった bot 以外の人が書いたものがあれば動かさない(決め方は untrusted-hold.sh。#494)
+          if ! bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$PR"; then
+            echo "#$PR は信頼しない人が書いたものがある・確かめられなかったので見送る"
             exit 0
           fi
           gh label create ai-in-actions -R "$REPO" --color 0e8a16 --description "GitHub Actions の Claude Code が対応している PR" 2>/dev/null || true
@@ -334,6 +342,15 @@ jobs:
           echo "#$PR ${head:0:7} から作り直す: $(paste -sd' ' .ai-conflict/generated)"
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
+      # 作り直しの手順は既定のブランチのスクリプトを使う(ai-review-loop.yml の regenerate と同じ。generated-regen.sh)
+      - uses: actions/checkout@v6
+        if: steps.need.outputs.head
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - uses: actions/checkout@v6
         if: steps.need.outputs.head
         with:
@@ -344,17 +361,17 @@ jobs:
       - uses: shivammathur/setup-php@v2
         if: steps.need.outputs.head
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: pdo_mysql, mbstring, intl
           tools: composer:v2
           coverage: none
 
+      # この回は既定のブランチの文脈(schedule・workflow_dispatch)で PR のコードを動かす。ここで保存したキャッシュは既定のブランチの分として
+      # デプロイ(deploy.yml・deploy-env.yml)にも読まれるので、キャッシュは使わない(cache を書かない。#508)
       - uses: actions/setup-node@v7
         if: steps.need.outputs.head
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: work/frontend/package-lock.json
 
       # CLAUDE.md の「API を変えたら」と同じ手順。Scramble がモデルの型をテーブルから読むので、先にマイグレーションを流す
       - name: openapi.json を作り直す
@@ -379,17 +396,7 @@ jobs:
         if: steps.need.outputs.head
         env:
           HEAD_SHA: ${{ steps.need.outputs.head }}
-        run: |
-          mkdir -p .ai-regen
-          echo "$HEAD_SHA" > .ai-regen/head
-          for f in $GENERATED_FILES; do
-            if [ -n "$(git -C work status --porcelain -- "$f")" ]; then
-              mkdir -p ".ai-regen/files/$(dirname "$f")"
-              cp "work/$f" ".ai-regen/files/$f"
-              echo "$f" >> .ai-regen/changed
-            fi
-          done
-          echo "#$PR 作り直して変わったファイル: $(paste -sd' ' .ai-regen/changed 2>/dev/null || echo なし)"
+        run: bash .ai-dev/.github/scripts/generated-regen.sh collect work .ai-regen "$HEAD_SHA"
 
       # 作り直せなかったことを after に伝える(after が人に頼む)
       - name: 作り直せなかった印を残す
@@ -456,7 +463,8 @@ jobs:
       # 作り直せなかったら、CI の「Check OpenAPI is up to date」が落ちたまま止まるので、手元に頼む(判断は要らない。Slack への通知は下の手順)。
       # 作り直して変わったファイルがあり、その後に誰も push していなければ、push する
       # .ai-regen は PR のコードを動かした regenerate が書くので、中身を PR のコードが自由に書ける(RC-04)。
-      # changed の各行は生成ファイルの一覧と完全に一致し、files の中身が通常のファイル(リンクでない・リンクのディレクトリの下でない)のときだけ使う。
+      # changed の各行は生成ファイルの一覧と完全に一致し、files の中身が通常のファイル(リンクでない・リンクのディレクトリの下でない)のときだけ使う
+      # (決め方は generated-regen.sh の check。ai-review-loop.yml の regen-push と同じ)。
       # 作り直した回の URL は、failed の中身をコメントに埋めずに組み立て直す(regenerate は同じ実行のジョブ)
       - name: 作り直した生成ファイルを push するか決める
         id: regen_decide
@@ -465,39 +473,20 @@ jobs:
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          regen_head=$(cat .ai-regen/head)
           head=$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)
-          if [ "$head" != "$regen_head" ]; then
-            echo "#$PR 作り直した後に ${head:0:7} が push されたので、push しない"
-            exit 0
-          fi
-          failed=
-          [ -s .ai-regen/failed ] && failed="作り直すコマンドが失敗した"
-          if [ -z "$failed" ] && [ -s .ai-regen/changed ]; then
-            while IFS= read -r f; do
-              ok=
-              for g in $GENERATED_FILES; do [ "$f" = "$g" ] && ok=1; done
-              src=".ai-regen/files/$f"
-              if [ -z "$ok" ] || [ ! -f "$src" ] || [ -L "$src" ] || [ "$(realpath -- "$src")" != "$(realpath .)/$src" ]; then
-                echo "::warning::#$PR 作り直したファイルの一覧に、生成ファイルではないか通常のファイルでないものがあるので、push しない"
-                failed="作り直したファイルの一覧が正しい形でなかった"
-                break
-              fi
-            done < .ai-regen/changed
-          fi
-          if [ -n "$failed" ]; then
-            gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
+          result=$(bash .github/scripts/generated-regen.sh check .ai-regen "$head")
+          case "${result%%$'\t'*}" in
+            push) echo "push=true" >> "$GITHUB_OUTPUT" ;;
+            failed)
+              failed=${result#*$'\t'}
+              gh pr comment "$PR" -R "$REPO" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:conflict-resolve sha=$PICKED_HEAD base=$BASE -->
           develop を取り込んだ後の生成ファイル($(paste -sd' ' .ai-conflict/generated))を作り直そうとしたが、${failed}。手元で作り直して push してほしい(CLAUDE.md の「API を変えたら」の手順)。
 
           作り直した回: $RUN_URL"
-            gh pr edit "$PR" -R "$REPO" --add-label needs-local
-            exit 0
-          fi
-          if [ ! -s .ai-regen/changed ]; then
-            echo "#$PR 作り直しても生成ファイルは変わらなかった(develop の版のままで合っている)"
-            exit 0
-          fi
-          echo "push=true" >> "$GITHUB_OUTPUT"
+              gh pr edit "$PR" -R "$REPO" --add-label needs-local
+              ;;
+            *) echo "#$PR は push しない($result)" ;;
+          esac
 
       - uses: actions/checkout@v6
         if: steps.regen_decide.outputs.push
@@ -559,7 +548,7 @@ jobs:
             MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
             # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
             # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
-            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision"))] | join(",")' <<<"$pr")
+            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-decision"))] | join(",")' <<<"$pr")
             if [ "$(jq -r .isDraft <<<"$pr")" = false ] && [ -z "$held" ]; then
               gh workflow run ai-claude-review.yml -R "$REPO" -f number="$PR" -f reason=conflict-resolve
             fi
@@ -572,8 +561,8 @@ jobs:
           develop(${BASE:0:7})の取り込みを試したが、コンフリクトを解消できないまま止まった。develop が進んだときに試し直す。急ぐときは手元で develop を取り込んで push してほしい。"
           fi
 
-          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local が付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ
-          for label in needs-human needs-local; do
+          # Claude Code が人・手元に頼んだ回は、目印のコメントと needs-human・needs-local・needs-manual のどれかが付いている。GITHUB_TOKEN で付いたラベルは通知を起こさないので直接呼ぶ(needs-local は人がすることが無いので知らせない。#516)
+          for label in needs-human needs-manual; do
             if jq -e --arg l "$label" '.labels | any(.name == $l)' <<<"$pr" >/dev/null \
               && grep -F "$mark" <<<"$comments" | grep -qF "ai-dev:$label"; then
               gh workflow run notify-needs-human.yml -R "$REPO" -f number="$PR" -f label="$label"
@@ -584,3 +573,10 @@ jobs:
       - name: 状態のラベルを付け替える
         if: always() && steps.tried.outcome == 'success'
         run: bash .github/scripts/pr-status.sh "$REPO" "$PR" || true
+
+      # resolve で untrusted-hold.sh が止めた PR は、試した印が無いので上の手順が動かない(決め方は untrusted-notify.sh。#494)
+      - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
+        if: always()
+        run: |
+          since=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          bash .github/scripts/untrusted-notify.sh "$REPO" "$PR" "$since" || echo "::warning::#$PR を止めたことを Slack に知らせられなかった(毎朝のまとめには出る)"

@@ -7,12 +7,30 @@ use Illuminate\Validation\Validator;
 use InvalidArgumentException;
 
 /**
- * 管理画面の編集の入力(銘柄 #314・用語 #315 など)に共通する、YouTube の欄の規則と、空の欄を null で読む方法。
+ * 管理画面の編集の入力(銘柄 #314・カクテル #291・用語 #315 など)に共通する読み方。
  *
- * YouTube の動画と開始位置の規則はカクテル(#291)と同じ(YoutubeInput)。
+ * YouTube の欄の規則(動画と開始位置の規則はカクテルと同じ。YoutubeInput)と、空の欄を null で読む方法、
+ * 画像つき(multipart)で文字列で届く真偽値の直しを持つ。
  */
 trait AdminFormInput
 {
+    /**
+     * multipart(画像つき)では真偽値が文字列の "true"・"false" で届くので、boolean の規則が読める 1・0 に直す。
+     *
+     * @param  list<string>  $keys
+     */
+    protected function normalizeBooleanStrings(array $keys): void
+    {
+        $normalized = [];
+        foreach ($keys as $key) {
+            $value = $this->input($key);
+            if (is_string($value) && in_array(strtolower($value), ['true', 'false'], true)) {
+                $normalized[$key] = strtolower($value) === 'true' ? 1 : 0;
+            }
+        }
+        $this->merge($normalized);
+    }
+
     /**
      * YouTube の URL か動画 ID と、開始位置の時・分・秒の規則。
      *
@@ -34,7 +52,7 @@ trait AdminFormInput
      *
      * @return callable(Validator): void
      */
-    protected function youtubeValidator(): callable
+    protected function youtubeValidation(): callable
     {
         return function (Validator $validator): void {
             if ($validator->errors()->has('youtube')) {

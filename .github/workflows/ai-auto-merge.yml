@@ -13,7 +13,7 @@
 #
 # 次のどれかに当てはまる PR は、まだマージできる状態ではないので何もしない。理由はジョブのログに出す
 # - 下書き・向き先が develop・staging・release 以外・作ったのがオーナー以外
-# - ラベル needs-human / needs-local / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
+# - ラベル needs-human / needs-local / needs-manual / needs-decision / needs-approval / ai-in-actions が付いている(人か手元の番か、Actions が対応している途中)
 # - CodeRabbit(上限で動かなかったときは、代わりの Claude。ai-claude-review.yml。昇格の PR では手元の Claude)が最新のコミットをまだ見ていない・指摘が残っている。
 #   自動でマージする PR は未解決のスレッドが 0 件。人の手でマージする PR は、エージェントが直さない理由を返して未解決のまま残る
 #   スレッドもあるので、返信待ちのスレッドが 0 件(その判断も人が見る)
@@ -27,10 +27,18 @@
 # Slack に知らせる(.github/scripts/thread-handoff.sh。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、
 # 人がすべて解決したら、見回り(ai-review-sweep.yml)がその needs-human を外して、ここを呼び直す(#388)
 #
-# マージは普通のマージ(マージコミット)。GITHUB_TOKEN でマージするので、develop への push で動くワークフローは起きず、
+# マージは普通のマージ(マージコミット)。develop のルールセットは承認 1 件を求め、オーナー(リポジトリの admin)だけを除外している(#540)。
+# github-actions のボットは除外されないので、secret AUTO_MERGE_TOKEN(オーナーの fine-grained PAT。このリポジトリの Contents: write・
+# Pull requests: write。Workflows は付けないので、ワークフローを変える PR は下の #191 のとおり断られて人がマージする)があれば、マージだけをそれでする。
+# PAT でのマージは develop への push・PR の closed のイベントを起こすので、Closes #N の issue のクローズ、ブランチの自動削除と積んだ PR の付け替えは
+# GitHub が、dev 環境へのデプロイ・ワークフローを変えた通知・積んだ PR の CI の流し直しは、それぞれのワークフロー(deploy-dev.yml・
+# notify-workflow-merged.yml・ci-rerun.yml)がする。このワークフローではしない。
+# secret が無ければ GITHUB_TOKEN でマージする。そのときは、develop への push で動くワークフローは起きず、
 # Closes #N の issue も閉じない・ブランチの自動削除も効かない。issue を閉じるのとブランチを消すのは、マージの後にこのワークフローがする。
 # ブランチを消す前に、そのブランチに積んだ開いた PR の向き先をこの PR の向き先に付け替え、その PR の CI を流し直す(GitHub の自動削除と同じ。#463)
 # GITHUB_TOKEN で付けたラベルは通知のワークフローを起こさないので、needs-approval を付けたら notify-needs-human.yml を直接呼ぶ。
+# 状態のラベル(pr-status.sh)は、マージした・見送った・人に頼んだのどれでも、ジョブの最後のステップで出し直す。pr-status.yml は、
+# このワークフローも起動するきっかけでは動かない(同じきっかけで数秒のジョブを 2 つ課金しない。#534)
 # 同じ理由で、ワークフローを変えた PR をマージしたら notify-workflow-merged.yml を、develop にマージしたら deploy-dev.yml を直接呼ぶ
 #
 # 条件を満たしても、gh pr merge が GitHub に断られることがある(#191 はワークフローを書き換える PR で workflows の権限が無いと、
@@ -60,6 +68,7 @@ permissions:
   pull-requests: write
   issues: write
   checks: read
+  statuses: read   # 状態のラベル(pr-status.sh)が、必須のチェックの結果を読む
   actions: write   # 通知のワークフローを gh workflow run で呼ぶ。Claude Code を動かさないので渡してよい
 
 # CI の終わりと CodeRabbit の「Review finished」は同時に来やすい。同じ PR の回を 1 列に並べ、人に 2 回知らせないようにする
@@ -76,7 +85,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request_target' && (github.event.action != 'unlabeled'
-        || contains(fromJSON('["needs-human","needs-local","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
+        || contains(fromJSON('["needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions","no-auto-merge"]'), github.event.label.name)))
       || (github.event_name == 'pull_request_review' && (github.event.review.user.login == 'coderabbitai[bot]'
         || (github.event.review.user.login == github.repository_owner && contains(github.event.review.body, 'ai-dev:local-review'))))
       || (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'coderabbitai[bot]'
@@ -106,8 +115,10 @@ jobs:
       - name: 条件を確かめて、マージするか人に知らせる
         env:
           EVENT_ACTION: ${{ github.event.action }}
-          # needs-local が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
+          # needs-local・needs-manual が外れた回で、見送ったレビューの依頼を出す(request-review.sh。review-on-push.yml と同じ secret)
           CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+          # マージだけに使う(ジョブの GH_TOKEN には入れない)
+          AUTO_MERGE_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
         run: |
           skip() { echo "見送り: $*"; exit 0; }
           # いまのコミットで CI が動いていないので見送るときは、CI の流し直し(ci-rerun.yml。#228)にこの PR を見させる(#268)。
@@ -115,6 +126,16 @@ jobs:
           # 走っている途中なら何もしない)は ci-rerun.sh が決める。流した CI が緑で終わると、workflow_run でここが呼び直されてマージに進む。
           # 頼めなくても見送りは変わらず、1 時間ごとの ci-rerun.yml が拾う
           rerun_ci() {
+            # いまのコミットの CI(test.yml)の回が走っている途中なら頼まない。終われば workflow_run でここが呼び直され、
+            # 頼んでも ci-rerun.sh は何もしないので、ci-rerun.yml の数秒のジョブが課金されるだけになる(#534)。
+            # 読めなかったときは、今までどおり頼む(止まった PR を拾い損ねないほうを選ぶ)
+            local running
+            if running=$(gh api "repos/$REPO/actions/runs?head_sha=$head&event=pull_request&per_page=100" \
+              --jq '[.workflow_runs[] | select((.path | endswith("/test.yml")) and (.status | IN("queued","in_progress","waiting","requested","pending")))] | length') \
+              && [ "$running" != 0 ]; then
+              echo "${head:0:7} の CI(test.yml)が走っている途中なので、CI の流し直しは頼まない"
+              return 0
+            fi
             bash .ai-dev/.github/scripts/ci-rerun-request.sh "$REPO" "$NUMBER" "$base" "$DEFAULT_BRANCH" \
               || echo "::warning::CI の流し直し(ci-rerun.yml)を頼めなかった(1 時間ごとの見回りで拾う)"
           }
@@ -129,7 +150,6 @@ jobs:
           $1"
             gh pr edit "$NUMBER" -R "$REPO" --add-label needs-approval
             gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-approval
-            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
           }
 
           # 人の手でマージする理由。空なら自動でマージする
@@ -144,6 +164,8 @@ jobs:
             NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '[.[] | select(.state == "open")][0].number // empty')
           fi
           [ -n "$NUMBER" ] || skip "PR が見つからない"
+          # 最後のステップ(状態のラベル)に渡す(workflow_run ではジョブの NUMBER が空)。この後で見送っても(skip で終わっても)、ラベルは出し直す
+          echo "PR_NUMBER=$NUMBER" >> "$GITHUB_ENV"
 
           pr=$(gh pr view "$NUMBER" -R "$REPO" --json state,isDraft,baseRefName,headRefOid,author,labels,mergeable,isCrossRepository,closingIssuesReferences)
           head=$(jq -r .headRefOid <<<"$pr")
@@ -159,8 +181,16 @@ jobs:
           [ "$(jq -r .isCrossRepository <<<"$pr")" = false ] || skip "#$NUMBER はフォークから"
           [ "$(jq -r .author.login <<<"$pr")" = "$OWNER" ] || skip "#$NUMBER を作ったのがオーナーではない"
 
-          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
+          held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-decision","needs-approval","ai-in-actions"))] | join(",")' <<<"$pr")
           [ -z "$held" ] || skip "#$NUMBER にラベル $held が付いている"
+          # AI のワークフローは PR・issue のコメントを読み、書き込みのできる権限で動く。オーナー・コラボレーター・決まった bot 以外の人が
+          # 書いたものがある PR は、その指示で変わったかもしれないので自動ではマージせず、needs-human で人に確かめてもらう(決め方は untrusted-hold.sh。#494)
+          if ! bash .ai-dev/.github/scripts/untrusted-hold.sh "$REPO" "$NUMBER"; then
+            if gh pr view "$NUMBER" -R "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-human; then
+              gh workflow run notify-needs-human.yml -R "$REPO" -f number="$NUMBER" -f label=needs-human || echo "::warning::通知のワークフローを呼べなかった(毎朝のまとめで知らせる)"
+            fi
+            skip "#$NUMBER に信頼しない人が書いたものがある・確かめられなかった"
+          fi
           if jq -e '.labels | any(.name == "no-auto-merge")' <<<"$pr" >/dev/null; then human="ラベル no-auto-merge が付いている"; fi
 
           # 閉じる issue には、別のリポジトリの issue(Closes owner/repo#N)も入るので、このリポジトリのものに絞る
@@ -180,7 +210,7 @@ jobs:
           pushed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date) || skip "いまのコミット ${head:0:7} の日時を読めない"
           reviewed=$(bash .ai-dev/.github/scripts/head-reviewed.sh "$REPO" "$NUMBER") || skip "#$NUMBER のレビューを読めない"
           if [ "$reviewed" != true ]; then
-            # needs-local の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
+            # needs-local・needs-manual の間に CI が終わると review-on-push.yml はレビューの依頼を見送る。ラベルが外れたこの回で、見送った依頼を出す
             # (出さないと次の ai-review-sweep.yml まで最大 2 時間待つ)。依頼済みなら request-review.sh が見送る
             if [ "$EVENT_ACTION" = unlabeled ]; then
               bash .ai-dev/.github/scripts/request-review.sh "$REPO" "$NUMBER"                 || echo "::warning::レビューの依頼を出せなかった(ai-review-sweep.yml が拾う)"
@@ -271,13 +301,21 @@ jobs:
           # needs-human で頼む(同じコミットでは 1 回だけ)。人がすべて解決すると、見回り(ai-review-sweep.yml)が外してここへ戻す
           if [ "${unresolved:-0}" != 0 ]; then
             bash .ai-dev/.github/scripts/thread-handoff.sh ask "$REPO" "$NUMBER"
-            gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER" || echo "::warning::状態のラベルを付け替えられなかった"
             exit 0
           fi
 
           # 昇格の PR は上で人の手でマージするものにしてあるので、ここへは来ない。それでも、デプロイになるマージは絶対にしない
           [ "$base" = "$DEFAULT_BRANCH" ] || skip "#$NUMBER の向き先が $DEFAULT_BRANCH ではないので、自動ではマージしない"
-          if ! merged=$(gh pr merge "$NUMBER" -R "$REPO" --merge --match-head-commit "$head" 2>&1); then
+          # PAT では --admin を付ける。gh はルールセットの承認が足りない PR(mergeStateStatus が BLOCKED)を、API に送る前に自分で断るため。
+          # サーバー側の決まり(ブランチ保護の必須のチェックは admin にも効く。ルールセットの承認はオーナーを除外)はそのまま効く
+          if [ -n "${AUTO_MERGE_TOKEN:-}" ]; then
+            merge=(env GH_TOKEN="$AUTO_MERGE_TOKEN" gh pr merge --admin)
+          else
+            merge=(gh pr merge)
+          fi
+          merged_comment="<!-- ai-dev:agent -->
+          AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
+          if ! merged=$("${merge[@]}" "$NUMBER" -R "$REPO" --merge --match-head-commit "$head" 2>&1); then
             echo "$merged"
             # 断られている間に、人がマージした・閉じた・push した(新しいコミットで呼び直される)なら、知らせない(RC-07)
             now=$(gh pr view "$NUMBER" -R "$REPO" --json state,headRefOid --jq '.state + " " + .headRefOid') || skip "#$NUMBER のマージに失敗し、いまの状態も読めない"
@@ -294,6 +332,12 @@ jobs:
             exit 0
           fi
           echo "#$NUMBER をマージした"
+
+          # PAT でマージしたなら、後片付けは GitHub とイベントで動くワークフローがする(冒頭のコメント)
+          if [ -n "${AUTO_MERGE_TOKEN:-}" ]; then
+            gh pr comment "$NUMBER" -R "$REPO" --body "$merged_comment"
+            exit 0
+          fi
 
           # ワークフローを変えた PR なら、オーナーに知らせる(GITHUB_TOKEN のマージは notify-workflow-merged.yml を起こさないので直接呼ぶ)
           if [ "$(gh pr view "$NUMBER" -R "$REPO" --json files --jq 'any(.files[].path; startswith(".github/workflows/"))')" = true ]; then
@@ -324,7 +368,15 @@ jobs:
             gh workflow run pr-status.yml -R "$REPO" -f number="$stacked" || echo "::warning::#$stacked の状態のラベルを付け替えられなかった"
           done
 
-          gh pr comment "$NUMBER" -R "$REPO" --body "<!-- ai-dev:agent -->
-          AI レビュアーの指摘への対応が終わり(未解決の指摘なし)、CI も緑だったので、自動でマージした(\`.github/ai-dev.yml\` の \`merge: auto\`)。"
-          # GITHUB_TOKEN でマージしたので閉じた PR のイベントが起きない。状態のラベルを外させる
-          gh workflow run pr-status.yml -R "$REPO" -f number="$NUMBER"
+          gh pr comment "$NUMBER" -R "$REPO" --body "$merged_comment"
+          # GITHUB_TOKEN でマージしたので閉じた PR のイベントが起きない。状態のラベルは、次のステップで外す
+
+      # 状態を変えた後(マージ・needs-approval・needs-human)も、見送ったときも、その PR の状態のラベルを事実から出し直す。
+      # 前のステップが途中で落ちても出し直す。落ちても見回り(ai-review-sweep.yml)が全 PR を出し直すので、ジョブは止めない
+      - name: 状態のラベルを出し直す
+        if: always()
+        # PR の番号は、イベントから分かればジョブの NUMBER、CI の終わり(workflow_run)ならコミットから探した PR_NUMBER
+        run: |
+          n=${PR_NUMBER:-$NUMBER}
+          [ -n "$n" ] || { echo "PR が分からないので、状態のラベルは出し直さない"; exit 0; }
+          bash .ai-dev/.github/scripts/pr-status.sh "$REPO" "$n" || echo "::warning::#$n の状態のラベルを付け替えられなかった"

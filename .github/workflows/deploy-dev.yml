@@ -1,7 +1,7 @@
 name: deploy-dev
 
 # develop を、Basic 認証で閉じた dev 環境(cocktail-dev)に出す。中身は deploy-env.yml
-# - develop に push(作業ブランチの PR をマージ)したときに出す。ai-auto-merge.yml のマージ(GITHUB_TOKEN)では push が起きないので、そちらが直接呼ぶ
+# - develop に push(作業ブランチの PR をマージ)したときに出す。ai-auto-merge.yml が secret AUTO_MERGE_TOKEN(オーナーの PAT)でマージしたときもこれで動く。secret が無く GITHUB_TOKEN でマージしたときは push が起きないので、そちらが直接呼ぶ(#540)
 # - Actions の画面(または gh workflow run deploy-dev.yml --ref develop)から、いつでも手で出せる。同じコミットを出し直すときは force を付ける
 on:
   push:
@@ -31,9 +31,17 @@ jobs:
       db_suffix: cocktail_dev
       app_url: ${{ vars.DEV_APP_URL }}
       force: ${{ inputs.force || false }}
+      # develop に入るコミットは PR の CI で通している。マージのたびに 9 ジョブを流し直すと、private では 1 回 約 11 分かかる(#535)。
+      # stg・本番は、出す前に流す
+      run_tests: false
     secrets:
       DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
       BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
       MIXHOST_SSH_KEY: ${{ secrets.MIXHOST_SSH_KEY }}
       MIXHOST_SSH_HOST: ${{ secrets.MIXHOST_SSH_HOST }}
       MIXHOST_SSH_USER: ${{ secrets.MIXHOST_SSH_USER }}
+      # アフィリエイトの設定(#505)。Secret が無ければ空で渡り、.env に行を書かない
+      AMAZON_CREDENTIAL_ID: ${{ secrets.DEV_AMAZON_CREDENTIAL_ID }}
+      AMAZON_CREDENTIAL_SECRET: ${{ secrets.DEV_AMAZON_CREDENTIAL_SECRET }}
+      AMAZON_PARTNER_TAG: ${{ secrets.DEV_AMAZON_PARTNER_TAG }}
+      RAKUTEN_AFFILIATE_ID: ${{ secrets.DEV_RAKUTEN_AFFILIATE_ID }}

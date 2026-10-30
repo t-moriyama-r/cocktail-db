@@ -10,11 +10,12 @@ const pages = [
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', title: SITE_TITLE },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', title: SITE_TITLE },
   { path: '/result/Cocktails', title: `カクテル検索結果 ｜ ${SITE_TITLE}` },
-  { path: '/category/1', title: SITE_TITLE },
+  { path: '/category/1', title: `蒸留酒(蒸留酒) ｜ ${SITE_TITLE}` },
   { path: '/detail/brand/1', title: SITE_TITLE },
   { path: '/detail/cocktail/1', title: SITE_TITLE },
   { path: '/dictionary', title: `用語辞典 ｜ ${SITE_TITLE}` },
-  { path: '/dictionary/1', title: SITE_TITLE },
+  // E2eSeeder の用語辞典で ID 1 の用語(#56)。詳細はタイトルに用語の名前を出す(TC-56-06)
+  { path: '/dictionary/1', title: `タンブラー(Tumbler) ｜ ${SITE_TITLE}` },
   { path: '/nope', title: `ページが見つかりません ｜ ${SITE_TITLE}` },
 ]
 
@@ -40,11 +41,11 @@ test('TC-296-09: 画面を移るとタイトルが変わる', async ({ page }) =
   await expect(page).toHaveTitle(`ページが見つかりません ｜ ${SITE_TITLE}`)
 
   await page.getByRole('link', { name: 'トップへ戻る' }).click()
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
   await expect(page).toHaveTitle(`トップページ ｜ ${SITE_TITLE}`)
 
   await footer(page).getByRole('link', { name: '更新ボランティア募集中...' }).click()
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   await expect(page).toHaveTitle(SITE_TITLE)
 })
 
@@ -67,33 +68,33 @@ const scrollY = (page: Page) => page.evaluate(() => window.scrollY)
 
 test('TC-296-10: 下までスクロールしてからフッターのリンクで移ると、移った先を一番上から出す', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
   await scrollToBottomOfTallPage(page)
 
   await footer(page).getByRole('link', { name: '更新ボランティア募集中...' }).click()
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   expect(await scrollY(page)).toBe(0)
 })
 
 test('TC-296-11: ブラウザの「戻る」で戻っても、一番上から出す', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
   await scrollToBottomOfTallPage(page)
   await footer(page).getByRole('link', { name: '更新ボランティア募集中...' }).click()
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
 
   await page.goBack()
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Hello World from Laravel')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
   expect(await scrollY(page)).toBe(0)
 })
 
 test('TC-296-12: いま開いている URL へのリンクを押しても、スクロールの位置は変えない', async ({ page }) => {
   await page.goto('/helpme')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('更新ボランティア募集')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
   await scrollToBottomOfTallPage(page)
   const before = await scrollY(page)
 

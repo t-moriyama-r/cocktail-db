@@ -23,14 +23,7 @@ class SaveBrandRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        $normalized = [];
-        foreach (['is_major', 'is_like'] as $key) {
-            $value = $this->input($key);
-            if (is_string($value) && in_array(strtolower($value), ['true', 'false'], true)) {
-                $normalized[$key] = strtolower($value) === 'true' ? 1 : 0;
-            }
-        }
-        $this->merge($normalized);
+        $this->normalizeBooleanStrings(['is_major', 'is_like']);
     }
 
     /**
@@ -64,6 +57,6 @@ class SaveBrandRequest extends FormRequest
      */
     public function after(): array
     {
-        return [$this->youtubeValidator()];
+        return [$this->youtubeValidation()];
     }
 }

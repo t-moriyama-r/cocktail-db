@@ -45,6 +45,6 @@ class SaveDictionaryRequest extends FormRequest
      */
     public function after(): array
     {
-        return [$this->youtubeValidator()];
+        return [$this->youtubeValidation()];
     }
 }

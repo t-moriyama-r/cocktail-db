@@ -1,0 +1,186 @@
+/* カクテルの詳細の基本情報と材料(旧 Detail/CocktailDetail.vue と Detail/detail.scss) */
+.page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+/* 見出し。旧は 250% の大きさだった。ページの題の大きさ(960px 未満は特大)にそろえる */
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+@media (min-width: 960px) {
+  .title {
+    font-size: var(--font-size-title);
+  }
+}
+
+/* ベースなどの欄とグラス。旧と同じく左に線を引く */
+.data {
+  margin-top: var(--space-2);
+  border-left: 5px solid var(--color-detail-data-line);
+}
+
+.dataList {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+/* 1 つの項目。見出し(旧の th)の下に値(旧の td)を置く */
+.dataItem {
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.dataItem dt {
+  font-weight: 700;
+}
+
+.dataItem dd {
+  margin: 0;
+}
+
+/* 製法のアイコンと名前の間を空ける */
+.dataItem dd svg {
+  margin-right: var(--space-1);
+  vertical-align: -0.125em;
+}
+
+/* 評価の無いカクテルの「未評価」は薄い色にする */
+.dataItem dd.noRate {
+  color: var(--color-text-muted);
+}
+
+/* 600px 未満: ベースだけを 1 行目に置き、残りの 4 つを 2 行目に等分して並べる(旧のスマホ版の表) */
+@media (max-width: 599px) {
+  .dataItem {
+    flex: 1;
+  }
+
+  .baseItem {
+    flex-basis: 100%;
+  }
+}
+
+/* 説明文。960px 未満では上に「§Description§」の区切りを出す */
+.description {
+  margin: var(--space-5) var(--space-2) var(--space-5);
+}
+
+.descriptionDivider {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-1);
+}
+
+.dividerLine {
+  flex: 1;
+  border-bottom: 3px double var(--color-border);
+}
+
+.dividerLabel {
+  padding: 0 var(--space-1);
+  color: var(--color-section-label);
+}
+
+@media (min-width: 960px) {
+  .descriptionDivider {
+    display: none;
+  }
+}
+
+/* YouTube。旧と同じく幅は 550px までにし、960px 未満では真ん中に置く */
+.youtube {
+  max-width: 550px;
+}
+
+@media (max-width: 959px) {
+  .youtube {
+    margin: 0 auto;
+  }
+}
+
+/* 材料の表と Note。旧と同じく左に線を引く */
+.recipe {
+  margin-top: var(--space-2);
+  border-left: 5px solid var(--color-detail-recipe-line);
+}
+
+.ingredients {
+  border-collapse: collapse;
+}
+
+.ingredients th {
+  padding: 0 var(--space-1);
+  text-align: left;
+}
+
+.ingredients td {
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.ingredients td.amount {
+  text-align: right;
+}
+
+/* 600px 未満: 旧と同じく「Material」の列を出さない */
+@media (max-width: 599px) {
+  .material {
+    display: none;
+  }
+}
+
+.note {
+  margin-left: var(--space-4);
+}
+
+.note svg {
+  margin-right: var(--space-1);
+  vertical-align: -0.125em;
+}
+
+.noteText {
+  margin-left: 1em;
+  border-top: 1px solid var(--color-detail-note-line);
+}
+
+/* 同じ名前・別名・同じレシピ・材料が似た・同じベースのカクテルの欄(#109)。旧と同じく、左に 5px の線を引いて欄ごとに色を変える。
+   材料が似た・同じベースの一覧(RandomCocktails)の上下の余白は、この欄の上の余白と重なる(縦の余白の相殺) */
+.related {
+  margin-top: var(--space-5);
+  padding-left: var(--space-2);
+  border-left: 5px solid;
+}
+
+.sameCocktail {
+  border-left-color: var(--color-detail-same-name-line);
+}
+
+.similar {
+  border-left-color: var(--color-detail-similar-line);
+}
+
+.sameBase {
+  border-left-color: var(--color-detail-same-base-line);
+}
+
+/* 「同じ名前のカクテルがあります！」。旧は見出しではなく地の文と同じ大きさ・太さの文字だった */
+.noticeHeading {
+  margin: 0 0 var(--space-2);
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+}
+
+.aliases {
+  margin: 0;
+}
+
+/* 電球・タグのアイコンと文言の間を空ける(旧の fa-fw の幅に近づける) */
+.noticeHeading svg,
+.aliases svg {
+  margin-right: var(--space-1);
+  vertical-align: -0.125em;
+}

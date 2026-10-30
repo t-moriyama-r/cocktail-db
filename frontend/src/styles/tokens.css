@@ -24,9 +24,38 @@
   /* 旧は #f9a825 だが、白地でコントラストが足りないので濃くした(#294) */
   --color-rate: #a15c00;
   --color-footer-bg: #f5f5f5;
-  /* 動画のあるカクテルの行のリンクの色と、YouTube のアイコンの色(旧 Results/Tables/table.scss の hasMovie と同じ値) */
+  /* 動画のあるカクテルの行のリンクと、説明文の中の動画があるリンク(#301)の色と、YouTube のアイコンの色(旧 Results/Tables/table.scss の hasMovie と同じ値) */
   --color-has-movie: #c24e00; /* 旧は #ff6600 だが、白地で 2.94:1 のため 4.5:1 を満たすよう濃くした */
   --color-youtube: #c4302b;
+  /* 検索フォームの材料の欄で、根(旧の種別)ごとに分ける背景の色(旧 form.vue の kind_1〜kind_5 と同じ値。#305) */
+  --color-ingredient-liquor-bg: #ddeeff; /* 役割なしの根(旧の蒸留酒・醸造酒・混成酒) */
+  --color-ingredient-soft-drink-bg: #ffffff; /* ソフトドリンク */
+  --color-ingredient-other-bg: #eeeeee; /* その他 */
+  /* ヘッダーの名前検索のボタン(#99)。押せないときの地と、禁止文字を含むときの「Error」の地。どちらも文字との差は 4.5:1 以上 */
+  --color-disabled-bg: #e0e0e0; /* 文字は --color-text-muted(4.69:1) */
+  --color-danger: #c62828; /* 文字は --color-on-accent(5.62:1) */
+  /* カテゴリの詳細の欄の線(#105)。有名な銘柄と子のノード(旧 Detail/CategoryDetail.vue の famous_brand・middle_list と同じ値) */
+  --color-famous-line: #006699;
+  --color-children-line: #ff6600;
+  /* カクテルの詳細(#108)。ベースなどの欄・材料の欄の左の線と、Note の上の線(旧 Detail/CocktailDetail.vue と同じ値。文字ではないので 4.5:1 の対象外) */
+  --color-detail-data-line: #006699;
+  --color-detail-recipe-line: #ff6600;
+  --color-detail-note-line: #98d4d6;
+  /* カクテルの詳細の、同じ名前・材料が似た・同じベースのカクテルの欄の左の線(旧 Detail/CocktailDetail.vue と同じ値。#109)。
+     別名・同じレシピの欄(旧に無い)は、同じ名前の欄と同じ線にする */
+  --color-detail-same-name-line: #fae125;
+  --color-detail-similar-line: #3399ff;
+  --color-detail-same-base-line: #1f0d85;
+  /* カクテルの詳細の「§Description§」の区切りの文字(#108) */
+  /* 旧と同じ値。白地で 4.11:1 と 4.5:1 に届かないが、旧と見た目を変える決まり(旧との差分)が無いので旧に合わせている */
+  --color-section-label: #1177ff;
+  /* モーダル(#99 の条件検索)の後ろを暗くする色(旧の Vuetify の v-overlay と同じ濃さ) */
+  --color-overlay: rgb(33 33 33 / 46%);
+  /* 用語辞典(#56)の一覧の分類の見出しの線(旧 Dictionary/index.vue と同じ値。ほかの見出しの --color-heading-line とは旧でも違った) */
+  --color-dictionary-category-line: #006699;
+  /* 用語辞典の詳細(#56)の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(旧 Dictionary/detail.vue と同じ値) */
+  --color-dictionary-method-line: #3399ff;
+  --color-dictionary-glass-line: #1f0d85;
 
   /* 余白。段階は共通にし、案ごとには倍率だけを変える */
   --space-scale: 1;
