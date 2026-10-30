@@ -64,10 +64,14 @@ extract() {
 	fi
 }
 
+# ワークフローと同じく、入力はファイルにして --slurpfile で渡す(message.jq は $target[0] などで受ける)
 message() {
+	printf '%s' "$2" >"$WORK/target.json"
+	printf '%s' "$3" >"$WORK/comments.json"
+	printf '%s' "$4" >"$WORK/issues.json"
 	jq -n -r -f "$WORK/message.jq" \
 		--arg repo owner/app --arg number "$1" --arg label needs-human --arg sender "" \
-		--argjson target "$2" --argjson comments "$3" --argjson issues "$4" \
+		--slurpfile target "$WORK/target.json" --slurpfile comments "$WORK/comments.json" --slurpfile issues "$WORK/issues.json" \
 		| jq -r .text >"$WORK/out.txt"
 }
 
