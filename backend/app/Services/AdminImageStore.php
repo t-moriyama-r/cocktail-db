@@ -23,6 +23,9 @@ final class AdminImageStore
     /** 受け付ける画像の種類。中身から推定した拡張子で確かめる(名前の拡張子は見ない) */
     private const TYPES = ['jpeg', 'png', 'gif', 'webp'];
 
+    /** 画像の列(image)を持ち、public ディスクのファイルを指しうる表 */
+    private const IMAGE_TABLES = ['cocktails', 'categories', 'brands', 'dictionaries'];
+
     /**
      * 画像の列に入れる値を返す。
      *
@@ -50,6 +53,27 @@ final class AdminImageStore
         }
 
         return $current;
+    }
+
+    /**
+     * 行を消したときに、その行の画像のファイルを消す。ほかの行(カクテル・ノード・銘柄・用語)が同じファイルを指していれば残す。
+     *
+     * 消す行と同じトランザクションの中で、行を消した後に呼ぶ(消した行は数えないため。#578)。
+     * 移した画像(#34)は、旧で同じファイルを複数の行が指していることがあるので、指す行が残るあいだは消さない。
+     */
+    public function deleteUnreferenced(?string $current): void
+    {
+        if ($current === null) {
+            return;
+        }
+
+        foreach (self::IMAGE_TABLES as $table) {
+            if (DB::table($table)->where('image', $current)->exists()) {
+                return;
+            }
+        }
+
+        $this->deleteStored($current);
     }
 
     /**

@@ -958,7 +958,7 @@
             },
             "delete": {
                 "operationId": "cocktail.destroy",
-                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u3082\u4e00\u7dd2\u306b\u6d88\u3048\u308b(#130)\u3002",
+                "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u6d88\u3059\u3002\u6750\u6599\u30fb\u5225\u540d\u3082\u4e00\u7dd2\u306b\u6d88\u3048\u308b(#130)\u3002\u753b\u50cf\u306e\u30d5\u30a1\u30a4\u30eb\u3082\u6d88\u3059(\u307b\u304b\u306e\u884c\u304c\u6307\u3059\u30d5\u30a1\u30a4\u30eb\u306f\u6b8b\u3059\u3002#578)\u3002",
                 "tags": [
                     "Cocktail"
                 ],

@@ -49,12 +49,11 @@ class CocktailController extends Controller
     }
 
     /**
-     * カクテルを消す。材料・別名も一緒に消える(#130)。
+     * カクテルを消す。材料・別名も一緒に消える(#130)。画像のファイルも消す(ほかの行が指すファイルは残す。#578)。
      */
-    public function destroy(int $cocktail): Response
+    public function destroy(AdminCocktailWriter $writer, int $cocktail): Response
     {
-        // 材料・別名は外部キーの CASCADE で消える(旧は材料の行を残していた。docs/migration-anomalies.md の 1)
-        Cocktail::query()->findOrFail($cocktail)->delete();
+        $writer->delete(Cocktail::query()->findOrFail($cocktail));
 
         return response()->noContent();
     }

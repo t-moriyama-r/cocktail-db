@@ -19,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  * RecipeCounter・RecipeSignature で作り直す(#130)。
  *
  * 別名(#293)は、送ったときだけ、送った並びに置き換える。
+ *
+ * 削除(#130)では、画像のファイルも消す(#578)。
  */
 class AdminCocktailWriter
 {
@@ -99,6 +101,23 @@ class AdminCocktailWriter
             $cocktail->refresh();
 
             return $cocktail;
+        });
+    }
+
+    /**
+     * $cocktail を消す。材料・別名は外部キーの CASCADE で消える(#130)。画像のファイルも消すが、
+     * ほかの行が同じファイルを指していれば残す(#578)。
+     */
+    public function delete(Cocktail $cocktail): void
+    {
+        DB::transaction(function () use ($cocktail): void {
+            // 画像の差し替えの保存と同時に消したときに、消す画像が食い違わないよう、行をロックして読み直す
+            $cocktail = Cocktail::query()->lockForUpdate()->findOrFail($cocktail->id);
+
+            // 旧は材料の行を残していた(docs/migration-anomalies.md の 1)
+            $cocktail->delete();
+            // 消した行を数えないよう、行を消してから、ほかに指す行があるかを確かめる。ファイルはコミットの後に消える
+            $this->images->deleteUnreferenced($cocktail->image);
         });
     }
 
