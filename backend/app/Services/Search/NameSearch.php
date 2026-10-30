@@ -5,6 +5,7 @@ namespace App\Services\Search;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
+use App\Models\CocktailAlias;
 use App\Support\NameNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * 旧の SearchController@fromName(Search::generate_search_array・Search::find_Jap_or_Eng)と同じ一致にする。
  * 材料名からカクテルを探す欄(ingredient_matches。旧のインテリジェンスサーチ CocktailFactory::intelligenceSearch。#173)も返す。
+ * カクテルは、別名(cocktail_aliases。#82。旧に無い)でも探す。
  * 旧と変えたところは docs/decisions/name-search.md の「旧との差分」。
  */
 class NameSearch
@@ -25,6 +27,9 @@ class NameSearch
      * $query に名前が一致するカクテル(下書きを除く)・ノード(根を除く)・銘柄と、$query の語を材料に使うカクテルを、
      * 種類ごとに ID の順で返す。
      *
+     * カクテルは、名前か別名のどちらかが一致したもの。名前では当たらず別名で当たったカクテルには、当たった別名の名前を
+     * 属性 matched_alias に入れる(当たった別名が 2 つ以上なら、先に登録した方。名前で当たったカクテルは null)。
+     *
      * @return array{cocktails: Collection<int, Cocktail>, nodes: Collection<int, Category>, brands: Collection<int, Brand>, ingredient_matches: Collection<int, Cocktail>}
      */
     public function search(string $query): array
@@ -34,8 +39,7 @@ class NameSearch
         $columns = ctype_alnum($query) ? ['name_eng', 'name_search'] : ['name_search'];
 
         return [
-            'cocktails' => $this->matching(Cocktail::query()->published(), $words, $columns)
-                ->with(['baseCategory', 'method'])->get(),
+            'cocktails' => $this->cocktails($words, $columns),
             // 根(旧の種別)は旧の検索に入っていなかったので除く。旧のカテゴリとミドルは、どちらも根の下のノード
             'nodes' => $this->matching(Category::query()->has('ancestors'), $words, $columns)
                 ->with('parent')->get(),
@@ -44,6 +48,39 @@ class NameSearch
             // 旧と同じく、英数字だけの入力なら英名だけ、それ以外は検索用の名前だけで、ノード・銘柄の完全一致を探す
             'ingredient_matches' => $this->ingredientMatches($words, ctype_alnum($query) ? 'name_eng' : 'name_search'),
         ];
+    }
+
+    /**
+     * 名前か別名が一致するカクテル(下書きを除く)を ID の順で返す。別名は英名を持たないので、検索用の名前だけで探す。
+     *
+     * @param  list<string>  $words
+     * @param  list<string>  $columns
+     * @return Collection<int, Cocktail>
+     */
+    private function cocktails(array $words, array $columns): Collection
+    {
+        $byName = $this->matching(Cocktail::query()->published(), $words, $columns)
+            ->with(['baseCategory', 'method'])->get();
+
+        // 名前で当たらなかったカクテルの別名だけを見る。別名の ID の順なので、先に登録した別名が先に来る
+        $aliasNames = [];
+        $aliases = $this->matching(
+            CocktailAlias::query()
+                ->whereHas('cocktail', fn (Builder $cocktail) => $cocktail->published())
+                ->whereNotIn('cocktail_id', $byName->modelKeys()),
+            $words,
+            ['name_search'],
+        )->get(['cocktail_id', 'name']);
+        foreach ($aliases as $alias) {
+            $aliasNames[$alias->cocktail_id] ??= $alias->name;
+        }
+
+        $byAlias = Cocktail::query()->whereKey(array_keys($aliasNames))->with(['baseCategory', 'method'])->get();
+        foreach ($byAlias as $cocktail) {
+            $cocktail->setAttribute('matched_alias', $aliasNames[$cocktail->id]);
+        }
+
+        return $byName->concat($byAlias)->sortBy('id')->values();
     }
 
     /**

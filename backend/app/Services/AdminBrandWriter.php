@@ -18,7 +18,8 @@ use UnexpectedValueException;
  * 管理画面の銘柄の新規・更新(#314)。旧の DetailEditController@brand と FactoryHelper::generateFromRequest の銘柄の分。
  *
  * 所属を変えたときは、同じトランザクションで、その銘柄を使う材料・アフィリエイトのノードを新しい所属にそろえ
- * (docs/schema.md の「材料が銘柄を持つときのノード」)、それらのカクテルの材料の数を数え直す(#156)。
+ * (docs/schema.md の「材料が銘柄を持つときのノード」)、それらのカクテルの材料の数を数え直し(#156)、材料の組の
+ * ハッシュ(recipe_signature)を作り直す(#82。材料のノードが変わるため)。
  */
 class AdminBrandWriter
 {
@@ -26,6 +27,7 @@ class AdminBrandWriter
         private readonly DescriptionMarkup $markup,
         private readonly AdminImageStore $images,
         private readonly RecipeCounter $counter,
+        private readonly RecipeSignature $signature,
     ) {}
 
     /**
@@ -143,7 +145,8 @@ class AdminBrandWriter
     }
 
     /**
-     * $brand を使う材料・アフィリエイトのノードを、$brand の所属にそろえ、その材料のカクテルの材料の数を数え直す。
+     * $brand を使う材料・アフィリエイトのノードを、$brand の所属にそろえ、その材料のカクテルの材料の数を数え直し、
+     * 材料の組のハッシュを作り直す。
      */
     private function followCategory(Brand $brand): void
     {
@@ -159,5 +162,6 @@ class AdminBrandWriter
             ->all();
 
         $this->counter->recount(array_values($cocktailIds));
+        $this->signature->rewrite(array_values($cocktailIds));
     }
 }

@@ -1,9 +1,17 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
-import { buildSelectionTree, checkStates, toggleNode, type TreeSelection } from './selection'
+import { collectCategoryTreeIds } from '../../components/CategoryTree/collectCategoryTreeIds'
+import {
+  buildSelectionTree,
+  checkStates,
+  emptySelection,
+  selectVisibleLeaves,
+  toggleNode,
+  type TreeSelection,
+} from './selection'
 import { sortSearchFormTree } from './sortSearchFormTree'
 import styles from './IngredientTreeField.module.css'
 
@@ -32,11 +40,19 @@ export const OTHER_ROOT_NOTE = 'あるもの検索では、持っていなくて
  * - 根ごとに背景の色を分ける(役割なし = 蒸留酒・醸造酒・混成酒は水色、ソフトドリンクは白、その他は灰色)
  * - 根は見出しで、チェックも詳細へのリンクも無い
  * - ノードの名前を押すと、そのノードの詳細へ移り(フォームがモーダルなら閉じる)、チェックは変わらない(jumpCategoryAndCloseModal)
+ * - 「全てチェック」「全てはずす」「メジャーでない項目の表示／非表示」(#306。check_all・check_disall・check_majorSwit)
+ *   - メジャーでない項目は既定で隠す。隠しても選択は外れない。表示の状態は保存しない(開くたびに隠した状態から)
+ *   - 「全てチェック」は見えているものだけを選び、隠れていた選択は外れる(#282 の決まったこと 3)
+ *   - 「全てはずす」は隠れているものも含めてすべて外す
+ *
+ * 名前での絞り込み(#297)は木の部品が木の上に出す(旧に無い)。隠しているあいだは、隠れている材料には当たらない
  */
 export default function IngredientTreeField({ categories, selection, onSelectionChange, onNavigate }: Props) {
   const navigate = useNavigate()
+  const [showsNonMajor, setShowsNonMajor] = useState(false)
   const sorted = useMemo(() => sortSearchFormTree(categories), [categories])
-  const nodes = useMemo(() => sorted.map(toCategoryTreeNode), [sorted])
+  // 隠すのは出し方だけ。選択の規則(tree)は隠れているノードも含めた木で扱うので、隠しても選択は残る
+  const nodes = useMemo(() => sorted.map((root) => toCategoryTreeNode(root, showsNonMajor)), [sorted, showsNonMajor])
   const tree = useMemo(() => buildSelectionTree(sorted), [sorted])
   const states = useMemo(() => checkStates(tree, selection), [tree, selection])
   const appearance = useMemo(() => buildAppearance(sorted), [sorted])
@@ -44,6 +60,26 @@ export default function IngredientTreeField({ categories, selection, onSelection
   return (
     <fieldset className={styles.field}>
       <legend className={styles.legend}>レシピ選択</legend>
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={() => onSelectionChange(selectVisibleLeaves(tree, collectCategoryTreeIds(nodes)))}
+        >
+          全てチェック
+        </button>
+        <button type="button" className={styles.actionButton} onClick={() => onSelectionChange(emptySelection)}>
+          全てはずす
+        </button>
+        <button
+          type="button"
+          className={styles.actionButton}
+          aria-pressed={showsNonMajor}
+          onClick={() => setShowsNonMajor((current) => !current)}
+        >
+          メジャーでない項目の表示／非表示
+        </button>
+      </div>
       <CategoryTree
         label="材料"
         nodes={nodes}
@@ -79,13 +115,19 @@ function buildAppearance(roots: readonly SearchFormNode[]): CategoryTreeAppearan
   }
 }
 
-/** API のノードを、木の部品が受け取る形にする(検索フォームの API は英名を返さない) */
-function toCategoryTreeNode(node: SearchFormNode): CategoryTreeNode {
+/**
+ * API のノードを、木の部品が受け取る形にする(検索フォームの API は英名を返さない)。
+ * showsNonMajor が false なら、メジャーでない子を部分木ごと出さない(旧も、メジャーでないカテゴリの下のミドルは出なかった)。
+ * 根(旧の種別)はメジャーかどうかを持たない(API では false)ので、いつも出す
+ */
+function toCategoryTreeNode(node: SearchFormNode, showsNonMajor: boolean): CategoryTreeNode {
   return {
     id: node.id,
     name: node.name,
     name_eng: null,
     is_major: node.is_major,
-    children: node.children.map(toCategoryTreeNode),
+    children: node.children
+      .filter((child) => showsNonMajor || child.is_major)
+      .map((child) => toCategoryTreeNode(child, showsNonMajor)),
   }
 }
