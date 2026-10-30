@@ -113,9 +113,10 @@ def check_widths(where, v)
     err("#{where}: 320〜3840 の整数の配列で書く")
     return []
   end
-  missing = BREAKPOINTS.map(&:first) - v.map { |w| breakpoint(w) }
+  # 両端の xs と lg は必ず撮る。sm・md は .css を変えた PR だけ要るが、それはこのブロックからは分からないので、書く人に任せる(#604)
+  missing = %w[xs lg] - v.map { |w| breakpoint(w) }
   unless missing.empty?
-    err("#{where}: 区切りごとに 1 つ以上の幅を入れる(足りない区切り: #{missing.join('・')}。既定は #{DEFAULT_WIDTHS.join('・')})")
+    err("#{where}: xs と lg の幅は必ず入れる(足りない区切り: #{missing.join('・')}。.css を変えた PR は sm・md も入れる。既定は #{DEFAULT_WIDTHS.join('・')})")
   end
   v.uniq.sort
 end

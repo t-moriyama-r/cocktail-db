@@ -124,10 +124,15 @@ main() {
 	expect TC-599-19 '画面のパスが無い・ホストを書いたものは落とす' "$(out)|$RC" \
 		"$(printf '%s\n%s' 'items[1](screen).path: 文字列で書く' 'items[2](screen).path: / で始まるアプリの中のパスにする(ホストは書かない): https://example.com/search')|1"
 
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /' '    widths: [375, 768]'
+	run
+	expect TC-599-20 '幅を書くときに、xs か lg が入っていなければ名前を出して落とす(#604 で sm・md は必須でなくした)' "$(out)|$RC" \
+		'items[1](screen).widths: xs と lg の幅は必ず入れる(足りない区切り: lg。.css を変えた PR は sm・md も入れる。既定は 375・768・1024・1440)|1'
+
 	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /' '    widths: [375, 1440]'
 	run
-	expect TC-599-20 '幅を書くときに、入っていない区切りがあれば名前を出して落とす' "$(out)|$RC" \
-		'items[1](screen).widths: 区切りごとに 1 つ以上の幅を入れる(足りない区切り: sm・md。既定は 375・768・1024・1440)|1'
+	expect TC-604-15 '.css を変えない画面の PR のために、xs・lg の 2 幅だけでも通す' "$(jq -c '.items[0] | [.widths, .video]' "$WORK/out")|$RC" \
+		'[[375,1440],[375,1440]]|0'
 
 	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /' '    widths: [599, 600, 959, 960, 1264]'
 	run
