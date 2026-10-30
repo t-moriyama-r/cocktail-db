@@ -39,10 +39,32 @@ export interface paths {
          *     名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順。
          *     q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
          */
-        get: operations["brand.index"];
+        get: operations["admin.brand.index_42"];
         put?: never;
         /** 銘柄を作る。名前・英名がほかの銘柄と同じなら、保存したうえで warnings に入れて返す。 */
         post: operations["brand.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/brands-regen-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 銘柄の一覧。名前の昇順で 1 ページずつ返す。
+         * @description 並びと絞り込みは管理画面のカクテルの一覧(#289)と同じ(旧の一覧の部品 ListComponent.vue を銘柄でも使っていた)。
+         *     名前はカタカナをひらがなに、全角の英数字を半角に、大文字を小文字にそろえて比べ、同じなら ID の順。
+         *     q は名前か英名のどこかに含むものに絞る(英名は大文字・小文字を区別しない)。
+         */
+        get: operations["admin.brand.index_43"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1633,7 +1655,7 @@ export interface operations {
             422: components["responses"]["ValidationException"];
         };
     };
-    "brand.index": {
+    "admin.brand.index_42": {
         parameters: {
             query?: {
                 /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
@@ -1718,6 +1740,59 @@ export interface operations {
                             /** @constant */
                             message: "同じ名前が存在しています";
                         })[];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "admin.brand.index_43": {
+        parameters: {
+            query?: {
+                /** @description 名前か英名のどこかに含む語(#284 の 6。部分一致) */
+                q?: string | null;
+                page?: number | null;
+                per_page?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `BrandListItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BrandListItemResource"][];
+                        links: {
+                            first: string | null;
+                            last: string | null;
+                            prev: string | null;
+                            next: string | null;
+                        };
+                        meta: {
+                            current_page: number;
+                            from: number | null;
+                            last_page: number;
+                            /** @description Generated paginator links. */
+                            links: {
+                                url: string | null;
+                                label: string;
+                                active: boolean;
+                            }[];
+                            /** @description Base path for paginator generated URLs. */
+                            path: string | null;
+                            /** @description Number of items shown per page. */
+                            per_page: number;
+                            /** @description Number of the last item in the slice. */
+                            to: number | null;
+                            /** @description Total number of items being paginated. */
+                            total: number;
+                        };
                     };
                 };
             };
