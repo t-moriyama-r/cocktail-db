@@ -77,13 +77,8 @@ class AdminCocktailWriter
             $cocktail->youtube = $videoId;
 
             // 画像は最後に置く。ここより前で止まったときに、上げたファイルだけが残らないようにする
+            // (ここより後で落ちてロールバックされたときは、AdminImageStore が置いたファイルを消す)
             $cocktail->image = $this->images->update($request->file('image'), $request->boolean('remove_image'), $cocktail->image);
-            $uploaded = $request->file('image') !== null ? $cocktail->image : null;
-
-            // ロールバックされると、置いたファイルを指す行は残らない。孤児にならないよう消す
-            if ($uploaded !== null) {
-                DB::afterRollBack(fn () => $this->images->discard($uploaded));
-            }
 
             $cocktail->save();
 
