@@ -2,13 +2,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, test } from 'vitest'
 import App from '../../App'
-import type { paths } from '../../api/schema'
 import { buildCocktailDetail } from '../../features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from '../../test/api'
-
-type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
-
-const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
 
 const renderAt = (path: string) =>
   render(
@@ -21,8 +16,7 @@ const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
   beforeEach(() => {
-    // トップの画面が GET /api/hello を、用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
-    mockApi('get', '/hello', 200, HELLO)
+    // 用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
     mockApi('get', '/dictionaries', 200, { data: [] })
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
@@ -56,7 +50,7 @@ describe('共通の枠(SiteLayout)', () => {
   })
 
   test.each([
-    ['/', 'Hello World from Laravel'],
+    ['/', '宅飲みカクテルデータベース'],
     ['/helpme', '当DBの更新ボランティア募集について'],
     ['/detail/cocktail/1', 'マティーニ(Martini)'],
     ['/nope', 'ページが見つかりません'],
@@ -94,7 +88,7 @@ describe('共通の枠(SiteLayout)', () => {
 
   test('TC-296-07: 画面を移るとタイトルが変わり、ページ名の無い画面ではサイト名だけに戻る', async () => {
     renderAt('/')
-    await screen.findByRole('heading', { level: 1, name: HELLO.message })
+    await screen.findByRole('heading', { level: 1, name: '宅飲みカクテルデータベース' })
     expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)')
 
     fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
