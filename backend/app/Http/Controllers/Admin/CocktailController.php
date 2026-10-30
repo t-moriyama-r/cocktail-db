@@ -8,9 +8,10 @@ use App\Http\Resources\Admin\CocktailResource;
 use App\Models\Cocktail;
 use App\Services\AdminCocktailWriter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
 
 /**
- * 管理画面のカクテルの基本情報(#291。画面は #127)。旧の DetailEditController@cocktail の置き換え(材料は #292)。
+ * 管理画面のカクテルの基本情報(#291。画面は #127)と削除(#130)。旧の DetailEditController@cocktail・delete_cocktail の置き換え(材料は #292)。
  */
 class CocktailController extends Controller
 {
@@ -33,10 +34,21 @@ class CocktailController extends Controller
     }
 
     /**
-     * カクテルの基本情報を書き換える。材料と、材料から作る値(度数・材料の数)は変えない。
+     * カクテルの基本情報を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。
      */
     public function update(SaveCocktailRequest $request, AdminCocktailWriter $writer, int $cocktail): CocktailResource
     {
         return CocktailResource::make($writer->save(Cocktail::query()->findOrFail($cocktail), $request));
+    }
+
+    /**
+     * カクテルを消す。材料・別名も一緒に消える(#130)。
+     */
+    public function destroy(int $cocktail): Response
+    {
+        // 材料・別名は外部キーの CASCADE で消える(旧は材料の行を残していた。docs/migration-anomalies.md の 1)
+        Cocktail::query()->findOrFail($cocktail)->delete();
+
+        return response()->noContent();
     }
 }
