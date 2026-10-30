@@ -8,7 +8,7 @@ const pages = [
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', heading: '名前検索の結果' },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', heading: '名前検索の結果' },
   { path: '/result/Cocktails', heading: '条件検索の結果' },
-  { path: '/category/1', heading: 'カテゴリの詳細' },
+  { path: '/category/1', heading: '蒸留酒(蒸留酒)' },
   { path: '/detail/brand/1', heading: '銘柄の詳細' },
   // E2eSeeder のジントニック(#108 で中身を出すようにした)
   { path: '/detail/cocktail/1', heading: 'ジントニック(Gin and Tonic)' },

@@ -79,6 +79,7 @@ npm run dev
 | 材料の欄の根の背景 `--color-ingredient-liquor-bg`・`--color-ingredient-soft-drink-bg`・`--color-ingredient-other-bg` | `#ddeeff`・`#ffffff`・`#eeeeee`(旧の `form.vue` の種別ごとの背景と同じ。リンクの色 `#337ab7` は `#ddeeff` で 3.85:1・`#eeeeee` で 3.93:1 で、4.5:1 に届かない。旧と同じ) | 検索フォームの材料の欄で、根(旧の種別)ごとに分ける背景。役割なし(蒸留酒・醸造酒・混成酒)・ソフトドリンク・その他(#305) |
 | 押せないボタンの地 `--color-disabled-bg` | `#e0e0e0`(文字は `--color-text-muted` で 4.69:1) | ヘッダーの名前検索のボタンで、入力が空・検索中・0 件・サーバーエラーのとき(#99) |
 | 誤りの地 `--color-danger` | `#c62828`(文字は `--color-on-accent` で 5.62:1) | ヘッダーの名前検索のボタンで、禁止文字を含むときの「Error」(#99) |
+| カテゴリの詳細の欄の線 `--color-famous-line`・`--color-children-line` | `#006699`・`#ff6600`(旧の `Detail/CategoryDetail.vue` の有名な銘柄・ミドルカテゴリの欄と同じ。線だけで文字には使わない) | カテゴリの詳細の、有名な銘柄と子のノードの欄の線(#105) |
 | 詳細の欄の線 `--color-detail-data-line`・`--color-detail-recipe-line`・`--color-detail-note-line` | `#006699`・`#ff6600`・`#98d4d6`(旧の `Detail/CocktailDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | カクテルの詳細の、ベースなどの欄の左の線・材料の欄の左の線・Note の上の線(#108) |
 | 区切りの文字 `--color-section-label` | `#1177ff`(旧と同じ。白地で 4.11:1 で、4.5:1 に届かない) | カクテルの詳細の、960px 未満で説明文の上に出す「§Description§」(#108) |
 | モーダルの後ろ `--color-overlay` | `rgb(33 33 33 / 46%)`(旧の Vuetify の v-overlay と同じ色と濃さ) | ヘッダーの条件検索のモーダル(#99) |

@@ -7,9 +7,31 @@ import { buildCocktailDetail } from './features/cocktail-detail/buildCocktailDet
 import { mockApi } from './test/api'
 
 type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
+type CategoryDetailResponse = paths['/categories/{category}']['get']['responses'][200]['content']['application/json']
 
 const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
 const NOT_FOUND_HEADING = 'ページが見つかりません'
+const ROOT_NODE = { id: 1, name: '蒸留酒', name_eng: 'Spirits' }
+const CATEGORY: CategoryDetailResponse = {
+  data: {
+    ...ROOT_NODE,
+    description: null,
+    is_major: true,
+    is_like: false,
+    youtube: null,
+    youtube_created_at: null,
+    youtube_start_seconds: null,
+    image: null,
+    image_txt: null,
+    image_url: null,
+    created_at: null,
+    updated_at: null,
+    path: [ROOT_NODE],
+    children: [],
+    famous_brand: null,
+    brands: [],
+  },
+}
 
 const renderAt = (path: string) =>
   render(
@@ -26,6 +48,8 @@ describe('App のルーティング', () => {
   beforeEach(() => {
     // トップの画面が GET /api/hello を呼ぶ
     mockApi('get', '/hello', 200, HELLO)
+    // カテゴリの詳細の画面が GET /api/categories/{id} を呼ぶ(#105)
+    mockApi('get', '/categories/{category}', 200, CATEGORY)
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
   })
@@ -43,7 +67,7 @@ describe('App のルーティング', () => {
     ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '名前検索の結果'],
     ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '名前検索の結果'],
     ['TC-97-06', '/result/Cocktails', '条件検索の結果'],
-    ['TC-97-07', '/category/1', 'カテゴリの詳細'],
+    ['TC-97-07', '/category/1', '蒸留酒(Spirits)'],
     ['TC-97-08', '/detail/brand/1', '銘柄の詳細'],
     ['TC-97-09', '/detail/cocktail/1', 'マティーニ(Martini)'],
     ['TC-97-10', '/dictionary', '用語辞典'],
