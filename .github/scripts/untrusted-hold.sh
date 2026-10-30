@@ -6,7 +6,7 @@
 # 終わりのコード: 0 … 動かしてよい / 1 … 動かさない(信頼しないものがある・読めなかった)
 #
 # Claude Code は PR・issue のコメントを読み、書き込みのできる権限で動く。public のリポジトリでは誰でもコメントできるので、
-# 外部の人のコメントで指示を渡されないよう、信頼しないもの(決め方は untrusted-comments.sh)があれば動かさない。
+# 外部の人のコメントで指示を渡されないよう、信頼しないもの(決め方は trust.jq)があれば動かさない。
 # PR なら、Claude Code が一緒に読む閉じる issue(このリポジトリのもの)も見る。
 #
 # 信頼しないものがあれば、その URL を並べたコメントを 1 回だけ書き(同じ中身のコメントがもうあれば書かない)、needs-human を付ける。
@@ -72,7 +72,7 @@ all_asked() {
 closing_issues() {
   local repo=$1 n=$2
   gh pr view "$n" -R "$repo" --json closingIssuesReferences \
-    | jq -r --arg repo "$repo" '.closingIssuesReferences[] | select(.repository.owner.login + "/" + .repository.name == $repo) | .number' \
+    | jq -r -L "$HERE" --arg repo "$repo" 'include "closing-issues"; own_closing_issues($repo)' \
     | tr '\n' ' '
 }
 
