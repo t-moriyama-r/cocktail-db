@@ -106,11 +106,8 @@
   font-size: var(--font-size-lg);
 }
 
-/* 安い方の価格。旧は楽天の方だけ黄色にしていた。Amazon の方は太字だけにする */
-.lower {
-  font-weight: bold;
-}
-
+/* 安い方の価格(strong)。旧と同じく、色を変えるのは楽天の方だけ(旧は Amazon の方にも lower のクラスを付けたが、色の指定が無かった)。
+   ボタンの文字はもともと太字なので、Amazon の方は見た目が変わらない */
 .rakuten .lower {
   color: var(--color-affiliate-lower);
 }
