@@ -1,0 +1,181 @@
+/*
+ * 商品の欄(旧 Detail/component/AffiliateContainer.vue の scss と同じ並び・大きさ)。
+ * 768px 未満は画像・題名・ボタンを縦に中央へ寄せ、768px 以上は画像の右に題名・ボタンを並べる。
+ * 768px は旧の部品が使っていた幅で、旧と同じ見た目にするため区切りの値の例外にしている(docs/design/style.md の「幅の区切り」)。
+ * 画像の欄に出すとき(.inImage。旧の is_photo_space)は、幅に関わらず縦に並べて左に寄せる
+ */
+.box {
+  position: relative;
+  box-sizing: border-box;
+  width: 94%;
+  margin: 0 auto var(--space-5);
+  padding: var(--space-5);
+  border: 3px solid var(--color-affiliate-border);
+  text-align: center;
+}
+
+.thumb {
+  width: 160px;
+  min-width: 160px;
+  margin: 0 auto var(--space-1);
+}
+
+.thumb a,
+.thumbImage {
+  display: block;
+}
+
+.thumbImage {
+  max-width: 160px;
+  margin: 0 auto;
+}
+
+.content {
+  width: 100%;
+  line-height: 1.25;
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+.snippet {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.price {
+  color: var(--color-affiliate-price);
+  font-size: var(--font-size-xl);
+}
+
+.note {
+  display: inline;
+}
+
+.disclaimer {
+  display: inline;
+}
+
+.disclaimer > summary {
+  display: inline;
+  cursor: pointer;
+  color: var(--color-link);
+}
+
+.disclaimerText {
+  display: block;
+  margin: var(--space-1) 0;
+  text-align: left;
+}
+
+.buttons {
+  margin-top: var(--space-4);
+}
+
+.shopLink {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-sm);
+}
+
+.shopLink > a {
+  display: block;
+  width: 90%;
+  margin: 0 auto var(--space-2);
+  padding: var(--space-2) 0;
+  color: var(--color-on-accent);
+  font-weight: bold;
+  text-align: center;
+  text-decoration: none;
+}
+
+.shopLink > a:hover {
+  opacity: 0.6;
+}
+
+.amazon > a {
+  background: var(--color-amazon);
+}
+
+.rakuten > a {
+  background: var(--color-rakuten);
+}
+
+.buttonPrice {
+  font-size: var(--font-size-lg);
+}
+
+/* 安い方の価格。旧は楽天の方だけ黄色にしていた。Amazon の方は太字だけにする */
+.lower {
+  font-weight: bold;
+}
+
+.rakuten .lower {
+  color: var(--color-affiliate-lower);
+}
+
+.searchByItem {
+  margin-top: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .box:not(.inImage) {
+    display: flex;
+    text-align: left;
+  }
+
+  .box:not(.inImage) .thumb {
+    min-width: auto;
+    margin: 0;
+  }
+
+  .box:not(.inImage) .content {
+    padding-left: var(--space-5);
+  }
+
+  .box:not(.inImage) .buttons {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .box:not(.inImage) .shopLink {
+    width: 40%;
+    margin: calc(var(--space-1) / 2);
+  }
+
+  .box:not(.inImage) .shopLink > a {
+    width: auto;
+    margin: 0;
+    border-radius: var(--radius);
+  }
+}
+
+.inImage {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.inImage .thumb {
+  max-width: 100%;
+}
+
+.inImage .content {
+  padding-left: var(--space-5);
+}
+
+.inImage .buttons {
+  display: flex;
+  flex-direction: column;
+}
+
+.inImage .shopLink {
+  margin: calc(var(--space-1) / 2) 0;
+}
+
+.inImage .shopLink > a {
+  width: auto;
+  margin: 0;
+  border-radius: var(--radius);
+}

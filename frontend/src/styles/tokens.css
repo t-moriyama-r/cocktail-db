@@ -56,6 +56,14 @@
   /* 用語辞典の詳細(#56)の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(旧 Dictionary/detail.vue と同じ値) */
   --color-dictionary-method-line: #3399ff;
   --color-dictionary-glass-line: #1f0d85;
+  /* 商品の欄(#303。旧 Detail/component/AffiliateContainer.vue と同じ値)。枠の線・本体の価格の文字・Amazon と楽天のボタンの地・
+     楽天のボタンの安い方の価格の文字。価格の赤は白地で 4.0:1、Amazon のボタンの地は白い文字で 2.2:1 で、4.5:1 に届かないが、
+     旧と見た目を変える決まり(旧との差分)が無いので旧に合わせている */
+  --color-affiliate-border: #dfdfdf;
+  --color-affiliate-price: #ff0000;
+  --color-amazon: #f79901;
+  --color-rakuten: #bf0000;
+  --color-affiliate-lower: #ffff00;
 
   /* 余白。段階は共通にし、案ごとには倍率だけを変える */
   --space-scale: 1;
