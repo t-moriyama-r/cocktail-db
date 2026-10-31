@@ -7,21 +7,23 @@ use App\Models\CocktailAlias;
 use App\Services\DescriptionMarkup;
 use App\Support\YoutubeInput;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * 管理画面のカクテルの編集で開く基本情報(GET /api/admin/cocktails/{id} と、新規・更新の応答。#291)。
+ * 管理画面のカクテルの編集で開く基本情報と材料(GET /api/admin/cocktails/{id} と、新規・更新の応答。#291・#292)。
  *
  * 説明・補足は、編集で開く形(記法に指す先の名前を添えたもの。DescriptionMarkup::withNotes)で返す。
  * YouTube の開始位置は、画面の欄に合わせて時・分・秒に分けて返す。画像は保存した値のまま返す
- * (public ディスクのファイル名か、外部の URL。AdminImageStore)。別名は名前だけを登録した順に返す(#293)。材料は #292 で足す。
+ * (public ディスクのファイル名か、外部の URL。AdminImageStore)。材料は、保存のときに送る形のまま、レシピの順で返す。
+ * 別名は名前だけを登録した順に返す(#293)。
  *
  * @property Cocktail $resource
  */
 class CocktailResource extends JsonResource
 {
     /**
-     * @return array{id: int, base_category_id: int, name: string, name_eng: string|null, method_id: int, glass_dictionary_id: int|null, ice_id: int|null, strength: float, rate: int|null, sweet_degree: int|null, is_major: bool, is_draft: bool, description: string|null, note: string|null, youtube: string|null, youtube_start_hour: int|null, youtube_start_minute: int|null, youtube_start_second: int|null, youtube_created_at: string|null, image: string|null, image_txt: string|null, image_url: string|null, aliases: list<string>, updated_at: string|null}
+     * @return array{id: int, base_category_id: int, name: string, name_eng: string|null, method_id: int, glass_dictionary_id: int|null, ice_id: int|null, strength: float, rate: int|null, sweet_degree: int|null, is_major: bool, is_draft: bool, description: string|null, note: string|null, youtube: string|null, youtube_start_hour: int|null, youtube_start_minute: int|null, youtube_start_second: int|null, youtube_created_at: string|null, image: string|null, image_txt: string|null, image_url: string|null, ingredients: AnonymousResourceCollection, aliases: list<string>, updated_at: string|null}
      */
     public function toArray(Request $request): array
     {
@@ -71,6 +73,8 @@ class CocktailResource extends JsonResource
             'image_txt' => $cocktail->image_txt,
             /** @var string|null */
             'image_url' => $cocktail->image_url,
+            // 材料。レシピの順(position の昇順)で、保存のときに送る形(#292)
+            'ingredients' => CocktailIngredientResource::collection($cocktail->ingredients),
             // 別名の名前。登録した順(保存で送った並び)
             /** @var list<string> */
             'aliases' => array_values($cocktail->aliases()->get()->map(fn (CocktailAlias $alias): string => $alias->name)->all()),

@@ -118,7 +118,7 @@ it('TC-130-05: 消したカクテルは、公開の詳細の API で 404 にな�
     $this->getJson("/api/cocktails/{$cocktail->id}")->assertNotFound();
 });
 
-it('TC-130-06: 更新の保存のたびに、材料の行から材料の数と材料の組のハッシュを作り直す', function () {
+it('TC-130-06: 更新の保存のたびに、保存した材料の行から材料の数と材料の組のハッシュを作り直す', function () {
     $n = cocktailDeleteNodes();
     $method = Method::factory()->create();
     // 同じ材料の組の、公開しているカクテル。保存した後に同じレシピとして引けるかで、ハッシュが作り直されたことを見る
@@ -133,6 +133,11 @@ it('TC-130-06: 更新の保存のたびに、材料の行から材料の数と�
     $this->putJson("/api/admin/cocktails/{$cocktail->id}", [
         'base_category_id' => $n['ラム']->id, 'name' => 'ダイキリ', 'name_eng' => 'Daiquiri', 'method_id' => $method->id,
         'description' => '説明', 'is_major' => false, 'is_draft' => false,
+        'ingredients' => [
+            ['category_id' => $n['ラム']->id, 'brand_id' => null, 'amount' => '30ml', 'is_optional' => false],
+            ['category_id' => $n['ライム']->id, 'brand_id' => null, 'amount' => '30ml', 'is_optional' => false],
+            ['category_id' => $n['ジン']->id, 'brand_id' => null, 'amount' => '30ml', 'is_optional' => true],
+        ],
     ])->assertOk();
 
     $cocktail->refresh();

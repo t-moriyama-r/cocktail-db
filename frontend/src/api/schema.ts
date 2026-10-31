@@ -147,7 +147,7 @@ export interface paths {
         /** 編集で開くカクテル。下書きも返す。 */
         get: operations["cocktail.show"];
         /**
-         * カクテルの基本情報と別名を書き換える。材料と度数は変えず、材料の数・材料の組のハッシュは今の材料から作り直す(#130)。
+         * カクテルの基本情報と材料・別名を書き換える。材料から作る値(度数・材料の数・材料の組のハッシュ)も作り直す。
          *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
          */
         put: operations["cocktail.update"];
@@ -843,6 +843,17 @@ export interface components {
                 amazon_search_url: string | null;
             };
         };
+        /** App.Http.Resources.Admin.CocktailIngredientResource */
+        "App.Http.Resources.Admin.CocktailIngredientResource": {
+            /** @description 材料のノード */
+            category_id: number;
+            /** @description 銘柄。銘柄を決めない材料では null */
+            brand_id: number | null;
+            /** @description 量(整えた後の値) */
+            amount: string;
+            /** @description 任意の材料か */
+            is_optional: boolean;
+        };
         /** App.Http.Resources.Admin.CocktailListItemResource */
         "App.Http.Resources.Admin.CocktailListItemResource": {
             id: number;
@@ -1123,6 +1134,8 @@ export interface components {
             image: string | null;
             image_txt: string | null;
             image_url: string | null;
+            /** @description 材料。レシピの順(position の昇順)で、保存のときに送る形(#292) */
+            ingredients: components["schemas"]["App.Http.Resources.Admin.CocktailIngredientResource"][];
             aliases: string[];
             updated_at: string | null;
         };
@@ -1444,9 +1457,9 @@ export interface components {
         };
         /**
          * SaveCocktailRequest
-         * @description カクテルの基本情報の新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。#291)の入力。
+         * @description カクテルの新規・更新(POST /api/admin/cocktails・PUT /api/admin/cocktails/{id}。基本情報は #291、材料は #292)の入力。
          *
-         *     旧の EditCocktailValidate の規則に、長さの上限とベースの規則を足したもの。材料は #292 で足す。
+         *     旧の EditCocktailValidate の規則に、長さの上限・ベースの規則と、材料の件数の上限・ノードと銘柄の規則を足したもの。
          *     別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
          *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
          */
@@ -1486,6 +1499,20 @@ export interface components {
              */
             image?: string | null;
             remove_image?: boolean;
+            /** @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る */
+            ingredients: {
+                /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
+                category_id: number;
+                /** @description 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19) */
+                brand_id?: number | null;
+                /**
+                 * @description 量。書式は確かめず、保存のときに整える(docs/decisions/admin-screens.md の決まったこと 4。旧と同じ)。
+                 *     整えた後の長さ(列の長さ)は保存のときに確かめる
+                 */
+                amount: string;
+                /** @description 任意の材料か。送らなければ任意でない(旧と同じ) */
+                is_optional?: boolean;
+            }[];
             /**
              * @description 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
              *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
