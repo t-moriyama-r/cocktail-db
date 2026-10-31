@@ -86,6 +86,7 @@ npm run dev
 | モーダルの後ろ `--color-overlay` | `rgb(33 33 33 / 46%)`(旧の Vuetify の v-overlay と同じ色と濃さ) | ヘッダーの条件検索のモーダル(#99) |
 | 用語辞典の分類の見出しの線 `--color-dictionary-category-line` | `#006699`(旧の `Dictionary/index.vue` と同じ。旧でもほかの見出しの線 `#4499FF` と違った) | 用語辞典の一覧の、分類の見出しの左と下の線(#56) |
 | 用語辞典のカクテルの欄の線 `--color-dictionary-method-line`・`--color-dictionary-glass-line` | `#3399ff`・`#1f0d85`(旧の `Dictionary/detail.vue` と同じ。飾りの線で、文字には使わない) | 用語辞典の詳細の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(#56) |
+| 商品の欄 `--color-affiliate-border`・`--color-affiliate-price`・`--color-amazon`・`--color-rakuten`・`--color-affiliate-lower` | `#dfdfdf`・`#ff0000`・`#f79901`・`#bf0000`・`#ffff00`(旧の `Detail/component/AffiliateContainer.vue` と同じ。価格の赤は白地で 4.0:1、Amazon のボタンの地は白い文字で 2.2:1 で、4.5:1 に届かない。旧と同じ) | 商品の欄(#303)の枠の線・本体の価格の文字・「Amazonで探す」「楽天で探す」のボタンの地・楽天のボタンの安い方の価格の文字 |
 
 案 A の色は旧の画面から取った(ヘッダーの水色 `#99DDFF`・リンクの青 `#337ab7`・見出しの線 `#4499FF`・区切りの線 `#BBDDFF`)。
 
@@ -98,7 +99,7 @@ npm run dev
 
 ## 幅の区切り
 
-旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。例外は、カクテルの一覧の表のベースの列(#298)と、銘柄の一覧の表の所属するノードの段(#299)を 700px 未満で隠す `max-width: 699px` だけ(旧と同じ見た目にするため。テストに許す値として、ファイルごとに書いてある)。
+旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。例外は、カクテルの一覧の表のベースの列(#298)と、銘柄の一覧の表の所属するノードの段(#299)を 700px 未満で隠す `max-width: 699px` と、商品の欄(#303)を 768px 以上で画像の右に題名・ボタンを並べる `min-width: 768px` だけ(旧と同じ見た目にするため。テストに許す値として、ファイルごとに書いてある)。
 
 | 名前 | 幅 | 変わるもの(試作) | 証跡を撮る幅 |
 |---|---|---|---|
