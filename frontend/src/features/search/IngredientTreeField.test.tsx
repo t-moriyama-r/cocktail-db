@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, test, vi } from 'vitest'
 import type { components } from '../../api/schema'
 import IngredientTreeField, { OTHER_ROOT_NOTE } from './IngredientTreeField'
+import { defaultSearchQuery, searchResultUrl } from './searchQuery'
 import { buildSelectionTree, emptySelection, toSendIds, type TreeSelection } from './selection'
 
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
@@ -334,5 +335,84 @@ describe('IngredientTreeField の一括操作とメジャーでない材料(#306
 
     render(<Harness categories={buildNonMajorCategories()} />)
     expect(screen.getByRole('button', { name: 'メジャーでない項目の表示／非表示' })).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+/** 実データでメジャーなもの(旧の「全てチェック」で選ばれた数。PR #343 の TC-282-06 で、旧を手元で動かして数えた) */
+const REAL_MAJOR = { categories: 54, middles: 22 } as const
+
+/**
+ * 実データと同じ大きさ(根 5・カテゴリ 95・計 600 ノード)で、メジャーなものの数を実データ(REAL_MAJOR)にそろえた木(#596)。
+ * URL の長さを厳しめに見るため、ID は 5 桁(10001 から)にしている(実データは移行で 1 から振り直すので 3 桁)。
+ * メジャーなものの置き方は、送る ID が多くなる形を 2 つ用意する。どの根にもメジャーでないカテゴリを置き、根には畳まれない
+ *
+ * - concentrated: メジャーなミドル 22 を 1 つのメジャーなカテゴリにまとめ(メジャーでない兄弟を 1 つ置いて畳まれないようにする)、
+ *   ほかのメジャーなカテゴリ 53 は子を持たない。送る ID は 53 + 22 = 75 個で、置き方の中でいちばん多い
+ *   (メジャーなカテゴリは子を持たないか、見えるミドルを持つかのどちらかで、見える葉は 54 + 22 - 1 を超えない)
+ * - spread: メジャーなカテゴリ 22 に、メジャーなミドルとメジャーでないミドルを 1 つずつ置き、残りの 32 は子を持たない。送る ID は 54 個
+ */
+const buildRealMajorCategories = (layout: 'concentrated' | 'spread'): SearchFormNode[] => {
+  let nextId = 10001
+  const make = (isMajor: boolean, children: SearchFormNode[] = []): SearchFormNode => {
+    const id = nextId++
+    return { id, name: `材料${id}`, is_major: isMajor, root_role: null, children }
+  }
+  const roots = Array.from({ length: 5 }, () => make(false))
+  const categories: SearchFormNode[] = []
+  const majorParents =
+    layout === 'concentrated'
+      ? [make(true, [...Array.from({ length: REAL_MAJOR.middles }, () => make(true)), make(false)])]
+      : Array.from({ length: REAL_MAJOR.middles }, () => make(true, [make(true), make(false)]))
+  categories.push(...majorParents)
+  while (categories.length < REAL_MAJOR.categories) categories.push(make(true))
+  // メジャーでないカテゴリ(子もメジャーでない)で、カテゴリ 95・計 600 ノードにする
+  const minorCategories = Array.from({ length: 95 - REAL_MAJOR.categories }, () => make(false))
+  categories.push(...minorCategories)
+  for (let i = 0; nextId < 10001 + 600; i++) minorCategories[i % minorCategories.length].children.push(make(false))
+  // 根に順に配る。メジャーでないカテゴリも 5 つに 1 つずつは配られ、どの根も畳まれない
+  const mutableRoots = roots.map((root) => ({ ...root, children: [] as SearchFormNode[] }))
+  categories.forEach((category, i) => mutableRoots[i % mutableRoots.length].children.push(category))
+  return mutableRoots
+}
+
+const countNodes = (nodes: readonly SearchFormNode[]): number => nodes.reduce((sum, n) => sum + 1 + countNodes(n.children), 0)
+
+describe('「メジャーでない」材料を隠した「全てチェック」の URL の長さ(#596)', () => {
+  test.each([
+    ['concentrated', 75],
+    ['spread', 54],
+  ] as const)(
+    'TC-596-01: 実データのメジャーな数(カテゴリ 54・ミドル 22)の 600 ノードの木で、隠して「全てチェック」すると、送る ID は %s で %i 個、URL は 2,000 文字以内',
+    (layout, expectedCount) => {
+      const categories = buildRealMajorCategories(layout)
+      expect(countNodes(categories)).toBe(600)
+      render(<Harness categories={categories} />)
+
+      fireEvent.click(screen.getByRole('button', { name: '全てチェック' }))
+
+      const nodeIds = (sendIds() ?? '').split(',').filter((id) => id !== '').map(Number)
+      // 条件をすべて既定でない値にし、クエリがいちばん長くなる形で測る
+      const url = `https://cocktail-next.trc-vlackhistory.net${searchResultUrl({
+        ...defaultSearchQuery,
+        nodeIds,
+        mode: 'having',
+        isEasy: true,
+        methodIds: [1, 2, 3, 4, 5],
+        sort: { key: 'recipe_count', isAsc: false },
+        page: 99,
+      })}`
+      expect(nodeIds).toHaveLength(expectedCount)
+      expect(url.length).toBeLessThanOrEqual(2000)
+    },
+  )
+
+  test('TC-596-02: 実データのメジャーな数の木で、出しているときの「全てチェック」は根 5 つに畳む', () => {
+    const categories = buildRealMajorCategories('concentrated')
+    render(<Harness categories={categories} />)
+    switchNonMajor()
+
+    fireEvent.click(screen.getByRole('button', { name: '全てチェック' }))
+
+    expect(sendIds()).toBe(categories.map((root) => root.id).join(','))
   })
 })
