@@ -18,6 +18,11 @@ const extraMaxWidths: Record<string, string[]> = {
   '../components/BrandTable/BrandTable.module.css': ['699px'],
 }
 
+// 旧の商品の欄(AffiliateContainer.vue)が 768px で横並びにしていた、商品の欄だけの例外(#303)
+const extraMinWidths: Record<string, string[]> = {
+  '../components/Affiliate/Affiliate.module.css': ['768px'],
+}
+
 /** CSS のメディアクエリに出てくる min-width・max-width の値を、ファイルごとに抜き出す */
 const mediaWidths = (css: string) =>
   [...css.matchAll(/@media[^{]*/g)].flatMap(([query]) =>
@@ -46,7 +51,11 @@ describe('幅の区切り', () => {
     'TC-295-04: %s のメディアクエリの幅は、区切りの値(以上は 600・960・1264px、未満は 599・959・1263px)だけを使う',
     (path, css) => {
       for (const { kind, value } of mediaWidths(css)) {
-        expect(kind === 'min' ? allowedMinWidths : [...allowedMaxWidths, ...(extraMaxWidths[path] ?? [])]).toContain(value)
+        expect(
+          kind === 'min'
+            ? [...allowedMinWidths, ...(extraMinWidths[path] ?? [])]
+            : [...allowedMaxWidths, ...(extraMaxWidths[path] ?? [])],
+        ).toContain(value)
       }
     },
   )
