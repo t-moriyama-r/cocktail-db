@@ -184,30 +184,32 @@ export default function CocktailSearchForm({
         onNavigate={onNavigate}
       />
 
-      {/* 旧と同じく、材料の欄の下に出す */}
-      {error !== null && (
-        <p id={errorId} className={styles.error}>
-          {error}
-        </p>
-      )}
-
-      <div className={inModal ? `${styles.submitBar} ${styles.submitBarFixed}` : styles.submitBar}>
-        <button
-          type="submit"
-          className={styles.submit}
-          disabled={error !== null}
-          aria-busy={searching}
-          aria-describedby={error !== null ? errorId : undefined}
-        >
-          {searching ? (
-            <>
-              <span className={styles.spinner} aria-hidden="true" />
-              <span className={styles.visuallyHidden}>検索中</span>
-            </>
-          ) : (
-            '検索'
-          )}
-        </button>
+      {/* 旧と同じく、材料の欄の下・検索ボタンの上に出す。モーダルでは検索ボタンと一緒に下端に貼り付け、
+          ボタンに隠れないようにする(#576。docs/decisions/search-submit-bar.md) */}
+      <div className={inModal ? styles.submitBarFixed : undefined}>
+        {error !== null && (
+          <p id={errorId} className={styles.error}>
+            {error}
+          </p>
+        )}
+        <div className={styles.submitRow}>
+          <button
+            type="submit"
+            className={styles.submit}
+            disabled={error !== null}
+            aria-busy={searching}
+            aria-describedby={error !== null ? errorId : undefined}
+          >
+            {searching ? (
+              <>
+                <span className={styles.spinner} aria-hidden="true" />
+                <span className={styles.visuallyHidden}>検索中</span>
+              </>
+            ) : (
+              '検索'
+            )}
+          </button>
+        </div>
       </div>
     </form>
   )
