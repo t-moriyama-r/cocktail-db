@@ -10,7 +10,7 @@ import {
   searchRequestBody,
   searchResultUrl,
 } from './searchQuery'
-import { buildSelectionTree, selectionFromIds, type SelectionTreeNode } from './selection'
+import { buildSelectionTree, emptySelection, selectionFromIds, toggleNode, type SelectionTreeNode } from './selection'
 
 const node = (id: number, children: SelectionTreeNode[] = []): SelectionTreeNode => ({ id, children })
 
@@ -176,5 +176,79 @@ describe('searchQuery', () => {
         page: 3,
       })
     })
+  })
+})
+
+/**
+ * 結果の画面の URL の長さの上限(#616。`docs/decisions/search-screen.md` の決まったこと 3)。
+ * サーバー(Apache の既定の LimitRequestLine は 8,190 バイト)の半分ほどにして、木が育つ分とサーバーの前の中継の余裕を残す
+ */
+const URL_LENGTH_LIMIT = 4000
+
+/** 公開先の origin を付け、検索方法・かんたん検索・技法・並べ替え・ページをすべて既定でない値にした、いちばん長くなる形の URL(#596 と同じ) */
+const longestUrl = (nodeIds: readonly number[]) =>
+  `https://cocktail-next.trc-vlackhistory.net${searchResultUrl({
+    ...defaultSearchQuery,
+    nodeIds,
+    mode: 'having',
+    isEasy: true,
+    methodIds: [1, 2, 3, 4, 5],
+    sort: { key: 'recipe_count', isAsc: false },
+    page: 99,
+  })}`
+
+/**
+ * 移行後の ID(1 から振り直す。docs/schema.md)で、実データと同じ大きさ(根 5・カテゴリ 95・ミドル 500、計 600 ノード)の木のうち、
+ * 手で選んだときに送る ID がいちばん多くなる形(#616)。ID は根 1〜5・カテゴリ 6〜100・ミドル 101〜600 の順に振る。
+ * ミドル 500 をすべて最初のカテゴリ(根 1 の下)に集め、ほかのカテゴリ 94 は子を持たない。カテゴリは根に順に配る
+ */
+const buildWorstManualTree = (): SelectionTreeNode[] => {
+  const roots = [1, 2, 3, 4, 5].map((id) => ({ id, children: [] as SelectionTreeNode[] }))
+  for (let i = 0; i < 95; i++) {
+    const children = i === 0 ? Array.from({ length: 500 }, (_, j) => node(101 + j)) : []
+    roots[i % roots.length].children.push(node(6 + i, children))
+  }
+  return roots
+}
+
+describe('「メジャーでない」材料を出して手で選んだときの URL の長さ(#616)', () => {
+  test('TC-616-01: 移行後の ID の 600 ノードの木で、送る ID がいちばん多くなるように手で選んでも、URL は上限(4,000 文字)以内', () => {
+    const roots = buildWorstManualTree()
+    const large = buildSelectionTree(roots)
+    expect(large.leavesOf.size).toBe(600)
+    // 根 5 つにチェックを入れ(「全てチェック」と同じ)、ミドルを持つカテゴリからミドルを 1 つ、ほかの根からは子の無いカテゴリを 1 つ外す。
+    // どの根・カテゴリも、すべては選ばれないので畳まれない
+    let selection = roots.reduce((current, root) => toggleNode(large, current, root.id, true), emptySelection)
+    selection = toggleNode(large, selection, 101, false)
+    for (const root of roots.slice(1)) selection = toggleNode(large, selection, root.children[0].id, false)
+
+    const query = searchQueryFromConditions(large, methods, {
+      mode: 'having',
+      isEasy: true,
+      methodIds: [1, 3],
+      selection,
+    })
+    const url = longestUrl(query.nodeIds)
+
+    // ミドル 499 + 子の無いカテゴリ 94 のうち外した 4 つを除いた 90
+    expect(query.nodeIds).toHaveLength(589)
+    expect(url.length).toBeGreaterThan(2000)
+    expect(url.length).toBeLessThanOrEqual(URL_LENGTH_LIMIT)
+  })
+
+  test('TC-616-02: 5 桁の ID の約 600 ノードの木で、「全てチェック」の後にカテゴリごとにミドルを 1 つずつ外しても、URL は上限(4,000 文字)以内', () => {
+    const roots = buildLargeSearchTree()
+    const large = buildSelectionTree(roots)
+    let selection = roots.reduce((current, root) => toggleNode(large, current, root.id, true), emptySelection)
+    for (const category of roots.flatMap((root) => root.children)) {
+      if (category.children.length > 0) selection = toggleNode(large, selection, category.children[0].id, false)
+    }
+
+    const ids = searchQueryFromConditions(large, methods, { mode: 'or', isEasy: false, methodIds: [1], selection }).nodeIds
+    const url = longestUrl(ids)
+
+    // ミドルを持つカテゴリ 64 は残ったミドル(合わせて 516 - 64 = 452)、子の無いカテゴリ 16 はそれぞれ 1 つ
+    expect(ids).toHaveLength(468)
+    expect(url.length).toBeLessThanOrEqual(URL_LENGTH_LIMIT)
   })
 })
