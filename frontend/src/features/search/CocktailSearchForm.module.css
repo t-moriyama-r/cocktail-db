@@ -99,6 +99,13 @@
   cursor: pointer;
 }
 
+/* 保存が無いあいだの「読み込み」「リロード」(#104)。色は検索ボタンの押せないときと同じ */
+.smallButton:disabled {
+  color: var(--color-text-muted);
+  background: var(--color-disabled-bg);
+  cursor: not-allowed;
+}
+
 /* 製法。旧は 600px 以上で横に並べ、未満では 1 行に 1 つ */
 .method {
   display: flex;
