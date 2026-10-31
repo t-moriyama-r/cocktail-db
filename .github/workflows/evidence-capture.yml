@@ -1,0 +1,255 @@
+name: evidence-capture
+
+# needs-local kind=evidence の PR の証跡(修正前後の静止画・比較画像・動画)を Actions で撮り、evidence ブランチに置く(#600。親は #487)。
+# 撮るものは、PR の証跡を頼むコメントの ```evidence のブロック(docs/evidence-request.md)。修正前は PR の向き先のブランチの今の先頭
+# (ブロックの before があればそのコミット)、修正後は PR の head(after があればそのコミット)を別のディレクトリに取り出し、
+# test.yml の e2e ジョブと同じ準備(MariaDB・シーダー・FE のビルド・Playwright)で順に起こして撮る。撮るのは公開リポジトリ
+# t-moriyama-r/evidence-capture の scripts(コミットを固定して取る)。PR 本文への貼り付け・needs-local の付け外しはしない(別の issue)。
+#
+# - request: PR とコメントを読み、撮るものを決める(信頼しない人の書いたものがあれば撮らない。#494)
+# - capture: PR のコードを動かして撮る。トークンは読むだけで、checkout に残さない。ランナーのパス・ホスト名が画面・応答に
+#   出ていたら、アーティファクトにも上げずに落ちる(アーティファクトも public のリポジトリでは読める)
+# - publish: 撮った物を GITHUB_TOKEN で evidence ブランチの pr-<番号>/<head の短い SHA>/ に push する。contents: write はこのジョブだけ。
+#   PR のコードは動かさず、置いてよい名前のファイルだけを置き、パス・ホスト名をもう一度確かめる(evidence-publish.sh)
+on:
+  workflow_dispatch:
+    inputs:
+      number:
+        description: 証跡を撮る PR の番号
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: evidence-capture-${{ inputs.number }}
+  cancel-in-progress: false
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      request: ${{ steps.pick.outputs.request }}
+      before: ${{ steps.pick.outputs.before }}
+      after: ${{ steps.pick.outputs.after }}
+      short: ${{ steps.pick.outputs.short }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Pick the evidence request
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.number }}
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$REPO/pulls/$NUMBER")
+          state=$(jq -r .state <<<"$pr")
+          head_repo=$(jq -r '.head.repo.full_name // ""' <<<"$pr")
+          if [ "$state" != open ] || [ "$head_repo" != "$REPO" ]; then
+            echo "::error::PR #$NUMBER は開いていないか、フォークからの PR なので撮らない"
+            exit 1
+          fi
+          # 信頼しない人の書いたものがある PR では撮らない(撮る側はブロックの run をシェルで流すため。#494)
+          untrusted=$(bash .github/scripts/untrusted-comments.sh "$REPO" "$NUMBER")
+          if [ -n "$untrusted" ]; then
+            echo "::error::PR #$NUMBER に、オーナー・コラボレーター・決まった bot 以外の人が書いたものがあるので撮らない"
+            printf '%s\n' "$untrusted"
+            exit 1
+          fi
+          bash .github/scripts/evidence-pick.sh "$REPO" "$NUMBER" >"$RUNNER_TEMP/request.md"
+          request=$(bash .github/scripts/evidence-request.sh "$RUNNER_TEMP/request.md")
+          base_ref=$(jq -r .base.ref <<<"$pr")
+          base_sha=$(gh api "repos/$REPO/branches/$base_ref" --jq .commit.sha)
+          before=$(jq -r --arg d "$base_sha" '.before // $d' <<<"$request")
+          after=$(jq -r --arg d "$(jq -r .head.sha <<<"$pr")" '.after // $d' <<<"$request")
+          for sha in "$before" "$after"; do
+            [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || { echo "::error::コミットの形でない: $sha"; exit 1; }
+          done
+          echo "修正前: $before(${base_ref} の先頭か、ブロックの before)/ 修正後: $after"
+          jq . <<<"$request"
+          {
+            echo "request=$(jq -c . <<<"$request")"
+            echo "before=$before"
+            echo "after=$after"
+            echo "short=${after:0:7}"
+          } >>"$GITHUB_OUTPUT"
+
+  capture:
+    needs: request
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      # 撮る手順のスクリプトは既定のブランチから取る(PR 側で書き換えたものは使わない)
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .ai-dev
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.request.outputs.before }}
+          path: before
+          # 依存ライブラリのインストール・PR のコードに、リポジトリのトークンを渡さない
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.request.outputs.after }}
+          path: after
+          persist-credentials: false
+
+      # 撮影・比較画像・http2html.js(github-attach.js は使わない)。中身を変えられないよう、コミットを固定する
+      - uses: actions/checkout@v7
+        with:
+          repository: t-moriyama-r/evidence-capture
+          ref: 63535031f30106a30dca99d96bfad221e19bacb8
+          path: .evidence-capture
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql, mbstring, intl
+          tools: composer:v2
+          coverage: none
+
+      # PR のコードを動かすジョブなので、ほかの実行と共有するキャッシュは使わない
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Create the databases
+        run: |
+          set -euo pipefail
+          for db in ev_before ev_after testing legacy_test; do
+            mysql -h 127.0.0.1 -u root -proot -e "CREATE DATABASE IF NOT EXISTS $db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          done
+
+      # e2e ジョブと同じ準備を、修正前・修正後それぞれに。APP_DEBUG=false で起こし、エラーの画面にスタックトレース・パスを出さない
+      - name: Prepare before and after
+        run: |
+          set -euo pipefail
+          for side in before after; do
+            echo "::group::$side"
+            (
+              cd "$side/backend"
+              composer install --no-interaction --prefer-dist
+              cp .env.example .env
+              sed -i -E '/^#? ?(APP_DEBUG|DB_[A-Z_]+)=/d' .env
+              printf '%s\n' APP_DEBUG=false DB_CONNECTION=mariadb DB_HOST=127.0.0.1 DB_PORT=3306 \
+                "DB_DATABASE=ev_$side" DB_USERNAME=root DB_PASSWORD=root >>.env
+              php artisan key:generate
+            )
+            (cd "$side/frontend" && npm ci && npm run build)
+            echo "::endgroup::"
+          done
+
+      # capture.js は playwright-core(e2e の依存)とランナーの Chrome で撮り、録画に Playwright の ffmpeg を使う。mp4・GIF はランナーの ffmpeg で作る
+      - name: Install Playwright and ffmpeg
+        working-directory: after/e2e
+        run: |
+          set -euo pipefail
+          npm ci
+          npx playwright install --with-deps chromium ffmpeg
+          command -v ffmpeg >/dev/null || { sudo apt-get update && sudo apt-get install -y ffmpeg; }
+
+      - name: Start the apps
+        run: |
+          set -euo pipefail
+          port=8001
+          for side in before after; do
+            (cd "$side/backend" && nohup php artisan serve --host=127.0.0.1 --port="$port" >"$RUNNER_TEMP/serve-$side.log" 2>&1 &)
+            for _ in $(seq 60); do
+              curl -sf -o /dev/null "http://127.0.0.1:$port/up" && break
+              sleep 1
+            done
+            curl -sf -o /dev/null "http://127.0.0.1:$port/up"
+            port=$((port + 1))
+          done
+
+      - name: Capture
+        env:
+          REQUEST: ${{ needs.request.outputs.request }}
+          BEFORE: ${{ needs.request.outputs.before }}
+          AFTER: ${{ needs.request.outputs.after }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$REQUEST" >"$RUNNER_TEMP/request.json"
+          node .ai-dev/.github/scripts/evidence-shoot.js run "$RUNNER_TEMP/request.json" --out evidence-out \
+            --tools .evidence-capture/evidence-capture/scripts --pw after/e2e \
+            --before-dir before --before-url http://127.0.0.1:8001 --after-dir after --after-url http://127.0.0.1:8002 \
+            --before-sha "$BEFORE" --after-sha "$AFTER"
+
+      # ランナーのパス・ホスト名が画面・応答・コマンドの結果に出ていたら、アーティファクトにも上げずに落とす(publish は動かない)
+      - name: Check for runner paths and the host name
+        run: |
+          set -euo pipefail
+          words=$(printf '%s\n' "$(hostname)" "$(hostname -f)" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" "$RUNNER_TOOL_CACHE" "$HOME" | sort -u)
+          EVIDENCE_LEAK_WORDS=$words bash .ai-dev/.github/scripts/evidence-leak-check.sh evidence-out/texts evidence-out/publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence
+          path: evidence-out/publish/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: [request, capture]
+    runs-on: ubuntu-latest
+    permissions:
+      # evidence ブランチへの push に使う。書き込みの権限はこのジョブだけに渡す
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: evidence
+          path: ${{ runner.temp }}/evidence
+
+      - name: Push to the evidence branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.number }}
+          SHORT: ${{ needs.request.outputs.short }}
+        run: |
+          set -euo pipefail
+          urls=$(bash .github/scripts/evidence-publish.sh "$RUNNER_TEMP/evidence" "$REPO" "$NUMBER" "$SHORT")
+          printf '%s\n' "$urls"
+          {
+            echo "## PR #$NUMBER の証跡($SHORT)"
+            echo
+            while IFS= read -r url; do echo "- $url"; done <<<"$urls"
+          } >>"$GITHUB_STEP_SUMMARY"
