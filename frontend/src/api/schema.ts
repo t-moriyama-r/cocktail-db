@@ -183,6 +183,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/cocktails/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * カクテルの編集画面の重複チェック(#129。docs/decisions/admin-screens.md の決まったこと 3)。保存は止めない。
+         * @description - same_name: 英名が同じか、検索用の名前が同じカクテル(下書きも含む。exclude_id のカクテルは除く)。exclude_id の
+         *       カクテルの保存してある材料に近い順(match の same_amount → same_ingredients → contains_all → other)、同じなら ID の順。
+         *       旧 DetailEditController@duplicate_get の置き換え
+         *     - same_recipe: exclude_id のカクテルと材料の組(recipe_signature。#82)がまったく同じカクテル(下書きも含む)を ID の順。
+         *       旧には無い。exclude_id が無い・材料の無いカクテルなら空
+         *
+         *     名前・英名は、空なら比べない(どちらか 1 つは要る)。材料は送った入力ではなく、exclude_id の保存してある材料で比べる(旧と同じ)。
+         */
+        get: operations["admin.cocktailDuplicate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/cocktail-form-options": {
         parameters: {
             query?: never;
@@ -1071,6 +1097,44 @@ export interface components {
             }[];
             /** @description 材料の組がまったく同じ、ほかの公開しているカクテル。ID の順。一覧の表と同じ項目 */
             same_recipe: components["schemas"]["CocktailSummaryResource"][];
+        };
+        /** CocktailDuplicateIngredientResource */
+        CocktailDuplicateIngredientResource: {
+            /** @description 材料のノード(いちばん深いノード) */
+            category_id: number;
+            category_name: string;
+            /** @description 銘柄。銘柄を決めない材料では null */
+            brand_id: number | null;
+            brand_name: string | null;
+            /** @description 量(整えた後の値) */
+            amount: string;
+            /** @description 任意の材料か */
+            is_optional: boolean;
+        };
+        /**
+         * CocktailDuplicateMatch
+         * @description 重複チェック(#129)で並べるカクテルの、編集しているカクテルとの材料の近さ。旧 DetailEditController@duplicate_get の 4 つの並び。 材料は旧のカテゴリ(根のすぐ下のノード)で比べる。ミドル・銘柄・任意かは比べない(旧と同じ)。 並べる順は、定義の順(近い順)。
+         *     | |
+         *     |---|
+         *     | `same_amount` <br/> 材料の数が同じで、どの材料も同じカテゴリ・同じ量のものがある |
+         *     | `same_ingredients` <br/> 材料の数が同じで、編集しているカクテルのカテゴリをすべて含むが、量の違う材料がある |
+         *     | `contains_all` <br/> 編集しているカクテルのカテゴリをすべて含むが、材料の数が違う |
+         *     | `other` <br/> 編集しているカクテルのカテゴリのどれかを含まない |
+         * @enum {string}
+         */
+        CocktailDuplicateMatch: "same_amount" | "same_ingredients" | "contains_all" | "other";
+        /** CocktailDuplicateResource */
+        CocktailDuplicateResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            method_id: number;
+            is_draft: boolean;
+            match: components["schemas"]["CocktailDuplicateMatch"];
+            description: string | null;
+            note: string | null;
+            /** @description 材料。レシピの順(position の昇順) */
+            ingredients: components["schemas"]["CocktailDuplicateIngredientResource"][];
         };
         /** CocktailIngredientResource */
         CocktailIngredientResource: {
@@ -2095,6 +2159,36 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    "admin.cocktailDuplicate": {
+        parameters: {
+            query?: {
+                /** @description 名前。英名と、どちらか 1 つは要る */
+                name?: string | null;
+                /** @description 英名。名前と、どちらか 1 つは要る */
+                name_eng?: string | null;
+                /** @description 編集しているカクテルの ID。新規なら送らない */
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        same_name: components["schemas"]["CocktailDuplicateResource"][];
+                        same_recipe: components["schemas"]["CocktailDuplicateResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "admin.cocktailFormOptions": {
