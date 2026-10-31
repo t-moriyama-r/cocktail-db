@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 import { resetApiMocks } from './api'
+import { resetPasskeyBrowser } from './webauthn'
 
 // API の差し替えはここの 1 か所に置く(テストのファイルごとに vi.mock を書かない)。
 // 自前の client を別物にはせず、同じ作り方(createApiClient。CSRF のトークンを付ける処理も入る)で、
@@ -24,4 +25,5 @@ afterEach(() => {
   // globals を使わない設定では Testing Library の自動の後片付けが動かないので、テストごとに描画を消す
   cleanup()
   resetApiMocks()
+  resetPasskeyBrowser()
 })

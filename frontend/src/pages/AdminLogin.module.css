@@ -4,3 +4,31 @@
   margin: 0 auto;
   padding: var(--space-6) var(--space-4);
 }
+
+/* 「パスキーでログイン」のボタンと、ログインできなかったときのメッセージ */
+.passkey {
+  margin: var(--space-4) 0;
+}
+
+.passkeyButton {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 応答を待つあいだは押せない */
+.passkeyButton:disabled {
+  border-color: var(--color-disabled-bg);
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  cursor: wait;
+}
+
+.error {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger);
+}
