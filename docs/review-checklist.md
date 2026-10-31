@@ -192,14 +192,13 @@ DB の行はトランザクションでロールバックできるが、ファ�
 - 行の削除と画像の削除を同じ処理でするときも同じ。行を消してから、コミット後にファイルを消す
 
 ```php
-// 悪い: 行を消す前にファイルを消す。delete() が落ちてロールバックされても、ファイルは戻らない(AdminDictionaryWriter::delete)
-$this->images->update(null, true, $dictionary->image);
+// 悪い: 行の保存の前にファイルをすぐ消す。あとの save() が落ちてロールバックされても、ファイルは戻らない(#439 のときの AdminDictionaryWriter)
+Storage::disk('public')->delete($dictionary->image);
 $dictionary->delete();
 
-// 良い: 画像の差し替えは保存の直前に置き、保存が落ちたら置いたファイルを消す(AdminBrandWriter::save)
-// 画像は最後に置く。ここより前で止まったときに、上げたファイルだけが残らないようにする
-$brand->image = $this->images->update($request->file('image'), $request->boolean('remove_image'), $brand->image);
-$brand->save();
+// 良い: トランザクションの中なら、コミットしてから消す。置いたファイルは、ロールバックされたら消す(AdminImageStore)
+DB::afterRollBack(fn () => $this->disk()->delete($stored));
+DB::afterCommit(fn () => $this->disk()->delete($current));
 ```
 
 ## RC-11: 外から来る値は、型・形・件数・長さを検査してから使う
