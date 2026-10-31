@@ -5549,11 +5549,25 @@
                                 ]
                             },
                             "response": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
+                                "type": "object",
+                                "properties": {
+                                    "clientDataJSON": {
+                                        "type": "string"
+                                    },
+                                    "attestationObject": {
+                                        "type": "string"
+                                    },
+                                    "transports": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
                                 },
-                                "minItems": 1
+                                "required": [
+                                    "clientDataJSON",
+                                    "attestationObject"
+                                ]
                             }
                         },
                         "required": [
@@ -5620,11 +5634,29 @@
                                 ]
                             },
                             "response": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
+                                "type": "object",
+                                "properties": {
+                                    "clientDataJSON": {
+                                        "type": "string"
+                                    },
+                                    "authenticatorData": {
+                                        "type": "string"
+                                    },
+                                    "signature": {
+                                        "type": "string"
+                                    },
+                                    "userHandle": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    }
                                 },
-                                "minItems": 1
+                                "required": [
+                                    "clientDataJSON",
+                                    "authenticatorData",
+                                    "signature"
+                                ]
                             }
                         },
                         "required": [
