@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useMemo, useState } from 'react'
 import type { components } from '../../api/schema'
 import MethodIcon from '../../components/CocktailTable/MethodIcon'
 import IngredientTreeField from './IngredientTreeField'
@@ -11,6 +11,9 @@ import {
   type SearchFormValues,
   type SearchMode,
 } from './searchForm'
+import { buildSelectionTree } from './selection'
+import { sortSearchFormTree } from './sortSearchFormTree'
+import { hasSavedSearch, loadSearch, saveSearch, type SearchStorageSlot } from './searchStorage'
 import styles from './CocktailSearchForm.module.css'
 
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
@@ -47,6 +50,31 @@ const MODES: readonly { value: SearchMode; label: string; description: string }[
 
 const EASY_DESCRIPTION = '材料が少なく(3つ以下)簡単に作れるレシピのみに絞ります'
 
+/** 「読み込み」の欄のボタンと説明(旧 form.vue と同じ文言・同じ並び)。リセットは保存先を持たない */
+const STORAGE_ACTIONS: readonly {
+  key: string
+  label: string
+  description: string
+  /** 保存するなら save、読むなら load。リセットは null */
+  action: { kind: 'save' | 'load'; slot: SearchStorageSlot } | null
+}[] = [
+  {
+    key: 'save',
+    label: '保存',
+    description: '現在のチェック状況を保存(持っているお酒の状況を保存するのに使います)',
+    action: { kind: 'save', slot: 'user' },
+  },
+  { key: 'load', label: '読み込み', description: '保存したデータを読み込みます。', action: { kind: 'load', slot: 'user' } },
+  { key: 'reload', label: 'リロード', description: '前回の検索条件を読み込みます。', action: { kind: 'load', slot: 'instant' } },
+  { key: 'reset', label: 'リセット', description: '初期状態に戻します', action: null },
+]
+
+/** 保存先ごとに、読める保存があるか */
+const readSavedSlots = (): Record<SearchStorageSlot, boolean> => ({
+  instant: hasSavedSearch('instant'),
+  user: hasSavedSearch('user'),
+})
+
 /**
  * 条件検索のフォーム(#307。旧 Forms/Search/Cocktail/form.vue)。見出しは「カクテル検索」。
  * ヘッダーのモーダル(#99)と、トップの下のページ内(#50)の 2 か所に置ける部品にしている。
@@ -55,8 +83,8 @@ const EASY_DESCRIPTION = '材料が少なく(3つ以下)簡単に作れるレシ
  * - 材料が 0 個のあいだは、材料の欄の下に「材料は必須です。」を出し、検索ボタンを押せない(旧は「カテゴリは必須です。」)
  * - 製法は 0 個でも検索できる(docs/decisions/search-screen.md の 6。旧は「製法は必須です。」で押せなかった)
  * - 「リセット」で既定値に戻す
- *
- * 旧の「保存」「読み込み」「リロード」(localStorage)は #104 で足す
+ * - 「保存」「読み込み」「リロード」(#104。旧 localStorageHelper.js。searchStorage.ts)。「保存」は今の値を、「検索」は押した条件を
+ *   保存する。「読み込み」「リロード」は、保存が無ければ押せない。開いたときには読まない(docs/decisions/search-screen.md の 4)
  */
 export default function CocktailSearchForm({
   categories,
@@ -71,6 +99,10 @@ export default function CocktailSearchForm({
   const id = useId()
   const error = ingredientError(values)
   const errorId = `${id}-ingredient-error`
+  // 保存・読み込みの木は、材料の欄と同じ並びで作る(保存する ID の並びを URL と同じにするため)
+  const tree = useMemo(() => buildSelectionTree(sortSearchFormTree(categories)), [categories])
+  // 開いたときに 1 度読み、保存・検索の後に読み直す(保存できたかは localStorage を読み直して決める)
+  const [savedSlots, setSavedSlots] = useState(readSavedSlots)
 
   return (
     <form
@@ -80,6 +112,9 @@ export default function CocktailSearchForm({
       onSubmit={(event) => {
         event.preventDefault()
         if (error === null) {
+          // 旧と同じく、検索の成否によらず押した時点で「リロード」用に保存する
+          saveSearch('instant', tree, methods, values)
+          setSavedSlots(readSavedSlots())
           onSubmit(toSearchConditions(methods, values))
         }
       }}
@@ -94,21 +129,34 @@ export default function CocktailSearchForm({
             読み込み
           </div>
           <div className={styles.rowBody}>
-            <div className={styles.option}>
-              <div className={styles.optionControl}>
-                <button
-                  type="button"
-                  className={styles.smallButton}
-                  aria-describedby={`${id}-reset-desc`}
-                  onClick={() => onValuesChange(defaultSearchFormValues)}
-                >
-                  リセット
-                </button>
+            {STORAGE_ACTIONS.map(({ key, label, description, action }) => (
+              <div key={key} className={styles.option}>
+                <div className={styles.optionControl}>
+                  <button
+                    type="button"
+                    className={styles.smallButton}
+                    aria-describedby={`${id}-${key}-desc`}
+                    disabled={action?.kind === 'load' && !savedSlots[action.slot]}
+                    onClick={() => {
+                      if (action === null) {
+                        onValuesChange(defaultSearchFormValues)
+                      } else if (action.kind === 'save') {
+                        saveSearch(action.slot, tree, methods, values)
+                        setSavedSlots(readSavedSlots())
+                      } else {
+                        const loaded = loadSearch(action.slot, tree, methods)
+                        if (loaded !== null) onValuesChange(loaded)
+                      }
+                    }}
+                  >
+                    {label}
+                  </button>
+                </div>
+                <div id={`${id}-${key}-desc`} className={styles.optionDescription}>
+                  {description}
+                </div>
               </div>
-              <div id={`${id}-reset-desc`} className={styles.optionDescription}>
-                初期状態に戻します
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 

@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
-import { describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { components } from '../../api/schema'
 import { jsonResponse, mockApi, mockApiHandler } from '../../test/api'
 import CocktailSearch from './CocktailSearch'
 import { defaultSearchFormValues, type SearchFormValues } from './searchForm'
+import { SEARCH_STORAGE_KEYS } from './searchStorage'
 
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
 type SearchFormMethod = components['schemas']['SearchFormMethodResource']
@@ -62,6 +63,13 @@ const searchButton = () => screen.getByRole('button', { name: '検索' })
 const methodBox = (name: string) => within(screen.getByRole('group', { name: '製法' })).getByRole('checkbox', { name })
 /** 検索ボタンで移った先の URL(#102 で、条件を URL のクエリに入れて結果の画面へ移るようにした) */
 const submittedUrl = () => screen.getByTestId('location').textContent
+
+// 保存(#104)は localStorage に残るので、テストごとに消す
+beforeEach(() => localStorage.clear())
+afterEach(() => {
+  vi.restoreAllMocks()
+  localStorage.clear()
+})
 
 describe('CocktailSearchForm', () => {
   test('TC-307-06: 開くと既定値(OR 検索・かんたん検索なし・技法はすべて・材料なし)で、検索ボタンを押せず「材料は必須です。」を出す', async () => {
@@ -190,5 +198,108 @@ describe('CocktailSearchForm', () => {
     failing = false
     fireEvent.click(screen.getByRole('button', { name: 'もう一度読み込む' }))
     expect(await screen.findByRole('heading', { name: 'カクテル検索' })).toBeInTheDocument()
+  })
+
+  describe('保存・読み込み・リロード(#104)', () => {
+    const button = (name: string) => screen.getByRole('button', { name })
+
+    test('TC-104-01: 「保存」「読み込み」「リロード」「リセット」を、旧と同じ並びと説明の文言で出す', async () => {
+      await renderForm()
+
+      const group = within(screen.getByRole('group', { name: '読み込み' }))
+      expect(group.getAllByRole('button').map((element) => element.textContent)).toEqual(['保存', '読み込み', 'リロード', 'リセット'])
+      expect(button('保存')).toHaveAccessibleDescription('現在のチェック状況を保存(持っているお酒の状況を保存するのに使います)')
+      expect(button('読み込み')).toHaveAccessibleDescription('保存したデータを読み込みます。')
+      expect(button('リロード')).toHaveAccessibleDescription('前回の検索条件を読み込みます。')
+      expect(button('リセット')).toHaveAccessibleDescription('初期状態に戻します')
+    })
+
+    test('TC-104-02: 保存が無いあいだは「読み込み」「リロード」を押せない。「保存」すると「読み込み」だけ押せる', async () => {
+      await renderForm()
+      expect(button('読み込み')).toBeDisabled()
+      expect(button('リロード')).toBeDisabled()
+      expect(button('保存')).toBeEnabled()
+
+      fireEvent.click(button('保存'))
+      expect(button('読み込み')).toBeEnabled()
+      expect(button('リロード')).toBeDisabled()
+    })
+
+    test('TC-104-03: 「保存」した条件を、変えた後に「読み込み」で戻す', async () => {
+      await renderForm()
+      fireEvent.click(screen.getByRole('radio', { name: 'あるもの検索' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'かんたん検索' }))
+      fireEvent.click(methodBox('ホット'))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'ラム' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'トニックウォーター' }))
+      fireEvent.click(button('保存'))
+
+      fireEvent.click(button('リセット'))
+      expect(screen.getByRole('checkbox', { name: 'ラム' })).not.toBeChecked()
+
+      fireEvent.click(button('読み込み'))
+      expect(screen.getByRole('radio', { name: 'あるもの検索' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'かんたん検索' })).toBeChecked()
+      expect(methodBox('ホット')).not.toBeChecked()
+      expect(methodBox('ビルド')).toBeChecked()
+      // ラムの子(ホワイトラム・ダークラム)はすべて選んだので、ラムにチェックが入る(子は畳まれていて出ない)
+      expect(screen.getByRole('checkbox', { name: 'ラム' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'トニックウォーター' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'ジン' })).not.toBeChecked()
+    })
+
+    test('TC-104-04: 「検索」で押した条件を残し、「リロード」で戻す。「保存」の値とは別に持つ', async () => {
+      await renderForm()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'オレンジジュース' }))
+      fireEvent.click(button('保存'))
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'オレンジジュース' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'ジン' }))
+      fireEvent.click(screen.getByRole('radio', { name: 'AND検索' }))
+      fireEvent.click(searchButton())
+      expect(button('リロード')).toBeEnabled()
+
+      fireEvent.click(button('リセット'))
+      fireEvent.click(button('リロード'))
+      expect(screen.getByRole('radio', { name: 'AND検索' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'ジン' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'オレンジジュース' })).not.toBeChecked()
+
+      fireEvent.click(button('読み込み'))
+      expect(screen.getByRole('radio', { name: 'OR検索' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'ジン' })).not.toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'オレンジジュース' })).toBeChecked()
+    })
+
+    test('TC-104-05: 保存があっても、開いたときは既定の状態のまま(自動で戻さない)。「読み込み」「リロード」は押せる', async () => {
+      localStorage.setItem(SEARCH_STORAGE_KEYS.user, 'n=11&mode=and')
+      localStorage.setItem(SEARCH_STORAGE_KEYS.instant, 'n=30&easy=1')
+      await renderForm()
+
+      expect(screen.getByRole('radio', { name: 'OR検索' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'ジン' })).not.toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'トニックウォーター' })).not.toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'かんたん検索' })).not.toBeChecked()
+      expect(searchButton()).toBeDisabled()
+      expect(button('読み込み')).toBeEnabled()
+      expect(button('リロード')).toBeEnabled()
+    })
+
+    test('TC-104-06: localStorage が例外を投げても、フォームを出して検索でき、「読み込み」「リロード」は押せないまま', async () => {
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('SecurityError')
+      })
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('SecurityError')
+      })
+      await renderForm()
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'ジン' }))
+      fireEvent.click(button('保存'))
+      expect(button('読み込み')).toBeDisabled()
+      fireEvent.click(searchButton())
+      expect(submittedUrl()).toBe('/result/Cocktails?n=11')
+      expect(button('リロード')).toBeDisabled()
+    })
   })
 })
