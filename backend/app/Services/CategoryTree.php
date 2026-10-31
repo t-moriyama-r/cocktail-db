@@ -442,6 +442,40 @@ class CategoryTree
     }
 
     /**
+     * $nodeIds のノードごとに、根のすぐ下の祖先(自分が根のすぐ下なら自分。旧のカテゴリにあたるノード)の ID を返す。
+     *
+     * 旧の材料は、カテゴリ(根のすぐ下)とミドル(その下)を別の列で持ち、カテゴリの列だけで比べる処理があった
+     * (旧 DetailEditController@duplicate_get。#129)。材料のノードは一番深いノードなので、比べるときにここで旧のカテゴリに直す。
+     * 根と、木に入っていないノードは返す配列に入らない。
+     *
+     * @param  list<int>  $nodeIds
+     * @return array<int, int> ノードの ID → 根のすぐ下の祖先の ID
+     */
+    public function topLevelAncestorIds(array $nodeIds): array
+    {
+        $nodeIds = array_values(array_unique($nodeIds));
+        if ($nodeIds === []) {
+            return [];
+        }
+
+        $rows = DB::table('category_closures as self_or_ancestor')
+            ->join('category_closures as parent_closure', 'parent_closure.descendant_id', '=', 'self_or_ancestor.ancestor_id')
+            ->where('parent_closure.depth', 1)
+            ->whereIn('parent_closure.ancestor_id', $this->rootIds())
+            ->whereIn('self_or_ancestor.descendant_id', $nodeIds)
+            ->get(['self_or_ancestor.descendant_id as node_id', 'self_or_ancestor.ancestor_id as top_id']);
+
+        $tops = [];
+        foreach ($rows as $row) {
+            if (is_numeric($row->node_id) && is_numeric($row->top_id)) {
+                $tops[(int) $row->node_id] = (int) $row->top_id;
+            }
+        }
+
+        return $tops;
+    }
+
+    /**
      * @throws InvalidArgumentException $node が木に入っていないとき
      */
     private function assertInTree(Category $node): void
