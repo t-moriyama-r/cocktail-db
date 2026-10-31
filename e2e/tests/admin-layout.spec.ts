@@ -34,13 +34,13 @@ test('TC-119-19: 未ログインで管理画面の URL を開くと、開こう�
   await expect(page.getByRole('navigation', { name: '管理画面のメニュー' })).toHaveCount(0)
 })
 
-test('TC-119-20: ログインすると、メニューに管理者の名前とログアウトが出て、オートインプットは出ない', async ({ page, baseURL }) => {
+test('TC-119-20: ログインすると、メニューに管理者の名前・画面のある項目(パスキー。#313)・ログアウトが出て、オートインプットは出ない', async ({ page, baseURL }) => {
   await login(page, baseURL!)
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('管理画面')
   await expect(page.getByText('E2E の管理者 でログイン中')).toBeVisible()
   const menu = page.getByRole('navigation', { name: '管理画面のメニュー' })
-  await expect(menu.getByRole('listitem')).toHaveText(['ログアウト'])
+  await expect(menu.getByRole('listitem')).toHaveText(['パスキー', 'ログアウト'])
   await expect(menu.getByText(/オートインプット/)).toHaveCount(0)
 })
 
