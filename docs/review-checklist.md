@@ -174,11 +174,11 @@ xs 375px・sm 768px・md 1024px・lg 1440px の修正前・修正後(比較画�
 <!-- 悪い: 件数の上限 1000(旧は上限が無い)を足したが、PR 本文の表に TC-163-20 の行も、根拠の節の引用も無い(#426) -->
 | TC-163-19 | CSRF トークンなしで POST | 200 | 旧に無い |
 
-<!-- 良い: 文書の「旧との差分」に 1 行 → 表で指す → 根拠の節で引く -->
-| TC-163-20 | category_ids が 1001 件 | 422 | 差分あり(意図: docs/search-expected-diffs.md) |
+<!-- 良い(文書名は例): 文書の「旧との差分」に 1 行 → 表で指す → 根拠の節で引く -->
+| TC-163-20 | category_ids が 1001 件 | 422 | 差分あり(意図: docs/decisions/search-limits.md) |
 
 ### 旧との差分の根拠
-TC-163-20 → docs/search-expected-diffs.md: 旧は件数の上限が無く巨大な配列も通る → 新は 1000 件を超えたら 422
+TC-163-20 → docs/decisions/search-limits.md: 旧は件数の上限が無く巨大な配列も通る → 新は 1000 件を超えたら 422
 ```
 
 ## RC-10: トランザクションの中で、画像のファイルを先に消さない・置いたまま残さない
@@ -236,7 +236,7 @@ DB::afterCommit(fn () => $this->disk()->delete($current));
 # 悪い: 上限を足したが再生成しない → openapi.json に maxItems が無い(#426)
 # 良い: 再生成して差分を読む
 cd backend && php artisan scramble:export --path=../openapi/openapi.json
-git diff ../openapi/openapi.json | grep -n 'maxItems\|required'
+git diff ../openapi/openapi.json | grep -nE 'maxItems|maxLength|required|"type"'
 ```
 
 ## RC-13: 挙動を変えたら、それを説明する文書・コメント・例も同じ PR で直す
@@ -274,4 +274,6 @@ expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
 
 // 良い: 4 つの一覧の読み込み表示が出ること、消えたあとに一覧が出ることを、それぞれ確かめる
 expect(screen.getAllByRole('status')).toHaveLength(4)
+await waitFor(() => expect(screen.queryAllByRole('status')).toHaveLength(0))
+expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
 ```
