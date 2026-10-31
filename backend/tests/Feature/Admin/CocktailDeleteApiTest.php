@@ -12,10 +12,12 @@ use App\Services\CategoryTree;
 use App\Services\RecipeSignature;
 use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 
 // 管理 API のカクテルの削除と、保存のたびに材料の数(recipe_count)・材料の組のハッシュ(recipe_signature)を
 // 作り直すこと(#130)。旧の DetailEditController@delete_cocktail と、旧の保存で材料の数を書いていたところの置き換え。
 // 旧と変えたところは #130 の本文の「旧との差分」。
+// 削除で画像のファイルも消すこと(#578)。旧は行を消すだけでファイルを残していた(#578 の本文の「旧との差分」)。
 // 説明文から参照されているカクテルを 409 で消させないこと(#579。旧との差分は #579 の本文)。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
 
@@ -143,6 +145,95 @@ it('TC-130-06: 更新の保存のたびに、保存した材料の行から材�
     $cocktail->refresh();
     expect($cocktail->recipe_count)->toBe(2)
         ->and($cocktail->sameRecipeCocktails()->pluck('id')->all())->toBe([$twin->id]);
+});
+
+/** public ディスクに画像のファイルを置く。中身は見ないので、名前だけで足りる */
+function cocktailDeletePutImages(string ...$names): void
+{
+    foreach ($names as $name) {
+        Storage::disk('public')->put($name, 'image');
+    }
+}
+
+it('TC-578-01: 削除すると、そのカクテルの画像のファイルも消え、ほかのファイルは残る', function () {
+    Storage::fake('public');
+    cocktailDeletePutImages('target.png', 'other.png');
+    $target = Cocktail::factory()->create(['image' => 'target.png']);
+    $other = Cocktail::factory()->create(['image' => 'other.png']);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")->assertNoContent();
+
+    expect(Cocktail::query()->pluck('id')->all())->toBe([$other->id]);
+    Storage::disk('public')->assertMissing('target.png');
+    Storage::disk('public')->assertExists('other.png');
+});
+
+it('TC-578-02: ほかのカクテルが同じファイルを指しているときは、ファイルを残す', function () {
+    Storage::fake('public');
+    cocktailDeletePutImages('shared.png');
+    $target = Cocktail::factory()->create(['image' => 'shared.png']);
+    $other = Cocktail::factory()->create(['image' => 'shared.png']);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")->assertNoContent();
+
+    expect(Cocktail::query()->pluck('id')->all())->toBe([$other->id]);
+    Storage::disk('public')->assertExists('shared.png');
+
+    // 最後に指していた行を消すと、ファイルも消える
+    $this->deleteJson("/api/admin/cocktails/{$other->id}")->assertNoContent();
+    Storage::disk('public')->assertMissing('shared.png');
+});
+
+it('TC-578-03: ノード・銘柄・用語が同じファイルを指しているときは、ファイルを残す', function (Closure $share) {
+    Storage::fake('public');
+    cocktailDeletePutImages('shared.png');
+    $share(cocktailDeleteNodes()['ラム'], 'shared.png');
+    $target = Cocktail::factory()->create(['image' => 'shared.png']);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")->assertNoContent();
+
+    expect(Cocktail::query()->whereKey($target->id)->exists())->toBeFalse();
+    Storage::disk('public')->assertExists('shared.png');
+})->with([
+    'ノード' => [fn (Category $node, string $image) => $node->forceFill(['image' => $image])->save()],
+    '銘柄' => [fn (Category $node, string $image) => Brand::factory()->create(['category_id' => $node->id, 'image' => $image])],
+    '用語' => [fn (Category $node, string $image) => Dictionary::factory()->create(['image' => $image])],
+]);
+
+it('TC-578-04: 画像の列がサーバーで付けた名前の形でない(外部の URL・パスを含む)ときは、ディスクのファイルを消さない', function (string $image, string $file) {
+    Storage::fake('public');
+    cocktailDeletePutImages($file);
+    $target = Cocktail::factory()->create(['image' => $image]);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")->assertNoContent();
+
+    expect(Cocktail::query()->whereKey($target->id)->exists())->toBeFalse();
+    Storage::disk('public')->assertExists($file);
+})->with([
+    '外部の URL' => ['https://example.com/a.png', 'a.png'],
+    'パスを含む値' => ['dir/a.png', 'dir/a.png'],
+]);
+
+it('TC-578-05: 画像の無いカクテルも 204 で消え、ディスクのファイルは残る', function () {
+    Storage::fake('public');
+    cocktailDeletePutImages('other.png');
+    $target = Cocktail::factory()->create(['image' => null]);
+
+    $this->deleteJson("/api/admin/cocktails/{$target->id}")->assertNoContent();
+
+    expect(Cocktail::query()->whereKey($target->id)->exists())->toBeFalse();
+    Storage::disk('public')->assertExists('other.png');
+});
+
+it('TC-578-06: 無い ID の削除は 404 で、画像のファイルは残る', function () {
+    Storage::fake('public');
+    cocktailDeletePutImages('target.png');
+    $target = Cocktail::factory()->create(['image' => 'target.png']);
+
+    $this->deleteJson('/api/admin/cocktails/'.($target->id + 1000))->assertNotFound();
+
+    expect(Cocktail::query()->whereKey($target->id)->exists())->toBeTrue();
+    Storage::disk('public')->assertExists('target.png');
 });
 
 /**

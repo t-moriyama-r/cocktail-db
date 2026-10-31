@@ -29,6 +29,8 @@ use InvalidArgumentException;
  * recipe_signature)を同じトランザクションで作り直す。
  *
  * 別名(#293)は、送ったときだけ、送った並びに置き換える。
+ *
+ * 削除(#130)では、画像のファイルも消す(#578)。
  */
 class AdminCocktailWriter
 {
@@ -182,6 +184,7 @@ class AdminCocktailWriter
 
     /**
      * $cocktail を消す。材料・別名は外部キーの CASCADE で消える(旧は材料の行を残していた。docs/migration-anomalies.md の 1)。
+     * 画像のファイルも消すが、ほかの行が同じファイルを指していれば残す(#578)。
      *
      * ほかのカクテル・ノード・技法・銘柄・用語の説明文から `@c<ID>@` で参照されているときは消さない(#579)。消すと参照が残り、
      * 画面では黙って取り除かれ(#286)、data:verify(#285 の 8)が失敗するため。
@@ -191,7 +194,7 @@ class AdminCocktailWriter
     public function delete(Cocktail $cocktail): void
     {
         DB::transaction(function () use ($cocktail): void {
-            // 同じカクテルの保存・削除と食い違わないよう、行をロックして読み直す。説明文の参照は外部キーではないので、
+            // 同じカクテルの保存・削除や画像の差し替えと食い違わないよう、行をロックして読み直す。説明文の参照は外部キーではないので、
             // 調べた後に別の保存が参照を足すのは止められない(その参照は data:verify が見つける)
             $cocktail = Cocktail::query()->lockForUpdate()->findOrFail($cocktail->id);
 
@@ -201,6 +204,8 @@ class AdminCocktailWriter
             }
 
             $cocktail->delete();
+            // 消した行を数えないよう、行を消してから、ほかに指す行があるかを確かめる。ファイルはコミットの後に消える
+            $this->images->deleteUnreferenced($cocktail->image);
         });
     }
 
