@@ -63,6 +63,58 @@ export const stubPasskeyBrowser = (get: (options: CredentialRequestOptions) => P
   return received
 }
 
+/** navigator.credentials.create() が返す、登録の資格情報の偽物(#313) */
+export class FakeRegistrationCredential implements PublicKeyCredential {
+  readonly type = 'public-key'
+  readonly authenticatorAttachment = 'platform'
+  readonly id: string
+  readonly rawId: ArrayBuffer
+  readonly response: AuthenticatorAttestationResponse
+
+  constructor(id: string, rawId: ArrayBuffer, response: { clientDataJSON: ArrayBuffer; attestationObject: ArrayBuffer }) {
+    this.id = id
+    this.rawId = rawId
+    this.response = {
+      ...response,
+      getTransports: () => ['internal'],
+      getAuthenticatorData: () => buffer(),
+      getPublicKey: () => null,
+      getPublicKeyAlgorithm: () => -7,
+    }
+  }
+
+  getClientExtensionResults(): AuthenticationExtensionsClientOutputs {
+    return {}
+  }
+
+  toJSON(): PublicKeyCredentialJSON {
+    throw new Error('テストの偽物では使わない(アプリは utils/webauthn.ts の attestationToJson で変換する)')
+  }
+}
+
+/** 中身の決まった登録の資格情報。ID は [7, 8](base64url で `Bwg`)、本文のバイト列はそれぞれ 1 バイト */
+export const fakeAttestation = () =>
+  new FakeRegistrationCredential('Bwg', buffer(7, 8), { clientDataJSON: buffer(1), attestationObject: buffer(9) })
+
+/**
+ * このブラウザがパスキーの登録に対応しているようにし、navigator.credentials.create() を create で答える(#313)。
+ * create が受け取った options を返り値の配列に残す(アプリが認証器に渡したものを確かめるため)。
+ */
+export const stubPasskeyRegistration = (create: (options: CredentialCreationOptions) => Promise<Credential | null>) => {
+  const received: CredentialCreationOptions[] = []
+  vi.stubGlobal('PublicKeyCredential', FakeRegistrationCredential)
+  Object.defineProperty(navigator, 'credentials', {
+    configurable: true,
+    value: {
+      create: (options: CredentialCreationOptions) => {
+        received.push(options)
+        return create(options)
+      },
+    },
+  })
+  return received
+}
+
 /** 差し替えた API を戻す(setup.ts がテストごとに呼ぶ) */
 export const resetPasskeyBrowser = () => {
   vi.unstubAllGlobals()

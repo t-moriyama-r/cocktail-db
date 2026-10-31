@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest'
-import { fakeAssertion } from '../test/webauthn'
-import { assertionToJson, base64UrlToBytes, bytesToBase64Url, toRequestOptions } from './webauthn'
+import { fakeAssertion, fakeAttestation } from '../test/webauthn'
+import {
+  assertionToJson,
+  attestationToJson,
+  base64UrlToBytes,
+  bytesToBase64Url,
+  toCreationOptions,
+  toRequestOptions,
+} from './webauthn'
 
 const bytes = (...values: number[]) => new Uint8Array(values)
 
@@ -53,6 +60,63 @@ describe('assertionToJson', () => {
       rawId: 'BAU',
       type: 'public-key',
       response: { clientDataJSON: 'AQ', authenticatorData: 'Ag', signature: 'Aw', userHandle: 'Bg' },
+      authenticatorAttachment: 'platform',
+      clientExtensionResults: {},
+    })
+  })
+})
+
+/** 登録の開始の API が返す options(BE の WebAuthn::toBrowserArray の形。null の値は BE が省く) */
+const creationOptions = (): Record<string, unknown> => ({
+  rp: { name: 'カクテルDB', id: 'localhost' },
+  user: { name: 'admin@example.com', id: 'CQo', displayName: '管理者の太郎' },
+  challenge: 'AQID',
+  pubKeyCredParams: [
+    { type: 'public-key', alg: -7 },
+    { type: 'public-key', alg: -257 },
+  ],
+  timeout: 60000,
+  excludeCredentials: [{ type: 'public-key', id: 'BAU' }],
+  authenticatorSelection: { userVerification: 'required', residentKey: 'required', requireResidentKey: true },
+  attestation: 'none',
+})
+
+describe('toCreationOptions', () => {
+  test('TC-313-01: BE の登録の options のチャレンジ・ユーザーの ID・登録済みの資格情報の ID をバイト列にし、ほかの値はそのまま渡す', () => {
+    expect(toCreationOptions(creationOptions())).toEqual({
+      rp: { name: 'カクテルDB', id: 'localhost' },
+      user: { name: 'admin@example.com', id: bytes(9, 10), displayName: '管理者の太郎' },
+      challenge: bytes(1, 2, 3),
+      pubKeyCredParams: [
+        { type: 'public-key', alg: -7 },
+        { type: 'public-key', alg: -257 },
+      ],
+      timeout: 60000,
+      excludeCredentials: [{ type: 'public-key', id: bytes(4, 5) }],
+      authenticatorSelection: { userVerification: 'required', residentKey: 'required', requireResidentKey: true },
+      attestation: 'none',
+    })
+  })
+
+  test.each([
+    { name: 'チャレンジ', key: 'challenge' },
+    { name: 'RP', key: 'rp' },
+    { name: 'ユーザー', key: 'user' },
+    { name: 'アルゴリズム', key: 'pubKeyCredParams' },
+  ])('TC-313-02: $name の無い options は TypeError', ({ key }) => {
+    const options = creationOptions()
+    delete options[key]
+    expect(() => toCreationOptions(options)).toThrow(TypeError)
+  })
+})
+
+describe('attestationToJson', () => {
+  test('TC-313-03: ブラウザが作った資格情報のバイト列を base64url にし、BE が読む形にする', () => {
+    expect(attestationToJson(fakeAttestation())).toEqual({
+      id: 'Bwg',
+      rawId: 'Bwg',
+      type: 'public-key',
+      response: { clientDataJSON: 'AQ', attestationObject: 'CQ', transports: ['internal'] },
       authenticatorAttachment: 'platform',
       clientExtensionResults: {},
     })
