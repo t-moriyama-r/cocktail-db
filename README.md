@@ -46,6 +46,7 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 cd backend
 composer install
 cp .env.example .env && php artisan key:generate
+php artisan storage:link     # /storage(画像)用の public/storage を作る
 php artisan serve            # http://127.0.0.1:8000
 
 # FE(別のターミナル)
