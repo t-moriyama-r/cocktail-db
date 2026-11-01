@@ -57,6 +57,12 @@
   display: inline;
 }
 
+/* Chrome は閉じた details の中身(::details-content)も block の箱として残すので、そのままだと
+   「−詳細はこちら−」の後の「)」が次の行に落ちる。閉じているあいだは箱ごと消して 1 行に収める */
+.disclaimer:not([open])::details-content {
+  display: none;
+}
+
 .disclaimer > summary {
   display: inline;
   cursor: pointer;
