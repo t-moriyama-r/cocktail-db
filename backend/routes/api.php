@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\DictionaryController;
 use App\Http\Controllers\Admin\LogoutController;
 use App\Http\Controllers\Admin\ParaphraseController;
 use App\Http\Controllers\Admin\PasskeyController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
@@ -108,4 +109,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
 
     // 用語辞典(#315)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::apiResource('dictionaries', DictionaryController::class)->where(['dictionary' => '[0-9]{1,18}']);
+
+    // 画面から変える設定(#132)。キーに「.」が入るので経路には載せず、本文で受ける(定義に無いキーは 422)
+    Route::get('/settings', [SettingController::class, 'index']);
+    Route::put('/settings', [SettingController::class, 'update']);
 });
