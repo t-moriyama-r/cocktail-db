@@ -85,3 +85,50 @@ for (const width of [375, 768, 1024, 1440]) {
     expect(scrollWidth).toBeLessThanOrEqual(width)
   })
 }
+
+type Box = { x: number; y: number; width: number; height: number }
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+// 「材料は必須です。」は検索ボタンと一緒にモーダルの下端に貼り付け、ボタンに隠れない(#576)。境目(599/600・959/960px)の両側も見る
+for (const width of [375, 599, 600, 768, 959, 960, 1024, 1440]) {
+  test(`TC-576-01: 幅 ${width}px・高さ 800px で、開いた直後に「材料は必須です。」が画面の中に見え、検索ボタンと重ならない`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/helpme')
+    const dialog = await openSearchModal(page)
+
+    const error = dialog.getByText('材料は必須です。')
+    const search = dialog.getByRole('button', { name: '検索', exact: true })
+    await expect(error).toBeInViewport({ ratio: 1 })
+    await expect(search).toBeInViewport({ ratio: 1 })
+    const errorBox = await error.boundingBox()
+    const searchBox = await search.boundingBox()
+    expect(errorBox).not.toBeNull()
+    expect(searchBox).not.toBeNull()
+    expect(overlaps(errorBox!, searchBox!)).toBe(false)
+    // 文言はボタンの上に出す(旧と同じ並び)
+    expect(errorBox!.y + errorBox!.height).toBeLessThanOrEqual(searchBox!.y)
+  })
+}
+
+test('TC-576-02: 木を開いて下までスクロールしても、「材料は必須です。」と検索ボタンが重ならずに見える', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await page.goto('/helpme')
+  const dialog = await openSearchModal(page)
+  await openToBeefeater(page)
+  await page.getByRole('button', { name: 'メジャーでない項目の表示／非表示' }).click()
+  // モーダルの中でスクロールする枠(overflow-y: auto の祖先)を、いちばん下まで送る
+  await dialog.getByRole('button', { name: '検索', exact: true }).evaluate((element) => {
+    let node = element.parentElement
+    while (node !== null && getComputedStyle(node).overflowY !== 'auto') {
+      node = node.parentElement
+    }
+    node?.scrollTo({ top: node.scrollHeight })
+  })
+
+  const error = dialog.getByText('材料は必須です。')
+  const search = dialog.getByRole('button', { name: '検索', exact: true })
+  await expect(error).toBeInViewport({ ratio: 1 })
+  await expect(search).toBeInViewport({ ratio: 1 })
+  expect(overlaps((await error.boundingBox())!, (await search.boundingBox())!)).toBe(false)
+})
