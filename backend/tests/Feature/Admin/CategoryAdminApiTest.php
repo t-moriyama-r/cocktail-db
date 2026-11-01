@@ -707,3 +707,19 @@ it('TC-121-24: 無いノードの更新・削除は 404', function (string $meth
 
     $this->json($method, '/api/admin/categories/999999', categoryAdminInput(null, ['name' => '新しい根']))->assertNotFound();
 })->with(['PUT', 'DELETE']);
+
+it('TC-121-25: その場で作る銘柄の度数は 0〜100 の数、名前・英名は 255 文字まで', function (string $field, mixed $value, bool $ok) {
+    ['nodes' => $n] = categoryAdminTree();
+
+    $response = $this->postJson('/api/admin/categories', categoryAdminInput($n['ラム'], categoryAdminBrandInput([$field => $value])));
+
+    $ok ? $response->assertCreated() : $response->assertUnprocessable()->assertJsonValidationErrors([$field]);
+})->with([
+    '度数 0' => ['brand_strength', 0, true],
+    '度数 100' => ['brand_strength', 100, true],
+    '度数 -0.1' => ['brand_strength', -0.1, false],
+    '度数 100.1' => ['brand_strength', 100.1, false],
+    '度数が数でない' => ['brand_strength', 'abc', false],
+    '名前 256 文字' => ['brand_name', str_repeat('あ', 256), false],
+    '英名 256 文字' => ['brand_name_eng', str_repeat('a', 256), false],
+]);
