@@ -46,12 +46,13 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 cd backend
 composer install
 cp .env.example .env && php artisan key:generate
+php artisan storage:link     # /storage(画像)用の public/storage を作る
 php artisan serve            # http://127.0.0.1:8000
 
 # FE(別のターミナル)
 cd frontend
 npm install
-npm run dev                  # http://localhost:5173 。/api は Laravel に流れる
+npm run dev                  # http://localhost:5173 。/api と /storage(画像)は Laravel に流れる
 ```
 
 Laravel から本番と同じ形で確かめるときは、`frontend` で `npm run build` してから http://127.0.0.1:8000 を開く。

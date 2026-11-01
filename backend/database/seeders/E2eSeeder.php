@@ -16,6 +16,8 @@ use App\Models\User;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * E2E テスト(e2e/)が前提にするデータを入れる。
@@ -29,7 +31,25 @@ class E2eSeeder extends Seeder
         $terms = $this->seedDictionary();
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
+        $this->seedCategoryImage($nodes['vodka']);
         $this->seedAdmin();
+    }
+
+    /**
+     * カテゴリ詳細の画像の E2E(#585)用。image 列にはファイル名だけを入れ、画像のファイルは public ディスクに置く。
+     * /storage/<ファイル名> を Laravel が返せるよう、public/storage の symlink も無ければ作る。
+     */
+    private function seedCategoryImage(Category $vodka): void
+    {
+        // 1x1 の PNG
+        Storage::disk('public')->put(
+            'e2e-vodka.png',
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+        );
+        if (! file_exists(public_path('storage'))) {
+            Artisan::call('storage:link');
+        }
+        $vodka->update(['image' => 'e2e-vodka.png']);
     }
 
     /**
