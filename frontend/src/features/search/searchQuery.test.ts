@@ -181,7 +181,7 @@ describe('searchQuery', () => {
 
 /**
  * 結果の画面の URL の長さの上限(#616。`docs/decisions/search-screen.md` の決まったこと 3)。
- * サーバー(Apache の既定の LimitRequestLine は 8,190 バイト)の半分ほどにして、木が育つ分とサーバーの前の中継の余裕を残す
+ * 公開先のサーバーが受け付ける長さ(8,000 文字ほど。#618 で確かめた)の半分ほどにして、木が育つ分とサーバーの前の中継の余裕を残す
  */
 const URL_LENGTH_LIMIT = 4000
 
