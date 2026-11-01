@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Link } from 'react-router'
 import type { components } from '../../api/schema'
+import { categoryPath } from '../../utils/detailPaths'
 import styles from './NodeTable.module.css'
 import { parentNodes } from './parentNodes'
 
@@ -48,8 +49,4 @@ export default function NodeTable({ nodes, label }: Props) {
       </tbody>
     </table>
   )
-}
-
-function categoryPath(id: number): string {
-  return `/category/${id}`
 }

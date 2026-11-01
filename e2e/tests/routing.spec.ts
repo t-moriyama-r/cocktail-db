@@ -61,3 +61,21 @@ test('TC-111-20: 詳細ページの HTML(JS を動かす前)に、名前の titl
   expect(html).toContain('<meta name="description" content="定番のロングカクテル。">')
   expect(html).toMatch(/<link rel="canonical" href="[^"]*\/detail\/cocktail\/1">/)
 })
+
+// OGP・Twitter カード(#112): SNS のクローラーは JS を動かさないので、サーバーが返す HTML に入っているかを見る。
+// E2eSeeder のジントニック(ID 1)は画像が無いので、既定の画像を指す
+test('TC-112-14: 詳細ページの HTML(JS を動かす前)に OGP・Twitter カードが入り、既定の画像を取れる', async ({ request }) => {
+  const response = await request.get('/detail/cocktail/1')
+  expect(response.status()).toBe(200)
+  const html = await response.text()
+  expect(html).toContain('<meta property="og:title" content="ジントニック | 宅飲みカクテルデータベース">')
+  expect(html).toContain('<meta property="og:description" content="定番のロングカクテル。">')
+  expect(html).toMatch(/<meta property="og:url" content="[^"]*\/detail\/cocktail\/1">/)
+  expect(html).toContain('<meta name="twitter:card" content="summary">')
+  const image = html.match(/<meta property="og:image" content="([^"]*)">/)?.[1]
+  expect(image).toMatch(/\/og-default\.png$/)
+
+  const imageResponse = await request.get(new URL(image ?? '').pathname)
+  expect(imageResponse.status()).toBe(200)
+  expect(imageResponse.headers()['content-type']).toBe('image/png')
+})

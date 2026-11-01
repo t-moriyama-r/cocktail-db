@@ -12,6 +12,7 @@ use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
 use App\Models\Ice;
 use App\Models\Method;
+use App\Models\User;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
 use Illuminate\Database\Seeder;
@@ -31,6 +32,7 @@ class E2eSeeder extends Seeder
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
         $this->seedCategoryImage($nodes['vodka']);
+        $this->seedAdmin();
     }
 
     /**
@@ -48,6 +50,15 @@ class E2eSeeder extends Seeder
             Artisan::call('storage:link');
         }
         $vodka->update(['image' => 'e2e-vodka.png']);
+    }
+
+    /**
+     * 管理画面の枠(#119)の E2E でログインする管理者。E2E は php artisan admin:login-link で非常用のログイン URL を出してログインする
+     * (ユーザーが 1 人なので email を渡さなくてよいが、取り違えないよう E2E は email を渡す)。
+     */
+    private function seedAdmin(): void
+    {
+        User::factory()->create(['name' => 'E2E の管理者', 'email' => 'e2e-admin@example.com']);
     }
 
     /**

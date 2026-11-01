@@ -4,6 +4,7 @@ import { useApi } from '../api/useApi'
 import ApiView from '../components/ApiView/ApiView'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 import { termLabel } from '../features/dictionary/termLabel'
+import { dictionaryPath } from '../utils/detailPaths'
 import styles from './DictionaryIndex.module.css'
 
 const fetchDictionaries = () => api.GET('/dictionaries')
@@ -45,8 +46,4 @@ export default function DictionaryIndex() {
       )}
     </ApiView>
   )
-}
-
-function dictionaryPath(id: number): string {
-  return `/dictionary/${id}`
 }

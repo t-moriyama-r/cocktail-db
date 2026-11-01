@@ -117,7 +117,7 @@ describe('App のルーティング', () => {
     ['TC-97-15', '/nope'],
     ['TC-97-16', '/detail/category/1'],
     ['TC-97-16', '/detail/middle/1'],
-    ['TC-97-17', '/admin'],
+    // #97 では /admin も 404 の画面を出していた。#119 で管理画面の枠を置いた(管理画面の表示は AdminLayout.test.tsx)
     ['TC-97-17', '/about'],
     ['TC-97-18', '/detail/cocktail/'],
     ['TC-97-18', '/result/FromNameResult/'],

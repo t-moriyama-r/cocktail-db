@@ -51,10 +51,18 @@ const hits = (cocktails: number, nodes = 0, brands = 0, ingredientMatches = 0): 
   ingredient_matches: Array.from({ length: ingredientMatches }, (_, i) => cocktail(i + 101)),
 })
 
+/** モーダルの中の条件検索のフォーム(#307)の部品。蒸留酒 > ジン と、技法 1 つ */
+const searchForm: paths['/search-form']['get']['responses'][200]['content']['application/json'] = {
+  categories: [
+    { id: 1, name: '蒸留酒', is_major: false, root_role: null, children: [{ id: 10, name: 'ジン', is_major: true, root_role: null, children: [] }] },
+  ],
+  methods: [{ id: 1, name: 'ビルド' }],
+}
+
 /** 今の URL を出す(移った先を確かめるため) */
 function LocationProbe() {
-  const { pathname } = useLocation()
-  return <output data-testid="location">{pathname}</output>
+  const { pathname, search } = useLocation()
+  return <output data-testid="location">{`${pathname}${search}`}</output>
 }
 
 const renderAt = (path: string) =>
@@ -85,6 +93,7 @@ describe('ヘッダー(SiteHeader)', () => {
   beforeEach(() => {
     mockApi('get', '/cocktails/count', 200, { count: 1234 })
     mockApi('get', '/random-walk', 200, { type: 'cocktail', id: 7 })
+    mockApi('get', '/search-form', 200, searchForm)
   })
 
   afterEach(() => {
@@ -321,6 +330,39 @@ describe('ヘッダー(SiteHeader)', () => {
 
       expect(location()).toHaveTextContent(/^\/$/)
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    test('TC-307-15・TC-102-19: モーダルの中に条件検索のフォームを出し、材料を選んで検索すると、条件を URL に入れて結果の画面へ移って閉じる', async () => {
+      renderAt('/helpme')
+      fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
+      const dialog = within(screen.getByRole('dialog', { name: 'カクテル検索' }))
+
+      expect(await dialog.findByRole('heading', { name: 'カクテル検索' })).toBeInTheDocument()
+      expect(dialog.getByRole('button', { name: '検索' })).toBeDisabled()
+      fireEvent.click(dialog.getByRole('checkbox', { name: 'ジン' }))
+      fireEvent.click(dialog.getByRole('button', { name: '検索' }))
+
+      // 条件を URL のクエリに入れて移る(#102)。ジンは蒸留酒のただ 1 つの子なので、蒸留酒 1 つに畳む
+      expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1$/)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    test('TC-307-16: 選んだ条件は、閉じて開き直しても、材料の名前で詳細へ移っても残る', async () => {
+      renderAt('/helpme')
+      fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'ジン' }))
+      fireEvent.click(screen.getByRole('radio', { name: 'AND検索' }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }))
+
+      fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
+      expect(await screen.findByRole('checkbox', { name: 'ジン' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: 'AND検索' })).toBeChecked()
+
+      fireEvent.click(screen.getByRole('button', { name: 'ジン' }))
+      expect(location()).toHaveTextContent(/^\/category\/10$/)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
+      expect(await screen.findByRole('checkbox', { name: 'ジン' })).toBeChecked()
     })
   })
 
