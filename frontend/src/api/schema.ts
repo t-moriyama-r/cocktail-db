@@ -1399,7 +1399,11 @@ export interface components {
                 rawId: string;
                 /** @enum {string} */
                 type: "public-key";
-                response: string[];
+                response: {
+                    clientDataJSON: string;
+                    attestationObject: string;
+                    transports?: string[];
+                };
             };
         };
         /** PasskeyResource */
@@ -1417,7 +1421,12 @@ export interface components {
                 rawId: string;
                 /** @enum {string} */
                 type: "public-key";
-                response: string[];
+                response: {
+                    clientDataJSON: string;
+                    authenticatorData: string;
+                    signature: string;
+                    userHandle?: string | null;
+                };
             };
             remember?: boolean;
         };
