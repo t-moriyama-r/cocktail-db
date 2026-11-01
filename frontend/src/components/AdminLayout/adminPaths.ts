@@ -1,6 +1,12 @@
 /** 管理画面のメニュー(トップ)の URL */
 export const ADMIN_HOME_PATH = '/admin'
 
+/** 管理画面のカクテルの一覧(公開済み・下書き。#126)の URL */
+export const ADMIN_COCKTAILS_PATH = '/admin/cocktails'
+
+/** 管理画面のカクテルの編集画面(#127)の URL。一覧の 1 行から開く */
+export const adminCocktailEditPath = (id: number): string => `${ADMIN_COCKTAILS_PATH}/${id}`
+
 /** 管理画面へのログインの画面の URL。ログインの前に開くので、管理画面の枠(AdminLayout)の外に置く */
 export const ADMIN_LOGIN_PATH = '/admin/login'
 
