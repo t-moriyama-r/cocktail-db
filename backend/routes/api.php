@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\BrandController;
+use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\CocktailController;
 use App\Http\Controllers\Admin\CocktailDuplicateController;
 use App\Http\Controllers\Admin\CocktailFormOptionsController;
@@ -105,6 +106,10 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('/brands', [BrandController::class, 'store']);
     Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
+
+    // カテゴリ木のノード(#121)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る。
+    // 消せないノード(子・銘柄・材料・ベース・アフィリエイトのどれかがある)は消さず 409 で理由を返す
+    Route::apiResource('categories', CategoryController::class)->where(['category' => '[0-9]{1,18}']);
 
     // 用語辞典(#315)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::apiResource('dictionaries', DictionaryController::class)->where(['dictionary' => '[0-9]{1,18}']);
