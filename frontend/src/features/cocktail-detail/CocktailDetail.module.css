@@ -65,6 +65,41 @@
   }
 }
 
+/* 説明文から同じベースのカクテルまでと、画像を並べる(旧の cocktail_block)。960px 未満は画像を上にして縦に積む(旧の column-reverse)。
+   960px 以上は左右を同じ幅にする(旧と同じく、画像の欄は 200px より狭くしない) */
+.body {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.main,
+.media {
+  min-width: 0;
+}
+
+/* 960px 未満の画像は、旧と同じく高さを 250px までにし、200px より狭くしてもよい */
+@media (max-width: 959px) {
+  .media img {
+    min-width: 0;
+    max-height: 250px;
+  }
+}
+
+@media (min-width: 960px) {
+  .body {
+    flex-direction: row;
+  }
+
+  .main,
+  .media {
+    flex: 1;
+  }
+
+  .media {
+    min-width: 200px;
+  }
+}
+
 /* 説明文。960px 未満では上に「§Description§」の区切りを出す */
 .description {
   margin: var(--space-5) var(--space-2) var(--space-5);
@@ -183,4 +218,33 @@
 .aliases svg {
   margin-right: var(--space-1);
   vertical-align: -0.125em;
+}
+
+/* 材料ごとの商品の欄(旧の recipe_amazon)。1 つを 580px までにして、折り返して真ん中に寄せる */
+.affiliates {
+  margin: var(--space-5) 0;
+}
+
+/* 「使われている材料はこちら」。旧は見出しではなく地の文と同じ大きさ・太さの文字を真ん中に置いていた */
+.affiliatesHeading {
+  margin: 0;
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+  text-align: center;
+}
+
+.affiliateList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.affiliateItem {
+  width: 580px;
+  max-width: 100%;
+}
+
+/* 商品の欄を出さなかった材料(行が無い・読み込み中など)は、場所を取らない */
+.affiliateItem:empty {
+  display: none;
 }
