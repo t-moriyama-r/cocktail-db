@@ -10,7 +10,6 @@ import CocktailDetail from './pages/CocktailDetail'
 import CocktailSearchResult from './pages/CocktailSearchResult'
 import DictionaryDetail from './pages/DictionaryDetail'
 import DictionaryIndex from './pages/DictionaryIndex'
-import HelpMe from './pages/HelpMe'
 import NameSearchResult from './pages/NameSearchResult'
 import NotFound from './pages/NotFound'
 import Top from './pages/Top'
@@ -33,7 +32,6 @@ export default function App() {
       <Route element={<SiteLayout />}>
         <Route path="/" element={<Top />} />
         <Route path="/index" element={<Top />} />
-        <Route path="/helpme" element={<HelpMe />} />
         <Route path="/result/FromNameResult/:word" element={<NameSearchResult />} />
         {/* 旧で URL の語で検索し直すための別名。画面は同じ */}
         <Route path="/result/FromNameResultEx/:word" element={<NameSearchResult />} />
