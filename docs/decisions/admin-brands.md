@@ -16,7 +16,7 @@
 
 ## 旧との差分
 
-テストの表では `差分あり(意図: docs/decisions/admin-brands.md)` としてここを指す。旧の画面のソース(cocktail-legacy の `laravel6/resources/js/Admin/Super/BrandList.vue`・`ListComponent.vue`・`Detail/BrandEdit.vue`・`Detail/component/NamesAndDescription.vue`)を読んで書いた。旧システムを動かして確かめてはいない。
+テストの表では `差分あり(意図: docs/decisions/admin-brands.md)` としてここを指す。旧の画面のソース(cocktail-legacy の `laravel6/resources/js/Admin/Super/BrandList.vue`・`ListComponent.vue`・`Detail/BrandEdit.vue`・`Detail/component/NamesAndDescription.vue`)と、本番の画面のビルド(`production-public/3.js`。フォームの部分はソースと同じ)を読んで書いた。旧システムを動かして確かめてはいない。
 
 - メニュー: 旧は「銘柄新規」「銘柄編集」の 2 つの項目だった → 新は「銘柄」1 つにし、新規は一覧の上のリンクから開く(決まったこと 1。カクテルの一覧(#126)と同じ形)
 - 一覧の所属: 旧は「(★カテゴリ/★ミドル)」の 2 段 → 新は根を除いたパンくずのいちばん上の段と所属のノードの 2 段で、間の段は省く(決まったこと 2。2 段までの木では旧と同じに見える)
