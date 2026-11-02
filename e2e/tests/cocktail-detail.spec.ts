@@ -102,3 +102,78 @@ for (const width of [375, 768, 1024, 1440]) {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
   })
 }
+
+// 画像(#110)。E2eSeeder のモスコミュール(ID 3)は、画像(1x1 の PNG)と出典の文字「E2E の出典」を持つ
+const IMAGE_PATH = '/detail/cocktail/3'
+
+test('TC-110-10: 画像のあるカクテルを開くと、画像を /storage/<ファイル名> から読み込み、その下に出典を出す', async ({ page }) => {
+  await page.goto(IMAGE_PATH)
+
+  const image = page.getByRole('img', { name: 'モスコミュール' })
+  await expect(image).toHaveAttribute('src', '/storage/e2e-vodka.png')
+  await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0)
+  await expect(page.getByRole('figure').getByText('E2E の出典')).toBeVisible()
+})
+
+// 960px 未満は画像を説明文の上に、960px 以上は説明文の右に置く(旧の cocktail_block の column-reverse)。境目の両側も見る
+for (const { width, imageBeside } of [
+  { width: 375, imageBeside: false },
+  { width: 768, imageBeside: false },
+  { width: 959, imageBeside: false },
+  { width: 960, imageBeside: true },
+  { width: 1024, imageBeside: true },
+  { width: 1440, imageBeside: true },
+]) {
+  test(`TC-110-11: 幅 ${width}px で、画像を${imageBeside ? '説明文の右' : '説明文の上'}に置き、横スクロールが出ない`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(IMAGE_PATH)
+
+    const image = (await page.getByRole('img', { name: 'モスコミュール' }).boundingBox())!
+    const description = (await page.getByText('銅のマグで飲む', { exact: false }).boundingBox())!
+    if (imageBeside) {
+      expect(image.x).toBeGreaterThanOrEqual(description.x + description.width)
+    } else {
+      expect(image.y + image.height).toBeLessThanOrEqual(description.y)
+    }
+
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+}
+
+// 材料ごとの商品の欄(#110)。ジントニックは、材料の銘柄(ビーフィーター 40度)にだけ商品の行があり、ミントには無い。
+// E2E では Amazon の設定が無いので、商品の欄はボタン「Amazonで探す」だけになる
+test('TC-110-12: ジントニックを開くと、「使われている材料はこちら」の下に、銘柄の商品の欄を 1 つだけ出す', async ({ page }) => {
+  await page.goto(PATH)
+
+  const affiliates = page.getByRole('region', { name: '使われている材料' })
+  await expect(affiliates.getByRole('heading', { level: 2, name: '使われている材料はこちら' })).toBeVisible()
+  await expect(affiliates.getByRole('complementary', { name: '商品' })).toHaveCount(1)
+  await expect(affiliates.getByRole('link', { name: 'Amazonで探す' })).toHaveAttribute('href', /amazon\.co\.jp/)
+})
+
+test('TC-110-13: 商品の行が 1 つも無いカクテル(モスコミュール)では、「使われている材料はこちら」を出さない', async ({ page }) => {
+  const affiliateResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/affiliates')
+  await page.goto(IMAGE_PATH)
+  expect((await affiliateResponse).status()).toBe(404)
+
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('モスコミュール(Moscow Mule)')
+  await expect(page.getByText('使われている材料はこちら')).toHaveCount(0)
+})
+
+for (const width of [375, 768, 1024, 1440]) {
+  test(`TC-110-14: 幅 ${width}px で、商品の欄を出しても横スクロールが出ない`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(PATH)
+    await expect(page.getByRole('complementary', { name: '商品' })).toBeVisible()
+
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+}
