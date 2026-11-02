@@ -24,12 +24,12 @@ type BrandSummaryResource = components['schemas']['BrandSummaryResource']
  * カテゴリ(木のノード)の詳細の画面。旧のカテゴリの詳細(Detail/CategoryDetail.vue)とミドルの詳細(MiddleDetail.vue)を、
  * 任意の深さのノードで 1 つにしたもの(docs/decisions/category-detail.md)。
  *
- * 上から、タイトル・パンくず・説明文と画像・有名な銘柄と子のノード(#105)・登録されている銘柄の一覧・
- * これを使ったカクテル・商品の欄(アフィリエイト)の順に出す(#106)。
+ * 上から、タイトル・パンくず・説明文と画像・有名な銘柄と子のノード(#105)・これを使ったカクテル・
+ * 登録されている銘柄の一覧・商品の欄(アフィリエイト)の順に出す(#106)。
  * - 銘柄の一覧は、このノードと配下すべての銘柄(API の brands)。0 件なら欄ごと出さない(旧と同じ)
  * - これを使ったカクテルは、旧と同じくランダムの 5 件と「再取得」。配下のノードを使うカクテルも当たる
  *   (docs/decisions/public-detail.md の決まったこと 1)
- * - 銘柄の一覧 → カクテルの並びは #106 の本文の追記のとおり(旧はカテゴリの詳細とミドルの詳細で逆だった。
+ * - カクテル → 銘柄の一覧の並びは、旧のカテゴリの詳細と同じ(旧はカテゴリとミドルで逆だった。#631 でオーナーが決めた。
  *   docs/decisions/public-detail.md の「旧との差分」)
  * - 商品の欄は、画像が無ければ画像の場所に出す(960px 以上)。960px 未満と、画像があるときは、いちばん下に出す
  *   (旧と同じ。どの幅でも 1 つだけ見える)
@@ -99,11 +99,11 @@ function CategoryDetailContent({ node }: { node: CategoryDetailResource }) {
         </IntroSection>
       </div>
 
-      {node.brands.length > 0 && <BrandList brands={node.brands} />}
-
       <div className={styles.cocktails}>
         <RandomCocktails origin={{ kind: 'category', id: node.id }} />
       </div>
+
+      {node.brands.length > 0 && <BrandList brands={node.brands} />}
 
       {/* 画像が無いときは、960px 以上では画像の場所に出しているので、ここには出さない(旧の is_already_display_inImage) */}
       <div

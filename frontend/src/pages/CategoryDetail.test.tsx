@@ -372,7 +372,7 @@ describe('カテゴリの詳細の、銘柄の一覧・これを使ったカク�
     ])
   })
 
-  test('TC-106-06: 子のノードの欄の後に、銘柄の一覧 → これを使ったカクテルの順に並べる', async () => {
+  test('TC-106-06: 子のノードの欄の後に、これを使ったカクテル → 銘柄の一覧の順に並べる', async () => {
     respondWith(buildNode([LIQUOR, GIN], { brands: [FAMOUS] }))
     renderAt(GIN.id)
     await findTitle()
@@ -380,8 +380,8 @@ describe('カテゴリの詳細の、銘柄の一覧・これを使ったカク�
     const children = screen.getByRole('region', { name: '子のノード' })
     const brands = screen.getByRole('region', { name: BRAND_LIST })
     const cocktails = screen.getByRole('region', { name: COCKTAILS })
-    expect(children.compareDocumentPosition(brands) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(brands.compareDocumentPosition(cocktails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(children.compareDocumentPosition(cocktails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(cocktails.compareDocumentPosition(brands) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   test('TC-106-07: 画像が無ければ、商品の欄を画像の場所といちばん下の両方に置く(どちらを見せるかは幅で決める)', async () => {
