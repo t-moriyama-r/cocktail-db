@@ -11,7 +11,8 @@ const pages = [
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', title: SITE_TITLE },
   { path: '/result/Cocktails', title: `カクテル検索結果 ｜ ${SITE_TITLE}` },
   { path: '/category/1', title: `蒸留酒(蒸留酒) ｜ ${SITE_TITLE}` },
-  { path: '/detail/brand/1', title: SITE_TITLE },
+  // 銘柄の詳細はタイトルに「名前(英名)」を出す(#54)
+  { path: '/detail/brand/1', title: `ビーフィーター 40度(Beefeater 40) ｜ ${SITE_TITLE}` },
   { path: '/detail/cocktail/1', title: SITE_TITLE },
   { path: '/dictionary', title: `用語辞典 ｜ ${SITE_TITLE}` },
   // E2eSeeder の用語辞典で ID 1 の用語(#56)。詳細はタイトルに用語の名前を出す(TC-56-06)
