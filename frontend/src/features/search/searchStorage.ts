@@ -1,5 +1,11 @@
 import { toSearchConditions, type SearchFormValues } from './searchForm'
-import { formatSearchQuery, formValuesFromQuery, parseSearchQuery, searchQueryFromConditions } from './searchQuery'
+import {
+  formatSearchQuery,
+  formValuesFromQuery,
+  parseSearchQuery,
+  searchQueryFromConditions,
+  type SearchQuery,
+} from './searchQuery'
 import type { SelectionTree } from './selection'
 
 /**
@@ -13,7 +19,8 @@ import type { SelectionTree } from './selection'
  * | `user` | 「保存」を押したとき | 「読み込み」を押したとき | `searchUser` |
  *
  * - 画面を開いたときには読まない(docs/decisions/search-screen.md の 4。旧も開くたびに既定の状態だった)
- * - キーには版(`v1`)を入れ、旧のキー(`searchInstant`・`searchUser`。旧の ID が入っている)とは分ける。旧のキーの値を直すのは #175
+ * - キーには版(`v1`)を入れ、旧のキー(`searchInstant`・`searchUser`。旧の ID が入っている)とは分ける。ここの関数は旧のキーを
+ *   読まず、書き換えない。旧のキーの値を新しいノードに直してここに移すのは legacySearchStorage.ts(#175)
  * - 中身は URL のクエリと同じ形の文字列(searchQuery.ts。例: `n=12,45&mode=and&m=1,3`)。読むときも URL と同じく、
  *   不正な値は既定値にし、木に無いノード・無い技法の ID は捨てる(selection.ts の selectionFromIds。#304)。
  *   技法がすべてチェックなら書かないので、後から技法が増えても「すべて」のまま戻る
@@ -30,8 +37,14 @@ export const SEARCH_STORAGE_KEYS: Readonly<Record<SearchStorageSlot, string>> = 
   user: 'cocktail-db.search.user.v1',
 }
 
+/**
+ * 保存先の中身を、画面の外(旧サイトの保存値の移し替え。#175)が書き換えたときに window に送るイベントの名前。
+ * 同じタブでの書き換えには storage のイベントが来ないので、フォームはこれを聞いて「読み込み」「リロード」を押せるかを読み直す
+ */
+export const SEARCH_STORAGE_CHANGED_EVENT = 'cocktail-db:search-storage-changed'
+
 /** 使える localStorage。無い・触ると例外を投げるときは null */
-function storage(): Storage | null {
+export function browserStorage(): Storage | null {
   try {
     return typeof window === 'undefined' ? null : window.localStorage
   } catch {
@@ -42,7 +55,7 @@ function storage(): Storage | null {
 /** 保存した文字列。保存が無い・読めないときは null */
 function readRaw(slot: SearchStorageSlot): string | null {
   try {
-    return storage()?.getItem(SEARCH_STORAGE_KEYS[slot]) ?? null
+    return browserStorage()?.getItem(SEARCH_STORAGE_KEYS[slot]) ?? null
   } catch {
     return null
   }
@@ -63,11 +76,15 @@ export function saveSearch(
   methods: readonly { readonly id: number }[],
   values: SearchFormValues,
 ): boolean {
-  const text = formatSearchQuery(searchQueryFromConditions(tree, methods, toSearchConditions(methods, values)))
+  return saveSearchQuery(slot, searchQueryFromConditions(tree, methods, toSearchConditions(methods, values)))
+}
+
+/** URL のクエリと同じ形の条件を、そのまま保存する。保存できたら true(旧サイトの保存値を直して移すときにも使う。#175) */
+export function saveSearchQuery(slot: SearchStorageSlot, query: SearchQuery): boolean {
   try {
-    const target = storage()
+    const target = browserStorage()
     if (target === null) return false
-    target.setItem(SEARCH_STORAGE_KEYS[slot], text)
+    target.setItem(SEARCH_STORAGE_KEYS[slot], formatSearchQuery(query))
     return true
   } catch {
     return false
