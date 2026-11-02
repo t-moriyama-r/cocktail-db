@@ -146,7 +146,7 @@ describe('画面を開く', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'スキップ語' })).toBeInTheDocument()
   })
 
-  test('TC-67-02: 言い換えの一覧に、変換前 → 変換後(/ ミドル)・強制ホット・解決した先のパンくず(銘柄なら末尾に銘柄)を出し、解決できない語はそう出す', async () => {
+  test('TC-67-02: 言い換えの一覧に、変換前 → 変換後 【ミドル】・note の印・解決した先のパンくず(銘柄なら末尾に銘柄)を出し、解決できない語はそう出す', async () => {
     mockScreen({
       paraphrases: [
         paraphrase({
@@ -154,7 +154,7 @@ describe('画面を開く', () => {
           name: 'ジン(ドライ)',
           converted: 'ジン',
           middle: 'ドライジン',
-          command: 'hot',
+          note: 'ドライと書かれたジン',
           resolved: { path: [LIQUOR, GIN, DRY_GIN], brand: null },
         }),
         paraphrase({
@@ -173,16 +173,18 @@ describe('画面を開く', () => {
 
     const items = await within(await screen.findByRole('region', { name: '言い換えの一覧' })).findAllByRole('listitem')
     expect(items.map((item) => item.textContent)).toEqual([
-      'ジン(ドライ) → ジン / ドライジン強制ホット蒸留酒 / ジン / ドライジン',
+      'ジン(ドライ) → ジン 【ドライジン】 蒸留酒 / ジン / ドライジン',
       'ビーフィーター → ビーフィーター 40度蒸留酒 / ジン / ドライジン / ビーフィーター 40度',
       '古い語 → 消えたノード解決できません(この名前のノード・銘柄がありません)',
     ])
+    expect(within(items[0]).getByRole('img', { name: 'note あり' })).toBeInTheDocument()
+    expect(within(items[1]).queryByRole('img')).not.toBeInTheDocument()
   })
 
   test('TC-67-03: 言い換えの一覧の絞り込みに入れた語を、q で API に渡す', async () => {
     mockScreen({ paraphrases: [paraphrase({ id: 1, name: 'ジン' })] })
     renderScreen()
-    await within(await screen.findByRole('region', { name: '言い換え辞書' })).findByRole('button', { name: /^ジン → / })
+    await within(await screen.findByRole('region', { name: '言い換えの一覧' })).findByRole('button', { name: 'ジン' })
 
     typeInto(within(paraphraseSection()).getByRole('searchbox', { name: '絞り込み' }), 'ドライ')
 
@@ -346,9 +348,7 @@ describe('言い換えを保存・削除する', () => {
       note: 'メモ',
     })
     expect(within(form).getByRole('textbox', { name: '変換前' })).toHaveValue('')
-    expect(
-      await within(paraphraseSection()).findByRole('button', { name: 'ドライ・ジン → ジン / ドライジン' }),
-    ).toBeInTheDocument()
+    expect(await within(paraphraseSection()).findByRole('button', { name: 'ドライ・ジン' })).toBeInTheDocument()
   })
 
   test('TC-67-12: ミドル・command・note を空にして保存すると、どれも null で送る', async () => {
@@ -383,9 +383,7 @@ describe('言い換えを保存・削除する', () => {
     renderScreen()
     await waitForTree()
 
-    fireEvent.click(
-      await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ) → ジン / ドライジン' }),
-    )
+    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ)' }))
 
     const form = paraphraseForm()
     expect(within(form).getByText('言い換え「ジン(ドライ)」を編集中')).toBeInTheDocument()
@@ -471,7 +469,7 @@ describe('言い換えを保存・削除する', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     renderScreen()
     await waitForTree()
-    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ) → ジン' }))
+    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ)' }))
 
     fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '削除する' }))
     expect(confirm).toHaveBeenLastCalledWith('言い換え「ジン(ドライ)」を消します。よろしいですか?')
@@ -492,7 +490,7 @@ describe('言い換えを保存・削除する', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderScreen()
     await waitForTree()
-    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ) → ジン' }))
+    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ)' }))
 
     fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '削除する' }))
 

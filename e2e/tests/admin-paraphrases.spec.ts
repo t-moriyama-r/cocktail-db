@@ -38,10 +38,10 @@ test('TC-67-26: 木からノードを選ぶと変換後・ミドルに名前が�
 
   await expect(form.getByText('「E2E のドライ・ジン」を保存しました')).toBeVisible()
   const item = list.getByRole('listitem').filter({ hasText: 'E2E のドライ・ジン' })
-  await expect(item).toHaveText('E2E のドライ・ジン → ジン / ドライジン蒸留酒 / ジン / ドライジン')
+  await expect(item).toHaveText('E2E のドライ・ジン → ジン 【ドライジン】蒸留酒 / ジン / ドライジン')
 
   page.once('dialog', (dialog) => void dialog.accept())
-  await item.getByRole('button').click()
+  await item.getByRole('button', { name: 'E2E のドライ・ジン' }).click()
   await form.getByRole('button', { name: '削除する' }).click()
   await expect(form.getByText('「E2E のドライ・ジン」を消しました')).toBeVisible()
   await expect(list.getByRole('listitem').filter({ hasText: 'E2E のドライ・ジン' })).toHaveCount(0)

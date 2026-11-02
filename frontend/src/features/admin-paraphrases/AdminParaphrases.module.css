@@ -168,13 +168,6 @@
   text-decoration: underline;
 }
 
-.badge {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font-size: var(--font-size-sm);
-}
-
 .resolved {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);

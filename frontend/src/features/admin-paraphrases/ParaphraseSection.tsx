@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react'
 import type { components } from '../../api/schema'
 import AdminList, { type AdminListQuery } from '../../components/AdminList/AdminList'
+import FontAwesomeIcon from '../../components/CocktailTable/FontAwesomeIcon'
 import {
   deleteParaphrase,
   failureMessage,
@@ -200,6 +201,10 @@ export default function ParaphraseSection() {
   )
 }
 
+/**
+ * 一覧の 1 行。旧(ListComponent.vue)と同じく「〈変換前〉 → 〈変換後〉 【〈ミドル〉】」と、note があればその印を出し、
+ * 変換前を押すとフォームに読み込む。旧に無い、解決した先のパンくずを後ろに足す(docs/decisions/admin-paraphrases.md)
+ */
 function ParaphraseItem({
   paraphrase,
   onEdit,
@@ -207,14 +212,22 @@ function ParaphraseItem({
   paraphrase: ParaphraseResource
   onEdit: (p: ParaphraseResource) => void
 }) {
-  const target = paraphrase.middle === null ? paraphrase.converted : `${paraphrase.converted} / ${paraphrase.middle}`
   const label = resolvedLabel(paraphrase)
   return (
     <div className={styles.item}>
-      <button className={styles.itemButton} type="button" onClick={() => onEdit(paraphrase)}>
-        {`${paraphrase.name} → ${target}`}
-      </button>
-      {paraphrase.command === 'hot' && <span className={styles.badge}>強制ホット</span>}
+      <span>
+        <button className={styles.itemButton} type="button" onClick={() => onEdit(paraphrase)}>
+          {paraphrase.name}
+        </button>
+        {` → ${paraphrase.converted}`}
+        {paraphrase.middle !== null && ` 【${paraphrase.middle}】`}
+        {paraphrase.note !== null && (
+          <>
+            {' '}
+            <FontAwesomeIcon icon="lightbulb" label="note あり" />
+          </>
+        )}
+      </span>
       <span className={label === null ? styles.unresolved : styles.resolved}>
         {label ?? '解決できません(この名前のノード・銘柄がありません)'}
       </span>
