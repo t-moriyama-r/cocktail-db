@@ -11,6 +11,7 @@ use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
 use App\Models\Ice;
+use App\Models\LegacyIdMap;
 use App\Models\Method;
 use App\Models\User;
 use App\Services\CategoryTree;
@@ -33,6 +34,19 @@ class E2eSeeder extends Seeder
         $this->seedTopData($nodes['vodka']);
         $this->seedCategoryImage($nodes['vodka']);
         $this->seedAdmin();
+        $this->seedLegacyIdMaps($nodes['gin'], $nodes['dryGin'], $nodes['vodka']);
+    }
+
+    /**
+     * 旧サイトが保存した検索条件の移し替え(#175)の E2E 用の、旧 ID と新しい ID の対応(legacy_id_maps)。
+     * 旧のカテゴリ 9001 → ジン(子のミドル 9101 → ドライジン)、9002 → ウォッカ(子のミドルなし)、旧の技法 9201 → ビルド。
+     * 旧 ID は、ほかの E2E のデータの ID と重ならないよう大きな値にする
+     */
+    private function seedLegacyIdMaps(Category $gin, Category $dryGin, Category $vodka): void
+    {
+        LegacyIdMap::record('m_category', 'categories', [9001 => $gin->id, 9002 => $vodka->id]);
+        LegacyIdMap::record('m_middle', 'categories', [9101 => $dryGin->id]);
+        LegacyIdMap::record('m_method', 'methods', [9201 => Method::query()->where('name', 'ビルド')->firstOrFail()->id]);
     }
 
     /**
@@ -200,7 +214,7 @@ class E2eSeeder extends Seeder
      * (蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)。
      * 閉包表は CategoryTree 経由でだけ書き換える決まりなので、ノードは addNode で作る。
      *
-     * @return array{gin: Category, beefeater: Category, mint: Category, vodka: Category} ヘッダー(seedHeaderData)・トップ(seedTopData)のデータが使うノード
+     * @return array{gin: Category, dryGin: Category, beefeater: Category, mint: Category, vodka: Category} ヘッダー(seedHeaderData)・トップ(seedTopData)・旧 ID の対応(seedLegacyIdMaps)のデータが使うノード
      */
     private function seedIngredientTree(CategoryTree $tree): array
     {
@@ -223,7 +237,7 @@ class E2eSeeder extends Seeder
         $other = $node(null, 'その他', CategoryRole::Other);
         $mint = $node($other, 'ミント');
 
-        return ['gin' => $gin, 'beefeater' => $beefeater, 'mint' => $mint, 'vodka' => $vodka];
+        return ['gin' => $gin, 'dryGin' => $dryGin, 'beefeater' => $beefeater, 'mint' => $mint, 'vodka' => $vodka];
     }
 
     /**
