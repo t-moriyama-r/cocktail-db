@@ -55,9 +55,18 @@ test('TC-307-17・TC-102-19: 開くと材料が無いので検索を押せず、
 
 test('TC-307-20・TC-102-19: トップのメニューの「カクテル検索」で条件検索のフォームへ移り、材料を選んで検索すると条件を URL に入れて結果の画面へ移る', async ({ page }) => {
   await page.goto('/')
+  const section = page.getByRole('region', { name: 'カクテル検索' })
+  // 読み終える前に押すと、ページが短いまま飛び、上の欄(新作動画・3 つの一覧)が届いて伸びた分だけ
+  // フォームが画面の外へ押し出される(#642)。上の欄とフォームが出そろい、読み込み中が無くなってから押す
+  await expect(page.getByRole('region', { name: '新作動画' })).toBeVisible()
+  for (const title of ['★最近更新されたカクテル', '★おすすめカクテル', '★気まぐれセレクト']) {
+    await expect(page.getByRole('region', { name: title })).toHaveAttribute('aria-busy', 'false')
+  }
+  await expect(section.getByRole('heading', { name: 'カクテル検索' })).toBeVisible()
+  await expect(page.getByRole('status')).toHaveCount(0)
+
   await page.getByRole('region', { name: 'Menu' }).getByRole('link', { name: 'カクテル検索' }).click()
 
-  const section = page.getByRole('region', { name: 'カクテル検索' })
   await expect(section.getByRole('heading', { name: 'カクテル検索' })).toBeInViewport()
   await expect(section.getByText('材料は必須です。')).toBeVisible()
   const search = section.getByRole('button', { name: '検索', exact: true })
