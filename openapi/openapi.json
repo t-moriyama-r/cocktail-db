@@ -341,6 +341,115 @@
                 }
             }
         },
+        "/admin/brands/duplicates": {
+            "get": {
+                "operationId": "brand.duplicates",
+                "description": "\u6bd4\u3079\u65b9\u306f\u4fdd\u5b58\u306e\u5f8c\u306e warnings \u3068\u540c\u3058(\u540d\u524d\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3067\u3001\u82f1\u540d\u306f\u305d\u306e\u307e\u307e\u3002\u6240\u5c5e\u306b\u3088\u3089\u305a\u8868\u306e\u5168\u4f53\u3067\u6bd4\u3079\u308b)\u3002\nexclude_id \u306e\u9298\u67c4(\u7de8\u96c6\u3057\u3066\u3044\u308b\u9298\u67c4)\u3068\u306f\u6bd4\u3079\u306a\u3044\u3002\u540d\u524d\u30fb\u82f1\u540d\u306f\u3001\u7a7a\u306a\u3089\u6bd4\u3079\u306a\u3044(\u3069\u3061\u3089\u304b 1 \u3064\u306f\u8981\u308b)\u3002",
+                "summary": "\u540d\u524d\u30fb\u82f1\u540d\u306e\u91cd\u306a\u308a\u306e\u554f\u3044\u5408\u308f\u305b(#632)\u3002\u9298\u67c4\u306e\u7de8\u96c6\u753b\u9762\u3067\u3001\u540d\u524d\u30fb\u82f1\u540d\u3092\u5165\u308c\u305f\u305d\u3070\u306b\u300c\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059\u300d\u3092\u51fa\u3059\u305f\u3081\u3002\n\u65e7 DetailEditController@duplicate_check \u306e\u9298\u67c4\u306e\u5206\u306e\u7f6e\u304d\u63db\u3048\u3002",
+                "tags": [
+                    "Brand"
+                ],
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "\u540d\u524d\u3002\u82f1\u540d\u3068\u3001\u3069\u3061\u3089\u304b 1 \u3064\u306f\u8981\u308b",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "name_eng",
+                        "in": "query",
+                        "description": "\u82f1\u540d\u3002\u540d\u524d\u3068\u3001\u3069\u3061\u3089\u304b 1 \u3064\u306f\u8981\u308b",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "exclude_id",
+                        "in": "query",
+                        "description": "\u7de8\u96c6\u3057\u3066\u3044\u308b\u9298\u67c4\u306e ID\u3002\u65b0\u898f\u306a\u3089\u9001\u3089\u306a\u3044",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "anyOf": [
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "field": {
+                                                                "type": "string",
+                                                                "const": "name"
+                                                            },
+                                                            "message": {
+                                                                "type": "string",
+                                                                "const": "\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "field",
+                                                            "message"
+                                                        ]
+                                                    },
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "field": {
+                                                                "type": "string",
+                                                                "const": "name_eng"
+                                                            },
+                                                            "message": {
+                                                                "type": "string",
+                                                                "const": "\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "field",
+                                                            "message"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "warnings"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/brands/{brand}": {
             "get": {
                 "operationId": "brand.show",

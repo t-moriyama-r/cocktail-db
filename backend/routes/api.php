@@ -103,6 +103,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::get('/brands', [BrandController::class, 'index']);
     Route::post('/brands', [BrandController::class, 'store']);
+    // 名前・英名の重なりの問い合わせ(#632)。編集画面で入れたそばに警告を出すため。保存は止めない
+    Route::get('/brands/duplicates', [BrandController::class, 'duplicates']);
     Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
 
