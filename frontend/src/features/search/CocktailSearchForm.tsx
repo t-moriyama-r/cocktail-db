@@ -103,6 +103,8 @@ export default function CocktailSearchForm({
   const tree = useMemo(() => buildSelectionTree(sortSearchFormTree(categories)), [categories])
   // 開いたときに 1 度読み、保存・検索の後に読み直す(保存できたかは localStorage を読み直して決める)
   const [savedSlots, setSavedSlots] = useState(readSavedSlots)
+  // 保存に失敗したとき(容量不足・localStorage が使えない)は、古い保存が残っていても保存できたことにしない
+  const [saveFailed, setSaveFailed] = useState(false)
 
   return (
     <form
@@ -113,7 +115,7 @@ export default function CocktailSearchForm({
         event.preventDefault()
         if (error === null) {
           // 旧と同じく、検索の成否によらず押した時点で「リロード」用に保存する
-          saveSearch('instant', tree, methods, values)
+          setSaveFailed(!saveSearch('instant', tree, methods, values))
           setSavedSlots(readSavedSlots())
           onSubmit(toSearchConditions(methods, values))
         }
@@ -122,6 +124,12 @@ export default function CocktailSearchForm({
       <h2 id={`${id}-title`} className={styles.title}>
         カクテル検索
       </h2>
+
+      {saveFailed && (
+        <p role="alert" className={styles.error}>
+          条件を保存できませんでした。ブラウザの保存領域が使えないか、いっぱいです。
+        </p>
+      )}
 
       <div className={styles.topRows}>
         <div className={styles.row} role="group" aria-labelledby={`${id}-load`}>
@@ -141,7 +149,7 @@ export default function CocktailSearchForm({
                       if (action === null) {
                         onValuesChange(defaultSearchFormValues)
                       } else if (action.kind === 'save') {
-                        saveSearch(action.slot, tree, methods, values)
+                        setSaveFailed(!saveSearch(action.slot, tree, methods, values))
                         setSavedSlots(readSavedSlots())
                       } else {
                         const loaded = loadSearch(action.slot, tree, methods)

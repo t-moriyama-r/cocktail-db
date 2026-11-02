@@ -301,5 +301,20 @@ describe('CocktailSearchForm', () => {
       expect(submittedUrl()).toBe('/result/Cocktails?n=11')
       expect(button('リロード')).toBeDisabled()
     })
+
+    test('TC-104-13: 保存に失敗したら、古い保存が残っていても失敗を知らせ、成功すると消える', async () => {
+      localStorage.setItem(SEARCH_STORAGE_KEYS.user, 'n=11')
+      await renderForm()
+      const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('QuotaExceededError')
+      })
+
+      fireEvent.click(button('保存'))
+      expect(screen.getByRole('alert')).toHaveTextContent('条件を保存できませんでした')
+
+      spy.mockRestore()
+      fireEvent.click(button('保存'))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
   })
 })
