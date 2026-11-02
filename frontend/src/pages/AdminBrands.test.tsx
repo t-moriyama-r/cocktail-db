@@ -165,7 +165,7 @@ describe('一覧', () => {
 })
 
 describe('新規', () => {
-  test('TC-64-10: 欄は 所属 / 名前・英名 / 度数 / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / メジャー・お気に入り / 送信 の順', async () => {
+  test('TC-64-10: 欄は 所属 / 名前・英名・度数 / メジャー・お気に入り / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / 送信 の順', async () => {
     loggedIn()
     mockTree()
     renderAt('/admin/brands/new')
@@ -177,6 +177,8 @@ describe('新規', () => {
       '名前',
       '英名',
       '度数(%)',
+      'メジャー',
+      'お気に入り',
       '説明',
       'YouTube',
       '時',
@@ -185,8 +187,6 @@ describe('新規', () => {
       '画像',
       'リンクテキスト',
       'リンクURL',
-      'メジャー',
-      'お気に入り',
     ])
   })
 
@@ -224,6 +224,22 @@ describe('新規', () => {
     expect(screen.getByLabelText('時')).toHaveValue('1')
     expect(screen.getByLabelText('分')).toHaveValue('67')
     expect(screen.getByLabelText('秒')).toHaveValue('59')
+  })
+
+  test('TC-64-25: メジャー・お気に入りは、押すたびに入れ・外しができる', async () => {
+    loggedIn()
+    mockTree()
+    renderAt('/admin/brands/new')
+
+    const major = await screen.findByLabelText('メジャー')
+    fireEvent.click(major)
+    expect(major).toBeChecked()
+    fireEvent.click(major)
+    expect(major).not.toBeChecked()
+    const like = screen.getByLabelText('お気に入り')
+    fireEvent.click(like)
+    fireEvent.click(like)
+    expect(like).not.toBeChecked()
   })
 
   test('TC-64-13: 英名は欄を離れると、全角の英数字を半角にする', async () => {

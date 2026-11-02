@@ -37,10 +37,12 @@ const MINUTE_OR_SECOND_DIGITS = 2
 /**
  * 管理画面の銘柄の編集フォーム(旧 `Detail/BrandEdit.vue`・`component/NamesAndDescription.vue`。#64)。
  *
- * 並びは旧と同じく、所属 / 名前・英名 / 度数 / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / メジャー・お気に入り / 送信。
+ * 並びは旧(本番の画面のビルドも同じ)と同じく、所属 / 名前・英名・度数 / メジャー・お気に入り / 説明 / YouTube と開始位置 / 画像 /
+ * リンクテキスト・リンクURL / 送信(docs/decisions/admin-brands.md の決まったこと 3)。
  * - 所属は木の部品(#297)の単一選択で、根(旧の種別)の下のどの深さのノードでも選べる。根は見出しにして選べなくする
  *   (旧はカテゴリとミドルの 2 つの選択。#314 の「旧との差分」)
- * - 度数は数字と `.` だけを 4 文字まで、開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付ける(旧と同じ)
+ * - 度数は数字と `.` だけを 4 文字まで(旧は 4 文字で止めなかった)、開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付ける(旧と同じ)
+ * - メジャー・お気に入りは、押すたびに入れ・外しができる(旧は押すと必ず入れるだけで、外せなかった)
  * - 英名は、欄を離れたときに全角の英数字を半角にする(旧と同じ)
  * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定。
  *   旧はサーバーのメッセージを alert で出していた)
@@ -121,9 +123,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
           onChange={(value) => set('nameEng', value)}
           onBlur={() => set('nameEng', toHalfWidthAlphanumeric(values.nameEng))}
         />
-      </div>
-
-      <div className={styles.row}>
         <TextField
           label="度数(%)"
           errors={errors.strength}
@@ -134,6 +133,18 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
           onChange={(value) => set('strength', sanitizeStrength(value))}
         />
       </div>
+
+      <div className={styles.checks}>
+        <label className={styles.check}>
+          <input type="checkbox" checked={values.isMajor} onChange={(event) => set('isMajor', event.target.checked)} />
+          メジャー
+        </label>
+        <label className={styles.check}>
+          <input type="checkbox" checked={values.isLike} onChange={(event) => set('isLike', event.target.checked)} />
+          お気に入り
+        </label>
+      </div>
+      <FieldErrors messages={[...(errors.is_major ?? []), ...(errors.is_like ?? [])]} />
 
       <Field label="説明" errors={errors.description}>
         {(props) => (
@@ -197,18 +208,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
         <TextField label="リンクテキスト" errors={errors.image_txt} value={values.imageTxt} onChange={(value) => set('imageTxt', value)} />
         <TextField label="リンクURL" errors={errors.image_url} value={values.imageUrl} onChange={(value) => set('imageUrl', value)} />
       </div>
-
-      <div className={styles.checks}>
-        <label className={styles.check}>
-          <input type="checkbox" checked={values.isMajor} onChange={(event) => set('isMajor', event.target.checked)} />
-          メジャー
-        </label>
-        <label className={styles.check}>
-          <input type="checkbox" checked={values.isLike} onChange={(event) => set('isLike', event.target.checked)} />
-          お気に入り
-        </label>
-      </div>
-      <FieldErrors messages={[...(errors.is_major ?? []), ...(errors.is_like ?? [])]} />
 
       <div className={styles.submit}>
         <button className={styles.submitButton} type="submit" disabled={saving}>

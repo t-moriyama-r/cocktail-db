@@ -26,10 +26,13 @@ describe('欄に入れた文字の整え方', () => {
     expect(sanitizeStrength('abc')).toBe('')
   })
 
-  test('TC-64-05: 開始位置は数字だけを残し(全角の数字は半角に、「.」も捨てる)、指定の桁までにする', () => {
+  test('TC-64-05: 開始位置は数字だけを残し(全角の数字は半角に、「.」も捨てる)、指定の桁までの数にする', () => {
     expect(sanitizeDigits('１２', 1)).toBe('1')
     expect(sanitizeDigits('6a.7８', 2)).toBe('67')
-    expect(sanitizeDigits('時', 2)).toBe('')
+    expect(sanitizeDigits('05', 2)).toBe('5')
+    // 数字の無い文字は 0(旧の Number('') と同じ)。空にしたときだけ空
+    expect(sanitizeDigits('時', 2)).toBe('0')
+    expect(sanitizeDigits('', 2)).toBe('')
   })
 
   test('TC-64-06: 英名の全角の英数字を半角にし、ほかの文字は変えない', () => {

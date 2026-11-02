@@ -121,13 +121,18 @@ export function sanitizeStrength(input: string): string {
 }
 
 /**
- * 開始位置(時・分・秒)の欄に入れた文字から、数字だけを残し、maxLength 文字までにする
- * (旧の onlyNumber1digit・onlyNumber2digit と同じく、全角の数字は半角にし、`.` も捨てる。時は 1 桁、分・秒は 2 桁)。
+ * 開始位置(時・分・秒)の欄に入れた文字から、数字だけを残して maxLength 桁までにし、数にして出す
+ * (旧の onlyNumber1digit・onlyNumber2digit と同じ。全角の数字は半角にし、`.` も捨てる。時は 1 桁、分・秒は 2 桁)。
+ * 旧と同じく、数字の無い文字を入れたら 0、先頭の 0 は落とす(`05` は `5`)。欄を空にしたときだけ空のまま。
  */
 export function sanitizeDigits(input: string, maxLength: number): string {
-  return toHalfWidthDigits(input)
+  if (input === '') {
+    return ''
+  }
+  const digits = toHalfWidthDigits(input)
     .replace(/[^0-9]/g, '')
     .slice(0, maxLength)
+  return String(Number(digits))
 }
 
 /** 英名の全角の英数字を半角にする(旧 Helper.Big_to_hankaku と同じ。旧は英名の欄を離れたときにかけていた) */
