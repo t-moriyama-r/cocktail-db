@@ -79,3 +79,34 @@ export const PRICE_DISCLAIMER: Record<PriceSource, string> = {
   rakuten:
     'このサイトで掲載されている情報は、宅飲みカクテルデータベースの作成者により運営されています。価格、販売可能情報は、変更される場合があります。購入時に楽天市場店舗（www.rakuten.co.jp）に表示されている価格が、その商品の販売に適用されます。',
 }
+
+/**
+ * ボタンに添える価格。期限内の価格があり、取った時刻が読めるときだけ返す
+ * (価格は取った時刻と一緒にしか出さない。docs/decisions/affiliate-freshness.md の 3)
+ */
+export function shownButtonPrice(price: number | null, fetchedAt: string | null): number | null {
+  return hasPrice(price) && fetchedAt !== null && formatFetchedAt(fetchedAt) !== null ? price : null
+}
+
+/**
+ * その提供元(Amazon・楽天)の API から取った商品の情報を、欄に出すか。本体(画像・題名・価格)がその提供元のときか、
+ * その提供元のボタンに価格を添えるとき。期限切れで検索のリンクだけのときと、手で入れた値は、API から取った情報ではないので入れない
+ */
+export function showsSourceContent(data: AffiliateData, source: PriceSource): boolean {
+  if (data.display?.source === source) return true
+  return shownButtonPrice(data[source].price, data[source].fetched_at) !== null
+}
+
+/**
+ * Amazon の商品の情報を出すときに添える、提供の文言(docs/amazon-creators-api.md の 9.5。利用要件 (q) の原文で、
+ * 「本アプリケーション内」「本サイト上」のうち「本サイト上」を選んだもの。docs/decisions/affiliate-freshness.md の 3)
+ */
+export const AMAZON_ATTRIBUTION =
+  '本サイト上で表示されるコンテンツの一部は、アマゾンジャパン合同会社またはその関連会社により提供されたものです。これらのコンテンツは「現状有姿」で提供されており、随時変更または削除される場合があります。'
+
+/**
+ * 楽天の商品の情報を出すときに添える、楽天ウェブサービスのクレジット(テキストの形)。公式の HTML のソースを変えずに使う
+ * (docs/rakuten-api.md の 4.2。docs/decisions/affiliate-freshness.md の 3)。中身を変えないので、属性(rel など)も足さない
+ */
+export const RAKUTEN_CREDIT_HTML =
+  '<!-- Rakuten Web Services Attribution Snippet FROM HERE --><a href="https://webservice.rakuten.co.jp/" target="_blank">Supported by Rakuten Developers</a><!-- Rakuten Web Services Attribution Snippet TO HERE -->'

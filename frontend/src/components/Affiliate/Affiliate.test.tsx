@@ -14,6 +14,12 @@ const AMAZON_DISCLAIMER =
 const RAKUTEN_DISCLAIMER =
   'このサイトで掲載されている情報は、宅飲みカクテルデータベースの作成者により運営されています。価格、販売可能情報は、変更される場合があります。購入時に楽天市場店舗（www.rakuten.co.jp）に表示されている価格が、その商品の販売に適用されます。'
 
+/** Amazon の提供の文言(docs/amazon-creators-api.md の 9.5。利用要件 (q) の原文で「本サイト上」を選んだもの) */
+const AMAZON_ATTRIBUTION =
+  '本サイト上で表示されるコンテンツの一部は、アマゾンジャパン合同会社またはその関連会社により提供されたものです。これらのコンテンツは「現状有姿」で提供されており、随時変更または削除される場合があります。'
+/** 楽天のクレジット(docs/rakuten-api.md の 4.2。テキストの形) */
+const RAKUTEN_CREDIT = 'Supported by Rakuten Developers'
+
 /** 取った時刻(UTC)。日本時間では 2026年10月27日 14:11 */
 const AMAZON_FETCHED_AT = '2026-10-27T05:11:00+00:00'
 /** 日本時間では 2026年10月27日 09:05 */
@@ -268,10 +274,10 @@ describe('Affiliate の並びと、出す値の優先順位', () => {
     renderAffiliate(<Affiliate categoryId={12} />)
 
     const box = await findBox()
-    // 画像・題名・Amazon と楽天のボタン
+    // 画像・題名・Amazon と楽天のボタン(楽天のクレジットは公式のソースのまま出すので、ここでは見ない。TC-610-02)
     const external = within(box)
       .getAllByRole('link')
-      .filter((link) => link.textContent !== SEARCH_LINK)
+      .filter((link) => link.textContent !== SEARCH_LINK && link.textContent !== RAKUTEN_CREDIT)
     expect(external).toHaveLength(4)
     for (const link of external) {
       expect(link).toHaveAttribute('target', '_blank')
@@ -391,5 +397,86 @@ describe('Affiliate のカクテルを探すリンク', () => {
     renderAffiliate(<Affiliate categoryId={12} brandId={345} />)
 
     expect(await screen.findByRole('link', { name: SEARCH_LINK })).toHaveAttribute('href', '/result/Cocktails?n=12')
+  })
+})
+
+describe('Affiliate の Amazon の提供の文言と楽天のクレジット', () => {
+  const amazonAttribution = (box: HTMLElement) => within(box).queryByText(AMAZON_ATTRIBUTION)
+  const rakutenCredit = (box: HTMLElement) => within(box).queryByRole('link', { name: RAKUTEN_CREDIT })
+
+  test('TC-610-01: Amazon の商品の情報(画像・題名・価格)を出すと、欄の中に Amazon の提供の文言を原文のまま出す', async () => {
+    mockAffiliate({ ...freshBoth(), rakuten: EXPIRED_RAKUTEN })
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    expect(amazonAttribution(box)).toBeInTheDocument()
+    expect(rakutenCredit(box)).not.toBeInTheDocument()
+  })
+
+  test('TC-610-02: 楽天の商品の情報(画像・題名・価格)を出すと、欄の中に楽天のクレジットを公式のテキストのソースのまま出す', async () => {
+    mockAffiliate(freshRakutenOnly())
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    const credit = rakutenCredit(box)
+    expect(credit).toHaveAttribute('href', 'https://webservice.rakuten.co.jp/')
+    expect(credit).toHaveAttribute('target', '_blank')
+    expect(amazonAttribution(box)).not.toBeInTheDocument()
+  })
+
+  test('TC-610-03: 両方が期限内なら、両方を「カクテルを探す」の後に、Amazon の提供の文言 → 楽天のクレジットの順に出す', async () => {
+    mockAffiliate(freshBoth())
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    const text = box.textContent ?? ''
+    const order = [SEARCH_LINK, AMAZON_ATTRIBUTION, RAKUTEN_CREDIT].map((part) => text.indexOf(part))
+    expect(order.every((index) => index >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+  })
+
+  test('TC-610-04: 本体が楽天でも、Amazon のボタンに期限内の価格を出すなら、Amazon の提供の文言も出す', async () => {
+    const base = freshRakutenOnly()
+    mockAffiliate({ ...base, amazon: freshBoth().amazon })
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    expect(amazonAttribution(box)).toBeInTheDocument()
+    expect(rakutenCredit(box)).toBeInTheDocument()
+  })
+
+  test('TC-610-05: 両方が期限切れ(検索のリンクだけ)なら、どちらも出さない', async () => {
+    mockAffiliate({ ...freshBoth(), display: null, amazon: EXPIRED_AMAZON, rakuten: EXPIRED_RAKUTEN })
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    expect(amazonAttribution(box)).not.toBeInTheDocument()
+    expect(rakutenCredit(box)).not.toBeInTheDocument()
+  })
+
+  test('TC-610-06: 手で入れた値だけを出す(Amazon・楽天が期限切れ)なら、どちらも出さない', async () => {
+    mockAffiliate({ ...withHuman(HUMAN_DETAIL), amazon: EXPIRED_AMAZON, rakuten: EXPIRED_RAKUTEN })
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    expect(within(box).getByText('¥2500')).toBeInTheDocument()
+    expect(amazonAttribution(box)).not.toBeInTheDocument()
+    expect(rakutenCredit(box)).not.toBeInTheDocument()
+  })
+
+  test('TC-610-07: 手で入れた値を本体に出しても、ボタンに Amazon・楽天の期限内の価格を出すなら、両方を出す', async () => {
+    mockAffiliate(withHuman(HUMAN_DETAIL))
+
+    renderAffiliate(<Affiliate categoryId={12} />)
+
+    const box = await findBox()
+    expect(amazonAttribution(box)).toBeInTheDocument()
+    expect(rakutenCredit(box)).toBeInTheDocument()
   })
 })
