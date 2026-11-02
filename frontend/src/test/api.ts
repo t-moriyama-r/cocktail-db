@@ -66,13 +66,26 @@ export const mockApi = <M extends HttpMethod, P extends PathWith<M>, S extends J
 /** 画面が送ったリクエストを、送った順に返す(メソッドとパスを確かめるため) */
 export const apiRequests = (): readonly Request[] => requests
 
+/**
+ * Laravel がリクエストを受けるメソッド。multipart の POST に `_method` があれば、そのメソッドとして受ける
+ * (Laravel のメソッドの上書き。PHP は PUT の multipart を読まないので、画像つきの更新はこの形で送る)
+ */
+const routedMethod = async (request: Request): Promise<string> => {
+  if (request.method !== 'POST' || !(request.headers.get('Content-Type') ?? '').startsWith('multipart/form-data')) {
+    return request.method
+  }
+  const override = (await request.clone().formData()).get('_method')
+  return typeof override === 'string' ? override.toUpperCase() : request.method
+}
+
 /** 差し替えた client の fetch。登録の無いリクエストは、どれか分かるように例外にする */
 export const fetchApi = async (request: Request): Promise<Response> => {
   requests.push(request)
   const { pathname } = new URL(request.url)
-  const route = routes.findLast((candidate) => candidate.method === request.method && candidate.pattern.test(pathname))
+  const method = await routedMethod(request)
+  const route = routes.findLast((candidate) => candidate.method === method && candidate.pattern.test(pathname))
   if (!route) {
-    throw new Error(`テストで応答を登録していない API: ${request.method} ${pathname}`)
+    throw new Error(`テストで応答を登録していない API: ${method} ${pathname}`)
   }
   return route.handler(request)
 }
