@@ -3,10 +3,14 @@ import { Link, useParams } from 'react-router'
 import { api } from '../api/client'
 import type { components } from '../api/schema'
 import { useApi } from '../api/useApi'
+import Affiliate from '../components/Affiliate/Affiliate'
 import ApiView from '../components/ApiView/ApiView'
+import BrandTable from '../components/BrandTable/BrandTable'
+import type { BrandTableRow } from '../components/BrandTable/BrandTable.types'
 import CreditedImage from '../components/CreditedImage/CreditedImage'
 import Description from '../components/Description/Description'
 import NodeBreadcrumb from '../components/NodeBreadcrumb/NodeBreadcrumb'
+import RandomCocktails from '../components/RandomCocktails/RandomCocktails'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 import SquareDot from '../components/SquareDot/SquareDot'
 import YouTubeEmbed from '../components/YouTubeEmbed/YouTubeEmbed'
@@ -14,11 +18,21 @@ import { brandPath, categoryPath } from '../utils/detailPaths'
 import styles from './CategoryDetail.module.css'
 
 type CategoryDetailResource = components['schemas']['CategoryDetailResource']
+type BrandSummaryResource = components['schemas']['BrandSummaryResource']
 
 /**
  * カテゴリ(木のノード)の詳細の画面。旧のカテゴリの詳細(Detail/CategoryDetail.vue)とミドルの詳細(MiddleDetail.vue)を、
  * 任意の深さのノードで 1 つにしたもの(docs/decisions/category-detail.md)。
- * 銘柄の一覧・これを使ったカクテル・アフィリエイトの中身は #106 で足す。
+ *
+ * 上から、タイトル・パンくず・説明文と画像・有名な銘柄と子のノード(#105)・登録されている銘柄の一覧・
+ * これを使ったカクテル・商品の欄(アフィリエイト)の順に出す(#106)。
+ * - 銘柄の一覧は、このノードと配下すべての銘柄(API の brands)。0 件なら欄ごと出さない(旧と同じ)
+ * - これを使ったカクテルは、旧と同じくランダムの 5 件と「再取得」。配下のノードを使うカクテルも当たる
+ *   (docs/decisions/public-detail.md の決まったこと 1)
+ * - 銘柄の一覧 → カクテルの並びは #106 の本文の追記のとおり(旧はカテゴリの詳細とミドルの詳細で逆だった。
+ *   docs/decisions/public-detail.md の「旧との差分」)
+ * - 商品の欄は、画像が無ければ画像の場所に出す(960px 以上)。960px 未満と、画像があるときは、いちばん下に出す
+ *   (旧と同じ。どの幅でも 1 つだけ見える)
  */
 export default function CategoryDetail() {
   // RequireNumericId が、数字の ID のときだけこの画面を出す
@@ -55,8 +69,10 @@ function CategoryDetailContent({ node }: { node: CategoryDetailResource }) {
           {node.image ? (
             <CreditedImage src={node.image} alt={node.name} creditUrl={node.image_url} creditText={node.image_txt} />
           ) : (
-            // 画像が無いときは、旧と同じくここにアフィリエイトを出す(中身は #106。960px 未満では出さない)
-            <div className={styles.affiliateInImage} data-testid="affiliate-in-image" />
+            // 画像が無いときは、旧と同じくここにアフィリエイトを出す(960px 未満では出さず、いちばん下に出す)
+            <div className={styles.affiliateInImage} data-testid="affiliate-in-image">
+              <Affiliate categoryId={node.id} inImage />
+            </div>
           )}
         </div>
       </div>
@@ -82,8 +98,54 @@ function CategoryDetailContent({ node }: { node: CategoryDetailResource }) {
           )}
         </IntroSection>
       </div>
+
+      {node.brands.length > 0 && <BrandList brands={node.brands} />}
+
+      <div className={styles.cocktails}>
+        <RandomCocktails origin={{ kind: 'category', id: node.id }} />
+      </div>
+
+      {/* 画像が無いときは、960px 以上では画像の場所に出しているので、ここには出さない(旧の is_already_display_inImage) */}
+      <div
+        className={node.image ? styles.affiliateBottom : `${styles.affiliateBottom} ${styles.affiliateBottomNoImage}`}
+        data-testid="affiliate-bottom"
+      >
+        <Affiliate categoryId={node.id} />
+      </div>
     </main>
   )
+}
+
+/** 登録されている銘柄の一覧(旧の belong_brand_container)。このノードと配下すべてのノードの銘柄を、銘柄の表で出す */
+function BrandList({ brands }: { brands: readonly BrandSummaryResource[] }) {
+  const headingId = useId()
+  return (
+    <section className={styles.brands} aria-labelledby={headingId}>
+      <h2 className={styles.blockHeading} id={headingId}>
+        <SquareDot />
+        {BRAND_LIST_HEADING}
+      </h2>
+      <BrandTable brands={brands.map(toBrandRow)} label={BRAND_LIST_HEADING} />
+    </section>
+  )
+}
+
+const BRAND_LIST_HEADING = '登録されている銘柄の一覧'
+
+/**
+ * API の銘柄を、銘柄の表の行にする。ノードの詳細の銘柄は更新日時を返さないので、動画の列で並べ替えると、
+ * 動画のある行どうしは渡した順(ID の順)のままになる(名前検索の結果と同じ)
+ */
+function toBrandRow(brand: BrandSummaryResource): BrandTableRow {
+  return {
+    id: brand.id,
+    name: brand.name,
+    name_eng: brand.name_eng,
+    path: brand.path,
+    strength: brand.strength,
+    youtube: brand.youtube,
+    updated_at: null,
+  }
 }
 
 /**

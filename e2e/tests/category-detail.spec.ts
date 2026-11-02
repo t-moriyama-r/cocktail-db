@@ -118,3 +118,78 @@ test('TC-585-04: 画像のあるノードの詳細で、画像を /storage/<フ�
     .poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth))
     .toBeGreaterThan(0)
 })
+
+// 銘柄の一覧・これを使ったカクテル・商品の欄(#106)。ジンの配下(ビーフィーター)の銘柄「ビーフィーター 40度」と、
+// それを材料に使うジントニック(E2eSeeder の seedHeaderData)、ウォッカを材料に使う公開の 7 件(seedTopData)、
+// 画像の無いドライジンと画像のあるウォッカの商品の行(seedAffiliates)を使う
+const brandList = (page: Page) => page.getByRole('region', { name: '登録されている銘柄の一覧' })
+const cocktails = (page: Page) => page.getByRole('region', { name: 'これを使ったカクテル(ランダム5種)' })
+const affiliateInImage = (page: Page) => page.getByTestId('affiliate-in-image').getByRole('complementary', { name: '商品' })
+const affiliateBottom = (page: Page) => page.getByTestId('affiliate-bottom').getByRole('complementary', { name: '商品' })
+
+test('TC-106-11: ジンの詳細に、配下のノードの銘柄と、配下のノードの銘柄を使うカクテルを出す', async ({ page }) => {
+  await openGin(page)
+
+  const brandRows = brandList(page).getByRole('row')
+  // 見出しの行と、銘柄 1 行
+  await expect(brandRows).toHaveCount(2)
+  await expect(brandRows.nth(1).getByRole('cell').nth(0)).toHaveText('ビーフィーター 40度')
+  await expect(brandRows.nth(1).getByRole('cell').nth(2)).toHaveText('ジン(ジン) / ビーフィーター(ビーフィーター)')
+
+  // 材料はビーフィーター(ジンの 3 段下)の銘柄で、ジンを起点にしても当たる
+  await expect(cocktails(page).getByRole('link', { name: 'ジントニック' })).toBeVisible()
+  await expect(cocktails(page).getByRole('button', { name: '再取得' })).toBeVisible()
+})
+
+test('TC-106-12: 銘柄の無いウォッカの詳細は、銘柄の一覧を出さず、これを使ったカクテルを 5 件出し、再取得で取り直す', async ({
+  page,
+}) => {
+  await page.goto('/category/1')
+  await children(page).getByRole('link', { name: 'ウォッカ(ウォッカ)' }).click()
+  await expect(title(page)).toHaveText('ウォッカ(ウォッカ)')
+
+  // 見出しの行と、カクテル 5 行(当たるのは公開の 7 件)
+  await expect(cocktails(page).getByRole('row')).toHaveCount(6)
+  await expect(brandList(page)).toHaveCount(0)
+  await expect(page.getByText('登録されている銘柄の一覧')).toHaveCount(0)
+
+  const regot = page.waitForResponse((response) => response.url().includes('/api/cocktails/random') && response.ok())
+  await cocktails(page).getByRole('button', { name: '再取得' }).click()
+  await regot
+  await expect(cocktails(page).getByRole('row')).toHaveCount(6)
+})
+
+// 商品の欄は、画像が無ければ 960px 以上で画像の場所に、960px 未満と画像があるときはいちばん下に出す(どの幅でも 1 つだけ見える)
+for (const { width, wide } of [
+  { width: 959, wide: false },
+  { width: 960, wide: true },
+]) {
+  test(`TC-106-13: ${width}px では、画像の無いドライジンの商品の欄を${wide ? '画像の場所' : 'いちばん下'}に出し、画像のあるウォッカはいちばん下に出す`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await openGin(page)
+    await children(page).getByRole('link', { name: 'ドライジン(ドライジン)' }).click()
+    await expect(title(page)).toHaveText('ドライジン(ドライジン)')
+
+    if (wide) {
+      await expect(affiliateInImage(page)).toBeVisible()
+      await expect(affiliateBottom(page)).toBeHidden()
+    } else {
+      await expect(affiliateBottom(page)).toBeVisible()
+      await expect(affiliateInImage(page)).toBeHidden()
+    }
+    // 下の欄は、これを使ったカクテルの欄より下にある
+    if (!wide) {
+      const cocktailsBox = (await cocktails(page).boundingBox())!
+      const bottomBox = (await affiliateBottom(page).boundingBox())!
+      expect(cocktailsBox.y + cocktailsBox.height).toBeLessThanOrEqual(bottomBox.y)
+    }
+
+    await page.goto('/category/1')
+    await children(page).getByRole('link', { name: 'ウォッカ(ウォッカ)' }).click()
+    await expect(title(page)).toHaveText('ウォッカ(ウォッカ)')
+    await expect(affiliateBottom(page)).toBeVisible()
+    await expect(page.getByTestId('affiliate-in-image')).toHaveCount(0)
+  })
+}

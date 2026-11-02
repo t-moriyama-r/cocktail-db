@@ -37,6 +37,9 @@
   /* カテゴリの詳細の欄の線(#105)。有名な銘柄と子のノード(旧 Detail/CategoryDetail.vue の famous_brand・middle_list と同じ値) */
   --color-famous-line: #006699;
   --color-children-line: #ff6600;
+  /* カテゴリの詳細の、登録されている銘柄の一覧とこれを使ったカクテルの欄の左の線(#106。旧の belong_brand_container・using_cocktail_container と同じ値) */
+  --color-category-brands-line: #ff6600;
+  --color-category-cocktails-line: #3399ff;
   /* カクテルの詳細(#108)。ベースなどの欄・材料の欄の左の線と、Note の上の線(旧 Detail/CocktailDetail.vue と同じ値。文字ではないので 4.5:1 の対象外) */
   --color-detail-data-line: #006699;
   --color-detail-recipe-line: #ff6600;

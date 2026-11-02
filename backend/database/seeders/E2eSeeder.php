@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\CategoryRole;
+use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
@@ -32,7 +33,24 @@ class E2eSeeder extends Seeder
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
         $this->seedCategoryImage($nodes['vodka']);
+        $this->seedAffiliates($nodes['dryGin'], $nodes['vodka']);
         $this->seedAdmin();
+    }
+
+    /**
+     * カテゴリの詳細の商品の欄(#106)の E2E 用。画像の無いドライジンと、画像のあるウォッカ(seedCategoryImage)に
+     * ノードの行を置き、画像の有無で欄の位置が変わることを確かめる(どちらも有名な銘柄が無いので、ノードの行が返る)。
+     * 欄を出す条件(手で入れた Amazon の商品のページ)だけを入れ、外の画像・価格は入れない
+     */
+    private function seedAffiliates(Category $dryGin, Category $vodka): void
+    {
+        foreach ([$dryGin, $vodka] as $node) {
+            Affiliate::factory()->create([
+                'category_id' => $node->id,
+                'human_title' => "{$node->name}の商品",
+                'human_amazon_detail_url' => 'https://www.amazon.co.jp/dp/E2E0000000',
+            ]);
+        }
     }
 
     /**
@@ -200,7 +218,7 @@ class E2eSeeder extends Seeder
      * (蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)。
      * 閉包表は CategoryTree 経由でだけ書き換える決まりなので、ノードは addNode で作る。
      *
-     * @return array{gin: Category, beefeater: Category, mint: Category, vodka: Category} ヘッダー(seedHeaderData)・トップ(seedTopData)のデータが使うノード
+     * @return array{gin: Category, dryGin: Category, beefeater: Category, mint: Category, vodka: Category} ヘッダー(seedHeaderData)・トップ(seedTopData)・商品の欄(seedAffiliates)のデータが使うノード
      */
     private function seedIngredientTree(CategoryTree $tree): array
     {
@@ -223,7 +241,7 @@ class E2eSeeder extends Seeder
         $other = $node(null, 'その他', CategoryRole::Other);
         $mint = $node($other, 'ミント');
 
-        return ['gin' => $gin, 'beefeater' => $beefeater, 'mint' => $mint, 'vodka' => $vodka];
+        return ['gin' => $gin, 'dryGin' => $dryGin, 'beefeater' => $beefeater, 'mint' => $mint, 'vodka' => $vodka];
     }
 
     /**

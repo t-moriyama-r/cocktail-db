@@ -32,7 +32,7 @@
   margin: var(--space-4) auto 0;
 }
 
-/* 画像が無いときにアフィリエイトを出す場所(中身は #106)。旧と同じく 960px 未満では出さない */
+/* 画像が無いときにアフィリエイトを出す場所。旧と同じく 960px 未満では出さない(いちばん下の .affiliateBottom に出す) */
 .affiliateInImage {
   display: none;
 }
@@ -82,6 +82,37 @@
   margin: 0;
 }
 
+/* 登録されている銘柄の一覧と、これを使ったカクテルの欄(旧の belong_brand_container・using_cocktail_container)。
+   左の太い線で欄を分ける。線の色は旧と同じ */
+.brands,
+.cocktails {
+  margin-top: var(--space-5);
+  padding-left: var(--space-2);
+  border-left: 5px solid;
+}
+
+.brands {
+  border-left-color: var(--color-category-brands-line);
+}
+
+.cocktails {
+  border-left-color: var(--color-category-cocktails-line);
+}
+
+/* 銘柄の一覧の見出し(旧の block_title)。ランダムなカクテルの一覧の見出しと同じく、地の文と同じ大きさ・太さ */
+.blockHeading {
+  display: flex;
+  align-items: center;
+  margin: 0 0 var(--space-2);
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+}
+
+/* いちばん下の商品の欄(旧の amazon_container bottom) */
+.affiliateBottom {
+  margin-top: var(--space-4);
+}
+
 @media (min-width: 960px) {
   .title {
     font-size: var(--font-size-title);
@@ -102,6 +133,11 @@
 
   .affiliateInImage {
     display: block;
+  }
+
+  /* 画像が無いときは画像の場所に出しているので、いちばん下には出さない(旧の is_already_display_inImage) */
+  .affiliateBottomNoImage {
+    display: none;
   }
 
   /* 2 つの欄を右に寄せて横に並べる(旧と同じ) */
