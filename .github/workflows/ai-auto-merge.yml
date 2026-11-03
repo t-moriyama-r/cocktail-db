@@ -205,7 +205,8 @@ jobs:
 
           # 判断表を変える PR は、閉じる issue のラベルによらず、オーナーが確かめるまで自動でマージしない。
           # 変えたファイルを読めないときは、判断表を変えていないと取り違えてマージしないよう見送る
-          changed=$(gh pr diff "$NUMBER" -R "$REPO" --name-only) || skip "#$NUMBER の変えたファイルを読めない"
+          # 名前の変更は --name-only だと移動先しか出ないので、移動元(previous_filename)も並べる
+          changed=$(gh api --paginate "repos/$REPO/pulls/$NUMBER/files" --jq '.[] | .filename, (.previous_filename // empty)') || skip "#$NUMBER の変えたファイルを読めない"
           if grep -qx 'docs/judgment-criteria.md' <<<"$changed"; then
             human="判断表 docs/judgment-criteria.md を変えている(人が中身を確かめる)"
           fi
