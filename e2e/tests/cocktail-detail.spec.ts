@@ -136,13 +136,31 @@ for (const { width, imageBeside } of [
       expect(image.y + image.height).toBeLessThanOrEqual(description.y)
     }
 
-    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }))
-    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+    // 960px は、左の欄を表の幅まで広げる(旧と同じ。#639 で A に決めた)結果、12px ほど横スクロールが出るのを受け入れる
+    if (width !== 960) {
+      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }))
+      expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+    }
   })
 }
+
+test('TC-110-15: 960px 以上で、左の欄の表の右端が、画像の欄の左端より左にある(表が画像の下に潜らない)', async ({ page }) => {
+  for (const width of [960, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(IMAGE_PATH)
+
+    const image = (await page.getByRole('img', { name: 'モスコミュール' }).boundingBox())!
+    const tables = page.getByRole('table')
+    await expect(tables.first()).toBeVisible()
+    for (const table of await tables.all()) {
+      const box = (await table.boundingBox())!
+      expect(box.x + box.width, `幅 ${width}px`).toBeLessThanOrEqual(image.x + 1)
+    }
+  }
+})
 
 // 材料ごとの商品の欄(#110)。ジントニックは、材料の銘柄(ビーフィーター 40度)にだけ商品の行があり、ミントには無い。
 // E2E では Amazon の設定が無いので、商品の欄はボタン「Amazonで探す」だけになる
