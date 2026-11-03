@@ -147,6 +147,7 @@ jobs:
           bash "$RUNNER_TEMP/ai-dev/trusted-context.sh" "$REPO" "$PR" "$RUNNER_TEMP/ai-context.json"
 
       # Edit・Write は作業ディレクトリの中(./**)だけにする(外の ~/.gitconfig などを書き換えさせない)。
+      # git の diff・log・show も --output=<ファイル> で外に書けるので、オプションを固定した形だけを渡す(理由は ai-review-loop.yml の resume と同じ)。
       # gh pr view・gh issue view(コメントをその場で読める)は渡さない。diff・checks は番号の後ろまで書き、ほかの PR を読ませない
       - uses: anthropics/claude-code-action@v1
         id: claude
@@ -158,7 +159,7 @@ jobs:
             workflows: write
           claude_args: |
             --max-turns 80
-            --allowedTools "Read,Edit(./**),Write(./**),Glob,Grep,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push),Bash(git push origin HEAD),Bash(gh pr diff ${{ env.PR }}),Bash(gh pr diff ${{ env.PR }} --name-only),Bash(gh pr checks ${{ env.PR }}),Bash(gh pr ready ${{ env.PR }}),Bash(gh pr comment ${{ env.PR }} --body:*),Bash(gh pr edit ${{ env.PR }} --body-file:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh pr edit ${{ env.PR }} --add-label needs-manual),Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions),Bash(gh run view:*)"
+            --allowedTools "Read,Edit(./**),Write(./**),Glob,Grep,Bash(git status:*),Bash(git diff),Bash(git diff --stat),Bash(git diff --name-only),Bash(git diff --check),Bash(git diff --cached),Bash(git diff --cached --stat),Bash(git diff --cached --name-only),Bash(git diff HEAD),Bash(git diff -- *),Bash(git diff --cached -- *),Bash(git diff HEAD -- *),Bash(git log --oneline -30),Bash(git log --oneline -30 -- *),Bash(git log -p -5 -- *),Bash(git show HEAD),Bash(git show --stat HEAD),Bash(git show HEAD -- *),Bash(git add:*),Bash(git commit:*),Bash(git push),Bash(git push origin HEAD),Bash(gh pr diff ${{ env.PR }}),Bash(gh pr diff ${{ env.PR }} --name-only),Bash(gh pr checks ${{ env.PR }}),Bash(gh pr ready ${{ env.PR }}),Bash(gh pr comment ${{ env.PR }} --body:*),Bash(gh pr edit ${{ env.PR }} --body-file:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh pr edit ${{ env.PR }} --add-label needs-manual),Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions),Bash(gh run view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} は draft のまま止まっている。実装したエージェントが、ready にする前に途中で落ちたとみられる。
             これを引き継いで仕上げ、ready にしてレビューに回してほしい。今回は ${{ env.ROUND }} 回目の引き継ぎ。
@@ -212,7 +213,9 @@ jobs:
             - それでも、セキュリティを広げる変更(permissions を足す・起動のきっかけ(on)を変える・外部への送信を足す・外部のアクションの追加や版の変更・
               Claude Code に渡す権限やツールを広げる・Secret を渡す先や出す先を増やす)になるときは、変えずに上の「人に頼む」で、何をどう変えるかと懸念を書いて許可を求める。
               セキュリティを締める変更(入力の検査を足す・ファイルの読める範囲を絞る・権限を減らす など)は、許可を求めない
-            使えるコマンドは絞ってある(git は status・diff・log・show・add・commit と、`git push`・`git push origin HEAD`。gh は `gh pr diff ${{ env.PR }}`(`--name-only` も)・`gh pr checks ${{ env.PR }}`・`gh pr ready ${{ env.PR }}` と、PR #${{ env.PR }} の
+            使えるコマンドは絞ってある(git は status・diff・log・show・add・commit と、`git push`・`git push origin HEAD`。
+            diff・log・show は次の形だけ(`<パス>` は 1 つ以上のパス): `git diff`(後ろに `--stat`・`--name-only`・`--check` のどれか 1 つを付けてよい)・`git diff --cached`(後ろに `--stat`・`--name-only` を付けてよい)・`git diff HEAD`・
+            `git diff -- <パス>`・`git diff --cached -- <パス>`・`git diff HEAD -- <パス>`・`git log --oneline -30`・`git log --oneline -30 -- <パス>`・`git log -p -5 -- <パス>`・`git show HEAD`・`git show --stat HEAD`・`git show HEAD -- <パス>`。gh は `gh pr diff ${{ env.PR }}`(`--name-only` も)・`gh pr checks ${{ env.PR }}`・`gh pr ready ${{ env.PR }}` と、PR #${{ env.PR }} の
             `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --add-label needs-manual`・`edit --remove-label ai-in-actions` と、`gh run view`)。この形のまま使う。
             ファイルを書き換えられるのは作業ディレクトリの中だけ。
             返信・コメントの先頭には <!-- ai-dev:agent --> を付ける。決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
