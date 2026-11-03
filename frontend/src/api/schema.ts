@@ -833,6 +833,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 定義にある項目をすべて、定義の順で返す。秘密の項目は値を返さず、末尾 4 文字だけを返す。 */
+        get: operations["setting.index"];
+        /**
+         * 1 項目の値を書き換え、変えた人と日時を残す。value が null なら、保存した値を消して .env の値に戻す。
+         *     書き換えた後の項目を返す(秘密の項目は、一覧と同じく末尾 4 文字だけ)。
+         */
+        put: operations["setting.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/skip-words": {
         parameters: {
             query?: never;
@@ -1853,10 +1874,45 @@ export interface components {
             root_role: components["schemas"]["CategoryRole"] | null;
             children: components["schemas"]["SearchFormNodeResource"][];
         };
+        /** SettingResource */
+        SettingResource: {
+            key: string;
+            label: string;
+            description: string;
+            secret: boolean;
+            /** @description 画面で保存した値か .env の値があるか(秘密の項目の「設定済み」) */
+            is_set: boolean;
+            /** @description 秘密の項目は、どこから来た値でも返さない */
+            value: string | null;
+            last_four: string | null;
+            /** @description いま効いている値の出どころ。saved: 画面で保存した値、env: .env の値、null: どちらにも無い */
+            source: string | null;
+            /** @description 最後に画面で変えた日時と人(.env に戻したときも残る)。画面で一度も変えていなければ null */
+            updated_at: string | null;
+            updated_by: {
+                id: number | null;
+                name: string | null;
+            } | null;
+        };
         /** SkipWordResource */
         SkipWordResource: {
             id: number;
             name: string;
+        };
+        /**
+         * UpdateSettingRequest
+         * @description 設定の 1 項目の書き換え(PUT /api/admin/settings。#132)。
+         *
+         *     value を null(空の文字も、空の文字を null にするミドルウェアで null になる)にすると、保存した値を消して .env の値に戻す。
+         */
+        UpdateSettingRequest: {
+            /**
+             * @description 定義(SettingDefinitions)に無いキーは 422
+             * @enum {string}
+             */
+            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.affiliate_id";
+            /** @description 省いたときに黙って .env に戻さないよう、欄は必須(null は送れる)。形は項目ごとの規則で確かめる */
+            value: string | null;
         };
     };
     responses: {
@@ -3492,6 +3548,55 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    "setting.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `SettingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SettingResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "setting.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description `SettingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SettingResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "skip-words.index": {

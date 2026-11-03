@@ -29,7 +29,23 @@ final class Settings
      */
     public function get(string $key, ?string $default = null): ?string
     {
-        return $this->stored($key) ?? $this->fromEnv($key) ?? $default;
+        return $this->resolve($key)->value ?? $default;
+    }
+
+    /**
+     * いま効いている値と、それが画面で保存した値か .env の値かを返す(管理 API が出どころを出すため。#132)。
+     * 選び方は get() と同じ。どちらにも無ければ、値も出どころも null。
+     */
+    public function resolve(string $key): SettingValue
+    {
+        $stored = $this->stored($key);
+        if ($stored !== null) {
+            return new SettingValue($stored, SettingValue::SOURCE_SAVED);
+        }
+
+        $env = $this->fromEnv($key);
+
+        return new SettingValue($env, $env === null ? null : SettingValue::SOURCE_ENV);
     }
 
     /**

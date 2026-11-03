@@ -3303,6 +3303,78 @@
                 }
             }
         },
+        "/admin/settings": {
+            "get": {
+                "operationId": "setting.index",
+                "summary": "\u5b9a\u7fa9\u306b\u3042\u308b\u9805\u76ee\u3092\u3059\u3079\u3066\u3001\u5b9a\u7fa9\u306e\u9806\u3067\u8fd4\u3059\u3002\u79d8\u5bc6\u306e\u9805\u76ee\u306f\u5024\u3092\u8fd4\u3055\u305a\u3001\u672b\u5c3e 4 \u6587\u5b57\u3060\u3051\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "Setting"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `SettingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SettingResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "operationId": "setting.update",
+                "summary": "1 \u9805\u76ee\u306e\u5024\u3092\u66f8\u304d\u63db\u3048\u3001\u5909\u3048\u305f\u4eba\u3068\u65e5\u6642\u3092\u6b8b\u3059\u3002value \u304c null \u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u5024\u3092\u6d88\u3057\u3066 .env \u306e\u5024\u306b\u623b\u3059\u3002\n\u66f8\u304d\u63db\u3048\u305f\u5f8c\u306e\u9805\u76ee\u3092\u8fd4\u3059(\u79d8\u5bc6\u306e\u9805\u76ee\u306f\u3001\u4e00\u89a7\u3068\u540c\u3058\u304f\u672b\u5c3e 4 \u6587\u5b57\u3060\u3051)\u3002",
+                "tags": [
+                    "Setting"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateSettingRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SettingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SettingResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/skip-words": {
             "get": {
                 "operationId": "skip-words.index",
@@ -7323,6 +7395,91 @@
                 ],
                 "title": "SearchFormNodeResource"
             },
+            "SettingResource": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "secret": {
+                        "type": "boolean"
+                    },
+                    "is_set": {
+                        "type": "boolean",
+                        "description": "\u753b\u9762\u3067\u4fdd\u5b58\u3057\u305f\u5024\u304b .env \u306e\u5024\u304c\u3042\u308b\u304b(\u79d8\u5bc6\u306e\u9805\u76ee\u306e\u300c\u8a2d\u5b9a\u6e08\u307f\u300d)"
+                    },
+                    "value": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u79d8\u5bc6\u306e\u9805\u76ee\u306f\u3001\u3069\u3053\u304b\u3089\u6765\u305f\u5024\u3067\u3082\u8fd4\u3055\u306a\u3044"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "source": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u3044\u307e\u52b9\u3044\u3066\u3044\u308b\u5024\u306e\u51fa\u3069\u3053\u308d\u3002saved: \u753b\u9762\u3067\u4fdd\u5b58\u3057\u305f\u5024\u3001env: .env \u306e\u5024\u3001null: \u3069\u3061\u3089\u306b\u3082\u7121\u3044"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u6700\u5f8c\u306b\u753b\u9762\u3067\u5909\u3048\u305f\u65e5\u6642\u3068\u4eba(.env \u306b\u623b\u3057\u305f\u3068\u304d\u3082\u6b8b\u308b)\u3002\u753b\u9762\u3067\u4e00\u5ea6\u3082\u5909\u3048\u3066\u3044\u306a\u3051\u308c\u3070 null"
+                    },
+                    "updated_by": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "name": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    }
+                },
+                "required": [
+                    "key",
+                    "label",
+                    "description",
+                    "secret",
+                    "is_set",
+                    "value",
+                    "last_four",
+                    "source",
+                    "updated_at",
+                    "updated_by"
+                ],
+                "title": "SettingResource"
+            },
             "SkipWordResource": {
                 "type": "object",
                 "properties": {
@@ -7338,6 +7495,35 @@
                     "name"
                 ],
                 "title": "SkipWordResource"
+            },
+            "UpdateSettingRequest": {
+                "type": "object",
+                "description": "\u8a2d\u5b9a\u306e 1 \u9805\u76ee\u306e\u66f8\u304d\u63db\u3048(PUT /api/admin/settings\u3002#132)\u3002\n\nvalue \u3092 null(\u7a7a\u306e\u6587\u5b57\u3082\u3001\u7a7a\u306e\u6587\u5b57\u3092 null \u306b\u3059\u308b\u30df\u30c9\u30eb\u30a6\u30a7\u30a2\u3067 null \u306b\u306a\u308b)\u306b\u3059\u308b\u3068\u3001\u4fdd\u5b58\u3057\u305f\u5024\u3092\u6d88\u3057\u3066 .env \u306e\u5024\u306b\u623b\u3059\u3002",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "\u5b9a\u7fa9(SettingDefinitions)\u306b\u7121\u3044\u30ad\u30fc\u306f 422",
+                        "enum": [
+                            "amazon.credential_id",
+                            "amazon.credential_secret",
+                            "amazon.partner_tag",
+                            "rakuten.affiliate_id"
+                        ]
+                    },
+                    "value": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u7701\u3044\u305f\u3068\u304d\u306b\u9ed9\u3063\u3066 .env \u306b\u623b\u3055\u306a\u3044\u3088\u3046\u3001\u6b04\u306f\u5fc5\u9808(null \u306f\u9001\u308c\u308b)\u3002\u5f62\u306f\u9805\u76ee\u3054\u3068\u306e\u898f\u5247\u3067\u78ba\u304b\u3081\u308b",
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "key",
+                    "value"
+                ],
+                "title": "UpdateSettingRequest"
             }
         },
         "responses": {
