@@ -107,3 +107,14 @@ test('TC-105-20: 無いノードの ID を開くと 404 の画面を出す', asy
   await page.goto('/category/999999')
   await expect(title(page)).toHaveText('ページが見つかりません')
 })
+
+test('TC-585-04: 画像のあるノードの詳細で、画像を /storage/<ファイル名> から取って読み込める', async ({ page }) => {
+  await page.goto('/category/1')
+  await children(page).getByRole('link', { name: 'ウォッカ(ウォッカ)' }).click()
+  await expect(title(page)).toHaveText('ウォッカ(ウォッカ)')
+  const image = page.getByRole('img', { name: 'ウォッカ' })
+  await expect(image).toHaveAttribute('src', '/storage/e2e-vodka.png')
+  await expect
+    .poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth))
+    .toBeGreaterThan(0)
+})

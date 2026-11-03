@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react'
 import { Outlet, useLocation } from 'react-router'
+import SearchFormValuesProvider from '../../features/search/SearchFormValuesProvider'
 import SiteHeader from '../SiteHeader/SiteHeader'
 import SiteFooter from './SiteFooter'
 import styles from './SiteLayout.module.css'
@@ -8,6 +9,7 @@ import { SITE_TITLE } from './usePageTitle'
 /**
  * すべての公開ページを包む枠(旧 components/mainView.vue)。上に固定のヘッダー、本文(各ページ)、フッターを置く。
  * ヘッダー(名前検索・条件検索・ランダムウォーク)は SiteHeader(#99)。
+ * ヘッダーのモーダルの条件検索のフォームの値は、結果の画面(#102)も書き換えるので、枠で持つ(SearchFormValuesProvider)。
  */
 export default function SiteLayout() {
   useScrollToTopOnNavigate()
@@ -18,13 +20,15 @@ export default function SiteLayout() {
   }, [])
 
   return (
-    <div className={styles.root}>
-      <SiteHeader />
-      <div className={styles.content}>
-        <Outlet />
+    <SearchFormValuesProvider>
+      <div className={styles.root}>
+        <SiteHeader />
+        <div className={styles.content}>
+          <Outlet />
+        </div>
+        <SiteFooter />
       </div>
-      <SiteFooter />
-    </div>
+    </SearchFormValuesProvider>
   )
 }
 

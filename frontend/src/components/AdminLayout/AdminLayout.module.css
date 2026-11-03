@@ -1,0 +1,96 @@
+/* 管理画面の枠。上に題とメニュー、下に各画面を置く。公開ページのヘッダー(固定)とは別のもので、上に固定しない */
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ログインしているかを確かめているあいだ・確かめられなかったときの画面 */
+.status {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+/* 題(メニューへのリンク)と、ログインしている管理者の名前。狭い幅では名前を次の行に回す */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-header-bg);
+  color: var(--color-header-text);
+}
+
+.title {
+  color: inherit;
+  font-size: var(--font-size-lg);
+  text-decoration: none;
+}
+
+.title:hover {
+  color: inherit;
+}
+
+.admin {
+  font-size: var(--font-size-sm);
+}
+
+/* メニュー。項目は横に並べ、入りきらなければ折り返す */
+.menu {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.menuList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* いま開いている画面の項目(NavLink が aria-current="page" を付ける) */
+.menuLink[aria-current='page'] {
+  color: var(--color-text);
+  font-weight: bold;
+  text-decoration: none;
+}
+
+/* ログアウト。ほかの項目(リンク)と同じ見た目にそろえる */
+.logout {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-link);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.logout:hover {
+  color: var(--color-link-hover);
+}
+
+.logout:disabled {
+  color: var(--color-text-muted);
+  cursor: wait;
+}
+
+.logoutError {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger);
+}
+
+/* 各画面。中身の幅に収める */
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-4);
+}

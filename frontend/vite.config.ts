@@ -14,8 +14,8 @@ export default defineConfig({
     rollupOptions: { input: 'src/main.tsx' },
   },
   server: {
-    // 本番と同じく /api を同一オリジンで呼べるように、開発時は Laravel に流す
-    proxy: { '/api': 'http://127.0.0.1:8000' },
+    // 本番と同じく /api と画像(/storage。#585)を同一オリジンで取れるように、開発時は Laravel に流す
+    proxy: { '/api': 'http://127.0.0.1:8000', '/storage': 'http://127.0.0.1:8000' },
   },
   test: {
     environment: 'jsdom',

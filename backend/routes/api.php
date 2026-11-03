@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\BrandController;
 use App\Http\Controllers\Admin\CocktailController;
+use App\Http\Controllers\Admin\CocktailDuplicateController;
 use App\Http\Controllers\Admin\CocktailFormOptionsController;
 use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
@@ -91,9 +92,11 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('/cocktails', [CocktailController::class, 'store']);
     Route::get('/cocktails/{cocktail}', [CocktailController::class, 'show'])->where('cocktail', '[0-9]{1,18}');
     Route::put('/cocktails/{cocktail}', [CocktailController::class, 'update'])->where('cocktail', '[0-9]{1,18}');
-    // カクテルの削除(#130)。材料・別名も消える
+    // カクテルの削除(#130)。材料・別名も消える。説明文から参照されているカクテルは消さず 409(#579)
     Route::delete('/cocktails/{cocktail}', [CocktailController::class, 'destroy'])->where('cocktail', '[0-9]{1,18}');
     Route::get('/cocktail-form-options', CocktailFormOptionsController::class);
+    // カクテルの重複チェック(#129)。同じ名前のカクテルを材料の近い順に、同じレシピのカクテルを ID の順に返す
+    Route::get('/cocktails/duplicates', CocktailDuplicateController::class);
     Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}']);
     Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}']);
 

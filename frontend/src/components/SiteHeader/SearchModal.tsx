@@ -9,7 +9,7 @@ type Props = {
 
 /**
  * 条件検索のフォームを出すモーダルの枠(旧 Header/CocktailSearchModal.vue)。右上の「Close」・Esc・外側を押すと閉じる。
- * 中身(条件検索のフォーム)は #307 で置く。開いているあいだは、後ろのページをスクロールさせない。
+ * 中身は条件検索のフォーム(#307。SiteHeader が置く)。開いているあいだは、後ろのページをスクロールさせない。
  */
 export default function SearchModal({ onClose, children }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)

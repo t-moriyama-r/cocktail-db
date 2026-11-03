@@ -12,9 +12,12 @@ use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
 use App\Models\Ice;
 use App\Models\Method;
+use App\Models\User;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * E2E テスト(e2e/)が前提にするデータを入れる。
@@ -28,6 +31,34 @@ class E2eSeeder extends Seeder
         $terms = $this->seedDictionary();
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
+        $this->seedCategoryImage($nodes['vodka']);
+        $this->seedAdmin();
+    }
+
+    /**
+     * カテゴリ詳細の画像の E2E(#585)用。image 列にはファイル名だけを入れ、画像のファイルは public ディスクに置く。
+     * /storage/<ファイル名> を Laravel が返せるよう、public/storage の symlink も無ければ作る。
+     */
+    private function seedCategoryImage(Category $vodka): void
+    {
+        // 1x1 の PNG
+        Storage::disk('public')->put(
+            'e2e-vodka.png',
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+        );
+        if (! file_exists(public_path('storage'))) {
+            Artisan::call('storage:link');
+        }
+        $vodka->update(['image' => 'e2e-vodka.png']);
+    }
+
+    /**
+     * 管理画面の枠(#119)の E2E でログインする管理者。E2E は php artisan admin:login-link で非常用のログイン URL を出してログインする
+     * (ユーザーが 1 人なので email を渡さなくてよいが、取り違えないよう E2E は email を渡す)。
+     */
+    private function seedAdmin(): void
+    {
+        User::factory()->create(['name' => 'E2E の管理者', 'email' => 'e2e-admin@example.com']);
     }
 
     /**
@@ -38,6 +69,8 @@ class E2eSeeder extends Seeder
      * - 下書きを 1 件。更新・動画の公開がいちばん新しく、評価も 5 にして、下書きを返してしまうとどの一覧・新着動画にも出るようにする
      *
      * 公開のカクテルは、ヘッダーのジントニックと合わせて 8 件になる(ヘッダーの登録数は 8)。
+     *
+     * どれも材料にウォッカを 1 つ持たせ、条件検索の結果のページ(#103)の E2E で、ウォッカの検索が公開の 7 件に当たるようにする。
      */
     private function seedTopData(Category $vodka): void
     {
@@ -139,17 +172,27 @@ class E2eSeeder extends Seeder
 
     /**
      * トップの E2E 用のカクテルを 1 件作る。ベースはウォッカ、技法はシェイクにそろえ、検索用の名前は名前と同じにする。
+     * 材料はウォッカ 1 つ。
      *
      * @param  array<string, mixed>  $attributes  名前(name)は必ず入れる
      */
     private function createTopCocktail(Category $vodka, Method $method, array $attributes): Cocktail
     {
-        return Cocktail::factory()->create([
+        $cocktail = Cocktail::factory()->create([
             'name_search' => $attributes['name'],
             'base_category_id' => $vodka->id,
             'method_id' => $method->id,
             ...$attributes,
         ]);
+        CocktailIngredient::factory()->create([
+            'cocktail_id' => $cocktail->id,
+            'category_id' => $vodka->id,
+            'position' => 1,
+            'amount' => '45ml',
+        ]);
+        app(RecipeCounter::class)->recount([$cocktail->id]);
+
+        return $cocktail;
     }
 
     /**
