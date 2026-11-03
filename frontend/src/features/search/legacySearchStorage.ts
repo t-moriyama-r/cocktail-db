@@ -152,6 +152,12 @@ async function migrateSlot(slot: SearchStorageSlot, convert: ConvertLegacySearch
   })
   if (converted === null) return NOTHING
 
+  // API を待つあいだに利用者が保存したかもしれない。新しい方を残す
+  if (hasSavedSearch(slot)) {
+    removeLegacy(slot)
+    return NOTHING
+  }
+
   const saved = saveSearchQuery(slot, {
     ...defaultSearchQuery,
     nodeIds: converted.category_ids,
