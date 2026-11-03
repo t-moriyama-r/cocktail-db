@@ -7,7 +7,7 @@ use Illuminate\Validation\Validator;
 use InvalidArgumentException;
 
 /**
- * 管理画面の編集の入力(銘柄 #314・カクテル #291・用語 #315 など)に共通する読み方。
+ * 管理画面の編集の入力(銘柄 #314・カクテル #291・用語 #315・ノード #121 など)に共通する読み方。
  *
  * YouTube の欄の規則(動画と開始位置の規則はカクテルと同じ。YoutubeInput)と、空の欄を null で読む方法、
  * 画像つき(multipart)で文字列で届く真偽値の直しを持つ。
@@ -43,16 +43,19 @@ trait AdminFormInput
     /**
      * YouTube の URL か動画 ID と、開始位置の時・分・秒の規則。
      *
+     * $prefix は項目の名前の前に付ける語。ノードの編集でその場で作る銘柄の欄(`brand_youtube` など。#121)のように、
+     * 1 つのリクエストに YouTube の欄が 2 組あるときに使う。
+     *
      * @return array<string, list<string>>
      */
-    protected function youtubeRules(): array
+    protected function youtubeRules(string $prefix = ''): array
     {
         return [
             // YouTube の URL か動画 ID
-            'youtube' => ['nullable', 'string', 'max:255'],
-            'youtube_start_hour' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_HOUR],
-            'youtube_start_minute' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
-            'youtube_start_second' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
+            $prefix.'youtube' => ['nullable', 'string', 'max:255'],
+            $prefix.'youtube_start_hour' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_HOUR],
+            $prefix.'youtube_start_minute' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
+            $prefix.'youtube_start_second' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
         ];
     }
 
@@ -61,16 +64,16 @@ trait AdminFormInput
      *
      * @return callable(Validator): void
      */
-    protected function youtubeValidation(): callable
+    protected function youtubeValidation(string $prefix = ''): callable
     {
-        return function (Validator $validator): void {
-            if ($validator->errors()->has('youtube')) {
+        return function (Validator $validator) use ($prefix): void {
+            if ($validator->errors()->has($prefix.'youtube')) {
                 return;
             }
             try {
-                YoutubeInput::videoId($this->youtubeInput());
+                YoutubeInput::videoId($this->youtubeInput($prefix));
             } catch (InvalidArgumentException $e) {
-                $validator->errors()->add('youtube', $e->getMessage());
+                $validator->errors()->add($prefix.'youtube', $e->getMessage());
             }
         };
     }
@@ -78,21 +81,21 @@ trait AdminFormInput
     /**
      * 入れた YouTube の URL か動画 ID。空なら null。
      */
-    public function youtubeInput(): ?string
+    public function youtubeInput(string $prefix = ''): ?string
     {
-        return $this->nullableString('youtube');
+        return $this->nullableString($prefix.'youtube');
     }
 
     /**
      * 入れた開始位置を秒にする。動画が無いか、時・分・秒が 3 つとも空なら null。
      */
-    public function youtubeStartSeconds(?string $videoId): ?int
+    public function youtubeStartSeconds(?string $videoId, string $prefix = ''): ?int
     {
         return YoutubeInput::startSeconds(
             $videoId,
-            $this->nullableInt('youtube_start_hour'),
-            $this->nullableInt('youtube_start_minute'),
-            $this->nullableInt('youtube_start_second'),
+            $this->nullableInt($prefix.'youtube_start_hour'),
+            $this->nullableInt($prefix.'youtube_start_minute'),
+            $this->nullableInt($prefix.'youtube_start_second'),
         );
     }
 

@@ -101,7 +101,7 @@ describe('ヘッダー(SiteHeader)', () => {
   })
 
   test('TC-99-01: サイト名(アイコンと名前)のリンクで / へ移る', async () => {
-    renderAt('/helpme')
+    renderAt('/nope')
 
     fireEvent.click(header().getByRole('link', { name: '宅飲みカクテルデータベース' }))
 
@@ -110,7 +110,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
   describe('名前検索', () => {
     test('TC-99-02: 入力が空のとき(開いたとき・打った文字を消したとき)、ボタンは「入力して下さい」で押せず、API を呼ばない', async () => {
-      renderAt('/helpme')
+      renderAt('/nope')
       expect(header().getByRole('button', { name: '入力して下さい' })).toBeDisabled()
 
       fireEvent.change(nameInput(), { target: { value: 'ジ' } })
@@ -123,12 +123,12 @@ describe('ヘッダー(SiteHeader)', () => {
     test.each([['半角の空白', ' '], ['全角の空白', '　'], ['混ぜた空白', ' 　 ']])(
       'TC-99-03: %s だけの入力は空と同じに扱い、API を呼ばず、Enter でも移らない',
       async (_, value) => {
-        renderAt('/helpme')
+        renderAt('/nope')
         await typeAndWait(value)
 
         expect(header().getByRole('button', { name: '入力して下さい' })).toBeDisabled()
         fireEvent.submit(header().getByRole('search'))
-        expect(location()).toHaveTextContent('/helpme')
+        expect(location()).toHaveTextContent('/nope')
         expect(searchRequests()).toHaveLength(0)
       },
     )
@@ -136,7 +136,7 @@ describe('ヘッダー(SiteHeader)', () => {
     test.each(['!', '！', '？', '?', ';', '；', '<', '>', '_', '＿', '＜', '＞', '\\', '|', '/', '"', "'", '*', '{', '}', '^', '[', ']'])(
       'TC-99-04: 禁止文字 %s を 1 文字含むと、ボタンは「Error」になり、API を呼ばない',
       async (character) => {
-        renderAt('/helpme')
+        renderAt('/nope')
         await typeAndWait(`ジン${character}`)
 
         expect(header().getByRole('button', { name: 'Error' })).toBeEnabled()
@@ -145,7 +145,7 @@ describe('ヘッダー(SiteHeader)', () => {
     )
 
     test('TC-99-05: 「Error」を押すと入力が空になり、「入力して下さい」に戻る', async () => {
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('?')
 
       fireEvent.click(header().getByRole('button', { name: 'Error' }))
@@ -156,7 +156,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test.each(['%', '#', '・'])('TC-99-06: 禁止文字でない記号 %s は「Error」にせず、API を呼ぶ', async (character) => {
       mockApi('get', '/search', 200, hits(1))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait(character)
 
       expect(await header().findByRole('button', { name: '1件ヒット' })).toBeEnabled()
@@ -165,7 +165,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-07: 入力が止まってから 500ms 後に 1 回だけ呼ぶ。499ms では呼ばず、打っているあいだは呼ばない', async () => {
       mockApi('get', '/search', 200, hits(1))
-      renderAt('/helpme')
+      renderAt('/nope')
       vi.useFakeTimers()
 
       fireEvent.change(nameInput(), { target: { value: 'ジ' } })
@@ -189,7 +189,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-08: 応答を待っているあいだは「検索中...」で押せない', async () => {
       mockApiHandler('get', '/search', () => new Promise<Response>(() => {}))
-      renderAt('/helpme')
+      renderAt('/nope')
 
       fireEvent.change(nameInput(), { target: { value: 'ジン' } })
 
@@ -198,17 +198,17 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-09: 0 件なら「0件ヒット」で押せず、Enter でも移らない', async () => {
       mockApi('get', '/search', 200, hits(0))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ジン')
 
       expect(await header().findByRole('button', { name: '0件ヒット' })).toBeDisabled()
       fireEvent.submit(header().getByRole('search'))
-      expect(location()).toHaveTextContent('/helpme')
+      expect(location()).toHaveTextContent('/nope')
     })
 
     test('TC-99-23: 材料名だけで当たったカクテルも件数に数え、押せる', async () => {
       mockApi('get', '/search', 200, hits(0, 0, 0, 2))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ライム')
 
       expect(await header().findByRole('button', { name: '2件ヒット' })).toBeEnabled()
@@ -216,7 +216,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-10: 1 件なら「1件ヒット」で押せ、押すと /result/FromNameResult/〈語〉へ移る', async () => {
       mockApi('get', '/search', 200, hits(1))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ジン')
 
       fireEvent.click(await header().findByRole('button', { name: '1件ヒット' }))
@@ -227,7 +227,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-11: 件数は、カクテル・ノード・銘柄の合計', async () => {
       mockApi('get', '/search', 200, hits(2, 1, 3))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ジン')
 
       expect(await header().findByRole('button', { name: '6件ヒット' })).toBeEnabled()
@@ -235,7 +235,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-12: 1 件以上なら、Enter でもボタンと同じに移る', async () => {
       mockApi('get', '/search', 200, hits(1))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ジン')
       await header().findByRole('button', { name: '1件ヒット' })
 
@@ -250,7 +250,7 @@ describe('ヘッダー(SiteHeader)', () => {
       ['通信の失敗', () => Promise.reject(new TypeError('Failed to fetch'))],
     ])('TC-99-13: %s なら「サーバーエラー」で押せない', async (_, handler) => {
       mockApiHandler('get', '/search', handler)
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ジン')
 
       expect(await header().findByRole('button', { name: 'サーバーエラー' })).toBeDisabled()
@@ -258,7 +258,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     test('TC-99-14: 前後の空白(半角・全角)は除いて送り、移る先の URL の語にも含めない', async () => {
       mockApi('get', '/search', 200, hits(1))
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait(' 　ジン トニック　 ')
 
       fireEvent.click(await header().findByRole('button', { name: '1件ヒット' }))
@@ -277,7 +277,7 @@ describe('ヘッダー(SiteHeader)', () => {
             })
           : jsonResponse(hits(2), 200),
       )
-      renderAt('/helpme')
+      renderAt('/nope')
       await typeAndWait('ジ')
       await typeAndWait('ジン')
       expect(await header().findByRole('button', { name: '2件ヒット' })).toBeEnabled()
@@ -292,7 +292,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
   describe('条件検索のモーダル', () => {
     test('TC-99-16: 「検索をはじめる」を押すとモーダルが開き、Close で閉じる', () => {
-      renderAt('/helpme')
+      renderAt('/nope')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
       // fireEvent.click はフォーカスを移さないので、押す前にブラウザと同じくボタンにフォーカスを置く
@@ -308,7 +308,7 @@ describe('ヘッダー(SiteHeader)', () => {
     })
 
     test('TC-99-17: Esc・外側を押すと閉じ、枠の中を押しても閉じない', () => {
-      renderAt('/helpme')
+      renderAt('/nope')
 
       fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
       fireEvent.keyDown(document, { key: 'Escape' })
@@ -322,17 +322,17 @@ describe('ヘッダー(SiteHeader)', () => {
     })
 
     test('TC-99-18: モーダルを開いたまま画面を移ると閉じ、戻っても開き直さない', async () => {
-      renderAt('/helpme')
+      renderAt('/nope')
       fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
 
-      fireEvent.click(within(screen.getByRole('contentinfo')).getByRole('link', { name: '更新ボランティア募集中...' }))
+      fireEvent.click(screen.getByRole('link', { name: 'トップへ戻る' }))
       fireEvent.click(header().getByRole('link', { name: '宅飲みカクテルデータベース' }))
 
       expect(location()).toHaveTextContent(/^\/$/)
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
     test('TC-307-15・TC-102-19: モーダルの中に条件検索のフォームを出し、材料を選んで検索すると、条件を URL に入れて結果の画面へ移って閉じる', async () => {
-      renderAt('/helpme')
+      renderAt('/nope')
       fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
       const dialog = within(screen.getByRole('dialog', { name: 'カクテル検索' }))
 
@@ -347,7 +347,7 @@ describe('ヘッダー(SiteHeader)', () => {
     })
 
     test('TC-307-16: 選んだ条件は、閉じて開き直しても、材料の名前で詳細へ移っても残る', async () => {
-      renderAt('/helpme')
+      renderAt('/nope')
       fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
       fireEvent.click(await screen.findByRole('checkbox', { name: 'ジン' }))
       fireEvent.click(screen.getByRole('radio', { name: 'AND検索' }))
@@ -373,7 +373,7 @@ describe('ヘッダー(SiteHeader)', () => {
       [{ type: 'brand', id: 9 }, '/detail/brand/9'],
     ])('TC-99-19: 「現在の登録数：〈件数〉」のリンク先は、ランダムウォークの行き先(%j → %s)', async (walk, path) => {
       mockApi('get', '/random-walk', 200, walk)
-      renderAt('/helpme')
+      renderAt('/nope')
 
       expect(await header().findByRole('link', { name: '現在の登録数：1234' })).toHaveAttribute('href', path)
     })
@@ -383,16 +383,16 @@ describe('ヘッダー(SiteHeader)', () => {
       ['通信の失敗', () => Promise.reject(new TypeError('Failed to fetch'))],
     ])('TC-99-20: 件数が %s で取れないときは、登録数を出さない', async (_, handler) => {
       mockApiHandler('get', '/cocktails/count', handler)
-      renderAt('/helpme')
+      renderAt('/nope')
 
-      await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })
+      await screen.findByRole('heading', { level: 1, name: 'ページが見つかりません' })
       await act(async () => {})
       expect(header().queryByText(/現在の登録数/)).not.toBeInTheDocument()
     })
 
     test('TC-99-21: ランダムウォークが取れないときは、件数だけを出し、リンクにしない', async () => {
       mockApiHandler('get', '/random-walk', () => jsonResponse({ message: 'No query results' }, 404))
-      renderAt('/helpme')
+      renderAt('/nope')
 
       expect(await header().findByText('現在の登録数：1234')).toBeInTheDocument()
       expect(header().queryByRole('link', { name: /現在の登録数/ })).not.toBeInTheDocument()
@@ -404,7 +404,7 @@ describe('ヘッダー(SiteHeader)', () => {
         { type: 'brand', id: 9 },
       ]
       mockApiHandler('get', '/random-walk', () => jsonResponse(walks.shift() ?? { type: 'category', id: 8 }, 200))
-      renderAt('/helpme')
+      renderAt('/nope')
       const link = await header().findByRole('link', { name: '現在の登録数：1234' })
       expect(link).toHaveAttribute('href', '/detail/cocktail/7')
 

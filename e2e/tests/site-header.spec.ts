@@ -7,7 +7,7 @@ const header = (page: Page) => page.getByRole('banner')
 const nameInput = (page: Page) => header(page).getByRole('searchbox', { name: '名前から検索' })
 
 test('TC-99-23: 名前に「ジン」と入れると件数が出て、ボタンで名前検索の結果へ移る', async ({ page }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
 
   await expect(header(page).getByRole('button', { name: '入力して下さい' })).toBeDisabled()
   await nameInput(page).fill('ジン')
@@ -21,7 +21,7 @@ test('TC-99-23: 名前に「ジン」と入れると件数が出て、ボタン�
 })
 
 test('TC-99-24: 件数が出たあと Enter でも移る。禁止文字では「Error」になり、押すと入力が空になる', async ({ page }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
 
   await nameInput(page).fill('ジン?')
   await header(page).getByRole('button', { name: 'Error' }).click()
@@ -35,7 +35,7 @@ test('TC-99-24: 件数が出たあと Enter でも移る。禁止文字では「
 })
 
 test('TC-99-25: 「検索をはじめる」でモーダルが開き、Close で閉じる', async ({ page }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
 
   await header(page).getByRole('button', { name: '検索をはじめる' }).click()
   const dialog = page.getByRole('dialog', { name: 'カクテル検索' })
@@ -46,7 +46,7 @@ test('TC-99-25: 「検索をはじめる」でモーダルが開き、Close で�
 })
 
 test('TC-99-26: 「現在の登録数：8」のリンクで、ランダムウォークの行き先(詳細のどれか)へ移る', async ({ page }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
 
   const link = header(page).getByRole('link', { name: '現在の登録数：8' })
   await expect(link).toHaveAttribute('href', /^\/(detail\/cocktail|category|detail\/brand)\/\d+$/)
@@ -72,8 +72,8 @@ for (const { width, siteName, search, startRest, count } of widths) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 720 })
-    await page.goto('/helpme')
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('当DBの更新ボランティア募集について')
+    await page.goto('/nope')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
     // 登録数は API の応答の後に出るので、出る幅では出るまで待つ
     if (count) {
       await expect(header(page).getByText('現在の登録数：8')).toBeVisible()

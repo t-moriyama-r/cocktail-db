@@ -117,7 +117,8 @@ describe('App のルーティング', () => {
   })
 
   test.each([
-    ['TC-97-03', '/helpme', '当DBの更新ボランティア募集について'],
+    // 更新ボランティア募集の画面(旧 /helpme)は #641 で消した。開くと 404 の画面(TC-641-01)
+    ['TC-641-01', '/helpme', 'ページが見つかりません'],
     ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '結果'],
     ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '結果'],
     ['TC-97-06', '/result/Cocktails', '結果'],
