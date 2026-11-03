@@ -115,6 +115,14 @@ test('TC-110-10: 画像のあるカクテルを開くと、画像を /storage/<�
   await expect(page.getByRole('figure').getByText('E2E の出典')).toBeVisible()
 })
 
+// 材料が似たカクテル・同じベースのカクテルの表は後から読み込まれ、出ると左の欄が表の幅まで広がって画像の欄が右へずれる。
+// 置き場所は、両方の表に行が出て、並びが落ち着いてから測る
+const waitForRelatedTables = async (page: Page) => {
+  for (const name of ['材料が似たカクテル', '同じベースのカクテル']) {
+    await expect(page.getByRole('table', { name }).locator('tbody tr').first()).toBeVisible()
+  }
+}
+
 // 960px 未満は画像を説明文の上に、960px 以上は説明文の右に置く(旧の cocktail_block の column-reverse)。境目の両側も見る
 for (const { width, imageBeside } of [
   { width: 375, imageBeside: false },
@@ -127,6 +135,7 @@ for (const { width, imageBeside } of [
   test(`TC-110-11: 幅 ${width}px で、画像を${imageBeside ? '説明文の右' : '説明文の上'}に置き、横スクロールが出ない`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
     await page.goto(IMAGE_PATH)
+    await waitForRelatedTables(page)
 
     const image = (await page.getByRole('img', { name: 'モスコミュール' }).boundingBox())!
     const description = (await page.getByText('銅のマグで飲む', { exact: false }).boundingBox())!
@@ -151,10 +160,10 @@ test('TC-110-15: 960px 以上で、左の欄の表の右端が、画像の欄の
   for (const width of [960, 1024, 1440]) {
     await page.setViewportSize({ width, height: 800 })
     await page.goto(IMAGE_PATH)
+    await waitForRelatedTables(page)
 
     const image = (await page.getByRole('img', { name: 'モスコミュール' }).boundingBox())!
     const tables = page.getByRole('table')
-    await expect(tables.first()).toBeVisible()
     for (const table of await tables.all()) {
       const box = (await table.boundingBox())!
       expect(box.x + box.width, `幅 ${width}px`).toBeLessThanOrEqual(image.x + 1)
