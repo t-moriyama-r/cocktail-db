@@ -82,6 +82,93 @@ test('TC-50-16: メニューの「カクテル検索」を押すと、同じ画�
   await expect(page.getByRole('region', { name: 'カクテル検索' })).toBeInViewport()
 })
 
+/**
+ * トップの欄の API の応答を、返した関数を呼ぶまで止める。上の欄(新作動画・3 つの一覧)はいつも止め、
+ * holdForm のときは条件検索のフォームの API(/api/search-form)も止める
+ */
+const holdTopApis = async (page: Page, { holdForm }: { holdForm: boolean }) => {
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const held = ['/api/cocktails', '/api/cocktails/latest-video', ...(holdForm ? ['/api/search-form'] : [])]
+  await page.route(
+    (url) => held.includes(url.pathname),
+    async (route) => {
+      await released
+      await route.continue()
+    },
+  )
+  return release
+}
+
+/** 欄がどれも読み終わるのを、利用者に見える形で待つ */
+const waitAllSections = async (page: Page) => {
+  await expect(page.getByRole('region', { name: '新作動画' })).toBeVisible()
+  for (const title of LISTS) {
+    await expect(bodyRows(list(page, title))).toHaveCount(7)
+  }
+  await expect(page.getByRole('region', { name: 'カクテル検索' }).getByRole('heading', { name: 'カクテル検索' })).toBeVisible()
+  await expect(page.getByRole('status')).toHaveCount(0)
+}
+
+/** フォームの置き場所の上端と、ページ内リンクで飛んだときに上端が来るはずの位置(固定のヘッダーの分を空けた scroll-margin-top) */
+const formTop = (page: Page) =>
+  page.evaluate(() => {
+    const section = document.getElementById('cocktailform_anchor') as HTMLElement
+    return { top: section.getBoundingClientRect().top, expected: parseFloat(getComputedStyle(section).scrollMarginTop) }
+  })
+
+for (const [id, width, height, holdForm] of [
+  ['TC-646-01', 375, 667, true],
+  ['TC-646-02', 1440, 720, true],
+  ['TC-646-03', 1440, 720, false],
+] as const) {
+  test(`${id}: 幅 ${width}px で、${holdForm ? '上の欄とフォーム' : '上の欄だけ'}が読み込み中のあいだにメニューの「カクテル検索」を押しても、読み終わった後にフォームの置き場所が画面の先頭(ヘッダーの下)に来る`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    const release = await holdTopApis(page, { holdForm })
+    await page.goto('/')
+    // 押す時点で、上の欄はまだ読み込み中
+    for (const title of LISTS) {
+      await expect(list(page, title)).toHaveAttribute('aria-busy', 'true')
+    }
+
+    await page.getByRole('region', { name: 'Menu' }).getByRole('link', { name: 'カクテル検索' }).click()
+    await expect(page).toHaveURL(/\/#cocktailform_anchor$/)
+    release()
+    await waitAllSections(page)
+
+    const form = page.getByRole('region', { name: 'カクテル検索' })
+    await expect(form.getByRole('heading', { name: 'カクテル検索' })).toBeInViewport()
+    await expect.poll(async () => {
+      const { top, expected } = await formTop(page)
+      return Math.abs(top - expected)
+    }).toBeLessThanOrEqual(1)
+  })
+}
+
+test('TC-646-04: 読み込み中に「カクテル検索」を押した後、自分でいちばん上まで戻したら、欄が読み終わってもフォームへ引き戻さない', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 720 })
+  const release = await holdTopApis(page, { holdForm: false })
+  await page.goto('/')
+  await expect(page.getByRole('region', { name: 'カクテル検索' }).getByRole('heading', { name: 'カクテル検索' })).toBeVisible()
+
+  await page.getByRole('region', { name: 'Menu' }).getByRole('link', { name: 'カクテル検索' }).click()
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  await page.mouse.move(100, 300)
+  await page.mouse.wheel(0, -10_000)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+  release()
+  await waitAllSections(page)
+
+  await expect(page.getByRole('heading', { level: 1 })).toBeInViewport()
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+})
+
 // 幅で出し分けるもの(docs/design/style.md の「幅の区切り」)。区切りの境目の両側と、証跡を撮る幅で確かめる
 const widths = [
   { width: 375, subtitle: false },
