@@ -122,6 +122,18 @@
   margin-top: var(--space-2);
 }
 
+/* Amazon の提供の文言と楽天のクレジット。本文より小さくし、どの幅でも左に寄せて折り返す */
+.credits {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.credit {
+  margin: var(--space-1) 0 0;
+}
+
 @media (min-width: 768px) {
   .box:not(.inImage) {
     display: flex;

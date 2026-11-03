@@ -112,8 +112,20 @@ final class AdminImageStore
     public static function rules(): array
     {
         return [
-            'image' => ['nullable', 'file', 'mimes:'.implode(',', self::TYPES), 'max:'.self::MAX_KILOBYTES, 'prohibited_if_accepted:remove_image'],
+            'image' => [...self::fileRules(), 'prohibited_if_accepted:remove_image'],
             'remove_image' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /**
+     * 上げる画像のファイルそのものの規則(種類と大きさ)。rules() の image と同じ。
+     *
+     * 新規にしか使わず、消す指定の要らない画像の欄(ノードの編集でその場で作る銘柄の brand_image。#121)に使う。
+     *
+     * @return list<string>
+     */
+    public static function fileRules(): array
+    {
+        return ['nullable', 'file', 'mimes:'.implode(',', self::TYPES), 'max:'.self::MAX_KILOBYTES];
     }
 }

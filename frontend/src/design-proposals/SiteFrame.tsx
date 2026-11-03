@@ -3,7 +3,7 @@ import styles from './SiteFrame.module.css'
 
 /**
  * 試作の画面に共通の枠(ヘッダー・フッター)。旧の mainView.vue・header.vue と同じ要素
- * (サイト名・検索の入口・名前検索・登録数・フッターのリンク)を置き、案ごとの見え方を比べられるようにする。
+ * (サイト名・検索の入口・名前検索・登録数・フッターの著作の表示)を置き、案ごとの見え方を比べられるようにする。
  */
 export default function SiteFrame({ children }: { children: ReactNode }) {
   return (
@@ -24,7 +24,6 @@ export default function SiteFrame({ children }: { children: ReactNode }) {
       <main className={styles.main}>{children}</main>
       <footer className={styles.footer}>
         <span>宅飲みカクテルデータベース ©ろんぐ</span>
-        <a href="#helpme">更新ボランティア募集中...</a>
       </footer>
     </div>
   )
