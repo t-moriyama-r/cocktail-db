@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
@@ -46,6 +46,7 @@ const MINUTE_OR_SECOND_DIGITS = 2
 export default function BrandForm({ brandId, initialValues, currentImage, categories, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<BrandFieldErrors>({})
+  const categoryErrorId = useId()
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [preview, setPreview] = useState<string | null>(currentImage === null ? null : storageImageUrl(currentImage))
   const nodes = useMemo(() => categories.map(toCategoryTreeNode), [categories])
@@ -59,8 +60,11 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
   const set = <K extends keyof BrandFormValues>(key: K, value: BrandFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
 
+  const selectedFile = useRef<File | null>(null)
+
   const pickImage = (file: File | null) => {
     set('image', file)
+    selectedFile.current = file
     if (file === null) {
       setPreview(currentImage === null ? null : storageImageUrl(currentImage))
       return
@@ -68,7 +72,8 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
     // 旧と同じく、選んだ画像をその場で出す
     const reader = new FileReader()
     reader.addEventListener('load', () => {
-      if (typeof reader.result === 'string') setPreview(reader.result)
+      // 続けて別の画像を選んだときは、古い読み込みの結果でプレビューを上書きしない
+      if (selectedFile.current === file && typeof reader.result === 'string') setPreview(reader.result)
     })
     reader.readAsDataURL(file)
   }
@@ -89,12 +94,15 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
 
   return (
     <form className={styles.form} noValidate onSubmit={(event) => void submit(event)}>
-      <fieldset className={styles.category}>
+      <fieldset
+        className={styles.category}
+        aria-describedby={errors.category_id?.length ? categoryErrorId : undefined}
+      >
         <legend className={styles.legend}>所属</legend>
         <p className={styles.selected}>
           選んでいる所属: {selectedPath === null ? '(未選択)' : selectedPath.map((node) => node.name).join(' / ')}
         </p>
-        <FieldErrors messages={errors.category_id} />
+        <FieldErrors id={categoryErrorId} messages={errors.category_id} />
         <CategoryTree
           nodes={nodes}
           label="所属"
