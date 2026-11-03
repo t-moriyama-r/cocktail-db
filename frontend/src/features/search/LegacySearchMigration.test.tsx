@@ -10,7 +10,9 @@ import { SEARCH_STORAGE_KEYS } from './searchStorage'
 type ConvertResponse = paths['/legacy/search-condition']['post']['responses'][200]['content']['application/json']
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
 
-const HELPME_HEADING = '当DBの更新ボランティア募集について'
+// 本文が出たかを見る画面。API を呼ばない 404 の画面(更新ボランティア募集の画面 /helpme は #641 で消した)
+const PAGE_PATH = '/nope'
+const PAGE_HEADING = 'ページが見つかりません'
 const PATH = '/legacy/search-condition'
 
 const renderAt = (path: string) =>
@@ -59,7 +61,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     localStorage.setItem(LEGACY_SEARCH_STORAGE_KEYS.user, LEGACY_USER)
     mockApi('post', PATH, 200, { category_ids: [12, 45], method_ids: [1, 3], dropped_count: 0 } satisfies ConvertResponse)
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     await waitFor(() => expect(localStorage.getItem(SEARCH_STORAGE_KEYS.user)).toBe('n=12,45&mode=having&easy=1&m=1,3'))
     expect(localStorage.getItem(LEGACY_SEARCH_STORAGE_KEYS.user)).toBeNull()
@@ -67,7 +69,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     await settle()
     // 戻せなかったものが無ければ、何も出さない
     expect(screen.queryByText('旧サイトで保存した検索条件', { exact: false })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: HELPME_HEADING })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: PAGE_HEADING })).toBeInTheDocument()
   })
 
   test('TC-175-02: searchInstant と searchUser の両方があれば、それぞれを「リロード」用・「読み込み」用の新しいキーに移す', async () => {
@@ -82,7 +84,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
       return jsonResponse(response, 200)
     })
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     await waitFor(() => expect(localStorage.getItem(SEARCH_STORAGE_KEYS.user)).toBe('n=12,45&mode=having&easy=1&m=1,3'))
     expect(localStorage.getItem(SEARCH_STORAGE_KEYS.instant)).toBe('n=70&mode=and&m=1,2,3,4,5,6')
@@ -103,7 +105,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
       return jsonResponse(response, 200)
     })
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     const message = await noticeWith('戻せなかった材料・製法 3 件は、条件から外しています。')
     const box = message.closest('[role="status"]') as HTMLElement
@@ -112,7 +114,8 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     )
 
     // 画面を移っても出したまま(枠に置いている)
-    fireEvent.click(within(screen.getByRole('contentinfo')).getByRole('link', { name: '更新ボランティア募集中...' }))
+    fireEvent.click(within(screen.getByRole('main')).getByRole('link', { name: 'トップへ戻る' }))
+    expect(await screen.findByRole('region', { name: 'カクテル検索' })).toBeInTheDocument()
     expect(screen.getByText('戻せなかった材料・製法 3 件は、条件から外しています。', { exact: false })).toBeInTheDocument()
 
     fireEvent.click(within(box).getByRole('button', { name: '閉じる' }))
@@ -132,19 +135,19 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     localStorage.setItem(LEGACY_SEARCH_STORAGE_KEYS.user, LEGACY_USER)
     mockFailure()
 
-    const { unmount } = renderAt('/helpme')
+    const { unmount } = renderAt(PAGE_PATH)
     await waitFor(() => expect(convertCount()).toBe(1))
     await settle()
 
     expect(localStorage.getItem(LEGACY_SEARCH_STORAGE_KEYS.user)).toBe(LEGACY_USER)
     expect(localStorage.getItem(SEARCH_STORAGE_KEYS.user)).toBeNull()
     expect(screen.queryByText('旧サイトで保存した検索条件', { exact: false })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1, name: HELPME_HEADING })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: PAGE_HEADING })).toBeInTheDocument()
     unmount()
 
     // 次に開いたとき(API が戻った)
     mockApi('post', PATH, 200, { category_ids: [12, 45], method_ids: [1, 3], dropped_count: 0 })
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
     await waitFor(() => expect(localStorage.getItem(SEARCH_STORAGE_KEYS.user)).toBe('n=12,45&mode=having&easy=1&m=1,3'))
     expect(localStorage.getItem(LEGACY_SEARCH_STORAGE_KEYS.user)).toBeNull()
     expect(convertCount()).toBe(2)
@@ -158,20 +161,20 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
   ])('TC-175-05: 旧の値が壊れている(%s)ときは、画面を壊さず、API を呼ばずに旧のキーを消し、消したことを出す', async (_, broken) => {
     localStorage.setItem(LEGACY_SEARCH_STORAGE_KEYS.instant, broken)
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     expect(await noticeWith('旧サイトで保存した検索条件が壊れていて読めなかったため、消しました。')).toBeInTheDocument()
     expect(localStorage.getItem(LEGACY_SEARCH_STORAGE_KEYS.instant)).toBeNull()
     expect(localStorage.getItem(SEARCH_STORAGE_KEYS.instant)).toBeNull()
     expect(convertCount()).toBe(0)
-    expect(screen.getByRole('heading', { level: 1, name: HELPME_HEADING })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: PAGE_HEADING })).toBeInTheDocument()
   })
 
   test('TC-175-06: 新しいキーにもう保存があれば、新しい方を残して旧のキーを消す(API は呼ばない)', async () => {
     localStorage.setItem(LEGACY_SEARCH_STORAGE_KEYS.user, LEGACY_USER)
     localStorage.setItem(SEARCH_STORAGE_KEYS.user, 'n=99')
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     await waitFor(() => expect(localStorage.getItem(LEGACY_SEARCH_STORAGE_KEYS.user)).toBeNull())
     await settle()
@@ -180,7 +183,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
   })
 
   test('TC-175-07: 旧のキーが無ければ、API を呼ばず、何も出さない', async () => {
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
     await settle()
 
     expect(convertCount()).toBe(0)
@@ -193,7 +196,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     localStorage.setItem(LEGACY_SEARCH_STORAGE_KEYS.instant, legacyJson({ searchMethod: 'or', methods: [], categories: [5], middles: [] }))
     mockApi('post', PATH, 200, { category_ids: [12], method_ids: [], dropped_count: 0 })
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     await waitFor(() => expect(localStorage.getItem(SEARCH_STORAGE_KEYS.user)).toBe('n=12'))
     await waitFor(() => expect(localStorage.getItem(SEARCH_STORAGE_KEYS.instant)).toBe('n=12&m='))
@@ -210,7 +213,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     )
     mockApi('post', PATH, 200, { category_ids: [12, 45], method_ids: [1], dropped_count: 0 })
 
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
 
     expect(await noticeWith('戻せなかった材料・製法 7 件は、条件から外しています。')).toBeInTheDocument()
     expect(await convertBodies()).toEqual([{ categories: [5, 6], middles: [], methods: [1] }])
@@ -272,9 +275,9 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
     const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('SecurityError')
     })
-    const first = renderAt('/helpme')
+    const first = renderAt(PAGE_PATH)
     await settle()
-    expect(screen.getByRole('heading', { level: 1, name: HELPME_HEADING })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: PAGE_HEADING })).toBeInTheDocument()
     expect(convertCount()).toBe(0)
     first.unmount()
     getItem.mockRestore()
@@ -285,7 +288,7 @@ describe('旧サイトが保存した検索条件の移し替え(LegacySearchMig
       throw new DOMException('QuotaExceededError')
     })
     mockApi('post', PATH, 200, { category_ids: [12], method_ids: [1, 3], dropped_count: 1 })
-    renderAt('/helpme')
+    renderAt(PAGE_PATH)
     await waitFor(() => expect(convertCount()).toBe(1))
     await settle()
 

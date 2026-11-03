@@ -27,8 +27,8 @@ test('TC-175-12: 旧の形の値を localStorage に入れて開くと、新し�
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
 
-  // 旧サイトが残した値を入れてから開き直す(同じオリジンの localStorage)
-  await page.goto('/helpme')
+  // 旧サイトが残した値を入れてから開き直す(同じオリジンの localStorage)。開くのは API を呼ばない 404 の画面(/helpme は #641 で消した)
+  await page.goto('/nope')
   await page.evaluate((user) => {
     window.localStorage.setItem('searchUser', user)
     window.localStorage.setItem('searchInstant', '{"searchMethod":')
@@ -43,7 +43,7 @@ test('TC-175-12: 旧の形の値を localStorage に入れて開くと、新し�
   const notice = page.getByRole('status').filter({ hasText: '旧サイトで保存した検索条件' })
   await expect(notice).toContainText('戻せなかった材料・製法 1 件は、条件から外しています。')
   await expect(notice).toContainText('旧サイトで保存した検索条件が壊れていて読めなかったため、消しました。')
-  await expect(page.getByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'ページが見つかりません' })).toBeVisible()
 
   // 旧のキーは消え、新しいキーに保存した
   expect(await storageItem(page, 'searchUser')).toBeNull()
@@ -69,7 +69,7 @@ test('TC-175-12: 旧の形の値を localStorage に入れて開くと、新し�
   await notice.getByRole('button', { name: '閉じる' }).click()
   await expect(notice).toHaveCount(0)
   await page.reload()
-  await expect(page.getByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'ページが見つかりません' })).toBeVisible()
   await expect(page.getByRole('status').filter({ hasText: '旧サイトで保存した検索条件' })).toHaveCount(0)
 
   expect(errors).toEqual([])
