@@ -119,7 +119,7 @@ test('TC-110-10: 画像のあるカクテルを開くと、画像を /storage/<�
 // 置き場所は、両方の表に行が出て、並びが落ち着いてから測る
 const waitForRelatedTables = async (page: Page) => {
   for (const name of ['材料が似たカクテル', '同じベースのカクテル']) {
-    await expect(page.getByRole('table', { name }).locator('tbody tr').first()).toBeVisible()
+    await expect(page.getByRole('table', { name }).getByRole('cell').first()).toBeVisible()
   }
 }
 
