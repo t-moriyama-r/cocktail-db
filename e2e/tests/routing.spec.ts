@@ -8,7 +8,8 @@ const pages = [
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', heading: '結果' },
   { path: '/result/Cocktails', heading: '結果' },
   { path: '/category/1', heading: '蒸留酒(蒸留酒)' },
-  { path: '/detail/brand/1', heading: '銘柄の詳細' },
+  // E2eSeeder のビーフィーター 40度(#54 で中身を出すようにした)
+  { path: '/detail/brand/1', heading: 'ビーフィーター 40度(Beefeater 40)' },
   // E2eSeeder のジントニック(#108 で中身を出すようにした)
   { path: '/detail/cocktail/1', heading: 'ジントニック(Gin and Tonic)' },
   { path: '/dictionary', heading: '用語辞典' },
