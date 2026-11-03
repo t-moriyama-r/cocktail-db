@@ -75,6 +75,19 @@ function TreeChoices({ roots, picked, onPick }: Props & { roots: readonly Search
         }}
         appearance={appearance}
       />
+      {picked !== null && picked.brandId !== null && paths.has(picked.nodeId) && (
+        // 選んだノードのラジオは選ばれたままで、押しても onSelect が呼ばれない。銘柄からノードに戻す手段を別に置く
+        <button
+          className={styles.button}
+          type="button"
+          onClick={() => {
+            const node = nodeById(nodes, picked.nodeId)
+            if (node !== null) pickNode(node)
+          }}
+        >
+          銘柄ではなくノードそのものにする
+        </button>
+      )}
       {picked !== null && paths.has(picked.nodeId) && (
         <BrandChoices
           nodeId={picked.nodeId}
@@ -84,6 +97,15 @@ function TreeChoices({ roots, picked, onPick }: Props & { roots: readonly Search
       )}
     </>
   )
+}
+
+function nodeById(nodes: readonly CategoryTreeNode[], id: number): CategoryTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    const found = nodeById(node.children, id)
+    if (found !== null) return found
+  }
+  return null
 }
 
 type BrandChoicesProps = {

@@ -21,6 +21,20 @@ async function openScreen(page: Page, baseURL: string) {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('言い換え・スキップ語')
 }
 
+/**
+ * 前の実行が途中で落ちて残った語を、始める前に消す。足した語は同じテストの最後に消すが、途中の確認で落ちると残り、
+ * 再実行が一意制約の 422 で別の理由で落ちるため
+ */
+async function removeLeftover(page: Page, formName: string, listName: string, word: string, itemName: string | RegExp) {
+  const form = page.getByRole('form', { name: formName })
+  const row = page.getByRole('region', { name: listName }).getByRole('button', { name: itemName })
+  if ((await row.count()) === 0) return
+  page.once('dialog', (dialog) => void dialog.accept())
+  await row.first().click()
+  await form.getByRole('button', { name: '削除する' }).click()
+  await expect(form.getByText(`「${word}」を消しました`)).toBeVisible()
+}
+
 test('TC-67-26: 木からノードを選ぶと変換後・ミドルに名前が入り、保存すると一覧に解決した先と一緒に出る(消して片付ける)', async ({
   page,
   baseURL,
@@ -28,6 +42,7 @@ test('TC-67-26: 木からノードを選ぶと変換後・ミドルに名前が�
   await openScreen(page, baseURL!)
   const form = page.getByRole('form', { name: '言い換えのフォーム' })
   const list = page.getByRole('region', { name: '言い換えの一覧' })
+  await removeLeftover(page, '言い換えのフォーム', '言い換えの一覧', 'E2E のドライ・ジン', 'E2E のドライ・ジン')
 
   await form.getByRole('textbox', { name: '変換前' }).fill('E2E のドライ・ジン')
   await form.getByRole('button', { name: 'ジンを開く' }).click()
@@ -64,6 +79,7 @@ test('TC-67-28: スキップ語を足すと一覧に出て、消すと一覧か�
   await openScreen(page, baseURL!)
   const form = page.getByRole('form', { name: 'スキップ語のフォーム' })
   const list = page.getByRole('region', { name: 'スキップ語の一覧' })
+  await removeLeftover(page, 'スキップ語のフォーム', 'スキップ語の一覧', 'E2E のお好みで', 'E2E のお好みで')
 
   await form.getByRole('textbox', { name: 'スキップ語' }).fill('E2E のお好みで')
   await form.getByRole('button', { name: '保存する' }).click()

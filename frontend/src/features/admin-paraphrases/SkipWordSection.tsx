@@ -82,7 +82,15 @@ export default function SkipWordSection() {
         <p className={styles.formTitle}>
           {editingId === null ? '新しいスキップ語を足す' : `スキップ語「${editingName}」を編集中`}
         </p>
-        <TextField label="スキップ語" value={name} onChange={setName} errors={errors.name} />
+        <TextField
+          label="スキップ語"
+          value={name}
+          onChange={(value) => {
+            setName(value)
+            setErrors({})
+          }}
+          errors={errors.name}
+        />
         <div className={styles.actions}>
           <button className={styles.primaryButton} type="submit" disabled={pending}>
             保存する
@@ -114,7 +122,7 @@ export default function SkipWordSection() {
           searchable={false}
           itemKey={(skipWord) => skipWord.id}
           renderItem={(skipWord) => (
-            <button className={styles.itemButton} type="button" onClick={() => edit(skipWord)}>
+            <button className={styles.itemButton} type="button" disabled={pending} onClick={() => edit(skipWord)}>
               {skipWord.name}
             </button>
           )}

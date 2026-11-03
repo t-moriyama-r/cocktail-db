@@ -105,6 +105,9 @@ export function failureMessage(failure: RequestFailure, action: '保存' | '削�
     case 'not-found':
       return `${action}する語が見つかりませんでした。ほかの画面で消された可能性があります。一覧を読み直してください。`
     case 'http-error':
+      if (failure.status === 401) {
+        return `ログインの期限が切れていて${action}できませんでした。ページを開き直して、ログインし直してください。`
+      }
       return `${action}できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
   }
 }

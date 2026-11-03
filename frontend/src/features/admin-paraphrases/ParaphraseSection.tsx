@@ -51,6 +51,13 @@ export default function ParaphraseSection() {
   const commandId = useId()
 
   const set = (patch: Partial<FormValues>) => setValues((current) => ({ ...current, ...patch }))
+  // 欄を直したら、その欄の前の誤りは外す
+  const clearError = (...keys: (keyof FieldErrors)[]) =>
+    setErrors((current) => {
+      const next = { ...current }
+      for (const key of keys) delete next[key]
+      return next
+    })
   const resetForm = () => {
     setEditing(null)
     setValues(EMPTY_VALUES)
@@ -115,7 +122,10 @@ export default function ParaphraseSection() {
           {editing === null ? '新しい言い換えを足す' : `言い換え「${editing.name}」を編集中`}
         </p>
         <div className={styles.row}>
-          <TextField label="変換前" value={values.name} onChange={(name) => set({ name })} errors={errors.name} />
+          <TextField label="変換前" value={values.name} onChange={(name) => {
+              set({ name })
+              clearError('name')
+            }} errors={errors.name} />
           <div className={styles.field}>
             <label className={styles.label} htmlFor={commandId}>
               command
@@ -124,7 +134,10 @@ export default function ParaphraseSection() {
               id={commandId}
               className={styles.input}
               value={values.command}
-              onChange={(event) => set({ command: event.target.value === 'hot' ? 'hot' : '' })}
+              onChange={(event) => {
+                set({ command: event.target.value === 'hot' ? 'hot' : '' })
+                clearError('command')
+              }}
             >
               {COMMAND_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -135,13 +148,17 @@ export default function ParaphraseSection() {
             {errors.command !== undefined && <p className={styles.fieldError}>{errors.command.join(' ')}</p>}
           </div>
         </div>
-        <TextField label="note" value={values.note} onChange={(note) => set({ note })} errors={errors.note} multiline />
+        <TextField label="note" value={values.note} onChange={(note) => {
+              set({ note })
+              clearError('note')
+            }} errors={errors.note} multiline />
         <div className={styles.row}>
           <TextField
             label="変換後"
             value={values.converted}
             onChange={(converted) => {
               set({ converted })
+              clearError('converted')
               setPicked(null)
             }}
             errors={errors.converted}
@@ -152,6 +169,7 @@ export default function ParaphraseSection() {
             value={values.middle}
             onChange={(middle) => {
               set({ middle })
+              clearError('middle')
               setPicked(null)
             }}
             errors={errors.middle}
@@ -163,6 +181,7 @@ export default function ParaphraseSection() {
           onPick={(next, names) => {
             setPicked(next)
             set(names)
+            clearError('converted', 'middle')
           }}
         />
         <div className={styles.actions}>
@@ -194,7 +213,7 @@ export default function ParaphraseSection() {
         <AdminList
           load={load}
           itemKey={(paraphrase) => paraphrase.id}
-          renderItem={(paraphrase) => <ParaphraseItem paraphrase={paraphrase} onEdit={edit} />}
+          renderItem={(paraphrase) => <ParaphraseItem paraphrase={paraphrase} onEdit={edit} disabled={pending} />}
         />
       </section>
     </section>
@@ -208,15 +227,18 @@ export default function ParaphraseSection() {
 function ParaphraseItem({
   paraphrase,
   onEdit,
+  disabled,
 }: {
   paraphrase: ParaphraseResource
   onEdit: (p: ParaphraseResource) => void
+  /** 保存・削除の応答を待つあいだは、別の語を読み込ませない */
+  disabled: boolean
 }) {
   const label = resolvedLabel(paraphrase)
   return (
     <div className={styles.item}>
       <span>
-        <button className={styles.itemButton} type="button" onClick={() => onEdit(paraphrase)}>
+        <button className={styles.itemButton} type="button" disabled={disabled} onClick={() => onEdit(paraphrase)}>
           {paraphrase.name}
         </button>
         {` → ${paraphrase.converted}`}
