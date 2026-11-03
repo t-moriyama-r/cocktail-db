@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router'
 import RequireNumericId from './RequireNumericId'
 import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
+import AdminCategoryTree from './pages/AdminCategoryTree'
 import AdminHome from './pages/AdminHome'
 import AdminLogin from './pages/AdminLogin'
 import BrandDetail from './pages/BrandDetail'
@@ -49,6 +50,7 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminHome />} />
+        <Route path="categories" element={<AdminCategoryTree />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
       </Route>
