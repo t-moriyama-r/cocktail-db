@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
@@ -61,6 +61,13 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
     setValues((current) => ({ ...current, [key]: value }))
 
   const selectedFile = useRef<File | null>(null)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   const pickImage = (file: File | null) => {
     set('image', file)
@@ -81,7 +88,12 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setSave({ kind: 'saving' })
-    const result = await saveBrand(brandId, values)
+    // 欄を離れずに Enter で送ったときも、英名を半角にして送る
+    const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
+    setValues(normalized)
+    const result = await saveBrand(brandId, normalized)
+    // 保存を待つ間に別の画面へ移っていたら、一覧へ戻さない
+    if (!mounted.current) return
     if (result.kind === 'saved') {
       onSaved()
       return
