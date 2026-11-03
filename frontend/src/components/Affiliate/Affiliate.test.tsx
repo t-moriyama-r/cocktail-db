@@ -421,7 +421,7 @@ describe('Affiliate の Amazon の提供の文言と楽天のクレジット', (
 
     const box = await findBox()
     const credit = rakutenCredit(box)
-    expect(credit).toHaveAttribute('href', 'https://webservice.rakuten.co.jp/')
+    expect(credit).toHaveAttribute('href', 'https://developers.rakuten.com/')
     expect(credit).toHaveAttribute('target', '_blank')
     expect(amazonAttribution(box)).not.toBeInTheDocument()
   })

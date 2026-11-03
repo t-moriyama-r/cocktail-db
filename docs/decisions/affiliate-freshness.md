@@ -62,10 +62,12 @@
 
     > 本サイト上で表示されるコンテンツの一部は、アマゾンジャパン合同会社またはその関連会社により提供されたものです。これらのコンテンツは「現状有姿」で提供されており、随時変更または削除される場合があります。
 
-  - 楽天: クレジット(楽天の資料 4.2)。公式の HTML のソースのうち、テキストの形(「Supported by Rakuten Developers」)を変えずに使う(画像の形は、画像を楽天のサーバーから読むことになるので使わない)。いま使っているソース(公式のページと同じかは下の「確かめていないこと」8):
+  - 楽天: クレジット(楽天の資料 4.2)。公式の HTML のソースのうち、テキストの形(「Supported by Rakuten Developers」)を変えずに使う(画像の形は、画像を楽天のサーバーから読むことになるので使わない)。使っているソース(2026-11-03 に公式のページの「テキスト」のソースと見比べ、同じにした):
 
     ```html
-    <!-- Rakuten Web Services Attribution Snippet FROM HERE --><a href="https://webservice.rakuten.co.jp/" target="_blank">Supported by Rakuten Developers</a><!-- Rakuten Web Services Attribution Snippet TO HERE -->
+    <!-- Rakuten Web Services Attribution Snippet FROM HERE -->
+    <a href="https://developers.rakuten.com/" target="_blank">Supported by Rakuten Developers</a>
+    <!-- Rakuten Web Services Attribution Snippet TO HERE -->
     ```
 
   - **出す場所: 商品の欄(`frontend/src/components/Affiliate/`)の中の、いちばん下**(「⇒このアイテムが使われているカクテルを探す」の後)。Amazon の文言 → 楽天のクレジットの順に並べる
@@ -177,4 +179,3 @@
 5. **楽天の、1 回に複数の `itemCode` を指定できるか・1 日の上限**(楽天の資料 5・6)。指定できれば、楽天の 1 回の件数を増やせる。実際に呼んで確かめる
 6. **Amazon の資料 9.3 のキャッシュの時間(Offers は 1 時間)が守る決まりか**。決まりなら、2 の期限と 5 の間隔を 1 時間に合わせて組み直す
 7. **日本のマーケットプレイスの価格の書式**(Amazon の資料 7 の `displayAmount`)。3 の出し方の例は、価格を数値(`amount`)から組み立てる前提で書いた
-8. **楽天のクレジットの HTML のソースが、公式のページ(楽天の資料 4.2 の出典)と同じか**。#610 は、公式のページを開けない環境で作ったので、テキストの形のソース(3)を公式のページと 1 文字ずつ見比べていない。公式のページの「テキスト」のソースを写して見比べれば埋まる。違えば、公式のページのソースに差し替える

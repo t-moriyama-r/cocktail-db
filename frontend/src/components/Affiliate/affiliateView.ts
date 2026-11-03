@@ -109,4 +109,4 @@ export const AMAZON_ATTRIBUTION =
  * (docs/rakuten-api.md の 4.2。docs/decisions/affiliate-freshness.md の 3)。中身を変えないので、属性(rel など)も足さない
  */
 export const RAKUTEN_CREDIT_HTML =
-  '<!-- Rakuten Web Services Attribution Snippet FROM HERE --><a href="https://webservice.rakuten.co.jp/" target="_blank">Supported by Rakuten Developers</a><!-- Rakuten Web Services Attribution Snippet TO HERE -->'
+  '<!-- Rakuten Web Services Attribution Snippet FROM HERE -->\n<a href="https://developers.rakuten.com/" target="_blank">Supported by Rakuten Developers</a>\n<!-- Rakuten Web Services Attribution Snippet TO HERE -->'
