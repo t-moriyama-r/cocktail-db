@@ -49,6 +49,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/brands/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 名前・英名の重なりの問い合わせ(#632)。銘柄の編集画面で、名前・英名を入れたそばに「同じ名前が存在しています」を出すため。
+         *     旧 DetailEditController@duplicate_check の銘柄の分の置き換え。
+         * @description 比べ方は保存の後の warnings と同じ(名前は検索用の名前で、英名はそのまま。所属によらず表の全体で比べる)。
+         *     exclude_id の銘柄(編集している銘柄)とは比べない。名前・英名は、空なら比べない(どちらか 1 つは要る)。
+         */
+        get: operations["brand.duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/brands/{brand}": {
         parameters: {
             query?: never;
@@ -1823,6 +1845,45 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["BrandResource"];
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "brand.duplicates": {
+        parameters: {
+            query?: {
+                /** @description 名前。英名と、どちらか 1 つは要る */
+                name?: string | null;
+                /** @description 英名。名前と、どちらか 1 つは要る */
+                name_eng?: string | null;
+                /** @description 編集している銘柄の ID。新規なら送らない */
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
                         warnings: ({
                             /** @constant */
                             field: "name";
