@@ -137,7 +137,7 @@ for (const { width, imageBeside } of [
     await page.goto(IMAGE_PATH)
     await waitForRelatedTables(page)
 
-    const image = (await page.getByRole('img', { name: 'モスコミュール' }).boundingBox())!
+    const image = (await page.getByRole('figure').getByRole('img', { name: 'モスコミュール' }).boundingBox())!
     const description = (await page.getByText('銅のマグで飲む', { exact: false }).boundingBox())!
     if (imageBeside) {
       expect(image.x).toBeGreaterThanOrEqual(description.x + description.width)
@@ -162,7 +162,7 @@ test('TC-110-15: 960px 以上で、左の欄の表の右端が、画像の欄の
     await page.goto(IMAGE_PATH)
     await waitForRelatedTables(page)
 
-    const image = (await page.getByRole('img', { name: 'モスコミュール' }).boundingBox())!
+    const image = (await page.getByRole('figure').getByRole('img', { name: 'モスコミュール' }).boundingBox())!
     const tables = page.getByRole('table')
     for (const table of await tables.all()) {
       const box = (await table.boundingBox())!
