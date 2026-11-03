@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\CategoryDeleteBlocker;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveCategoryRequest;
 use App\Http\Resources\Admin\CategoryResource;
@@ -63,6 +62,8 @@ class CategoryController extends Controller
 
     /**
      * ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。
+     *
+     * ほかのノード・カクテル・技法・銘柄・用語の説明文から `@n<ID>@` で参照されているときも消さず、409 で理由と参照している行を返す(#629)。
      */
     public function destroy(AdminCategoryWriter $writer, int $category): Response|JsonResponse
     {
@@ -71,12 +72,10 @@ class CategoryController extends Controller
         } catch (CategoryNotDeletableException $e) {
             return response()->json([
                 'message' => 'このノードは消せません',
-                // 消せない理由。code は children(子のノード)・brands(銘柄)・ingredients(材料)・base_cocktails(ベース)・affiliates(アフィリエイト)
-                /** @var list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates', message: string}> */
-                'reasons' => array_map(
-                    fn (CategoryDeleteBlocker $blocker): array => ['code' => $blocker->value, 'message' => $blocker->message()],
-                    $e->blockers,
-                ),
+                // 消せない理由。code は children(子のノード)・brands(銘柄)・ingredients(材料)・base_cocktails(ベース)・affiliates(アフィリエイト)と、
+                // 説明文から参照している側の種類(referenced_by_cocktail・node・method・brand・dictionary)。referrers は説明文からの参照の理由にだけ付く、参照している行(ID の順)
+                /** @var list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates'|'referenced_by_cocktail'|'referenced_by_node'|'referenced_by_method'|'referenced_by_brand'|'referenced_by_dictionary', message: string, referrers?: list<array{id: int, name: string}>}> */
+                'reasons' => $e->reasons(),
             ], 409);
         }
 

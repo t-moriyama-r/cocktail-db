@@ -872,6 +872,7 @@
             },
             "delete": {
                 "operationId": "categories.destroy",
+                "description": "\u307b\u304b\u306e\u30ce\u30fc\u30c9\u30fb\u30ab\u30af\u30c6\u30eb\u30fb\u6280\u6cd5\u30fb\u9298\u67c4\u30fb\u7528\u8a9e\u306e\u8aac\u660e\u6587\u304b\u3089 `@n<ID>@` \u3067\u53c2\u7167\u3055\u308c\u3066\u3044\u308b\u3068\u304d\u3082\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3068\u53c2\u7167\u3057\u3066\u3044\u308b\u884c\u3092\u8fd4\u3059(#629)\u3002",
                 "summary": "\u30ce\u30fc\u30c9\u3092\u6d88\u3059\u3002\u5b50\u30fb\u9298\u67c4\u30fb\u6750\u6599\u30fb\u30d9\u30fc\u30b9\u30fb\u30a2\u30d5\u30a3\u30ea\u30a8\u30a4\u30c8\u306e\u3069\u308c\u304b\u304c\u3042\u308c\u3070\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3092\u3059\u3079\u3066\u8fd4\u3059\u3002",
                 "tags": [
                     "Category"
@@ -913,11 +914,34 @@
                                                             "brands",
                                                             "ingredients",
                                                             "base_cocktails",
-                                                            "affiliates"
+                                                            "affiliates",
+                                                            "referenced_by_cocktail",
+                                                            "referenced_by_node",
+                                                            "referenced_by_method",
+                                                            "referenced_by_brand",
+                                                            "referenced_by_dictionary"
                                                         ]
                                                     },
                                                     "message": {
                                                         "type": "string"
+                                                    },
+                                                    "referrers": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "id",
+                                                                "name"
+                                                            ]
+                                                        }
                                                     }
                                                 },
                                                 "required": [
@@ -4708,11 +4732,34 @@
                                         "brands",
                                         "ingredients",
                                         "base_cocktails",
-                                        "affiliates"
+                                        "affiliates",
+                                        "referenced_by_cocktail",
+                                        "referenced_by_node",
+                                        "referenced_by_method",
+                                        "referenced_by_brand",
+                                        "referenced_by_dictionary"
                                     ]
                                 },
                                 "message": {
                                     "type": "string"
+                                },
+                                "referrers": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "integer"
+                                            },
+                                            "name": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "id",
+                                            "name"
+                                        ]
+                                    }
                                 }
                             },
                             "required": [
