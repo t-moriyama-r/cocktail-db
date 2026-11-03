@@ -28,8 +28,8 @@ agent_write() {
     reply)
       [ $# -eq 3 ] || usage
       thread_id "$2"
-      same_pr "$2" "$REPO" "$PR"
       body_file "$3"
+      same_pr "$2" "$REPO" "$PR"
       reply "$2" "$3"
       ;;
     resolve)

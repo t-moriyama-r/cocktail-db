@@ -22,8 +22,8 @@ main() {
 	reset
 	echo '直した' >"$FAKE/body.md"
 	run reply PRRT_abc "$FAKE/body.md"
-	expect TC-498-13 'reply は固定の mutation でスレッドに返信し、返信の URL だけを出す' \
-		"$RC|$(out)|$(grep -c '^gh api graphql' "$FAKE/calls")|$(grep -c 'addPullRequestReviewThreadReply' "$FAKE/arg-query")|$(arg id)" '0|https://example.test/reply|1|1|PRRT_abc'
+	expect TC-498-13 'reply はスレッドの PR を確かめてから、固定の mutation でスレッドに返信し、返信の URL だけを出す' \
+		"$RC|$(out)|$(grep -c '^gh api graphql' "$FAKE/calls")|$(grep -c 'addPullRequestReviewThreadReply' "$FAKE/arg-query")|$(arg id)" '0|https://example.test/reply|2|1|PRRT_abc'
 
 	reset
 	echo '直した' >"$FAKE/body.md"
@@ -37,8 +37,8 @@ main() {
 
 	reset
 	run resolve PRRT_abc
-	expect TC-498-16 'resolve はスレッドを解決にし、解決した ID だけを出す' \
-		"$RC|$(out)|$(grep -c '^gh api graphql' "$FAKE/calls")|$(grep -c 'resolveReviewThread' "$FAKE/arg-query")" '0|resolved PRRT_abc|1|1'
+	expect TC-498-16 'resolve はスレッドの PR を確かめてから解決にし、解決した ID だけを出す' \
+		"$RC|$(out)|$(grep -c '^gh api graphql' "$FAKE/calls")|$(grep -c 'resolveReviewThread' "$FAKE/arg-query")" '0|resolved PRRT_abc|2|1'
 
 	reset
 	echo '新しい本文' >"$FAKE/body.md"
@@ -71,6 +71,15 @@ main() {
 	REPO=o/r PR=5 run body "$FAKE/body.md"
 	expect TC-498-22 'agent-write.target が無ければ、環境変数があっても gh を呼ばずに 2 で終わる' "$RC|$(calls)" '2|0'
 
+	reset
+	echo x >"$FAKE/body.md"
+	THREAD_PR=o/r#6 run reply PRRT_abc "$FAKE/body.md"
+	r1="$RC|$(grep -c 'addPullRequestReviewThreadReply' "$FAKE/calls")"
+	reset
+	THREAD_PR=evil/r#5 run resolve PRRT_abc
+	expect TC-498-31 'スレッドが対象の PR のものでなければ、返信・解決をせずに 2 で終わる' \
+		"$r1|$RC|$(grep -c 'resolveReviewThread' "$FAKE/calls")" '2|0|2|0'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -88,6 +97,8 @@ while [ $# -gt 0 ]; do
 	shift
 done
 case "$(cat "$FAKE/arg-query" 2>/dev/null)" in
+	# スレッドの PR の確かめ(same_pr)。--jq を通した後の形で返す。THREAD_PR で別の PR のスレッドにできる
+	*'node(id: $id)'*) echo "${THREAD_PR:-o/r#5}" ;;
 	*addPullRequestReviewThreadReply*) echo https://example.test/reply ;;
 	*resolveReviewThread*) echo "resolved $(cat "$FAKE/arg-id")" ;;
 esac
