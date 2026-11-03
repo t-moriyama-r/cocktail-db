@@ -76,3 +76,20 @@ test('TC-64-24: 度数の欄に文字を入れても、数字と「.」だけが
 
   await expect(strength).toHaveValue('40.5')
 })
+
+test('TC-64-26: 度数・開始位置の欄に文字の混ざった値を貼り付けても、数字(度数は「.」も)だけが桁数まで残る', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/brands/new')
+
+  // fill は貼り付けと同じく、値をまとめて 1 度に入れる
+  const strength = page.getByLabel('度数(%)')
+  await strength.fill('4a0.5')
+  await expect(strength).toHaveValue('40.5')
+
+  const minute = page.getByLabel('分')
+  await minute.fill('6a7')
+  await expect(minute).toHaveValue('67')
+})

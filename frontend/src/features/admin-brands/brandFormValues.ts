@@ -108,7 +108,7 @@ const toHalfWidthDigits = (value: string): string =>
   value.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0))
 
 /** 度数の欄に入れられる文字数(旧の欄の counter と同じ 4 文字) */
-export const STRENGTH_MAX_LENGTH = 4
+const STRENGTH_MAX_LENGTH = 4
 
 /**
  * 度数の欄に入れた文字から、数字と `.` だけを残す(旧 NamesAndDescription.vue の onlyNumberAndDot と同じ。全角の数字は半角にする)。

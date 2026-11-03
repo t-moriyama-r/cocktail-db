@@ -4,13 +4,7 @@ import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { saveBrand, type BrandFieldErrors, type SaveBrandResult } from './brandApi'
-import {
-  sanitizeDigits,
-  sanitizeStrength,
-  STRENGTH_MAX_LENGTH,
-  toHalfWidthAlphanumeric,
-  type BrandFormValues,
-} from './brandFormValues'
+import { sanitizeDigits, sanitizeStrength, toHalfWidthAlphanumeric, type BrandFormValues } from './brandFormValues'
 import styles from './BrandForm.module.css'
 
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
@@ -128,7 +122,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
           errors={errors.strength}
           value={values.strength}
           inputMode="decimal"
-          maxLength={STRENGTH_MAX_LENGTH}
           narrow
           onChange={(value) => set('strength', sanitizeStrength(value))}
         />
@@ -165,7 +158,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
           errors={errors.youtube_start_hour}
           value={values.youtubeStartHour}
           inputMode="numeric"
-          maxLength={HOUR_DIGITS}
           narrow
           onChange={(value) => set('youtubeStartHour', sanitizeDigits(value, HOUR_DIGITS))}
         />
@@ -174,7 +166,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
           errors={errors.youtube_start_minute}
           value={values.youtubeStartMinute}
           inputMode="numeric"
-          maxLength={MINUTE_OR_SECOND_DIGITS}
           narrow
           onChange={(value) => set('youtubeStartMinute', sanitizeDigits(value, MINUTE_OR_SECOND_DIGITS))}
         />
@@ -183,7 +174,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
           errors={errors.youtube_start_second}
           value={values.youtubeStartSecond}
           inputMode="numeric"
-          maxLength={MINUTE_OR_SECOND_DIGITS}
           narrow
           onChange={(value) => set('youtubeStartSecond', sanitizeDigits(value, MINUTE_OR_SECOND_DIGITS))}
         />
@@ -258,7 +248,6 @@ function TextField({
   onChange,
   onBlur,
   inputMode,
-  maxLength,
   narrow,
 }: {
   label: string
@@ -267,7 +256,6 @@ function TextField({
   onChange: (value: string) => void
   onBlur?: () => void
   inputMode?: 'decimal' | 'numeric'
-  maxLength?: number
   narrow?: boolean
 }) {
   return (
@@ -278,7 +266,6 @@ function TextField({
           className={styles.input}
           type="text"
           inputMode={inputMode}
-          maxLength={maxLength}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}
