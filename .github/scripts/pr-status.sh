@@ -48,8 +48,8 @@ main() {
 # マージ待ち・人のマージ待ちは、GitHub が実際にマージを許す(mergeStateStatus がマージできる値の)ときだけにする。ブランチ保護は
 # 必須のチェックの成功と会話の解決を求めるので、返信の済んだ指摘や、パスの絞り込みで CI が動かなかったコミットでも止まる。
 # 止めている理由ごとにラベルを分け、どれにも当てはまらない受け皿をマージ待ちにしない。
-# BLOCKED のうち実行中・未解決で説明できないもので、必須のチェックがいまのコミットで揃って成功していると確かめられないもの
-# (保護の中身を読めなかったものを含む)は、必須のチェックが付いていないものとみなす。
+# BLOCKED のうち実行中・未解決で説明できないもので、いまのコミットに成功した必須のチェックが付いていないもの
+# (1 つも付いていない・draft のときに飛ばした回のものしか無い)は、必須のチェックが付いていないものとみなす。
 #
 # develop には、ブランチ保護のほかにルールセット「オーナー以外の PR は承認が要る」(#540。承認 1 件、管理者は bypass できる)があり、
 # GitHub はオーナーの PR にも BLOCKED・REVIEW_REQUIRED を返す。オーナーは bypass してマージできるので、必須のチェックが揃っていて、
@@ -124,10 +124,7 @@ facts() {
   rm -f "$err"
   failed=$(jq '[.[] | select(.bucket == "fail")] | length' <<<"$checks")
   pending=$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$checks")
-  # 揃っているかは、BLOCKED の理由を分けるときにしか使わないので、そのときだけ向き先の保護を読む
-  if [ "$(jq -r .mergeStateStatus <<<"$pr")" = BLOCKED ]; then
-    complete=$(required_checks_complete "$repo" "$(jq -r .baseRefName <<<"$pr")" "$checks")
-  fi
+  complete=$(required_checks_complete "$checks")
   unanswered=$(bash "$HERE/unanswered-review-threads.sh" "$repo" "$number")
   unresolved=$(unresolved_threads "$repo" "$number")
   reviewed=$(bash "$HERE/head-reviewed.sh" "$repo" "$number")
@@ -141,20 +138,13 @@ facts() {
       byOwner: ((.author.login // "") == $owner)}' <<<"$pr"
 }
 
-# 向き先の保護で必須にしたチェックが、すべていまのコミットで成功(skipped を含む)で付いているかを true・false で出す。
-# 走らなかったワークフローのチェックは付かないので、付いたチェックに失敗・実行中が無いだけでは揃ったとは言えない。
-# 保護されているのに中身を読めないとき・読めなかったときは、揃っていないと取り違えないよう false にする
+# いまのコミットに付いた必須のチェック(gh pr checks --required の結果)が、成功で揃っているかを true・false で出す。
+# 保護の設定(必須にしたチェックの一覧)は管理者の権限が無いと読めず、Actions の GITHUB_TOKEN では読めないので、付いたチェックだけで決める。
+# draft のときに全ジョブを飛ばした回のチェック(skipping)は成功に数えられるが、CI を流したことにはならないので、
+# 成功(pass)が 1 つも無ければ揃っていないとみなす。release 向けで E2E だけを飛ばした回のように、飛ばしたものが混じっていてもよい。
+# 一部のチェックだけが付いていない(ワークフローの一部しか走らなかった)ことは、一覧を読めないので見分けられない
 required_checks_complete() {
-  local repo=$1 base=$2 checks=$3 branch
-  branch=$(gh api "repos/$repo/branches/$base" 2>/dev/null) || {
-    echo false
-    return
-  }
-  jq --argjson checks "$checks" '
-    if .protected == true and .protection == null then false
-    else ([.protection.required_status_checks.contexts // [] | .[]]
-      - [$checks[] | select(.bucket == "pass" or .bucket == "skipping") | .name]) == []
-    end' <<<"$branch"
+  jq 'any(.[]; .bucket == "pass") and all(.[]; .bucket == "pass" or .bucket == "skipping")' <<<"$1"
 }
 
 # ブランチ保護の会話の解決は、AI レビュアーのものに限らず、すべてのスレッドを数える
