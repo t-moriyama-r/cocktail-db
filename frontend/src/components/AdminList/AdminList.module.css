@@ -1,0 +1,73 @@
+/* 管理画面の一覧。絞り込みの欄・行・ページ送りを縦に並べる */
+.list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.searchLabel {
+  font-weight: bold;
+}
+
+/* 狭い幅でもはみ出さないよう、欄の幅は親に合わせて縮める */
+.searchInput {
+  flex: 1 1 16em;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-surface);
+}
+
+/* 長い名前は折り返す(横スクロールを出さない) */
+.item {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.item:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.pageButton {
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pageButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

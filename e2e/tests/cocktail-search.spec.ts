@@ -15,7 +15,7 @@ const openModal = async (page: Page) => {
 test('TC-102-20: モーダルで検索すると条件が URL に入り、読み直しても同じ条件と結果、戻るボタンで前の条件と結果に戻る', async ({
   page,
 }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
 
   // 1 回目: ジンを OR 検索
   let dialog = await openModal(page)
@@ -60,4 +60,47 @@ test('TC-102-24: 不正なクエリは無視し、材料が残らなければ条
   await expect(form.getByText('材料は必須です。')).toBeVisible()
   await expect(form.getByRole('radio', { name: 'OR検索' })).toBeChecked()
   await expect(results(page)).toHaveCount(0)
+})
+
+test('TC-103-08: 結果の「次へ」・ページの番号で、同じ条件の別のページへ移り、URL にページが入り、戻るボタンで前のページに戻る', async ({
+  page,
+}) => {
+  // E2eSeeder の材料にウォッカを使う公開のカクテルは 7 件で、1 ページ(50 件)に収まる。ページの移り方を本物の API で確かめるため、
+  // 送る本文に 1 ページの件数(per_page。画面は送らない)を 3 件と足す。7 件が 3・3・1 件の 3 ページになる(並びは ID の昇順)
+  await page.route('**/api/cocktails/search', (route) =>
+    route.continue({ postData: JSON.stringify({ ...route.request().postDataJSON(), per_page: 3 }) }),
+  )
+  await page.goto('/nope')
+  const dialog = await openModal(page)
+  await dialog.getByRole('checkbox', { name: 'ウォッカ' }).check()
+  await dialog.getByRole('button', { name: '検索' }).click()
+
+  const rows = results(page).getByRole('table').locator('tbody > tr')
+  const pager = page.getByRole('navigation', { name: 'カクテル検索結果のページ' })
+  await expect(page).toHaveURL(/\/result\/Cocktails\?n=\d+$/)
+  const firstUrl = page.url()
+  await expect(results(page)).toContainText('カクテル検索結果 7件ヒットしました。')
+  await expect(rows).toHaveCount(3)
+  await expect(results(page).getByRole('link', { name: 'モスコミュール', exact: true })).toBeVisible()
+  await expect(pager.getByText('1', { exact: true })).toHaveAttribute('aria-current', 'page')
+
+  await pager.getByRole('link', { name: '次へ' }).click()
+  await expect(page).toHaveURL(/\/result\/Cocktails\?n=\d+&page=2$/)
+  const secondUrl = page.url()
+  await expect(results(page).getByRole('link', { name: 'ブラッディメアリー', exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(3)
+  await expect(results(page)).toContainText('カクテル検索結果 7件ヒットしました。')
+
+  await pager.getByRole('link', { name: '3 ページ目' }).click()
+  await expect(page).toHaveURL(/\/result\/Cocktails\?n=\d+&page=3$/)
+  await expect(results(page).getByRole('link', { name: 'バラライカ', exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(1)
+  await expect(pager.getByRole('link', { name: '次へ' })).toHaveCount(0)
+
+  await page.goBack()
+  await expect(page).toHaveURL(secondUrl)
+  await expect(results(page).getByRole('link', { name: 'ブラッディメアリー', exact: true })).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(firstUrl)
+  await expect(results(page).getByRole('link', { name: 'モスコミュール', exact: true })).toBeVisible()
 })

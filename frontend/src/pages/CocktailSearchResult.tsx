@@ -7,6 +7,7 @@ import InlineApiView from '../components/ApiView/InlineApiView'
 import CocktailHitCount from '../components/CocktailTable/CocktailHitCount'
 import CocktailTable from '../components/CocktailTable/CocktailTable'
 import type { CocktailSort } from '../components/CocktailTable/CocktailTable.types'
+import Pager from '../components/Pager/Pager'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 import { SubmittingForm } from '../features/search/CocktailSearch'
 import { toSearchConditions, type SearchFormValues } from '../features/search/searchForm'
@@ -36,7 +37,8 @@ const fetchSearchForm = () => api.GET('/search-form')
  * - 不正な値(数字でない ID・知らない mode・負のページなど)は無視して既定値にする
  *
  * 材料の木と技法の一覧(GET /api/search-form)を読んでから、URL の ID を木と突き合わせて検索する。
- * 一覧の表の並べ替えは URL の sort・order に入れる。ページを選ぶ部品・件数ごとの表示は #103
+ * 一覧の表の並べ替えは URL の sort・order に、ページは page に入れる(#103。1 ページ 50 件・既定の並びは ID の昇順。
+ * docs/decisions/search-screen.md の決まったこと 5)。件数は全ページの合計を出し、0 件でも見出しの行だけの表を出す(旧と同じ)
  */
 export default function CocktailSearchResult() {
   usePageTitle('カクテル検索結果')
@@ -45,7 +47,7 @@ export default function CocktailSearchResult() {
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>条件検索の結果</h1>
+      <h1 className={styles.title}>結果</h1>
       {/* 見出しは読み込みを待たずに出す。読み込み中・失敗の表示は見出しの下に出す */}
       <InlineApiView state={state} onRetry={retry}>
         {(form) => <SearchFromUrl form={form} search={search} />}
@@ -100,6 +102,11 @@ function SearchResults({ form, tree, restored, sort, page }: SearchResultsProps)
     },
     [navigate, tree, form.methods, conditions],
   )
+  // ページを移っても、条件と並びはそのまま
+  const pageUrl = useCallback(
+    (next: number) => searchResultUrl({ ...searchQueryFromConditions(tree, form.methods, conditions), sort, page: next }),
+    [tree, form.methods, conditions, sort],
+  )
 
   return (
     <InlineApiView state={state} onRetry={retry}>
@@ -107,6 +114,7 @@ function SearchResults({ form, tree, restored, sort, page }: SearchResultsProps)
         <section aria-label="カクテル検索結果">
           <CocktailHitCount heading="カクテル検索結果" count={result.meta.total} />
           <CocktailTable cocktails={result.data} sort={{ mode: 'controlled', sort, onSortChange }} label="カクテル検索結果" />
+          <Pager current={page} last={result.meta.last_page} hrefOf={pageUrl} label="カクテル検索結果のページ" />
         </section>
       )}
     </InlineApiView>

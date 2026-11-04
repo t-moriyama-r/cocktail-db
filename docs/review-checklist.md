@@ -158,3 +158,122 @@ PC 幅(1440px)とスマホ幅(375px)の修正前・修正後
 ## 証跡
 xs 375px・sm 768px・md 1024px・lg 1440px の修正前・修正後(比較画像は幅ごとに 1 枚)
 ```
+
+## RC-09: 旧と挙動を変えたら、「旧との差分」の 3 か所をそろえる
+
+追加: 2026-11-01 / 出た PR: [#320](https://github.com/t-moriyama-r/cocktail-db/pull/320)・[#343](https://github.com/t-moriyama-r/cocktail-db/pull/343)・[#345](https://github.com/t-moriyama-r/cocktail-db/pull/345)・[#406](https://github.com/t-moriyama-r/cocktail-db/pull/406)・[#415](https://github.com/t-moriyama-r/cocktail-db/pull/415)・[#418](https://github.com/t-moriyama-r/cocktail-db/pull/418)・[#426](https://github.com/t-moriyama-r/cocktail-db/pull/426)・[#428](https://github.com/t-moriyama-r/cocktail-db/pull/428)・[#433](https://github.com/t-moriyama-r/cocktail-db/pull/433)・[#440](https://github.com/t-moriyama-r/cocktail-db/pull/440)・[#470](https://github.com/t-moriyama-r/cocktail-db/pull/470)・[#510](https://github.com/t-moriyama-r/cocktail-db/pull/510)・[#527](https://github.com/t-moriyama-r/cocktail-db/pull/527)・[#529](https://github.com/t-moriyama-r/cocktail-db/pull/529)
+
+旧と挙動を変えるコード(入力の上限・エラーの出し方・計算できないときの例外・リンクの形など)を足したのに、決めた文書の「旧との差分」の節・PR 本文のテストケースの表(`差分あり(意図: …)`)・PR 本文の「旧との差分の根拠」の引用のどれかが抜ける。レビュアーが意図した仕様変更か回帰かを見分けられず、あとで差分の根拠をたどれなくなる。
+
+- 旧と変えたコードを足したら、(1) 決めた issue か `docs/decisions/` の文書の「旧との差分」に 1 行、(2) PR 本文の表の「旧での結果」に `差分あり(意図: <その文書>)`、(3) 「旧との差分の根拠」にその 1 行の引用、の 3 つをそろえる
+- 「旧での結果」は、旧を動かした実測で書く。ソースを読んだだけなら `未確認(理由)` にする。`同じ` と書いた行が、足した差分と食い違っていないか見直す
+- 旧に画面や API が無い新しい仕様は `旧に無い`。旧が違う挙動だったと書いたなら、`差分あり` にする
+- 差分をレビューで指摘されて文書に足したら、表と引用も同じ PR で足す
+
+```markdown
+<!-- 悪い: 件数の上限 1000(旧は上限が無い)を足したが、PR 本文の表に TC-163-20 の行も、根拠の節の引用も無い(#426) -->
+| TC-163-19 | CSRF トークンなしで POST | 200 | 旧に無い |
+
+<!-- 良い(文書名は例): 文書の「旧との差分」に 1 行 → 表で指す → 根拠の節で引く -->
+| TC-163-20 | category_ids が 1001 件 | 422 | 差分あり(意図: docs/decisions/search-limits.md) |
+
+### 旧との差分の根拠
+TC-163-20 → docs/decisions/search-limits.md: 旧は件数の上限が無く巨大な配列も通る → 新は 1000 件を超えたら 422
+```
+
+## RC-10: トランザクションの中で、画像のファイルを先に消さない・置いたまま残さない
+
+追加: 2026-11-01 / 出た PR: [#415](https://github.com/t-moriyama-r/cocktail-db/pull/415)・[#439](https://github.com/t-moriyama-r/cocktail-db/pull/439)
+
+DB の行はトランザクションでロールバックできるが、ファイルは戻らない。トランザクションの中で前のファイルを先に消すと、そのあとで保存が落ちたとき、行は元に戻るのにファイルだけ無くなって画像が壊れる。逆に、新しいファイルを置いたあとで落ちると、行に結び付かないファイルが残る。
+
+- 前のファイルを消すのは、行の保存が終わり、コミットされたあと(`DB::afterCommit`)にする
+- 新しいファイルを置くのは保存の直前にして、落ちたときに置いたファイルを消す後片付けを付ける(`AdminImageStore`)。外側のトランザクションがロールバックされる場合も考える
+- 行の削除と画像の削除を同じ処理でするときも同じ。行を消してから、コミット後にファイルを消す
+
+```php
+// 悪い: update() がファイルをすぐ消していた(#439 のときの AdminDictionaryWriter)。あとの delete() が落ちてロールバックされても、ファイルは戻らない
+$this->images->update(null, true, $dictionary->image);
+$dictionary->delete();
+
+// 良い: トランザクションの中なら、コミットしてから消す。置いたファイルは、ロールバックされたら消す(AdminImageStore)
+DB::afterRollBack(fn () => $this->disk()->delete($stored));
+DB::afterCommit(fn () => $this->disk()->delete($current));
+```
+
+## RC-11: 外から来る値は、型・形・件数・長さを検査してから使う
+
+追加: 2026-11-01 / 出た PR: [#370](https://github.com/t-moriyama-r/cocktail-db/pull/370)・[#406](https://github.com/t-moriyama-r/cocktail-db/pull/406)・[#415](https://github.com/t-moriyama-r/cocktail-db/pull/415)・[#426](https://github.com/t-moriyama-r/cocktail-db/pull/426)・[#470](https://github.com/t-moriyama-r/cocktail-db/pull/470)・[#565](https://github.com/t-moriyama-r/cocktail-db/pull/565)
+
+認証の要らない公開の API や、保存した値を画面にそのまま出す管理の API では、想定外の値が来る。検査が足りないと、巨大な配列で負荷をかけられる・範囲外の数字で 500 になる・`true` や `1.0` が ID として通る・記法が壊れた値が保存されて画面で XSS や壊れた表示になる。
+
+- 配列は、件数の上限を `max:` で付ける。入れ子は、内側の配列にも付ける(外側だけだと、内側に巨大な配列を入れられる)
+- 数字の ID は、`integer` だけだと `true`・`1.0` も通る。JSON の整数だけを受けるなら、型を確かめる規則を足す。URL の ID は桁数も絞る(範囲を超えると 500 になる)
+- URL・動画の ID など、画面で属性や URL に埋め込む文字列は、`url:http,https`・正規表現と `max:` で形と長さを絞る。空配列・省略した欄の扱い(`prohibited_if` が空配列を通すなど)も試す
+- 正規表現で記法を読むときは、`@` が 2 つ以上・改行を含む・数字の先頭が 0 のような端の入力を、テストに入れる
+
+```php
+// 悪い: 形も長さも見ない。javascript: も 255 文字を超える値も保存できる(#415 の image_url)
+'image_url' => ['nullable', 'string'],
+
+// 良い: 形と長さを絞る。ID は bool・float を弾く(SaveBrandRequest・CocktailSearchRequest)
+'image_url' => ['nullable', 'url:http,https', 'max:2048'],
+'category_ids' => ['required_unless:mode,and', 'array', 'list', 'max:'.self::MAX_CATEGORY_IDS],
+'category_ids.*' => ['required', 'integer', self::notBoolOrFloat(...)],
+```
+
+## RC-12: API の入力の定義を変えたら、`openapi.json` を作り直して中身を読む
+
+追加: 2026-11-01 / 出た PR: [#415](https://github.com/t-moriyama-r/cocktail-db/pull/415)・[#426](https://github.com/t-moriyama-r/cocktail-db/pull/426)・[#440](https://github.com/t-moriyama-r/cocktail-db/pull/440)・[#470](https://github.com/t-moriyama-r/cocktail-db/pull/470)
+
+入力の規則(必須・上限・型)や形式(multipart など)を変えたのに、`openapi/openapi.json` を作り直し忘れる。または作り直しても、規則が定義に出ない・実装と食い違う。CI の「Check OpenAPI is up to date」が落ちるだけでなく、FE の型の元が実装とずれ、本文を省略できるような定義になる。
+
+- 入力の規則を変えたら、`php artisan scramble:export --path=../openapi/openapi.json` を流し、`git diff openapi/openapi.json` で、変えた規則(`required`・`maxItems`・`maxLength`・型)が定義に出ているかを読む
+- 規則が定義に出ない形(クロージャの規則・`prohibited_if` など)は、定義が実装より緩くなる。FE が頼る部分(本文が必須か・上限)が合っているかを確かめる
+- multipart のフォームは、真偽値の送り方(`"1"`・`"0"` など)が定義と合うかを確かめる
+
+```bash
+# 悪い: 上限を足したが再生成しない → openapi.json に maxItems が無い(#426)
+# 良い: 再生成して差分を読む
+cd backend && php artisan scramble:export --path=../openapi/openapi.json
+git diff ../openapi/openapi.json | grep -nE 'maxItems|maxLength|required|"type"'
+```
+
+## RC-13: 挙動を変えたら、それを説明する文書・コメント・例も同じ PR で直す
+
+追加: 2026-11-01 / 出た PR: [#149](https://github.com/t-moriyama-r/cocktail-db/pull/149)・[#271](https://github.com/t-moriyama-r/cocktail-db/pull/271)・[#344](https://github.com/t-moriyama-r/cocktail-db/pull/344)・[#348](https://github.com/t-moriyama-r/cocktail-db/pull/348)・[#353](https://github.com/t-moriyama-r/cocktail-db/pull/353)・[#356](https://github.com/t-moriyama-r/cocktail-db/pull/356)・[#413](https://github.com/t-moriyama-r/cocktail-db/pull/413)・[#454](https://github.com/t-moriyama-r/cocktail-db/pull/454)・[#476](https://github.com/t-moriyama-r/cocktail-db/pull/476)・[#541](https://github.com/t-moriyama-r/cocktail-db/pull/541)・[#556](https://github.com/t-moriyama-r/cocktail-db/pull/556)・[#603](https://github.com/t-moriyama-r/cocktail-db/pull/603)
+
+ワークフロー・スクリプト・ルールの挙動を変えたのに、それを説明する文書(`docs/labels.md`・`README.md`・`CLAUDE.md`)・ワークフローの冒頭のコメント・ルールの「良い例」・PR 本文が、変える前のまま残る。あとで読んだエージェントが古い説明どおりに動く。同じ決まりを 2 か所に書くと、片方だけ直して食い違う。
+
+- 変えた名前・挙動(ラベル・ジョブ・コマンド・数字)で `CLAUDE.md`・`README.md`・`docs/`・`.github/` を grep し、説明が残っていないかを確かめる
+- 例外を書く決まりは、本文と例が矛盾しないようにする(「例外は無い」と書いて例外を並べない。「良い例」が本文の注意と同じ書き方をしていない)
+- PR 本文に「ワークフローは変えていない」と書くなら、差分にワークフローが無いことを確かめる
+- 同じ決まりは 1 か所に書き、ほかからはそこを指す
+
+```markdown
+<!-- 悪い: pr-status.yml が下書きのラベルでも動くよう変えたのに、labels.md が古いまま(#476) -->
+下書きの PR へのラベルの付け外しでは pr-status.yml が動かない。見回りなどで反映される。
+
+<!-- 良い: 変更と同じ PR で、実際の動きに直す -->
+下書きの PR でも、待ちのラベルの付け外しですぐ付け替わる。
+```
+
+## RC-14: テストの名前・ケース ID を、確かめている中身と合わせる
+
+追加: 2026-11-01 / 出た PR: [#426](https://github.com/t-moriyama-r/cocktail-db/pull/426)・[#500](https://github.com/t-moriyama-r/cocktail-db/pull/500)・[#551](https://github.com/t-moriyama-r/cocktail-db/pull/551)
+
+テストの名前・ケース ID・PR 本文の表の期待値が、テストが実際に確かめていることと食い違う。名前を信じて安心するが、確かめていないので、壊れても通る。ゆるい検証(個数が 0 より大きいだけ、など)は、エラー応答でも通る。
+
+- テスト名は、本体が確かめていることを書く(「戻るとチェックが残る」と書いて、トップが出ることだけを見ない)
+- ケース ID(`TC-<issue 番号>-<連番>`)は、PR 本文の表と同じ中身を指す。同じ ID を別のテストに使わない
+- 状態を確かめるときは、成功した状態だけが満たす条件にする(`toBeGreaterThan(0)` や「`role="status"` が 1 件」は、エラー表示でも満たせないか見直す)
+
+```ts
+// 悪い: 読み込み表示が 1 つ残っていても通る(#551)
+expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
+
+// 良い: 4 つの一覧の読み込み表示が出ること、消えたあとに一覧が出ることを、それぞれ確かめる
+expect(screen.getAllByRole('status')).toHaveLength(4)
+await waitFor(() => expect(screen.queryAllByRole('status')).toHaveLength(0))
+expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
+```

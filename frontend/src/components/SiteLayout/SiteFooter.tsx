@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import styles from './SiteLayout.module.css'
 
 /** 作者のサイトと X(旧 mainView.vue のフッターのリンク先。旧の本番の画面にも出ていた公開の URL) */
@@ -6,8 +5,9 @@ const AUTHOR_SITE_URL = 'https://trc-vlackhistory.net/'
 const AUTHOR_X_URL = 'https://twitter.com/virtualDollym'
 
 /**
- * フッター(旧 mainView.vue の v-footer)。左に著作の表示と作者のサイト・X へのリンク、右に更新ボランティア募集へのリンク。
+ * フッター(旧 mainView.vue の v-footer)。著作の表示と作者のサイト・X へのリンク。
  * 外のサイトは旧と同じく新しいタブで開く。
+ * 旧は右に更新ボランティア募集(/helpme)へのリンクを置いていたが、募集をやめたので画面ごと消した(#641)。
  */
 export default function SiteFooter() {
   return (
@@ -20,9 +20,6 @@ export default function SiteFooter() {
         <a href={AUTHOR_X_URL} target="_blank" rel="noopener noreferrer" className={styles.xLink}>
           <XIcon />
         </a>
-      </div>
-      <div>
-        <Link to="/helpme">更新ボランティア募集中...</Link>
       </div>
     </footer>
   )

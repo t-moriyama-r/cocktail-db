@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\BrandController;
+use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\CocktailController;
+use App\Http\Controllers\Admin\CocktailDuplicateController;
 use App\Http\Controllers\Admin\CocktailFormOptionsController;
 use App\Http\Controllers\Admin\CocktailIndexController;
 use App\Http\Controllers\Admin\CocktailPreviewController;
@@ -10,6 +12,7 @@ use App\Http\Controllers\Admin\DictionaryController;
 use App\Http\Controllers\Admin\LogoutController;
 use App\Http\Controllers\Admin\ParaphraseController;
 use App\Http\Controllers\Admin\PasskeyController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\SkipWordController;
 use App\Http\Controllers\AffiliateController;
 use App\Http\Controllers\Auth\PasskeyLoginController;
@@ -94,15 +97,27 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     // カクテルの削除(#130)。材料・別名も消える。説明文から参照されているカクテルは消さず 409(#579)
     Route::delete('/cocktails/{cocktail}', [CocktailController::class, 'destroy'])->where('cocktail', '[0-9]{1,18}');
     Route::get('/cocktail-form-options', CocktailFormOptionsController::class);
+    // カクテルの重複チェック(#129)。同じ名前のカクテルを材料の近い順に、同じレシピのカクテルを ID の順に返す
+    Route::get('/cocktails/duplicates', CocktailDuplicateController::class);
     Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}']);
     Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}']);
 
     // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::get('/brands', [BrandController::class, 'index']);
     Route::post('/brands', [BrandController::class, 'store']);
+    // 名前・英名の重なりの問い合わせ(#632)。編集画面で入れたそばに警告を出すため。保存は止めない
+    Route::get('/brands/duplicates', [BrandController::class, 'duplicates']);
     Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
 
+    // カテゴリ木のノード(#121)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る。
+    // 消せないノード(子・銘柄・材料・ベース・アフィリエイトのどれかがある)は消さず 409 で理由を返す
+    Route::apiResource('categories', CategoryController::class)->where(['category' => '[0-9]{1,18}']);
+
     // 用語辞典(#315)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::apiResource('dictionaries', DictionaryController::class)->where(['dictionary' => '[0-9]{1,18}']);
+
+    // 画面から変える設定(#132)。キーに「.」が入るので経路には載せず、本文で受ける(定義に無いキーは 422)
+    Route::get('/settings', [SettingController::class, 'index']);
+    Route::put('/settings', [SettingController::class, 'update']);
 });

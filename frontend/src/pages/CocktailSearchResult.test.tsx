@@ -192,3 +192,140 @@ describe('条件検索の結果の画面(CocktailSearchResult)', () => {
     expect(await screen.findByRole('link', { name: 'ジントニック' })).toBeInTheDocument()
   })
 })
+
+/** total 件のカクテル(ID 1〜total。名前は「カクテル<ID>」)を、API と同じく 50 件ずつに分けて、送られたページを返す */
+const mockSearchOf = (total: number) => {
+  mockApiHandler('post', '/cocktails/search', async (request) => {
+    const body = (await request.json()) as SearchRequest
+    sentBodies.push(body)
+    const page = body.page ?? 1
+    const perPage = 50
+    const lastPage = Math.max(1, Math.ceil(total / perPage))
+    const from = (page - 1) * perPage + 1
+    const ids = Array.from({ length: Math.max(0, Math.min(perPage, total - from + 1)) }, (_, i) => from + i)
+    const response: SearchResponse = {
+      data: ids.map((id) => cocktail(id, `カクテル${id}`)),
+      links: { first: null, last: null, prev: null, next: null },
+      meta: {
+        current_page: page,
+        from: ids.length > 0 ? from : null,
+        last_page: lastPage,
+        links: [],
+        path: null,
+        per_page: perPage,
+        to: ids.length > 0 ? from + ids.length - 1 : null,
+        total,
+      },
+    }
+    return jsonResponse(response, 200)
+  })
+}
+
+/** 表の本体の行(見出しの行を除く) */
+const bodyRows = () => {
+  const table = results().getByRole('table', { name: 'カクテル検索結果' })
+  return within(table).getAllByRole('row').slice(1)
+}
+const pager = () => screen.queryByRole('navigation', { name: 'カクテル検索結果のページ' })
+
+describe('条件検索の結果の画面: 件数とページ(#103)', () => {
+  beforeEach(() => {
+    sentBodies = []
+    mockApi('get', '/cocktails/count', 200, { count: 3 })
+    mockApi('get', '/random-walk', 200, { type: 'cocktail', id: 7 })
+    mockApi('get', '/search-form', 200, searchForm)
+  })
+
+  test('TC-103-02: 見出しは「結果」、ページの題は「カクテル検索結果」', async () => {
+    mockSearchOf(1)
+    renderAt('/result/Cocktails?n=10')
+
+    expect(await screen.findByRole('heading', { level: 1, name: '結果' })).toBeInTheDocument()
+    expect(document.title).toMatch(/^カクテル検索結果 ｜ /)
+  })
+
+  test.each([
+    ['0 件', 0, 0],
+    ['1 件', 1, 1],
+    ['ちょうど 1 ページ(50 件)', 50, 50],
+  ])('TC-103-03: %s は、件数と %i 行の表を出し、ページを選ぶ部品は出さない', async (_, total, rows) => {
+    mockSearchOf(total)
+    renderAt('/result/Cocktails?n=10')
+
+    expect(await screen.findByText(`カクテル検索結果 ${total}件ヒットしました。`, { exact: false })).toBeInTheDocument()
+    expect(results().getByText(/列名をクリックするとソートします。/)).toBeInTheDocument()
+    expect(bodyRows()).toHaveLength(rows)
+    expect(results().getByRole('columnheader', { name: '名前' })).toBeInTheDocument()
+    expect(pager()).not.toBeInTheDocument()
+  })
+
+  test('TC-103-04: 1 ページ + 1 件(51 件)の 1 ページ目は、50 行と、いまのページ 1・2 ページ目・「次へ」を出す(「前へ」は無い)', async () => {
+    mockSearchOf(51)
+    renderAt('/result/Cocktails?n=10')
+
+    expect(await screen.findByText(/カクテル検索結果 51件ヒットしました。/)).toBeInTheDocument()
+    expect(bodyRows()).toHaveLength(50)
+    expect(results().getByRole('link', { name: 'カクテル50' })).toBeInTheDocument()
+    const nav = within(pager()!)
+    expect(nav.getByText('1')).toHaveAttribute('aria-current', 'page')
+    expect(nav.getByRole('link', { name: '2 ページ目' })).toHaveAttribute('href', '/result/Cocktails?n=10&page=2')
+    expect(nav.getByRole('link', { name: '次へ' })).toHaveAttribute('href', '/result/Cocktails?n=10&page=2')
+    expect(nav.queryByRole('link', { name: '前へ' })).not.toBeInTheDocument()
+  })
+
+  test('TC-103-05: 51 件の 2 ページ目は、51 件目の 1 行と、「前へ」・1 ページ目・いまのページ 2 を出す(「次へ」は無い)', async () => {
+    mockSearchOf(51)
+    renderAt('/result/Cocktails?n=10&page=2')
+
+    expect(await screen.findByRole('link', { name: 'カクテル51' })).toBeInTheDocument()
+    expect(screen.getByText(/カクテル検索結果 51件ヒットしました。/)).toBeInTheDocument()
+    expect(bodyRows()).toHaveLength(1)
+    const nav = within(pager()!)
+    expect(nav.getByText('2')).toHaveAttribute('aria-current', 'page')
+    // 1 ページ目は page を書かない
+    expect(nav.getByRole('link', { name: '前へ' })).toHaveAttribute('href', '/result/Cocktails?n=10')
+    expect(nav.getByRole('link', { name: '1 ページ目' })).toHaveAttribute('href', '/result/Cocktails?n=10')
+    expect(nav.queryByRole('link', { name: '次へ' })).not.toBeInTheDocument()
+    expect(sentBodies.map((body) => body.page)).toEqual([2])
+  })
+
+  test('TC-103-06: ページを移ると、条件と並びはそのままで URL の page が変わってそのページを取り直し、戻るボタンで前のページに戻る', async () => {
+    mockSearchOf(120)
+    renderAt('/result/Cocktails?n=10&mode=having&sort=strength&order=desc')
+    await screen.findByRole('link', { name: 'カクテル1' })
+
+    fireEvent.click(within(pager()!).getByRole('link', { name: '次へ' }))
+
+    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&mode=having&sort=strength&order=desc&page=2$/)
+    expect(await screen.findByRole('link', { name: 'カクテル51' })).toBeInTheDocument()
+
+    fireEvent.click(within(pager()!).getByRole('link', { name: '3 ページ目' }))
+    expect(await screen.findByRole('link', { name: 'カクテル101' })).toBeInTheDocument()
+    expect(location()).toHaveTextContent(/&page=3$/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'ブラウザの戻る' }))
+
+    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&mode=having&sort=strength&order=desc&page=2$/)
+    expect(await screen.findByRole('link', { name: 'カクテル51' })).toBeInTheDocument()
+    expect(sentBodies.map(({ mode, sort, order, page }) => ({ mode, sort, order, page }))).toEqual([
+      { mode: 'having', sort: 'strength', order: 'desc', page: 1 },
+      { mode: 'having', sort: 'strength', order: 'desc', page: 2 },
+      { mode: 'having', sort: 'strength', order: 'desc', page: 3 },
+      { mode: 'having', sort: 'strength', order: 'desc', page: 2 },
+    ])
+  })
+
+  test('TC-103-07: 最後のページより後(51 件で 5 ページ目)は、件数と見出しの行だけの表を出し、「前へ」で最後のページへ移れる', async () => {
+    mockSearchOf(51)
+    renderAt('/result/Cocktails?n=10&page=5')
+
+    expect(await screen.findByText(/カクテル検索結果 51件ヒットしました。/)).toBeInTheDocument()
+    expect(bodyRows()).toHaveLength(0)
+    const nav = within(pager()!)
+    expect(nav.getByRole('link', { name: '前へ' })).toHaveAttribute('href', '/result/Cocktails?n=10&page=2')
+    expect(nav.getByRole('link', { name: '1 ページ目' })).toBeInTheDocument()
+    expect(nav.getByRole('link', { name: '2 ページ目' })).toBeInTheDocument()
+    expect(nav.queryByRole('link', { name: '次へ' })).not.toBeInTheDocument()
+    expect(nav.queryByText('5')).not.toBeInTheDocument()
+  })
+})

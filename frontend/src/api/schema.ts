@@ -49,6 +49,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/brands/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 名前・英名の重なりの問い合わせ(#632)。銘柄の編集画面で、名前・英名を入れたそばに「同じ名前が存在しています」を出すため。
+         *     旧 DetailEditController@duplicate_check の銘柄の分の置き換え。
+         * @description 比べ方は保存の後の warnings と同じ(名前は検索用の名前で、英名はそのまま。所属によらず表の全体で比べる)。
+         *     exclude_id の銘柄(編集している銘柄)とは比べない。名前・英名は、空なら比べない(どちらか 1 つは要る)。
+         */
+        get: operations["brand.duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/brands/{brand}": {
         parameters: {
             query?: never;
@@ -86,6 +108,46 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 木全体。根から一番深い段まで入れ子で、兄弟の並び順に返す。 */
+        get: operations["categories.index"];
+        put?: never;
+        /** ノードを作る。英名が同じ親の下のほかのノードと同じなら、保存したうえで warnings に入れて返す。 */
+        post: operations["categories.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/categories/{category}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 編集で開くノード。 */
+        get: operations["categories.show"];
+        /**
+         * ノードを書き換える。親を変えたときは部分木ごと移す。
+         *     英名が同じ親の下のほかのノードと同じなら、保存したうえで warnings に入れて返す。
+         */
+        put: operations["categories.update"];
+        post?: never;
+        /** ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。 */
+        delete: operations["categories.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -153,7 +215,7 @@ export interface paths {
         put: operations["cocktail.update"];
         post?: never;
         /**
-         * カクテルを消す。材料・別名も一緒に消える(#130)。
+         * カクテルを消す。材料・別名も一緒に消える(#130)。画像のファイルも消す(ほかの行が指すファイルは残す。#578)。
          * @description ほかのカクテル・ノード・技法・銘柄・用語の説明文から `@c<ID>@` で参照されているときは消さず、409 で理由と参照している行を返す(#579)。
          */
         delete: operations["cocktail.destroy"];
@@ -175,6 +237,32 @@ export interface paths {
          * @description 下書き・無いカクテルは 404(旧は下書きも返し、無い ID は 500 だった。docs/decisions/cocktail-detail.md)。
          */
         get: operations["cocktailDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/cocktails/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * カクテルの編集画面の重複チェック(#129。docs/decisions/admin-screens.md の決まったこと 3)。保存は止めない。
+         * @description - same_name: 英名が同じか、検索用の名前が同じカクテル(下書きも含む。exclude_id のカクテルは除く)。exclude_id の
+         *       カクテルの保存してある材料に近い順(match の same_amount → same_ingredients → contains_all → other)、同じなら ID の順。
+         *       旧 DetailEditController@duplicate_get の置き換え
+         *     - same_recipe: exclude_id のカクテルと材料の組(recipe_signature。#82)がまったく同じカクテル(下書きも含む)を ID の順。
+         *       旧には無い。exclude_id が無い・材料の無いカクテルなら空
+         *
+         *     名前・英名は、空なら比べない(どちらか 1 つは要る)。材料は送った入力ではなく、exclude_id の保存してある材料で比べる(旧と同じ)。
+         */
+        get: operations["admin.cocktailDuplicate"];
         put?: never;
         post?: never;
         delete?: never;
@@ -745,6 +833,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 定義にある項目をすべて、定義の順で返す。秘密の項目は値を返さず、末尾 4 文字だけを返す。 */
+        get: operations["setting.index"];
+        /**
+         * 1 項目の値を書き換え、変えた人と日時を残す。value が null なら、保存した値を消して .env の値に戻す。
+         *     書き換えた後の項目を返す(秘密の項目は、一覧と同じく末尾 4 文字だけ)。
+         */
+        put: operations["setting.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/skip-words": {
         parameters: {
             query?: never;
@@ -990,6 +1099,65 @@ export interface components {
             famous_brand: components["schemas"]["BrandSummaryResource"] | null;
             brands: components["schemas"]["BrandSummaryResource"][];
         };
+        /** CategoryResource */
+        CategoryResource: {
+            id: number;
+            parent_id: number | null;
+            path: {
+                id: number;
+                name: string;
+            }[];
+            /** @enum {string|null} */
+            role: "soft_drink" | "other" | null;
+            /** @enum {string|null} */
+            root_role: "soft_drink" | "other" | null;
+            /**
+             * @description 有名な銘柄が必須か。required(根の役割が無い部分木)・optional(ソフトドリンク・その他)・none(根。入れられない)
+             * @enum {string}
+             */
+            famous_brand_requirement: "none" | "optional" | "required";
+            name: string;
+            name_eng: string;
+            description: string | null;
+            is_major: boolean;
+            is_like: boolean;
+            is_powder: boolean;
+            famous_brand_id: number | null;
+            famous_brand_candidates: {
+                id: number;
+                name: string;
+                name_eng: string;
+            }[];
+            children: {
+                id: number;
+                name: string;
+                name_eng: string;
+            }[];
+            brands: {
+                id: number;
+                name: string;
+                name_eng: string;
+            }[];
+            /** @description 動画 ID */
+            youtube: string | null;
+            youtube_start_hour: number | null;
+            youtube_start_minute: number | null;
+            youtube_start_second: number | null;
+            /**
+             * Format: date-time
+             * @description 動画を入れた・変えた日時
+             */
+            youtube_created_at: string | null;
+            image: string | null;
+            image_txt: string | null;
+            image_url: string | null;
+            delete_blockers: {
+                /** @enum {string} */
+                code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates";
+                message: string;
+            }[];
+            updated_at: string | null;
+        };
         /**
          * CategoryRole
          * @description カテゴリ木の根の役割(categories.role。docs/decisions/category-root-role.md。#153)。 旧は種別の ID(m_category.kind)を数字で決め打ちして判定していた。新しい木では種別が根のノードになり ID も 振り直すので、役割の名前で持つ。役割の無い根(旧の蒸留酒・醸造酒・混成酒)は null で、ここには現れない。
@@ -1000,6 +1168,16 @@ export interface components {
          * @enum {string}
          */
         CategoryRole: "soft_drink" | "other";
+        /** CategoryTreeItemResource */
+        CategoryTreeItemResource: {
+            id: number;
+            name: string;
+            name_eng: string;
+            role: components["schemas"]["CategoryRole"] | null;
+            root_role: components["schemas"]["CategoryRole"] | null;
+            is_major: boolean;
+            children: components["schemas"]["CategoryTreeItemResource"][];
+        };
         /** CocktailDetailResource */
         CocktailDetailResource: {
             id: number;
@@ -1071,6 +1249,44 @@ export interface components {
             }[];
             /** @description 材料の組がまったく同じ、ほかの公開しているカクテル。ID の順。一覧の表と同じ項目 */
             same_recipe: components["schemas"]["CocktailSummaryResource"][];
+        };
+        /** CocktailDuplicateIngredientResource */
+        CocktailDuplicateIngredientResource: {
+            /** @description 材料のノード(いちばん深いノード) */
+            category_id: number;
+            category_name: string;
+            /** @description 銘柄。銘柄を決めない材料では null */
+            brand_id: number | null;
+            brand_name: string | null;
+            /** @description 量(整えた後の値) */
+            amount: string;
+            /** @description 任意の材料か */
+            is_optional: boolean;
+        };
+        /**
+         * CocktailDuplicateMatch
+         * @description 重複チェック(#129)で並べるカクテルの、編集しているカクテルとの材料の近さ。旧 DetailEditController@duplicate_get の 4 つの並び。 材料は旧のカテゴリ(根のすぐ下のノード)で比べる。ミドル・銘柄・任意かは比べない(旧と同じ)。 並べる順は、定義の順(近い順)。
+         *     | |
+         *     |---|
+         *     | `same_amount` <br/> 材料の数が同じで、どの材料も同じカテゴリ・同じ量のものがある |
+         *     | `same_ingredients` <br/> 材料の数が同じで、編集しているカクテルのカテゴリをすべて含むが、量の違う材料がある |
+         *     | `contains_all` <br/> 編集しているカクテルのカテゴリをすべて含むが、材料の数が違う |
+         *     | `other` <br/> 編集しているカクテルのカテゴリのどれかを含まない |
+         * @enum {string}
+         */
+        CocktailDuplicateMatch: "same_amount" | "same_ingredients" | "contains_all" | "other";
+        /** CocktailDuplicateResource */
+        CocktailDuplicateResource: {
+            id: number;
+            name: string;
+            name_eng: string | null;
+            method_id: number;
+            is_draft: boolean;
+            match: components["schemas"]["CocktailDuplicateMatch"];
+            description: string | null;
+            note: string | null;
+            /** @description 材料。レシピの順(position の昇順) */
+            ingredients: components["schemas"]["CocktailDuplicateIngredientResource"][];
         };
         /** CocktailIngredientResource */
         CocktailIngredientResource: {
@@ -1399,7 +1615,11 @@ export interface components {
                 rawId: string;
                 /** @enum {string} */
                 type: "public-key";
-                response: string[];
+                response: {
+                    clientDataJSON: string;
+                    attestationObject: string;
+                    transports?: string[];
+                };
             };
         };
         /** PasskeyResource */
@@ -1417,7 +1637,12 @@ export interface components {
                 rawId: string;
                 /** @enum {string} */
                 type: "public-key";
-                response: string[];
+                response: {
+                    clientDataJSON: string;
+                    authenticatorData: string;
+                    signature: string;
+                    userHandle?: string | null;
+                };
             };
             remember?: boolean;
         };
@@ -1454,6 +1679,65 @@ export interface components {
              */
             image?: string | null;
             remove_image?: boolean;
+        };
+        /**
+         * SaveCategoryRequest
+         * @description カテゴリ木のノードの新規・更新(POST /api/admin/categories・PUT /api/admin/categories/{id}。#121)の入力。
+         *
+         *     旧の EditCategoryValidate・EditMiddleValidate の規則(旧のカテゴリとミドルは同じ項目)に、長さの上限・根の役割・
+         *     親の付け替えの規則を足したもの。画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、
+         *     更新は POST に `_method=PUT` を付けて送る)。
+         *
+         *     有名な銘柄(docs/decisions/strength.md)は、既存の銘柄を famous_brand_id で選ぶか、brand_* の欄でその場で作る。
+         *     選べるのはそのノードの部分木の銘柄だけ。必須かどうかは、親の根の役割で決まる(下の famousBrandMode())。
+         */
+        SaveCategoryRequest: {
+            /** @description 親。空(null)なら根を作る・根にする。更新で変えると、部分木ごと移す(CategoryTree::moveSubtree) */
+            parent_id: number | null;
+            role?: components["schemas"]["CategoryRole"] | null;
+            name: string;
+            name_eng: string;
+            /** @description 説明。保存のときに記法へ変換する(DescriptionMarkup。#287) */
+            description: string;
+            is_major: boolean;
+            is_like: boolean;
+            is_powder: boolean;
+            /** @description YouTube の URL か動画 ID */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            /** @description 画像のリンクの文字と URL */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
+            /** @description 有名な銘柄に選ぶ既存の銘柄。そのノードの部分木の銘柄だけ(下の after())。根には入れられない */
+            famous_brand_id?: number | null;
+            /** @description その場で作る銘柄(旧の brand_*)。famous_brand_id を選んだときは使わない(旧と同じ) */
+            brand_name?: string | null;
+            brand_name_eng?: string | null;
+            brand_strength?: number | null;
+            brand_description?: string | null;
+            brand_is_major?: boolean | null;
+            brand_is_like?: boolean | null;
+            brand_youtube?: string | null;
+            brand_youtube_start_hour?: number | null;
+            brand_youtube_start_minute?: number | null;
+            brand_youtube_start_second?: number | null;
+            brand_image_txt?: string | null;
+            /** Format: uri */
+            brand_image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            brand_image?: string | null;
         };
         /**
          * SaveCocktailRequest
@@ -1590,10 +1874,45 @@ export interface components {
             root_role: components["schemas"]["CategoryRole"] | null;
             children: components["schemas"]["SearchFormNodeResource"][];
         };
+        /** SettingResource */
+        SettingResource: {
+            key: string;
+            label: string;
+            description: string;
+            secret: boolean;
+            /** @description 画面で保存した値か .env の値があるか(秘密の項目の「設定済み」) */
+            is_set: boolean;
+            /** @description 秘密の項目は、どこから来た値でも返さない */
+            value: string | null;
+            last_four: string | null;
+            /** @description いま効いている値の出どころ。saved: 画面で保存した値、env: .env の値、null: どちらにも無い */
+            source: string | null;
+            /** @description 最後に画面で変えた日時と人(.env に戻したときも残る)。画面で一度も変えていなければ null */
+            updated_at: string | null;
+            updated_by: {
+                id: number | null;
+                name: string | null;
+            } | null;
+        };
         /** SkipWordResource */
         SkipWordResource: {
             id: number;
             name: string;
+        };
+        /**
+         * UpdateSettingRequest
+         * @description 設定の 1 項目の書き換え(PUT /api/admin/settings。#132)。
+         *
+         *     value を null(空の文字も、空の文字を null にするミドルウェアで null になる)にすると、保存した値を消して .env の値に戻す。
+         */
+        UpdateSettingRequest: {
+            /**
+             * @description 定義(SettingDefinitions)に無いキーは 422
+             * @enum {string}
+             */
+            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.affiliate_id";
+            /** @description 省いたときに黙って .env に戻さないよう、欄は必須(null は送れる)。形は項目ごとの規則で確かめる */
+            value: string | null;
         };
     };
     responses: {
@@ -1767,6 +2086,45 @@ export interface operations {
             422: components["responses"]["ValidationException"];
         };
     };
+    "brand.duplicates": {
+        parameters: {
+            query?: {
+                /** @description 名前。英名と、どちらか 1 つは要る */
+                name?: string | null;
+                /** @description 英名。名前と、どちらか 1 つは要る */
+                name_eng?: string | null;
+                /** @description 編集している銘柄の ID。新規なら送らない */
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
     "brand.show": {
         parameters: {
             query?: never;
@@ -1856,6 +2214,163 @@ export interface operations {
                 };
             };
             404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "categories.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `CategoryTreeItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryTreeItemResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "categories.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description `CategoryResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryResource"];
+                        warnings: [
+                            {
+                                /** @constant */
+                                field: "name_eng";
+                                /** @constant */
+                                message: "同じ名前が存在しています";
+                            }
+                        ] | string[];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "categories.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `CategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryResource"];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+        };
+    };
+    "categories.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["SaveCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description `CategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CategoryResource"];
+                        warnings: [
+                            {
+                                /** @constant */
+                                field: "name_eng";
+                                /** @constant */
+                                message: "同じ名前が存在しています";
+                            }
+                        ] | string[];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
+        };
+    };
+    "categories.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        message: "このノードは消せません";
+                        reasons: {
+                            /** @enum {string} */
+                            code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates";
+                            message: string;
+                        }[];
+                    };
+                };
+            };
         };
     };
     categoryDetail: {
@@ -2095,6 +2610,36 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    "admin.cocktailDuplicate": {
+        parameters: {
+            query?: {
+                /** @description 名前。英名と、どちらか 1 つは要る */
+                name?: string | null;
+                /** @description 英名。名前と、どちらか 1 つは要る */
+                name_eng?: string | null;
+                /** @description 編集しているカクテルの ID。新規なら送らない */
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        same_name: components["schemas"]["CocktailDuplicateResource"][];
+                        same_recipe: components["schemas"]["CocktailDuplicateResource"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "admin.cocktailFormOptions": {
@@ -3003,6 +3548,55 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    "setting.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Array of `SettingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SettingResource"][];
+                    };
+                };
+            };
+        };
+    };
+    "setting.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description `SettingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SettingResource"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationException"];
         };
     };
     "skip-words.index": {
