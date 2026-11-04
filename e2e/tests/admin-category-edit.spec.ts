@@ -162,3 +162,82 @@ test('TC-308-24: 画像を上げて、差し替えて、消せる', async ({ pag
   await expect(nodeImage(page)).toHaveCount(0)
   await expect(page.getByRole('checkbox', { name: '画像を消す' })).toHaveCount(0)
 })
+
+// 親の付け替えと削除(#125)。ここでもミントの下に作ったノードだけを移す・消す。
+// 根をまたぐ付け替え(役割が変わる)は、ほかの E2E が見ている根の下を変えないよう、Vitest(TC-125-03)で確かめる
+
+/** 開いている編集画面のノードの ID(URL の末尾) */
+const nodeIdOf = (page: Page): number => Number(new URL(page.url()).pathname.split('/').pop())
+
+const publicBreadcrumb = (page: Page) => page.getByRole('navigation', { name: 'パンくず' })
+
+test('TC-125-13: ノードを別の親の下へ移すと、確かめてから移し、公開側のパンくずが新しい親までになる', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  const parentName = await createNode(page, 'move-parent')
+  const name = await createNode(page, 'move-child')
+  await openNode(page, name)
+  const id = nodeIdOf(page)
+
+  await page.goto(`/category/${id}`)
+  await expect(publicBreadcrumb(page)).toHaveText('その他 / ミント')
+
+  await page.goto(`/admin/categories/${id}`)
+  const move = page.getByRole('region', { name: '親の付け替え' })
+  await expect(move.getByText('今の親: その他 / ミント', { exact: true })).toBeVisible()
+  await move.getByRole('button', { name: '移す先を選ぶ' }).click()
+  const tree = move.getByRole('list', { name: '移す先' })
+  await tree.getByRole('button', { name: 'ミントを開く', exact: true }).click()
+  await tree.getByRole('radio', { name: parentName, exact: true }).check()
+  await expect(move.getByText(`移す先: その他 / ミント / ${parentName}`, { exact: true })).toBeVisible()
+  // 同じ根(その他)の中なので、役割は変わらない
+  await expect(move.getByText(/役割が/)).toHaveCount(0)
+
+  const dialog = page.waitForEvent('dialog')
+  const clicked = move.getByRole('button', { name: '移す', exact: true }).click()
+  const confirm = await dialog
+  expect(confirm.message()).toBe(`「${name}」を「その他 / ミント / ${parentName}」の下へ移します。よろしいですか?`)
+  await confirm.accept()
+  await clicked
+
+  await expect(page).toHaveURL(/\/admin\/categories$/)
+  await expect(page.getByRole('status').filter({ hasText: '移しました' })).toHaveText(
+    `「${name}」を「その他 / ミント / ${parentName}」の下へ移しました`,
+  )
+  await page.goto(`/category/${id}`)
+  await expect(publicBreadcrumb(page)).toHaveText(`その他 / ミント / ${parentName}`)
+})
+
+test('TC-125-14: 消せないノードを開くと、消せない理由が出て、消すボタンを押せない', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/categories')
+  await page.getByRole('list', { name: 'カテゴリ木' }).getByRole('radio', { name: 'ジン', exact: true }).click()
+  await expect(page.getByLabel('名前', { exact: true })).toHaveValue('ジン')
+
+  const deletion = page.getByRole('region', { name: 'ノードの削除' })
+  await expect(deletion.getByText('このノードは消せません', { exact: true })).toBeVisible()
+  // ジンは子(ドライジン)を持ち、カクテルのベースに使われている(E2eSeeder)
+  await expect(deletion.getByRole('listitem').filter({ hasText: '子のノードがあります' })).toHaveCount(1)
+  await expect(deletion.getByRole('listitem').filter({ hasText: 'カクテルのベースに使われています' })).toHaveCount(1)
+  await expect(deletion.getByRole('button', { name: 'このノードを消す' })).toBeDisabled()
+})
+
+test('TC-125-15: 消せるノードは、確かめてから消し、カテゴリ木に消したことが出て、公開側でも見つからなくなる', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  const name = await createNode(page, 'delete')
+  await openNode(page, name)
+  const id = nodeIdOf(page)
+
+  const deletion = page.getByRole('region', { name: 'ノードの削除' })
+  await expect(deletion.getByText('消すと元に戻せません。', { exact: true })).toBeVisible()
+  const dialog = page.waitForEvent('dialog')
+  const clicked = deletion.getByRole('button', { name: 'このノードを消す' }).click()
+  const confirm = await dialog
+  expect(confirm.message()).toBe(`「${name}」を消します。よろしいですか?`)
+  await confirm.accept()
+  await clicked
+
+  await expect(page).toHaveURL(/\/admin\/categories$/)
+  await expect(page.getByRole('status').filter({ hasText: '消しました' })).toHaveText(`「${name}」を消しました`)
+  await page.goto(`/category/${id}`)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
+})
