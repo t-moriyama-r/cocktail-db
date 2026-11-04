@@ -9,6 +9,7 @@ import type {
 } from './CategoryTree.types'
 import { buildCategoryTreeNode as buildNode } from './buildCategoryTreeNode'
 import { buildTestTree } from './buildTestTree'
+import { cpuTimeMs } from '../../test/cpuTime'
 
 const singleSelection = (overrides: Partial<CategoryTreeSingleSelection> = {}): CategoryTreeSingleSelection => ({
   mode: 'single',
@@ -245,17 +246,18 @@ describe('CategoryTree', () => {
     const countRows = () => container.querySelectorAll('input[type="checkbox"]').length
 
     // 1 回目は JIT のコンパイルと jsdom の初期化の時間が大きく混ざるので、一度開いて閉じてから測る。
-    // 同じ PC で動くほかの処理に割り込まれた回で落ちないよう、3 回測っていちばん速い回を見る
+    // 経過時間ではなく CPU 時間で測る。経過時間は、並べて流すほかのテストや CI のほかの処理に CPU を取られた分も数え、
+    // 負荷がかかると 1 秒を何倍も超えた(#663)。それでも混ざる揺れ(GC など)で落ちないよう、3 回測っていちばん速い回を見る
     fireEvent.click(openAll)
     fireEvent.click(closeAll)
 
     const trials = Array.from({ length: 3 }, () => {
-      const started = cpuMilliseconds()
+      const started = cpuTimeMs()
       fireEvent.click(openAll)
       const openedCount = countRows()
       fireEvent.click(closeAll)
       const closedCount = countRows()
-      return { openedCount, closedCount, elapsed: cpuMilliseconds() - started }
+      return { openedCount, closedCount, elapsed: cpuTimeMs() - started }
     })
 
     for (const { openedCount, closedCount } of trials) {
@@ -265,21 +267,6 @@ describe('CategoryTree', () => {
     expect(Math.min(...trials.map(({ elapsed }) => elapsed))).toBeLessThan(1000)
   })
 })
-
-/**
- * このスレッドが使った CPU の時間(ミリ秒)。経過時間(performance.now)は、同じマシンでほかのテストのファイル・
- * CI のほかのジョブが動いていると、待たされた分まで入って何倍にもなる(#663 で 8.3 秒)。操作そのものの重さを測るため、
- * 割り込まれていたあいだを含まない CPU の時間で測る。src の型は画面向け(DOM)で Node の型を入れていないので、使う分だけ書く
- */
-function cpuMilliseconds(): number {
-  type CpuUsage = { user: number; system: number }
-  const { process } = globalThis as unknown as {
-    process: { threadCpuUsage?: () => CpuUsage; cpuUsage: () => CpuUsage }
-  }
-  // threadCpuUsage(このスレッドだけ)の無い古い Node では、プロセス全体の cpuUsage で測る
-  const { user, system } = process.threadCpuUsage?.() ?? process.cpuUsage()
-  return (user + system) / 1000
-}
 
 /** 根 6・各 9 の子・各 10 の孫で、ちょうど 600 ノードの木(実データと同じくらいの大きさ) */
 function buildLargeTree(): CategoryTreeNode[] {
