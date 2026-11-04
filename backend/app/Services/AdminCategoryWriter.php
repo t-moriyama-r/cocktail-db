@@ -72,8 +72,12 @@ class AdminCategoryWriter
                 'image_txt' => $request->nullableString('image_txt'),
                 'image_url' => $request->nullableString('image_url'),
             ];
-            // 有名な銘柄は、選んだときだけ書き換える。選ばず、その場でも作らないときは前の値のまま(旧と同じ)
-            if ($request->filled('famous_brand_id')) {
+            // 有名な銘柄は、選んだときだけ書き換える。選ばず、その場でも作らないときは前の値のまま(旧と同じ)。
+            // 根は有名な銘柄を持たない(docs/decisions/strength.md の「根のノード」)ので、根へ移す・根を保存するときは空にする。
+            // 前の値のままにすると、有名な銘柄を持つノードを根へ移したときに、移す前の値が根に残る(#647)
+            if ($parent === null) {
+                $attrs['famous_brand_id'] = null;
+            } elseif ($request->filled('famous_brand_id')) {
                 $attrs['famous_brand_id'] = $request->integer('famous_brand_id');
             }
 
