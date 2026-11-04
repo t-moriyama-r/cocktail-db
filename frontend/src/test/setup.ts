@@ -29,9 +29,14 @@ vi.setConfig({ testTimeout: 30000 })
 // 出力で結果が埋もれないよう何もしない関数にする(スクロールの位置は E2E で確かめる)
 window.scrollTo = () => {}
 
-afterEach(() => {
+afterEach(async () => {
   // globals を使わない設定では Testing Library の自動の後片付けが動かないので、テストごとに描画を消す
   cleanup()
+  // 画面が出た直後にテストが終わると、まだ動いていない useEffect が cleanup の中で動いて API を呼び始める。
+  // openapi-fetch は middleware を await してから fetch を呼ぶので、差し替えた fetch(./api の fetchApi)に届くのは
+  // cleanup が返った後になる。すぐに記録を消すと、そのリクエストが後から次のテストの記録に入る(負荷がかかると起きた。#664)。
+  // 届くまで(マイクロタスクが尽きるまで)待ってから消す
+  await new Promise((resolve) => setTimeout(resolve, 0))
   resetApiMocks()
   resetPasskeyBrowser()
 })
