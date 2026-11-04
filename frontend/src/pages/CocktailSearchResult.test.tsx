@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, test } from 'vitest'
 import App from '../App'
@@ -134,10 +134,16 @@ describe('条件検索の結果の画面(CocktailSearchResult)', () => {
     expect(form.getByText('材料は必須です。')).toBeInTheDocument()
     expect(sentBodies).toEqual([])
 
-    fireEvent.click(form.getByRole('checkbox', { name: 'ジン' }))
+    // フォームが出た直後は、URL の条件(ここでは空)をフォームに戻す処理(useEffect)がまだ残っていることがある。
+    // 負荷のかかったときは、選んだ直後にそれが走って選んだ材料を空に戻すので、選べたのを見てから検索する(#663)
+    await waitFor(() => {
+      const gin = form.getByRole('checkbox', { name: 'ジン' })
+      if (!(gin as HTMLInputElement).checked) fireEvent.click(gin)
+      expect(gin).toBeChecked()
+    })
     fireEvent.click(form.getByRole('button', { name: '検索' }))
 
-    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10(&mode=and)?$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10(&mode=and)?$/))
     expect(await screen.findByRole('link', { name: '材料10のカクテル' })).toBeInTheDocument()
   })
 
@@ -151,13 +157,13 @@ describe('条件検索の結果の画面(CocktailSearchResult)', () => {
     fireEvent.click(modal.getByRole('button', { name: '検索' }))
 
     // ジンとラムで蒸留酒の子がすべて選ばれたので、蒸留酒 1 つに畳む
-    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1&mode=and$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1&mode=and$/))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(await screen.findByRole('link', { name: '材料1のカクテル' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'ブラウザの戻る' }))
 
-    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10$/))
     expect(await screen.findByRole('link', { name: '材料10のカクテル' })).toBeInTheDocument()
     const restored = openModal()
     expect(await restored.findByRole('radio', { name: 'OR検索' })).toBeChecked()
@@ -171,7 +177,7 @@ describe('条件検索の結果の画面(CocktailSearchResult)', () => {
 
     fireEvent.click(results().getByRole('button', { name: '度数' }))
 
-    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&sort=strength&order=desc$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&sort=strength&order=desc$/))
     await screen.findByRole('link', { name: '材料10のカクテル' })
     expect(sentBodies.map(({ sort, order, page }) => ({ sort, order, page }))).toEqual([
       { sort: undefined, order: undefined, page: 3 },
@@ -296,7 +302,7 @@ describe('条件検索の結果の画面: 件数とページ(#103)', () => {
 
     fireEvent.click(within(pager()!).getByRole('link', { name: '次へ' }))
 
-    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&mode=having&sort=strength&order=desc&page=2$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&mode=having&sort=strength&order=desc&page=2$/))
     expect(await screen.findByRole('link', { name: 'カクテル51' })).toBeInTheDocument()
 
     fireEvent.click(within(pager()!).getByRole('link', { name: '3 ページ目' }))
@@ -305,7 +311,7 @@ describe('条件検索の結果の画面: 件数とページ(#103)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'ブラウザの戻る' }))
 
-    expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&mode=having&sort=strength&order=desc&page=2$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10&mode=having&sort=strength&order=desc&page=2$/))
     expect(await screen.findByRole('link', { name: 'カクテル51' })).toBeInTheDocument()
     expect(sentBodies.map(({ mode, sort, order, page }) => ({ mode, sort, order, page }))).toEqual([
       { mode: 'having', sort: 'strength', order: 'desc', page: 1 },

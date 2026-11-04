@@ -15,7 +15,7 @@ const openModal = async (page: Page) => {
 test('TC-102-20: モーダルで検索すると条件が URL に入り、読み直しても同じ条件と結果、戻るボタンで前の条件と結果に戻る', async ({
   page,
 }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
 
   // 1 回目: ジンを OR 検索
   let dialog = await openModal(page)
@@ -70,7 +70,7 @@ test('TC-103-08: 結果の「次へ」・ページの番号で、同じ条件の
   await page.route('**/api/cocktails/search', (route) =>
     route.continue({ postData: JSON.stringify({ ...route.request().postDataJSON(), per_page: 3 }) }),
   )
-  await page.goto('/helpme')
+  await page.goto('/nope')
   const dialog = await openModal(page)
   await dialog.getByRole('checkbox', { name: 'ウォッカ' }).check()
   await dialog.getByRole('button', { name: '検索' }).click()
