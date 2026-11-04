@@ -16,7 +16,7 @@ const openToBeefeater = async (page: Page) => {
 }
 
 test('TC-305-12: 深さ 5 のノードを開いてチェックでき、名前を押すと詳細へ移ってモーダルが閉じ、開き直すとチェックが残る', async ({ page }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
   await openSearchModal(page)
 
   await openToBeefeater(page)
@@ -35,7 +35,7 @@ test('TC-305-12: 深さ 5 のノードを開いてチェックでき、名前を
 })
 
 test('TC-307-17・TC-102-19: 開くと材料が無いので検索を押せず、材料を 1 つ選ぶと押せ、押すと条件を URL に入れて結果の画面へ移って閉じる', async ({ page }) => {
-  await page.goto('/helpme')
+  await page.goto('/nope')
   const dialog = await openSearchModal(page)
 
   await expect(dialog.getByRole('radio', { name: 'OR検索' })).toBeChecked()
@@ -55,9 +55,18 @@ test('TC-307-17・TC-102-19: 開くと材料が無いので検索を押せず、
 
 test('TC-307-20・TC-102-19: トップのメニューの「カクテル検索」で条件検索のフォームへ移り、材料を選んで検索すると条件を URL に入れて結果の画面へ移る', async ({ page }) => {
   await page.goto('/')
+  const section = page.getByRole('region', { name: 'カクテル検索' })
+  // 読み終える前に押すと、ページが短いまま飛び、上の欄(新作動画・3 つの一覧)が届いて伸びた分だけ
+  // フォームが画面の外へ押し出される(#642)。上の欄とフォームが出そろい、読み込み中が無くなってから押す
+  await expect(page.getByRole('region', { name: '新作動画' })).toBeVisible()
+  for (const title of ['★最近更新されたカクテル', '★おすすめカクテル', '★気まぐれセレクト']) {
+    await expect(page.getByRole('region', { name: title })).toHaveAttribute('aria-busy', 'false')
+  }
+  await expect(section.getByRole('heading', { name: 'カクテル検索' })).toBeVisible()
+  await expect(page.getByRole('status')).toHaveCount(0)
+
   await page.getByRole('region', { name: 'Menu' }).getByRole('link', { name: 'カクテル検索' }).click()
 
-  const section = page.getByRole('region', { name: 'カクテル検索' })
   await expect(section.getByRole('heading', { name: 'カクテル検索' })).toBeInViewport()
   await expect(section.getByText('材料は必須です。')).toBeVisible()
   const search = section.getByRole('button', { name: '検索', exact: true })
@@ -75,7 +84,7 @@ test('TC-307-20・TC-102-19: トップのメニューの「カクテル検索」
 for (const width of [375, 768, 1024, 1440]) {
   test(`TC-307-18: 幅 ${width}px で、検索ボタンがモーダルの下に見え、横スクロールが出ない`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 })
-    await page.goto('/helpme')
+    await page.goto('/nope')
     const dialog = await openSearchModal(page)
     await openToBeefeater(page)
     await page.getByRole('button', { name: 'メジャーでない項目の表示／非表示' }).click()
@@ -94,7 +103,7 @@ const overlaps = (a: Box, b: Box) =>
 for (const width of [375, 599, 600, 768, 959, 960, 1024, 1440]) {
   test(`TC-576-01: 幅 ${width}px・高さ 800px で、開いた直後に「材料は必須です。」が画面の中に見え、検索ボタンと重ならない`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
-    await page.goto('/helpme')
+    await page.goto('/nope')
     const dialog = await openSearchModal(page)
 
     const error = dialog.getByText('材料は必須です。')
@@ -113,7 +122,7 @@ for (const width of [375, 599, 600, 768, 959, 960, 1024, 1440]) {
 
 test('TC-576-02: 木を開いて下までスクロールしても、「材料は必須です。」と検索ボタンが重ならずに見える', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 800 })
-  await page.goto('/helpme')
+  await page.goto('/nope')
   const dialog = await openSearchModal(page)
   await openToBeefeater(page)
   await page.getByRole('button', { name: 'メジャーでない項目の表示／非表示' }).click()

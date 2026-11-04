@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 import { resetApiMocks } from './api'
 import { resetPasskeyBrowser } from './webauthn'
@@ -20,6 +20,13 @@ vi.mock('../api/client', async (importOriginal) => {
 // jsdom は画面を描かないのでスクロールを持たず、window.scrollTo は「未実装」と出力するだけになる。
 // 出力で結果が埋もれないよう何もしない関数にする(スクロールの位置は E2E で確かめる)
 window.scrollTo = () => {}
+
+// 待つ長さ。負荷のかかった CI・手元(全部のファイルを並べて流すとき)では、既定の長さを超えて落ちることがある(#663)。
+// どちらも上限で、画面が出たらすぐ次へ進むので、通る回の時間は変わらない。
+// findBy…・waitFor の 1 回の待ち(既定は 1 秒)
+configure({ asyncUtilTimeout: 5000 })
+// 1 つのテストの時間(既定は 5 秒)。画面を何度も移るテストは、上の待ちを何回か重ねても収まる長さにする
+vi.setConfig({ testTimeout: 20000 })
 
 afterEach(() => {
   // globals を使わない設定では Testing Library の自動の後片付けが動かないので、テストごとに描画を消す

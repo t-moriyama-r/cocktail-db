@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { describe, expect, test } from 'vitest'
-import type { components } from '../api/schema'
+import { beforeEach, describe, expect, test } from 'vitest'
+import type { components, paths } from '../api/schema'
+import { buildCocktailRow } from '../components/CocktailTable/buildCocktailRow'
 import { SITE_TITLE } from '../components/SiteLayout/usePageTitle'
 import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
 import CategoryDetail from './CategoryDetail'
@@ -9,6 +10,8 @@ import CategoryDetail from './CategoryDetail'
 type CategoryDetailResource = components['schemas']['CategoryDetailResource']
 type NodeRef = components['schemas']['NodeRefResource']
 type BrandSummary = components['schemas']['BrandSummaryResource']
+type AffiliateResource = components['schemas']['AffiliateResource']
+type RandomResponse = paths['/cocktails/random']['get']['responses'][200]['content']['application/json']
 
 // E2eSeeder と同じ形の、深さ 5 の木(蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)
 const LIQUOR: NodeRef = { id: 1, name: '蒸留酒', name_eng: 'Spirits' }
@@ -53,6 +56,41 @@ const buildNode = (path: NodeRef[], overrides: Partial<CategoryDetailResource> =
 
 const respondWith = (node: CategoryDetailResource) => mockApi('get', '/categories/{category}', 200, { data: node })
 
+/** ランダムのカクテルの応答。送った category_id ごとに返す(登録の無い ID は 0 件) */
+const mockRandom = (byCategoryId: Record<number, RandomResponse['data']>) =>
+  mockApiHandler('get', '/cocktails/random', (request) => {
+    const id = Number(new URL(request.url).searchParams.get('category_id'))
+    return jsonResponse({ data: byCategoryId[id] ?? [] } satisfies RandomResponse, 200)
+  })
+
+/** 商品の欄の 1 件。検索結果のページの URL だけがある(期限切れの)行 */
+const AFFILIATE: AffiliateResource = {
+  category_id: 2,
+  brand_id: null,
+  name: 'ジン',
+  display: null,
+  amazon: {
+    title: null,
+    price: null,
+    image_url: null,
+    detail_url: null,
+    search_url: 'https://www.amazon.co.jp/s?k=gin',
+    fetched_at: null,
+  },
+  rakuten: { title: null, price: null, image_url: null, detail_url: null, search_url: null, fetched_at: null },
+  human: { title: null, price: null, image_url: null, amazon_detail_url: null, amazon_search_url: null },
+}
+
+/** 送ったリクエストの、パスとクエリ(/api から後ろ) */
+const sentUrls = () =>
+  apiRequests().map((request) => {
+    const url = new URL(request.url)
+    return `${url.pathname.replace(/^\/api/, '')}${url.search}`
+  })
+
+const BRAND_LIST = '登録されている銘柄の一覧'
+const COCKTAILS = 'これを使ったカクテル(ランダム5種)'
+
 const renderAt = (id: number) =>
   render(
     <MemoryRouter initialEntries={[`/category/${id}`]}>
@@ -64,6 +102,13 @@ const renderAt = (id: number) =>
 
 const findTitle = () => screen.findByRole('heading', { level: 1 })
 const breadcrumb = () => screen.queryByRole('navigation', { name: 'パンくず' })
+
+// 詳細の画面は、ランダムのカクテルと商品の欄の API も呼ぶ。テストごとに既定(カクテル 0 件・商品の行が無い 404)を置き、
+// 確かめるテストだけが上書きする(後に登録したものが勝つ)
+beforeEach(() => {
+  mockRandom({})
+  mockApiHandler('get', '/affiliates', () => jsonResponse({ message: 'Not Found' }, 404))
+})
 
 describe('カテゴリの詳細の画面', () => {
   test('TC-105-01: タイトルを「名前(英名)」で出し、ブラウザのタイトルにも同じものを出す', async () => {
@@ -234,6 +279,161 @@ describe('カテゴリの詳細の画面', () => {
     fireEvent.click(screen.getByRole('link', { name: 'ドライジン(Dry Gin)' }))
 
     expect(await screen.findByRole('heading', { level: 1, name: 'ドライジン(Dry Gin)' })).toBeInTheDocument()
-    expect(apiRequests().map((request) => new URL(request.url).pathname)).toEqual(['/api/categories/2', '/api/categories/3'])
+    // ノードの詳細のほかに、ランダムのカクテル・商品の欄の API も呼ぶ(#106)ので、ノードの詳細の API だけを数える
+    expect(
+      apiRequests()
+        .map((request) => new URL(request.url).pathname)
+        .filter((path) => path.startsWith('/api/categories/')),
+    ).toEqual(['/api/categories/2', '/api/categories/3'])
+  })
+})
+
+describe('カテゴリの詳細の、銘柄の一覧・これを使ったカクテル・商品の欄', () => {
+  const BRAND_IN_GIN: BrandSummary = {
+    id: 41,
+    name: 'ゴードン',
+    name_eng: "Gordon's",
+    strength: 37.5,
+    youtube: 'abcdefghijk',
+    path: [LIQUOR, GIN],
+  }
+
+  test('TC-106-01: 配下すべての銘柄を、返った順に銘柄の表で出し、所属はいちばん上の段と所属するノードを出す', async () => {
+    respondWith(buildNode([LIQUOR, GIN], { brands: [BRAND_IN_GIN, FAMOUS] }))
+    renderAt(GIN.id)
+    await findTitle()
+
+    const section = screen.getByRole('region', { name: BRAND_LIST })
+    const table = within(section).getByRole('table', { name: BRAND_LIST })
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows.map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))).toEqual([
+      ['ゴードン', "Gordon's", 'ジン(Gin)', '37.5', ''],
+      ['ビーフィーター 40度', 'Beefeater 40', 'ジン(Gin) / ビーフィーター(Beefeater)', '40', '-'],
+    ])
+    expect(within(rows[1]).getByRole('link', { name: 'ビーフィーター 40度' })).toHaveAttribute('href', '/detail/brand/40')
+    expect(within(rows[1]).getByRole('link', { name: 'ビーフィーター(Beefeater)' })).toHaveAttribute('href', '/category/5')
+  })
+
+  test('TC-106-02: 銘柄が 0 件なら、銘柄の一覧の欄も見出しも出さない', async () => {
+    respondWith(buildNode([LIQUOR, GIN]))
+    renderAt(GIN.id)
+    await findTitle()
+
+    expect(screen.queryByRole('region', { name: BRAND_LIST })).not.toBeInTheDocument()
+    expect(screen.queryByText(BRAND_LIST)).not.toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: BRAND_LIST })).not.toBeInTheDocument()
+  })
+
+  test('TC-106-03: これを使ったカクテルを、ノードの ID を起点にランダムの API で 5 件取って出す', async () => {
+    mockRandom({
+      [GIN.id]: [buildCocktailRow({ id: 11, name: 'ジントニック' }), buildCocktailRow({ id: 12, name: 'マティーニ' })],
+    })
+    respondWith(buildNode([LIQUOR, GIN]))
+    renderAt(GIN.id)
+    await findTitle()
+
+    const section = screen.getByRole('region', { name: COCKTAILS })
+    expect(await within(section).findByRole('link', { name: 'ジントニック' })).toHaveAttribute('href', '/detail/cocktail/11')
+    expect(within(section).getByRole('link', { name: 'マティーニ' })).toHaveAttribute('href', '/detail/cocktail/12')
+    expect(sentUrls()).toContain('/cocktails/random?limit=5&category_id=2')
+  })
+
+  test('TC-106-04: これを使ったカクテルが 0 件でも、見出しと「再取得」を出し、表は列の見出しの行だけにする', async () => {
+    respondWith(buildNode([LIQUOR, GIN]))
+    renderAt(GIN.id)
+    await findTitle()
+
+    const section = screen.getByRole('region', { name: COCKTAILS })
+    const table = await within(section).findByRole('table', { name: COCKTAILS })
+    expect(within(table).getAllByRole('row')).toHaveLength(1)
+    expect(within(section).getByRole('button', { name: '再取得' })).toBeInTheDocument()
+  })
+
+  test('TC-106-05: 「再取得」を押すと、同じノードを起点に取り直し、届いた一覧に替える', async () => {
+    let call = 0
+    mockApiHandler('get', '/cocktails/random', () => {
+      call += 1
+      const name = call === 1 ? 'ジントニック' : 'ギムレット'
+      return jsonResponse({ data: [buildCocktailRow({ id: call, name })] } satisfies RandomResponse, 200)
+    })
+    respondWith(buildNode([LIQUOR, GIN]))
+    renderAt(GIN.id)
+    await findTitle()
+
+    const section = screen.getByRole('region', { name: COCKTAILS })
+    expect(await within(section).findByRole('link', { name: 'ジントニック' })).toBeInTheDocument()
+    fireEvent.click(within(section).getByRole('button', { name: '再取得' }))
+
+    expect(await within(section).findByRole('link', { name: 'ギムレット' })).toBeInTheDocument()
+    expect(within(section).queryByRole('link', { name: 'ジントニック' })).not.toBeInTheDocument()
+    expect(sentUrls().filter((url) => url.startsWith('/cocktails/random'))).toEqual([
+      '/cocktails/random?limit=5&category_id=2',
+      '/cocktails/random?limit=5&category_id=2',
+    ])
+  })
+
+  test('TC-106-06: 子のノードの欄の後に、これを使ったカクテル → 銘柄の一覧の順に並べる', async () => {
+    respondWith(buildNode([LIQUOR, GIN], { brands: [FAMOUS] }))
+    renderAt(GIN.id)
+    await findTitle()
+
+    const children = screen.getByRole('region', { name: '子のノード' })
+    const brands = screen.getByRole('region', { name: BRAND_LIST })
+    const cocktails = screen.getByRole('region', { name: COCKTAILS })
+    expect(children.compareDocumentPosition(cocktails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(cocktails.compareDocumentPosition(brands) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test('TC-106-07: 画像が無ければ、商品の欄を画像の場所といちばん下の両方に置く(どちらを見せるかは幅で決める)', async () => {
+    mockApi('get', '/affiliates', 200, { data: AFFILIATE })
+    respondWith(buildNode([LIQUOR, GIN]))
+    renderAt(GIN.id)
+    await findTitle()
+
+    expect(await within(screen.getByTestId('affiliate-in-image')).findByRole('complementary', { name: '商品' })).toBeInTheDocument()
+    expect(await within(screen.getByTestId('affiliate-bottom')).findByRole('complementary', { name: '商品' })).toBeInTheDocument()
+    // 2 か所とも、このノードの ID で商品の欄を取る
+    expect(new Set(sentUrls().filter((url) => url.startsWith('/affiliates')))).toEqual(new Set(['/affiliates?category_id=2']))
+  })
+
+  test('TC-106-08: 画像があれば、商品の欄はいちばん下にだけ置く', async () => {
+    mockApi('get', '/affiliates', 200, { data: AFFILIATE })
+    respondWith(buildNode([LIQUOR, GIN], { image: 'gin.jpg' }))
+    renderAt(GIN.id)
+    await findTitle()
+
+    expect(await within(screen.getByTestId('affiliate-bottom')).findByRole('complementary', { name: '商品' })).toBeInTheDocument()
+    expect(screen.queryByTestId('affiliate-in-image')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('complementary', { name: '商品' })).toHaveLength(1)
+  })
+
+  test('TC-106-09: 商品の行が無い(404)ノードは、商品の欄を出さない', async () => {
+    respondWith(buildNode([LIQUOR, GIN]))
+    renderAt(GIN.id)
+    await findTitle()
+
+    await waitFor(() => expect(sentUrls()).toContain('/affiliates?category_id=2'))
+    expect(screen.queryByRole('complementary', { name: '商品' })).not.toBeInTheDocument()
+  })
+
+  test('TC-106-10: 子のノードのリンクで移ると、移った先のノードを起点にカクテルを取り直す', async () => {
+    mockApiHandler('get', '/categories/{category}', (request) => {
+      const id = Number(new URL(request.url).pathname.split('/').pop())
+      const node = id === GIN.id ? buildNode([LIQUOR, GIN], { children: [DRY_GIN] }) : buildNode([LIQUOR, GIN, DRY_GIN])
+      return jsonResponse({ data: node }, 200)
+    })
+    mockRandom({
+      [GIN.id]: [buildCocktailRow({ id: 11, name: 'ジントニック' })],
+      [DRY_GIN.id]: [buildCocktailRow({ id: 13, name: 'ギブソン' })],
+    })
+    renderAt(GIN.id)
+    expect(await screen.findByRole('link', { name: 'ジントニック' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'ドライジン(Dry Gin)' }))
+
+    const section = await screen.findByRole('region', { name: COCKTAILS })
+    expect(await within(section).findByRole('link', { name: 'ギブソン' })).toBeInTheDocument()
+    expect(within(section).queryByRole('link', { name: 'ジントニック' })).not.toBeInTheDocument()
+    expect(sentUrls()).toContain('/cocktails/random?limit=5&category_id=3')
   })
 })
