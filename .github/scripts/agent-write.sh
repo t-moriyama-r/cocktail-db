@@ -17,9 +17,10 @@ MARK='<!-- ai-dev:agent -->'
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 agent_write() {
-  local cmd=${1:-} REPO PR
+  local cmd=${1:-} REPO PR BODY_SHA now
   REPO=$(sed -n 's/^repo=//p' "$HERE/agent-write.target" 2>/dev/null || true)
   PR=$(sed -n 's/^pr=//p' "$HERE/agent-write.target" 2>/dev/null || true)
+  BODY_SHA=$(sed -n 's/^body_sha=//p' "$HERE/agent-write.target" 2>/dev/null || true)
   if [ -z "$REPO" ] || [ -z "$PR" ]; then
     echo "対象のリポジトリと PR が分からない(agent-write.target が無い)" >&2
     return 2
@@ -43,6 +44,14 @@ agent_write() {
     body)
       [ $# -eq 2 ] || usage
       body_file "$2"
+      # 実行の開始時の本文の sha256(agent-write.target の body_sha=)があれば、いまの本文と比べ、実行中に人が編集していたら書かない
+      if [ -n "$BODY_SHA" ]; then
+        now=$(gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1)
+        if [ "$now" != "$BODY_SHA" ]; then
+          echo "PR の本文が実行中に編集されたので書かない(人の編集を消さないため)" >&2
+          return 3
+        fi
+      fi
       gh api -X PATCH "repos/$REPO/pulls/$PR" -F body=@"$2" --silent
       echo "updated #$PR"
       ;;

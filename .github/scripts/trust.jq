@@ -18,4 +18,4 @@ def trusted($owner):
   # `capture(...)?.to` は jq 1.7 からの書き方で、クラウドのルーチンの jq 1.6 では構文エラーになる(#586)
   def addressed: .body // "" | ((capture("^\\s*(<!--[\\s\\S]*?-->\\s*)*@(?<to>[A-Za-z0-9-]+)") | .to)? // null)
     | . != null and . != $owner;
-  person or (bot and (addressed | not));
+  (person and (bot | not)) or (bot and (addressed | not));
