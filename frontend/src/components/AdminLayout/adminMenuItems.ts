@@ -1,4 +1,10 @@
-import { ADMIN_BRANDS_PATH, ADMIN_CATEGORIES_PATH, ADMIN_COCKTAILS_PATH, ADMIN_DICTIONARIES_PATH } from './adminPaths'
+import {
+  ADMIN_BRANDS_PATH,
+  ADMIN_CATEGORIES_PATH,
+  ADMIN_COCKTAILS_PATH,
+  ADMIN_DICTIONARIES_PATH,
+  ADMIN_PASSKEYS_PATH,
+} from './adminPaths'
 
 export type AdminMenuItem = {
   /** メニューに出す名前 */
@@ -20,4 +26,5 @@ export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [
   { label: '銘柄', path: ADMIN_BRANDS_PATH },
   { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
   { label: 'カクテル', path: ADMIN_COCKTAILS_PATH },
+  { label: 'パスキー', path: ADMIN_PASSKEYS_PATH },
 ]
