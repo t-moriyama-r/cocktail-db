@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 
 // 管理画面のカクテルの一覧(公開済み・下書き。#126)。相手は本物の管理 API(#289)と、E2eSeeder のカクテル
-// (公開済み: ジントニック・モスコミュールなど 8 件 / 下書き: 「下書きのカクテル」2 件。英名は Draft と Draft Cocktail)。
+// (公開済み: ジントニック・モスコミュールなど 8 件 / 下書き: 「下書きのカクテル」2 件(英名は Draft と Draft Cocktail)と、
+// カクテルの編集の E2E(#127)が使う「E2E の下書き」(英名は Save Test))。
 // ログインは、admin-layout.spec.ts と同じく、E2eSeeder の管理者で非常用のログイン URL(#115)を出して開く
 
 /** php artisan admin:login-link で、E2eSeeder の管理者の非常用のログイン URL を出す(APP_URL を E2E が開くオリジンにする) */
