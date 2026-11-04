@@ -119,6 +119,41 @@ describe('CategoryTree', () => {
     expect(screen.getByRole('button', { name: 'ラムを開く' })).toHaveAttribute('aria-expanded', 'false')
   })
 
+  test('TC-654-03: revealId に深さ 5 のノードを渡すと、根からその祖先までを開き、そのノードの選ぶ入力が最初から見えている', () => {
+    render(<CategoryTree label="カテゴリ" nodes={buildTestTree()} selection={singleSelection({ selectedId: 11000 })} revealId={11000} />)
+
+    expect(screen.getByRole('radio', { name: 'ビーフィーター' })).toBeChecked()
+    for (const name of ['蒸留酒', 'ジン', 'ドライジン', 'ロンドンドライジン']) {
+      expect(screen.getByRole('button', { name: `${name}を閉じる` })).toHaveAttribute('aria-expanded', 'true')
+    }
+    // 祖先でない枝は畳んだまま
+    expect(screen.getByRole('button', { name: 'ラムを開く' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('radio', { name: 'ホワイトラム' })).not.toBeInTheDocument()
+  })
+
+  test('TC-654-04: revealId で開いた枝も、手で畳める', () => {
+    render(<CategoryTree label="カテゴリ" nodes={buildTestTree()} selection={singleSelection({ selectedId: 11000 })} revealId={11000} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'ジンを閉じる' }))
+
+    expect(screen.queryByRole('radio', { name: 'ドライジン' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'ビーフィーター' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '蒸留酒を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  test('TC-654-05: revealId が null・木に無い ID なら、既定どおり根だけを開く', () => {
+    for (const revealId of [null, 99999]) {
+      const { unmount } = render(
+        <CategoryTree label="カテゴリ" nodes={buildTestTree()} selection={singleSelection()} revealId={revealId} />,
+      )
+      expect(screen.getByRole('button', { name: '蒸留酒を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getByRole('button', { name: 'ソフトドリンクを閉じる' })).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getByRole('button', { name: 'ジンを開く' })).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByRole('radio', { name: 'ドライジン' })).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
   test('TC-297-14: 畳むと子を描かなくなり、開くとまた出る', () => {
     render(<CategoryTree label="カテゴリ" nodes={buildTestTree()} selection={multipleSelection()} />)
 
