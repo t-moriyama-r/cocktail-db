@@ -127,6 +127,29 @@ class AdminCategoryWriter
     }
 
     /**
+     * 名前・英名が、$parent の下(null なら根どうし)の、$excludeId のノード(編集しているノード。新規なら null)のほかの
+     * ノードと同じなら、項目ごとに警告を返す。入れたそばの問い合わせ(GET /api/admin/categories/duplicates。#673)で使う。
+     *
+     * 比べ方は保存の API と同じ(名前は検索用の名前で比べ(保存では 422)、英名はそのまま比べる(保存では warnings))。
+     * 名前・英名が null か空なら、その項目は比べない。
+     *
+     * @return list<array{field: string, message: string}>
+     */
+    public function nameDuplicates(?Category $parent, ?string $name, ?string $nameEng, ?int $excludeId): array
+    {
+        $siblings = $this->siblings($parent, null)->when($excludeId !== null, fn (Builder $query) => $query->whereKeyNot($excludeId));
+        $warnings = [];
+        if ($name !== null && $name !== '' && (clone $siblings)->where('name_search', NameNormalizer::normalize($name))->exists()) {
+            $warnings[] = ['field' => 'name', 'message' => '同じ名前が存在しています'];
+        }
+        if ($nameEng !== null && $nameEng !== '' && (clone $siblings)->where('name_eng', $nameEng)->exists()) {
+            $warnings[] = ['field' => 'name_eng', 'message' => '同じ名前が存在しています'];
+        }
+
+        return $warnings;
+    }
+
+    /**
      * $node を消す。消せるのは葉で、銘柄・材料・ベース・アフィリエイトから指されていないものだけ。画像のファイルも消す。
      *
      * @throws CategoryNotDeletableException 消せない理由があるとき

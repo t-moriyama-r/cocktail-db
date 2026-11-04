@@ -153,6 +153,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/categories/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 名前・英名の重なりの問い合わせ(#673)。ノードの編集画面で、名前・英名を入れたそばに「同じ名前が存在しています」を出すため。
+         *     旧 DetailEditController@duplicate_check のカテゴリ・ミドルの分の置き換え。
+         * @description 比べる相手は parent_id の子(送らないか空なら根どうし)のうち、exclude_id のノード(編集しているノード)のほか。
+         *     比べ方は保存の API と同じ(名前は検索用の名前で、英名はそのまま)。名前・英名は、空なら比べない(どちらか 1 つは要る)。
+         *     保存では名前の重なりは 422・英名の重なりは warnings だが、ここではどちらも warnings で返す(保存は止めない問い合わせのため)。
+         */
+        get: operations["category.duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categories/{category}": {
         parameters: {
             query?: never;
@@ -2371,6 +2394,48 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    "category.duplicates": {
+        parameters: {
+            query?: {
+                /** @description 親のノードの ID。根どうしで比べるときは送らないか空にする */
+                parent_id?: number | null;
+                /** @description 名前。英名と、どちらか 1 つは要る */
+                name?: string | null;
+                /** @description 英名。名前と、どちらか 1 つは要る */
+                name_eng?: string | null;
+                /** @description 編集しているノードの ID。新規なら送らない */
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
         };
     };
     categoryDetail: {
