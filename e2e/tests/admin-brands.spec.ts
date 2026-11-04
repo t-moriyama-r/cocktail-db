@@ -93,3 +93,19 @@ test('TC-64-26: 度数・開始位置の欄に文字の混ざった値を貼り�
   await minute.fill('6a7')
   await expect(minute).toHaveValue('67')
 })
+
+test('TC-654-06: 深さ 5 のノードを所属に持つ銘柄の編集を開くと、そこまでの枝が開いていて、そのラジオがチェックされて見えている', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/brands')
+  await page.getByRole('searchbox', { name: '絞り込み' }).fill('ビーフィーター 40度')
+  await page.getByRole('link', { name: 'ビーフィーター 40度(Beefeater 40)' }).click()
+  await expect(page).toHaveURL(/\/admin\/brands\/\d+$/)
+
+  const tree = page.getByRole('list', { name: '所属' })
+  await expect(page.getByText('選んでいる所属: ジン / ドライジン / ロンドンドライジン / ビーフィーター')).toBeVisible()
+  await expect(tree.getByRole('radio', { name: 'ビーフィーター', exact: true })).toBeVisible()
+  await expect(tree.getByRole('radio', { name: 'ビーフィーター', exact: true })).toBeChecked()
+})
