@@ -1513,7 +1513,7 @@ export interface components {
         };
         /** FormOptionResource */
         FormOptionResource: {
-            id: string;
+            id: number;
             name: string;
         };
         /** LatestVideoCocktailResource */
