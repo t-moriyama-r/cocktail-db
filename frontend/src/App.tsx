@@ -4,6 +4,7 @@ import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
 import AdminBrandEdit from './pages/AdminBrandEdit'
 import AdminBrands from './pages/AdminBrands'
+import AdminCocktailEdit from './pages/AdminCocktailEdit'
 import AdminCocktails from './pages/AdminCocktails'
 import AdminHome from './pages/AdminHome'
 import AdminLogin from './pages/AdminLogin'
@@ -54,6 +55,8 @@ export default function App() {
         <Route path="brands/new" element={<AdminBrandEdit />} />
         <Route path="brands/:id" element={<RequireNumericId element={<AdminBrandEdit />} />} />
         <Route path="cocktails" element={<AdminCocktails />} />
+        <Route path="cocktails/new" element={<AdminCocktailEdit />} />
+        <Route path="cocktails/:id" element={<RequireNumericId element={<AdminCocktailEdit />} />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
       </Route>
