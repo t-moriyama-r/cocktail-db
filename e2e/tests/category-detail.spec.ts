@@ -121,7 +121,7 @@ test('TC-585-04: 画像のあるノードの詳細で、画像を /storage/<フ�
 
 // 銘柄の一覧・これを使ったカクテル・商品の欄(#106)。ジンの配下(ビーフィーター)の銘柄「ビーフィーター 40度」と、
 // それを材料に使うジントニック(E2eSeeder の seedHeaderData)、ウォッカを材料に使う公開の 7 件(seedTopData)、
-// 画像の無いドライジンと画像のあるウォッカの商品の行(seedAffiliates)を使う
+// 画像の無いドライジンと画像のあるロンドンドライジンの商品の行(seedAffiliates)を使う
 const brandList = (page: Page) => page.getByRole('region', { name: '登録されている銘柄の一覧' })
 const cocktails = (page: Page) => page.getByRole('region', { name: 'これを使ったカクテル(ランダム5種)' })
 const affiliateInImage = (page: Page) => page.getByTestId('affiliate-in-image').getByRole('complementary', { name: '商品' })
@@ -130,11 +130,10 @@ const affiliateBottom = (page: Page) => page.getByTestId('affiliate-bottom').get
 test('TC-106-11: ジンの詳細に、配下のノードの銘柄と、配下のノードの銘柄を使うカクテルを出す', async ({ page }) => {
   await openGin(page)
 
-  const brandRows = brandList(page).getByRole('row')
-  // 見出しの行と、銘柄 1 行
-  await expect(brandRows).toHaveCount(2)
-  await expect(brandRows.nth(1).getByRole('cell').nth(0)).toHaveText('ビーフィーター 40度')
-  await expect(brandRows.nth(1).getByRole('cell').nth(2)).toHaveText('ジン(ジン) / ビーフィーター(ビーフィーター)')
+  // ジンの配下には、ドライジンの銘柄(銘柄の詳細の E2E の seedBrandDetailData)もある。ビーフィーターの銘柄の行だけを見る
+  const beefeaterRow = brandList(page).getByRole('row').filter({ hasText: 'ビーフィーター 40度' })
+  await expect(beefeaterRow).toHaveCount(1)
+  await expect(beefeaterRow.getByRole('cell').nth(2)).toHaveText('ジン(ジン) / ビーフィーター(ビーフィーター)')
 
   // 材料はビーフィーター(ジンの 3 段下)の銘柄で、ジンを起点にしても当たる
   await expect(cocktails(page).getByRole('link', { name: 'ジントニック' })).toBeVisible()
@@ -164,7 +163,7 @@ for (const { width, wide } of [
   { width: 959, wide: false },
   { width: 960, wide: true },
 ]) {
-  test(`TC-106-13: ${width}px では、画像の無いドライジンの商品の欄を${wide ? '画像の場所' : 'いちばん下'}に出し、画像のあるウォッカはいちばん下に出す`, async ({
+  test(`TC-106-13: ${width}px では、画像の無いドライジンの商品の欄を${wide ? '画像の場所' : 'いちばん下'}に出し、画像のあるロンドンドライジンはいちばん下に出す`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 800 })
@@ -186,9 +185,8 @@ for (const { width, wide } of [
       expect(cocktailsBox.y + cocktailsBox.height).toBeLessThanOrEqual(bottomBox.y)
     }
 
-    await page.goto('/category/1')
-    await children(page).getByRole('link', { name: 'ウォッカ(ウォッカ)' }).click()
-    await expect(title(page)).toHaveText('ウォッカ(ウォッカ)')
+    await children(page).getByRole('link', { name: 'ロンドンドライジン(ロンドンドライジン)' }).click()
+    await expect(title(page)).toHaveText('ロンドンドライジン(ロンドンドライジン)')
     await expect(affiliateBottom(page)).toBeVisible()
     await expect(page.getByTestId('affiliate-in-image')).toHaveCount(0)
   })
