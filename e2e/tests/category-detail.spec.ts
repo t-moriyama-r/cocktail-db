@@ -140,17 +140,25 @@ test('TC-106-11: ジンの詳細に、配下のノードの銘柄と、配下の
   await expect(cocktails(page).getByRole('button', { name: '再取得' })).toBeVisible()
 })
 
-test('TC-106-12: 銘柄の無いウォッカの詳細は、銘柄の一覧を出さず、これを使ったカクテルを 5 件出し、再取得で取り直す', async ({
+test('TC-106-12: 銘柄の無いノードの詳細は銘柄の一覧を出さず、ウォッカの詳細はこれを使ったカクテルを 5 件出し、再取得で取り直す', async ({
   page,
 }) => {
+  // 銘柄の無いノードはソフトドリンクで見る。ウォッカ・ミントには、管理画面の E2E(admin-brands.spec.ts)が同じ DB に銘柄を作るため。
+  // ソフトドリンクは根のノードで、蒸留酒の子のリンクからも名前検索からも辿れないので、検索フォームの木(API)から ID を引いて開く
+  const form = (await (await page.request.get('/api/search-form')).json()) as { categories: { id: number; name: string }[] }
+  const softDrink = form.categories.find((node) => node.name === 'ソフトドリンク')!
+  await page.goto(`/category/${softDrink.id}`)
+  await expect(title(page)).toHaveText('ソフトドリンク(ソフトドリンク)')
+  await expect(cocktails(page)).toBeVisible()
+  await expect(brandList(page)).toHaveCount(0)
+  await expect(page.getByText('登録されている銘柄の一覧')).toHaveCount(0)
+
   await page.goto('/category/1')
   await children(page).getByRole('link', { name: 'ウォッカ(ウォッカ)' }).click()
   await expect(title(page)).toHaveText('ウォッカ(ウォッカ)')
 
   // 見出しの行と、カクテル 5 行(当たるのは公開の 7 件)
   await expect(cocktails(page).getByRole('row')).toHaveCount(6)
-  await expect(brandList(page)).toHaveCount(0)
-  await expect(page.getByText('登録されている銘柄の一覧')).toHaveCount(0)
 
   const regot = page.waitForResponse((response) => response.url().includes('/api/cocktails/random') && response.ok())
   await cocktails(page).getByRole('button', { name: '再取得' }).click()
