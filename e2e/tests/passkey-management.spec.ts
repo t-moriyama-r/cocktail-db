@@ -58,6 +58,9 @@ async function registerOnScreen(page: Page, name: string) {
   await expect(page.getByText(`「${name}」を登録しました。`)).toBeVisible()
 }
 
+/** 試行ごとに変わる印。CI のリトライで、前の試行が残したパスキーと名前が重ならないようにする */
+const RUN = Date.now()
+
 /** 一覧の、その名前の行 */
 const row = (page: Page, name: string) =>
   page.getByRole('list', { name: '登録したパスキー' }).getByRole('listitem', { name, exact: true })
@@ -78,9 +81,9 @@ test('TC-313-21: 画面で名前を付けて登録したパスキーが、登録
   await addVirtualAuthenticator(page)
   await openPasskeys(page, origin)
 
-  await registerOnScreen(page, 'TC-313-21 の端末')
+  await registerOnScreen(page, `TC-313-21 の端末 ${RUN}`)
 
-  const item = row(page, 'TC-313-21 の端末')
+  const item = row(page, `TC-313-21 の端末 ${RUN}`)
   await expect(item).toBeVisible()
   await expect(item.getByRole('definition')).toHaveText([today(), 'まだ使っていません'])
   await expect(page.getByLabel('端末の名前')).toHaveValue('')
@@ -90,29 +93,30 @@ test('TC-313-22: 登録したパスキーでログインすると、一覧の最
   const origin = passkeyOrigin(baseURL!)
   await addVirtualAuthenticator(page)
   await openPasskeys(page, origin)
-  await registerOnScreen(page, 'TC-313-22 の端末')
+  await registerOnScreen(page, `TC-313-22 の端末 ${RUN}`)
   await logout(page)
 
   await page.getByRole('button', { name: 'パスキーでログイン' }).click()
   await expect(page.getByText('E2E の管理者 でログイン中')).toBeVisible()
   await page.getByRole('navigation', { name: '管理画面のメニュー' }).getByRole('link', { name: 'パスキー' }).click()
 
-  await expect(row(page, 'TC-313-22 の端末').getByRole('definition')).toHaveText([today(), today()])
+  await expect(row(page, `TC-313-22 の端末 ${RUN}`).getByRole('definition')).toHaveText([today(), today()])
 })
 
 test('TC-313-23: 一覧から確かめて消したパスキーは一覧から消え、そのパスキーではログインできない', async ({ page, baseURL }) => {
   const origin = passkeyOrigin(baseURL!)
   await addVirtualAuthenticator(page)
   await openPasskeys(page, origin)
-  await registerOnScreen(page, 'TC-313-23 の端末')
+  const name = `TC-313-23 の端末 ${RUN}`
+  await registerOnScreen(page, name)
 
-  await row(page, 'TC-313-23 の端末').getByRole('button', { name: '「TC-313-23 の端末」を削除' }).click()
-  const confirm = page.getByRole('group', { name: '「TC-313-23 の端末」の削除の確認' })
+  await row(page, name).getByRole('button', { name: `「${name}」を削除` }).click()
+  const confirm = page.getByRole('group', { name: `「${name}」の削除の確認` })
   await expect(confirm).toContainText('消すと、このパスキーではログインできなくなります。')
   await confirm.getByRole('button', { name: '消す' }).click()
 
-  await expect(page.getByText('「TC-313-23 の端末」を消しました。')).toBeVisible()
-  await expect(row(page, 'TC-313-23 の端末')).toHaveCount(0)
+  await expect(page.getByText(`「${name}」を消しました。`)).toBeVisible()
+  await expect(row(page, name)).toHaveCount(0)
 
   // 端末(仮想の認証器)にはパスキーが残ったままで、サーバーの登録だけが消えている
   await logout(page)

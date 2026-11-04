@@ -119,7 +119,10 @@ function RegisterForm({ onRegistered }: { onRegistered: (passkey: Passkey) => vo
           maxLength={PASSKEY_NAME_MAX_LENGTH}
           placeholder="例: 仕事の MacBook"
           aria-describedby="passkey-name-hint"
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            setName(event.target.value)
+            if (state.kind === 'empty-name') setState({ kind: 'idle' })
+          }}
         />
         <button className={styles.primaryButton} type="submit" disabled={state.kind === 'pending'}>
           パスキーを登録

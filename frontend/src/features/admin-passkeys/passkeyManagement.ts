@@ -141,6 +141,9 @@ export function passkeyDeletionErrorMessage(result: Exclude<PasskeyDeletionResul
 }
 
 const apiFailureDetail = (error: ApiFailure): string => {
+  if (error.kind === 'http-error' && error.status === 401) {
+    return '。ログインの期限が切れました。ページを開き直して、もう一度ログインしてください。'
+  }
   switch (error.kind) {
     case 'network-error':
       return '。通信に失敗しました。接続を確かめて、もう一度お試しください。'

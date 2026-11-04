@@ -65,7 +65,7 @@ const listTexts = async () =>
   within(await screen.findByRole('list', { name: '登録したパスキー' }))
     .getAllByRole('listitem')
     .map((row) => [
-      row.querySelector('p')?.textContent,
+      row.getAttribute('aria-label'),
       ...within(row)
         .getAllByRole('definition')
         .map((dd) => dd.textContent),
