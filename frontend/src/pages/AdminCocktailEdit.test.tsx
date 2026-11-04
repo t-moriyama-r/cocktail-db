@@ -182,6 +182,13 @@ describe('入口', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'カクテルの新規' })).toBeInTheDocument()
     expect(currentUrl()).toBe('/admin/cocktails/new')
+  })
+
+  test('TC-127-21: 新規の画面には、保存の 2 つのボタンを出し、削除のボタンは出さない', async () => {
+    await openNew()
+
+    expect(screen.getByRole('button', { name: '下書きとして保存' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '公開する' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: '削除' })).not.toBeInTheDocument()
   })
 
