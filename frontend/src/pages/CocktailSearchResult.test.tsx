@@ -134,7 +134,13 @@ describe('条件検索の結果の画面(CocktailSearchResult)', () => {
     expect(form.getByText('材料は必須です。')).toBeInTheDocument()
     expect(sentBodies).toEqual([])
 
-    fireEvent.click(form.getByRole('checkbox', { name: 'ジン' }))
+    // フォームが出た直後は、URL の条件(ここでは空)をフォームに戻す処理(useEffect)がまだ残っていることがある。
+    // 負荷のかかったときは、選んだ直後にそれが走って選んだ材料を空に戻すので、選べたのを見てから検索する(#663)
+    await waitFor(() => {
+      const gin = form.getByRole('checkbox', { name: 'ジン' })
+      if (!(gin as HTMLInputElement).checked) fireEvent.click(gin)
+      expect(gin).toBeChecked()
+    })
     fireEvent.click(form.getByRole('button', { name: '検索' }))
 
     await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=10(&mode=and)?$/))

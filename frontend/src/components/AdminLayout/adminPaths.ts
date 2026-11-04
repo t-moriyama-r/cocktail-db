@@ -10,6 +10,15 @@ export const ADMIN_NEW_BRAND_PATH = `${ADMIN_BRANDS_PATH}/new`
 /** 管理画面の銘柄の編集画面(#64)の URL。一覧の 1 行から開く */
 export const adminBrandEditPath = (id: number): string => `${ADMIN_BRANDS_PATH}/${id}`
 
+/** 管理画面の用語辞典の一覧(#66)の URL */
+export const ADMIN_DICTIONARIES_PATH = '/admin/dictionaries'
+
+/** 管理画面の用語の新規の画面(#66)の URL */
+export const ADMIN_DICTIONARY_NEW_PATH = `${ADMIN_DICTIONARIES_PATH}/new`
+
+/** 管理画面の用語の編集の画面(#66)の URL。一覧の 1 行から開く */
+export const adminDictionaryEditPath = (id: number): string => `${ADMIN_DICTIONARIES_PATH}/${id}`
+
 /** 管理画面のカクテルの一覧(公開済み・下書き。#126)の URL */
 export const ADMIN_COCKTAILS_PATH = '/admin/cocktails'
 

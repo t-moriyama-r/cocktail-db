@@ -236,7 +236,7 @@ describe('CategoryTree', () => {
     expect(screen.getAllByText('注記')).toHaveLength(1)
   })
 
-  test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでが 1 秒以内で、閉じた子は描かない', () => {
+  test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでの処理が 1 秒以内(CPU 時間)で、閉じた子は描かない', () => {
     const { container } = render(
       <CategoryTree label="カテゴリ" nodes={buildLargeTree()} selection={multipleSelection()} />,
     )
