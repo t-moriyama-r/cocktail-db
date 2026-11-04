@@ -1,11 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
 import type { components } from '../api/schema'
 import { api } from '../api/client'
 import { useApi } from '../api/useApi'
+import { ADMIN_NEW_CATEGORY_PATH, adminCategoryEditPath } from '../components/AdminLayout/adminPaths'
 import InlineApiView from '../components/ApiView/InlineApiView'
 import CategoryTree from '../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../components/CategoryTree/CategoryTree.types'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
+import { readCategoryTreeNotice } from '../features/admin-categories/categoryTreeNotice'
+import styles from './AdminCategoryTree.module.css'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
 type CategoryRole = components['schemas']['CategoryRole']
@@ -26,18 +30,35 @@ const ROLE_LABEL: Record<CategoryRole | 'none', string> = {
  * - 並びは API の順(兄弟の `sort_order` の順)のままで、画面では並べ替えない。兄弟の並べ替えの操作は旧に無いので作らない
  * - ノードの行には、名前・英名(名前の後ろに括弧で)・根なら役割・メジャーかを出す
  * - 開閉・名前での絞り込み(当たったノードの祖先も出す)は木の部品がする
- * - ノードを選ぶと、選んだノードの印が付く。選んだノードの編集フォームを開くのは、フォームの issue(#308)でつなぐ
+ * - ノードを選ぶと、そのノードの編集フォーム(/admin/categories/:id。#308)を開く。新規は木の上の「新規」から開く
+ * - ノードを保存してこの画面へ戻ったときは、保存したこと(と保存の後の警告)を木の上に出す
  */
 export default function AdminCategoryTree() {
   usePageTitle('カテゴリ木')
   const { state, retry } = useApi(fetchCategoryTree)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  // 知らせは画面の state に持ち、履歴の state は消す(「戻る」で戻ったとき、古い知らせを出さないため)
+  const [notice] = useState(() => readCategoryTreeNotice(location.state))
+  useEffect(() => {
+    if (location.state != null) {
+      void navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+  }, [location.state, location.pathname, location.search, navigate])
 
   return (
-    <main>
-      <h1>カテゴリ木</h1>
+    <main className={styles.page}>
+      <h1 className={styles.title}>カテゴリ木</h1>
+      {notice !== null && (
+        <p className={styles.notice} role="status">
+          {notice}
+        </p>
+      )}
+      <p>
+        <Link to={ADMIN_NEW_CATEGORY_PATH}>新規</Link>
+      </p>
       <InlineApiView state={state} onRetry={retry}>
-        {({ data }) => <Tree items={data} selectedId={selectedId} onSelect={setSelectedId} />}
+        {({ data }) => <Tree items={data} onSelect={(id) => void navigate(adminCategoryEditPath(id))} />}
       </InlineApiView>
     </main>
   )
@@ -45,11 +66,11 @@ export default function AdminCategoryTree() {
 
 type TreeProps = {
   items: readonly AdminTreeItem[]
-  selectedId: number | null
   onSelect: (id: number) => void
 }
 
-function Tree({ items, selectedId, onSelect }: TreeProps) {
+/** 選ぶとすぐ編集フォームへ移るので、選んだ印は持たない */
+function Tree({ items, onSelect }: TreeProps) {
   const nodes = useMemo(() => items.map(toCategoryTreeNode), [items])
   const appearance = useMemo(() => buildAppearance(items), [items])
 
@@ -57,7 +78,7 @@ function Tree({ items, selectedId, onSelect }: TreeProps) {
     <CategoryTree
       label="カテゴリ木"
       nodes={nodes}
-      selection={{ mode: 'single', selectedId, onSelect: (node) => onSelect(node.id) }}
+      selection={{ mode: 'single', selectedId: null, onSelect: (node) => onSelect(node.id) }}
       appearance={appearance}
     />
   )
