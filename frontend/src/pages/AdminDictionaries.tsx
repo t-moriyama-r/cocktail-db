@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { useApi } from '../api/useApi'
 import { ADMIN_DICTIONARY_NEW_PATH, adminDictionaryEditPath } from '../components/AdminLayout/adminPaths'
 import InlineApiView from '../components/ApiView/InlineApiView'
@@ -21,7 +22,14 @@ export default function AdminDictionaries() {
   usePageTitle('用語辞典')
   const { state, retry } = useApi(fetchAdminDictionaries)
   const location = useLocation()
-  const notice = readAdminDictionariesNotice(location.state)
+  const navigate = useNavigate()
+  // 知らせは画面の state に持ち、履歴の state は消す(「戻る」で戻ったとき、古い知らせを出さないため)
+  const [notice] = useState(() => readAdminDictionariesNotice(location.state))
+  useEffect(() => {
+    if (location.state != null) {
+      navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+  }, [location.state, location.pathname, location.search, navigate])
 
   return (
     <main className={styles.page}>

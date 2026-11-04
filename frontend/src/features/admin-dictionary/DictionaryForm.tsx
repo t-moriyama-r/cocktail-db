@@ -224,6 +224,7 @@ export default function DictionaryForm({ categories, dictionary }: Props) {
               <input
                 type="checkbox"
                 checked={values.remove_image}
+                disabled={values.image !== null}
                 onChange={(event) => set('remove_image', event.target.checked)}
               />
               画像を消す
@@ -233,6 +234,7 @@ export default function DictionaryForm({ categories, dictionary }: Props) {
         <input
           {...fieldProps('image')}
           type="file"
+          disabled={values.remove_image}
           accept="image/jpeg,image/png,image/gif,image/webp"
           onChange={(event) => set('image', event.target.files?.[0] ?? null)}
         />
