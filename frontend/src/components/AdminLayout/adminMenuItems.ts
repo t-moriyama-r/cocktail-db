@@ -1,4 +1,10 @@
-import { ADMIN_BRANDS_PATH, ADMIN_COCKTAILS_PATH, ADMIN_DICTIONARIES_PATH, ADMIN_PASSKEYS_PATH } from './adminPaths'
+import {
+  ADMIN_BRANDS_PATH,
+  ADMIN_CATEGORIES_PATH,
+  ADMIN_COCKTAILS_PATH,
+  ADMIN_DICTIONARIES_PATH,
+  ADMIN_PASSKEYS_PATH,
+} from './adminPaths'
 
 export type AdminMenuItem = {
   /** メニューに出す名前 */
@@ -16,6 +22,7 @@ export type AdminMenuItem = {
  * 旧のメニューにあったオートインプット(実行・該当ページを開く・カウント+1)は引き継がない(#68)ので足さない。
  */
 export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [
+  { label: 'カテゴリ木', path: ADMIN_CATEGORIES_PATH },
   { label: '銘柄', path: ADMIN_BRANDS_PATH },
   { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
   { label: 'カクテル', path: ADMIN_COCKTAILS_PATH },
