@@ -33,6 +33,7 @@ class E2eSeeder extends Seeder
         $terms = $this->seedDictionary();
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
+        $this->seedAdminCocktailEditData($nodes['vodka']);
         $this->seedCategoryImage($nodes['vodka']);
         $this->seedAffiliates($nodes['dryGin'], $nodes['londonDryGin']);
         $this->seedBrandDetailData($nodes['liquor'], $nodes['dryGin']);
@@ -198,6 +199,38 @@ class E2eSeeder extends Seeder
             'youtube_created_at' => '2030-01-01 00:00:00',
             'updated_at' => '2030-01-01 00:00:00',
         ]);
+    }
+
+    /**
+     * 管理画面のカクテルの編集(#127)の E2E 用。保存の API は材料を 2 件以上求める(#292)が、編集画面はまだ材料を変えられず
+     * (#128)、開いたカクテルの材料をそのまま送り返すので、保存を試すカクテルには材料を 2 件持たせる。
+     *
+     * - 「公開する」を試す: seedTopData の公開のカクテル「カミカゼ」に、2 件目の材料(ウォッカ)と、公開に要る説明を足す。
+     *   公開のカクテルを足すと登録数(ヘッダーの 8)が変わるので、足さずに既にあるものを使う。ほかの E2E はカミカゼの材料・説明を見ていない
+     * - 「下書きとして保存」を試す: 材料 2 件(ウォッカ)の下書き「E2E の下書き」を足す。下書きなので登録数・公開の一覧・検索には入らない。
+     *   カクテルの一覧の E2E(#126)が「下書きのカクテル」で始まる名前と英名の「Cocktail」で絞るので、どちらにも当たらない名前にする
+     */
+    private function seedAdminCocktailEditData(Category $vodka): void
+    {
+        $secondVodka = fn (Cocktail $cocktail) => CocktailIngredient::factory()->create([
+            'cocktail_id' => $cocktail->id,
+            'category_id' => $vodka->id,
+            'position' => 2,
+            'amount' => '15ml',
+        ]);
+
+        $kamikaze = Cocktail::query()->where('name', 'カミカゼ')->firstOrFail();
+        $kamikaze->update(['description' => 'ライムを搾った、ウォッカのショートカクテル。']);
+        $secondVodka($kamikaze);
+
+        $draft = $this->createTopCocktail($vodka, Method::query()->findOrFail($kamikaze->method_id), [
+            'name' => 'E2E の下書き',
+            'name_eng' => 'Save Test',
+            'is_draft' => true,
+        ]);
+        $secondVodka($draft);
+
+        app(RecipeCounter::class)->recount([$kamikaze->id, $draft->id]);
     }
 
     /**
