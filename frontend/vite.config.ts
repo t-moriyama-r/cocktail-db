@@ -20,5 +20,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // 1 件のテストの上限(既定の 5 秒)を延ばす。画面を何度か移って待つテストは、負荷がかかると 5 秒を超えた(#663)。
+    // findBy…・waitFor の待ち(src/test/setup.ts で 5 秒)を何回か重ねても収まる長さにする
+    testTimeout: 30000,
   },
 })
