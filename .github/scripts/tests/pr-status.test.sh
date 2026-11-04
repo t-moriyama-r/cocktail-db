@@ -123,16 +123,16 @@ main() {
 	check_checks TC-385-21 '必須のチェックが 1 つも付いていない(終了コード 1、標準出力は空)' 1 '' 'no required checks reported on the branch' '0 0'
 	check_checks TC-385-22 '必須のチェックを読めない(JSON でも未付与でもない)' 1 '' 'HTTP 500' 'error'
 
-	# facts: BLOCKED のとき、向き先の保護で必須にしたチェックが揃っているか・作者がオーナーかを事実に入れる(#660)
+	# facts: BLOCKED のとき、いまのコミットの必須のチェックが成功で揃っているか・作者がオーナーかを事実に入れる(#660)。
+	# スタブはブランチ・保護の API をすべて 403 で断る(Actions の GITHUB_TOKEN と同じく、保護を読めない)
 	ALL5='[{"name":"backend","bucket":"pass"},{"name":"backend-lint","bucket":"pass"},{"name":"frontend","bucket":"pass"},{"name":"actionlint","bucket":"pass"},{"name":"e2e","bucket":"pass"}]'
-	PROTECTED='{"protected":true,"protection":{"required_status_checks":{"contexts":["backend","backend-lint","frontend","actionlint","e2e"]}}}'
-	check_blocked TC-660-12 'オーナーの PR で、必須のチェックがすべて成功' o "$ALL5" "$PROTECTED" 0 'true true REVIEW_REQUIRED 状態:マージ待ち'
-	check_blocked TC-660-13 '必須のチェックが 1 つ付いていない(5 つのうち 4 つ)' o "$(jq -c 'del(.[4])' <<<"$ALL5")" "$PROTECTED" 0 'false true REVIEW_REQUIRED 状態:CI未実行'
-	check_blocked TC-660-14 '必須のチェックが 1 つも付いていない' o '[]' "$PROTECTED" 0 'false true REVIEW_REQUIRED 状態:CI未実行'
-	check_blocked TC-660-15 '向き先の保護の中身を読めない' o "$ALL5" '{"protected":true,"protection":null}' 0 'false true REVIEW_REQUIRED 状態:CI未実行'
-	check_blocked TC-660-16 '向き先のブランチを読めない(API の失敗)' o "$ALL5" '' 1 'false true REVIEW_REQUIRED 状態:CI未実行'
-	check_blocked TC-660-17 'skipped の必須のチェックは成功に数える' o "$(jq -c '.[4].bucket = "skipping"' <<<"$ALL5")" "$PROTECTED" 0 'true true REVIEW_REQUIRED 状態:マージ待ち'
-	check_blocked TC-660-18 'オーナー以外の PR で、必須のチェックがすべて成功' someone "$ALL5" "$PROTECTED" 0 'true false REVIEW_REQUIRED 状態:承認のレビュー待ち'
+	check_blocked TC-660-12 'オーナーの PR で、必須のチェックがすべて成功(保護を読めなくても決まる)' o "$ALL5" 'true true REVIEW_REQUIRED 状態:マージ待ち'
+	check_blocked TC-660-13 'draft のときに飛ばした回のチェック(すべて skipping)しか無い' o "$(jq -c 'map(.bucket = "skipping")' <<<"$ALL5")" 'false true REVIEW_REQUIRED 状態:CI未実行'
+	check_blocked TC-660-14 '必須のチェックが 1 つも付いていない' o '[]' 'false true REVIEW_REQUIRED 状態:CI未実行'
+	check_blocked TC-660-15 '成功と skipping が混じる(release 向けで E2E だけ飛ばした回など)' o "$(jq -c '.[4].bucket = "skipping"' <<<"$ALL5")" 'true true REVIEW_REQUIRED 状態:マージ待ち'
+	check_blocked TC-660-16 '必須のチェックが 1 つだけで成功(境界)' o '[{"name":"backend","bucket":"pass"}]' 'true true REVIEW_REQUIRED 状態:マージ待ち'
+	check_blocked TC-660-17 '取り消された必須のチェックがある' o "$(jq -c '.[4].bucket = "cancel"' <<<"$ALL5")" 'false true REVIEW_REQUIRED 状態:CI未実行'
+	check_blocked TC-660-18 'オーナー以外の PR で、必須のチェックがすべて成功' someone "$ALL5" 'true false REVIEW_REQUIRED 状態:承認のレビュー待ち'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -171,9 +171,9 @@ STUB
 }
 
 # BLOCKED の PR の事実を gh のスタブから集め、「requiredChecksComplete byOwner reviewDecision 状態」を比べる。
-# author は PR の作者(リポジトリ o/r の持ち主は o)、checks は必須のチェック、branch は向き先のブランチの応答(branch_rc が 0 でなければ API の失敗)
+# author は PR の作者(リポジトリ o/r の持ち主は o)、checks は必須のチェック
 check_blocked() {
-	local id=$1 title=$2 author=$3 checks=$4 branch=$5 branch_rc=$6 expected=$7 actual out bin
+	local id=$1 title=$2 author=$3 checks=$4 expected=$5 actual out bin
 	bin=$(mktemp -d)
 	cat >"$bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -182,6 +182,10 @@ case "$*" in
 *"pulls/1/reviews"*)
 	echo '[[{"commit_id":"abc","user":{"login":"coderabbitai[bot]"},"body":"レビュー"}]]'
 	exit 0
+	;;
+*"/branches"* | *"/protection"* | *"/rulesets"*)
+	echo 'HTTP 403: Resource not accessible by integration' >&2
+	exit 1
 	;;
 esac
 case "$1 $2" in
@@ -197,16 +201,12 @@ case "$1 $2" in
 		baseRefName: "develop", author: {login: $a}, reviewDecision: "REVIEW_REQUIRED", headRefOid: "abc",
 		commits: [{committedDate: "2026-01-01T00:00:00Z"}]}'
 	;;
-"api repos/o/r/branches/develop")
-	printf '%s' "$STUB_BRANCH"
-	exit "$STUB_BRANCH_RC"
-	;;
 "api graphql") echo 0 ;;
 *) echo '[]' ;;
 esac
 STUB
 	chmod +x "$bin/gh"
-	out=$(PATH="$bin:$PATH" STUB_AUTHOR=$author STUB_CHECKS=$checks STUB_BRANCH=$branch STUB_BRANCH_RC=$branch_rc \
+	out=$(PATH="$bin:$PATH" STUB_AUTHOR=$author STUB_CHECKS=$checks \
 		bash "$SCRIPT" o/r 1 --dry-run 2>/dev/null) || out=
 	if [ -n "$out" ]; then
 		actual="$(sed 's/^#1 //; s/ => .*//' <<<"$out" | jq -r '"\(.requiredChecksComplete) \(.byOwner) \(.reviewDecision)"') ${out##* => }"
