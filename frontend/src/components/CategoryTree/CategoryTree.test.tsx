@@ -235,7 +235,7 @@ describe('CategoryTree', () => {
     expect(screen.getAllByText('注記')).toHaveLength(1)
   })
 
-  test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでが 1 秒以内で、閉じた子は描かない', () => {
+  test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでの処理が 1 秒以内(CPU 時間)で、閉じた子は描かない', () => {
     const { container } = render(
       <CategoryTree label="カテゴリ" nodes={buildLargeTree()} selection={multipleSelection()} />,
     )
@@ -250,12 +250,12 @@ describe('CategoryTree', () => {
     fireEvent.click(closeAll)
 
     const trials = Array.from({ length: 3 }, () => {
-      const started = performance.now()
+      const started = cpuMilliseconds()
       fireEvent.click(openAll)
       const openedCount = countRows()
       fireEvent.click(closeAll)
       const closedCount = countRows()
-      return { openedCount, closedCount, elapsed: performance.now() - started }
+      return { openedCount, closedCount, elapsed: cpuMilliseconds() - started }
     })
 
     for (const { openedCount, closedCount } of trials) {
@@ -265,6 +265,21 @@ describe('CategoryTree', () => {
     expect(Math.min(...trials.map(({ elapsed }) => elapsed))).toBeLessThan(1000)
   })
 })
+
+/**
+ * このスレッドが使った CPU の時間(ミリ秒)。経過時間(performance.now)は、同じマシンでほかのテストのファイル・
+ * CI のほかのジョブが動いていると、待たされた分まで入って何倍にもなる(#663 で 8.3 秒)。操作そのものの重さを測るため、
+ * 割り込まれていたあいだを含まない CPU の時間で測る。src の型は画面向け(DOM)で Node の型を入れていないので、使う分だけ書く
+ */
+function cpuMilliseconds(): number {
+  type CpuUsage = { user: number; system: number }
+  const { process } = globalThis as unknown as {
+    process: { threadCpuUsage?: () => CpuUsage; cpuUsage: () => CpuUsage }
+  }
+  // threadCpuUsage(このスレッドだけ)の無い古い Node では、プロセス全体の cpuUsage で測る
+  const { user, system } = process.threadCpuUsage?.() ?? process.cpuUsage()
+  return (user + system) / 1000
+}
 
 /** 根 6・各 9 の子・各 10 の孫で、ちょうど 600 ノードの木(実データと同じくらいの大きさ) */
 function buildLargeTree(): CategoryTreeNode[] {
