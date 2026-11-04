@@ -341,6 +341,115 @@
                 }
             }
         },
+        "/admin/brands/duplicates": {
+            "get": {
+                "operationId": "brand.duplicates",
+                "description": "\u6bd4\u3079\u65b9\u306f\u4fdd\u5b58\u306e\u5f8c\u306e warnings \u3068\u540c\u3058(\u540d\u524d\u306f\u691c\u7d22\u7528\u306e\u540d\u524d\u3067\u3001\u82f1\u540d\u306f\u305d\u306e\u307e\u307e\u3002\u6240\u5c5e\u306b\u3088\u3089\u305a\u8868\u306e\u5168\u4f53\u3067\u6bd4\u3079\u308b)\u3002\nexclude_id \u306e\u9298\u67c4(\u7de8\u96c6\u3057\u3066\u3044\u308b\u9298\u67c4)\u3068\u306f\u6bd4\u3079\u306a\u3044\u3002\u540d\u524d\u30fb\u82f1\u540d\u306f\u3001\u7a7a\u306a\u3089\u6bd4\u3079\u306a\u3044(\u3069\u3061\u3089\u304b 1 \u3064\u306f\u8981\u308b)\u3002",
+                "summary": "\u540d\u524d\u30fb\u82f1\u540d\u306e\u91cd\u306a\u308a\u306e\u554f\u3044\u5408\u308f\u305b(#632)\u3002\u9298\u67c4\u306e\u7de8\u96c6\u753b\u9762\u3067\u3001\u540d\u524d\u30fb\u82f1\u540d\u3092\u5165\u308c\u305f\u305d\u3070\u306b\u300c\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059\u300d\u3092\u51fa\u3059\u305f\u3081\u3002\n\u65e7 DetailEditController@duplicate_check \u306e\u9298\u67c4\u306e\u5206\u306e\u7f6e\u304d\u63db\u3048\u3002",
+                "tags": [
+                    "Brand"
+                ],
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "\u540d\u524d\u3002\u82f1\u540d\u3068\u3001\u3069\u3061\u3089\u304b 1 \u3064\u306f\u8981\u308b",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "name_eng",
+                        "in": "query",
+                        "description": "\u82f1\u540d\u3002\u540d\u524d\u3068\u3001\u3069\u3061\u3089\u304b 1 \u3064\u306f\u8981\u308b",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "exclude_id",
+                        "in": "query",
+                        "description": "\u7de8\u96c6\u3057\u3066\u3044\u308b\u9298\u67c4\u306e ID\u3002\u65b0\u898f\u306a\u3089\u9001\u3089\u306a\u3044",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "warnings": {
+                                            "type": "array",
+                                            "items": {
+                                                "anyOf": [
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "field": {
+                                                                "type": "string",
+                                                                "const": "name"
+                                                            },
+                                                            "message": {
+                                                                "type": "string",
+                                                                "const": "\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "field",
+                                                            "message"
+                                                        ]
+                                                    },
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "field": {
+                                                                "type": "string",
+                                                                "const": "name_eng"
+                                                            },
+                                                            "message": {
+                                                                "type": "string",
+                                                                "const": "\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "field",
+                                                            "message"
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "warnings"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/brands/{brand}": {
             "get": {
                 "operationId": "brand.show",
@@ -510,6 +619,317 @@
                                     },
                                     "required": [
                                         "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            }
+        },
+        "/admin/categories": {
+            "get": {
+                "operationId": "categories.index",
+                "summary": "\u6728\u5168\u4f53\u3002\u6839\u304b\u3089\u4e00\u756a\u6df1\u3044\u6bb5\u307e\u3067\u5165\u308c\u5b50\u3067\u3001\u5144\u5f1f\u306e\u4e26\u3073\u9806\u306b\u8fd4\u3059\u3002",
+                "tags": [
+                    "Category"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `CategoryTreeItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CategoryTreeItemResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "categories.store",
+                "summary": "\u30ce\u30fc\u30c9\u3092\u4f5c\u308b\u3002\u82f1\u540d\u304c\u540c\u3058\u89aa\u306e\u4e0b\u306e\u307b\u304b\u306e\u30ce\u30fc\u30c9\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059\u3002",
+                "tags": [
+                    "Category"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveCategoryRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CategoryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CategoryResource"
+                                        },
+                                        "warnings": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "array",
+                                                    "prefixItems": [
+                                                        {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "field": {
+                                                                    "type": "string",
+                                                                    "const": "name_eng"
+                                                                },
+                                                                "message": {
+                                                                    "type": "string",
+                                                                    "const": "\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "field",
+                                                                "message"
+                                                            ]
+                                                        }
+                                                    ],
+                                                    "minItems": 1,
+                                                    "maxItems": 1
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "warnings"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/categories/{category}": {
+            "get": {
+                "operationId": "categories.show",
+                "summary": "\u7de8\u96c6\u3067\u958b\u304f\u30ce\u30fc\u30c9\u3002",
+                "tags": [
+                    "Category"
+                ],
+                "parameters": [
+                    {
+                        "name": "category",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CategoryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CategoryResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "categories.update",
+                "summary": "\u30ce\u30fc\u30c9\u3092\u66f8\u304d\u63db\u3048\u308b\u3002\u89aa\u3092\u5909\u3048\u305f\u3068\u304d\u306f\u90e8\u5206\u6728\u3054\u3068\u79fb\u3059\u3002\n\u82f1\u540d\u304c\u540c\u3058\u89aa\u306e\u4e0b\u306e\u307b\u304b\u306e\u30ce\u30fc\u30c9\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059\u3002",
+                "tags": [
+                    "Category"
+                ],
+                "parameters": [
+                    {
+                        "name": "category",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveCategoryRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CategoryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CategoryResource"
+                                        },
+                                        "warnings": {
+                                            "anyOf": [
+                                                {
+                                                    "type": "array",
+                                                    "prefixItems": [
+                                                        {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "field": {
+                                                                    "type": "string",
+                                                                    "const": "name_eng"
+                                                                },
+                                                                "message": {
+                                                                    "type": "string",
+                                                                    "const": "\u540c\u3058\u540d\u524d\u304c\u5b58\u5728\u3057\u3066\u3044\u307e\u3059"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "field",
+                                                                "message"
+                                                            ]
+                                                        }
+                                                    ],
+                                                    "minItems": 1,
+                                                    "maxItems": 1
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "minItems": 0,
+                                                    "maxItems": 0
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "warnings"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "categories.destroy",
+                "summary": "\u30ce\u30fc\u30c9\u3092\u6d88\u3059\u3002\u5b50\u30fb\u9298\u67c4\u30fb\u6750\u6599\u30fb\u30d9\u30fc\u30b9\u30fb\u30a2\u30d5\u30a3\u30ea\u30a8\u30a4\u30c8\u306e\u3069\u308c\u304b\u304c\u3042\u308c\u3070\u6d88\u3055\u305a\u3001409 \u3067\u7406\u7531\u3092\u3059\u3079\u3066\u8fd4\u3059\u3002",
+                "tags": [
+                    "Category"
+                ],
+                "parameters": [
+                    {
+                        "name": "category",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "\u3053\u306e\u30ce\u30fc\u30c9\u306f\u6d88\u305b\u307e\u305b\u3093"
+                                        },
+                                        "reasons": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "code": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "children",
+                                                            "brands",
+                                                            "ingredients",
+                                                            "base_cocktails",
+                                                            "affiliates"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "code",
+                                                    "message"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "reasons"
                                     ]
                                 }
                             }
@@ -2883,6 +3303,78 @@
                 }
             }
         },
+        "/admin/settings": {
+            "get": {
+                "operationId": "setting.index",
+                "summary": "\u5b9a\u7fa9\u306b\u3042\u308b\u9805\u76ee\u3092\u3059\u3079\u3066\u3001\u5b9a\u7fa9\u306e\u9806\u3067\u8fd4\u3059\u3002\u79d8\u5bc6\u306e\u9805\u76ee\u306f\u5024\u3092\u8fd4\u3055\u305a\u3001\u672b\u5c3e 4 \u6587\u5b57\u3060\u3051\u3092\u8fd4\u3059\u3002",
+                "tags": [
+                    "Setting"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `SettingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SettingResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "operationId": "setting.update",
+                "summary": "1 \u9805\u76ee\u306e\u5024\u3092\u66f8\u304d\u63db\u3048\u3001\u5909\u3048\u305f\u4eba\u3068\u65e5\u6642\u3092\u6b8b\u3059\u3002value \u304c null \u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u5024\u3092\u6d88\u3057\u3066 .env \u306e\u5024\u306b\u623b\u3059\u3002\n\u66f8\u304d\u63db\u3048\u305f\u5f8c\u306e\u9805\u76ee\u3092\u8fd4\u3059(\u79d8\u5bc6\u306e\u9805\u76ee\u306f\u3001\u4e00\u89a7\u3068\u540c\u3058\u304f\u672b\u5c3e 4 \u6587\u5b57\u3060\u3051)\u3002",
+                "tags": [
+                    "Setting"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateSettingRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SettingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SettingResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/skip-words": {
             "get": {
                 "operationId": "skip-words.index",
@@ -3999,6 +4491,273 @@
                 ],
                 "title": "CategoryDetailResource"
             },
+            "CategoryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "path": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name"
+                            ]
+                        }
+                    },
+                    "role": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "soft_drink",
+                            "other",
+                            null
+                        ]
+                    },
+                    "root_role": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "soft_drink",
+                            "other",
+                            null
+                        ]
+                    },
+                    "famous_brand_requirement": {
+                        "type": "string",
+                        "description": "\u6709\u540d\u306a\u9298\u67c4\u304c\u5fc5\u9808\u304b\u3002required(\u6839\u306e\u5f79\u5272\u304c\u7121\u3044\u90e8\u5206\u6728)\u30fboptional(\u30bd\u30d5\u30c8\u30c9\u30ea\u30f3\u30af\u30fb\u305d\u306e\u4ed6)\u30fbnone(\u6839\u3002\u5165\u308c\u3089\u308c\u306a\u3044)",
+                        "enum": [
+                            "none",
+                            "optional",
+                            "required"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "is_like": {
+                        "type": "boolean"
+                    },
+                    "is_powder": {
+                        "type": "boolean"
+                    },
+                    "famous_brand_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "famous_brand_candidates": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "name_eng": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "name_eng"
+                            ]
+                        }
+                    },
+                    "children": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "name_eng": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "name_eng"
+                            ]
+                        }
+                    },
+                    "brands": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "name_eng": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "name_eng"
+                            ]
+                        }
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u52d5\u753b ID"
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "youtube_created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "description": "\u52d5\u753b\u3092\u5165\u308c\u305f\u30fb\u5909\u3048\u305f\u65e5\u6642"
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "delete_blockers": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "code": {
+                                    "type": "string",
+                                    "enum": [
+                                        "children",
+                                        "brands",
+                                        "ingredients",
+                                        "base_cocktails",
+                                        "affiliates"
+                                    ]
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "code",
+                                "message"
+                            ]
+                        }
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "parent_id",
+                    "path",
+                    "role",
+                    "root_role",
+                    "famous_brand_requirement",
+                    "name",
+                    "name_eng",
+                    "description",
+                    "is_major",
+                    "is_like",
+                    "is_powder",
+                    "famous_brand_id",
+                    "famous_brand_candidates",
+                    "children",
+                    "brands",
+                    "youtube",
+                    "youtube_start_hour",
+                    "youtube_start_minute",
+                    "youtube_start_second",
+                    "youtube_created_at",
+                    "image",
+                    "image_txt",
+                    "image_url",
+                    "delete_blockers",
+                    "updated_at"
+                ],
+                "title": "CategoryResource"
+            },
             "CategoryRole": {
                 "type": "string",
                 "description": "\u30ab\u30c6\u30b4\u30ea\u6728\u306e\u6839\u306e\u5f79\u5272(categories.role\u3002docs/decisions/category-root-role.md\u3002#153)\u3002 \u65e7\u306f\u7a2e\u5225\u306e ID(m_category.kind)\u3092\u6570\u5b57\u3067\u6c7a\u3081\u6253\u3061\u3057\u3066\u5224\u5b9a\u3057\u3066\u3044\u305f\u3002\u65b0\u3057\u3044\u6728\u3067\u306f\u7a2e\u5225\u304c\u6839\u306e\u30ce\u30fc\u30c9\u306b\u306a\u308a ID \u3082 \u632f\u308a\u76f4\u3059\u306e\u3067\u3001\u5f79\u5272\u306e\u540d\u524d\u3067\u6301\u3064\u3002\u5f79\u5272\u306e\u7121\u3044\u6839(\u65e7\u306e\u84b8\u7559\u9152\u30fb\u91b8\u9020\u9152\u30fb\u6df7\u6210\u9152)\u306f null \u3067\u3001\u3053\u3053\u306b\u306f\u73fe\u308c\u306a\u3044\u3002\n| |\n|---|\n| `soft_drink` <br/> \u65e7\u306e kind 4 |\n| `other` <br/> \u65e7\u306e kind 5(\u30ac\u30fc\u30cb\u30c3\u30b7\u30e5\u306a\u3069) |",
@@ -4007,6 +4766,61 @@
                     "other"
                 ],
                 "title": "CategoryRole"
+            },
+            "CategoryTreeItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "name_eng": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "anyOf": [
+                            {
+                                "description": "\u6839\u306e\u5f79\u5272\u3002\u6839\u3060\u3051\u304c\u5024\u3092\u6301\u3061\u3001\u6839\u3067\u306a\u3044\u30ce\u30fc\u30c9\u3068\u5f79\u5272\u306e\u7121\u3044\u6839\u3067\u306f null\n| |\n|---|\n| `soft_drink` <br/> \u65e7\u306e kind 4 |\n| `other` <br/> \u65e7\u306e kind 5(\u30ac\u30fc\u30cb\u30c3\u30b7\u30e5\u306a\u3069) |",
+                                "$ref": "#/components/schemas/CategoryRole"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "root_role": {
+                        "anyOf": [
+                            {
+                                "description": "\u30ce\u30fc\u30c9\u306e\u6839\u306e\u5f79\u5272\u3002\u5b50\u3092\u8db3\u3059\u3068\u304d\u306b\u3001\u6709\u540d\u306a\u9298\u67c4\u304c\u5fc5\u9808\u304b(null \u306a\u3089\u5fc5\u9808)\u3092\u753b\u9762\u3067\u6c7a\u3081\u308b\u306e\u306b\u4f7f\u3046\n| |\n|---|\n| `soft_drink` <br/> \u65e7\u306e kind 4 |\n| `other` <br/> \u65e7\u306e kind 5(\u30ac\u30fc\u30cb\u30c3\u30b7\u30e5\u306a\u3069) |",
+                                "$ref": "#/components/schemas/CategoryRole"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "children": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CategoryTreeItemResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "name_eng",
+                    "role",
+                    "root_role",
+                    "is_major",
+                    "children"
+                ],
+                "title": "CategoryTreeItemResource"
             },
             "CocktailDetailResource": {
                 "type": "object",
@@ -5970,6 +6784,224 @@
                 ],
                 "title": "SaveBrandRequest"
             },
+            "SaveCategoryRequest": {
+                "type": "object",
+                "description": "\u30ab\u30c6\u30b4\u30ea\u6728\u306e\u30ce\u30fc\u30c9\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/categories\u30fbPUT /api/admin/categories/{id}\u3002#121)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCategoryValidate\u30fbEditMiddleValidate \u306e\u898f\u5247(\u65e7\u306e\u30ab\u30c6\u30b4\u30ea\u3068\u30df\u30c9\u30eb\u306f\u540c\u3058\u9805\u76ee)\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u30fb\u6839\u306e\u5f79\u5272\u30fb\n\u89aa\u306e\u4ed8\u3051\u66ff\u3048\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\n\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002\n\n\u6709\u540d\u306a\u9298\u67c4(docs/decisions/strength.md)\u306f\u3001\u65e2\u5b58\u306e\u9298\u67c4\u3092 famous_brand_id \u3067\u9078\u3076\u304b\u3001brand_* \u306e\u6b04\u3067\u305d\u306e\u5834\u3067\u4f5c\u308b\u3002\n\u9078\u3079\u308b\u306e\u306f\u305d\u306e\u30ce\u30fc\u30c9\u306e\u90e8\u5206\u6728\u306e\u9298\u67c4\u3060\u3051\u3002\u5fc5\u9808\u304b\u3069\u3046\u304b\u306f\u3001\u89aa\u306e\u6839\u306e\u5f79\u5272\u3067\u6c7a\u307e\u308b(\u4e0b\u306e famousBrandMode())\u3002",
+                "properties": {
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "\u89aa\u3002\u7a7a(null)\u306a\u3089\u6839\u3092\u4f5c\u308b\u30fb\u6839\u306b\u3059\u308b\u3002\u66f4\u65b0\u3067\u5909\u3048\u308b\u3068\u3001\u90e8\u5206\u6728\u3054\u3068\u79fb\u3059(CategoryTree::moveSubtree)"
+                    },
+                    "role": {
+                        "anyOf": [
+                            {
+                                "description": "\u6839\u306e\u5f79\u5272(docs/decisions/category-root-role.md)\u3002\u6839\u306b\u3060\u3051\u5165\u308c\u3089\u308c\u308b(\u4e0b\u306e after())\n\n| |\n|---|\n| `soft_drink` <br/> \u65e7\u306e kind 4 |\n| `other` <br/> \u65e7\u306e kind 5(\u30ac\u30fc\u30cb\u30c3\u30b7\u30e5\u306a\u3069) |",
+                                "$ref": "#/components/schemas/CategoryRole"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "name_eng": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "\u8aac\u660e\u3002\u4fdd\u5b58\u306e\u3068\u304d\u306b\u8a18\u6cd5\u3078\u5909\u63db\u3059\u308b(DescriptionMarkup\u3002#287)"
+                    },
+                    "is_major": {
+                        "type": "boolean"
+                    },
+                    "is_like": {
+                        "type": "boolean"
+                    },
+                    "is_powder": {
+                        "type": "boolean"
+                    },
+                    "youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "YouTube \u306e URL \u304b\u52d5\u753b ID",
+                        "maxLength": 255
+                    },
+                    "youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 99
+                    },
+                    "youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u753b\u50cf\u306e\u30ea\u30f3\u30af\u306e\u6587\u5b57\u3068 URL",
+                        "maxLength": 255
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 5120 kilobytes."
+                    },
+                    "remove_image": {
+                        "type": "boolean"
+                    },
+                    "famous_brand_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "\u6709\u540d\u306a\u9298\u67c4\u306b\u9078\u3076\u65e2\u5b58\u306e\u9298\u67c4\u3002\u305d\u306e\u30ce\u30fc\u30c9\u306e\u90e8\u5206\u6728\u306e\u9298\u67c4\u3060\u3051(\u4e0b\u306e after())\u3002\u6839\u306b\u306f\u5165\u308c\u3089\u308c\u306a\u3044"
+                    },
+                    "brand_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u305d\u306e\u5834\u3067\u4f5c\u308b\u9298\u67c4(\u65e7\u306e brand_*)\u3002famous_brand_id \u3092\u9078\u3093\u3060\u3068\u304d\u306f\u4f7f\u308f\u306a\u3044(\u65e7\u3068\u540c\u3058)",
+                        "maxLength": 255
+                    },
+                    "brand_name_eng": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "brand_strength": {
+                        "type": [
+                            "number",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 100
+                    },
+                    "brand_description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "brand_is_major": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ]
+                    },
+                    "brand_is_like": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ]
+                    },
+                    "brand_youtube": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "brand_youtube_start_hour": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 99
+                    },
+                    "brand_youtube_start_minute": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "brand_youtube_start_second": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 59
+                    },
+                    "brand_image_txt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "brand_image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "brand_image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 5120 kilobytes."
+                    }
+                },
+                "required": [
+                    "parent_id",
+                    "name",
+                    "name_eng",
+                    "description",
+                    "is_major",
+                    "is_like",
+                    "is_powder"
+                ],
+                "title": "SaveCategoryRequest"
+            },
             "SaveCocktailRequest": {
                 "type": "object",
                 "description": "\u30ab\u30af\u30c6\u30eb\u306e\u65b0\u898f\u30fb\u66f4\u65b0(POST /api/admin/cocktails\u30fbPUT /api/admin/cocktails/{id}\u3002\u57fa\u672c\u60c5\u5831\u306f #291\u3001\u6750\u6599\u306f #292)\u306e\u5165\u529b\u3002\n\n\u65e7\u306e EditCocktailValidate \u306e\u898f\u5247\u306b\u3001\u9577\u3055\u306e\u4e0a\u9650\u30fb\u30d9\u30fc\u30b9\u306e\u898f\u5247\u3068\u3001\u6750\u6599\u306e\u4ef6\u6570\u306e\u4e0a\u9650\u30fb\u30ce\u30fc\u30c9\u3068\u9298\u67c4\u306e\u898f\u5247\u3092\u8db3\u3057\u305f\u3082\u306e\u3002\n\u5225\u540d(aliases\u3002#293)\u306f\u65e7\u306b\u7121\u3044\u9805\u76ee\u3067\u3001\u9001\u3063\u305f\u3068\u304d\u3060\u3051\u3001\u9001\u3063\u305f\u4e26\u3073\u306b\u7f6e\u304d\u63db\u3048\u308b(\u4e0b\u306e aliases())\u3002\n\u753b\u50cf\u3092\u4e0a\u3052\u308b\u3068\u304d\u306f multipart \u3067\u9001\u308b(PHP \u306f PUT \u306e multipart \u3092\u8aad\u307e\u306a\u3044\u306e\u3067\u3001\u66f4\u65b0\u306f POST \u306b `_method=PUT` \u3092\u4ed8\u3051\u3066\u9001\u308b)\u3002",
@@ -6363,6 +7395,91 @@
                 ],
                 "title": "SearchFormNodeResource"
             },
+            "SettingResource": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "secret": {
+                        "type": "boolean"
+                    },
+                    "is_set": {
+                        "type": "boolean",
+                        "description": "\u753b\u9762\u3067\u4fdd\u5b58\u3057\u305f\u5024\u304b .env \u306e\u5024\u304c\u3042\u308b\u304b(\u79d8\u5bc6\u306e\u9805\u76ee\u306e\u300c\u8a2d\u5b9a\u6e08\u307f\u300d)"
+                    },
+                    "value": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u79d8\u5bc6\u306e\u9805\u76ee\u306f\u3001\u3069\u3053\u304b\u3089\u6765\u305f\u5024\u3067\u3082\u8fd4\u3055\u306a\u3044"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "source": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u3044\u307e\u52b9\u3044\u3066\u3044\u308b\u5024\u306e\u51fa\u3069\u3053\u308d\u3002saved: \u753b\u9762\u3067\u4fdd\u5b58\u3057\u305f\u5024\u3001env: .env \u306e\u5024\u3001null: \u3069\u3061\u3089\u306b\u3082\u7121\u3044"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u6700\u5f8c\u306b\u753b\u9762\u3067\u5909\u3048\u305f\u65e5\u6642\u3068\u4eba(.env \u306b\u623b\u3057\u305f\u3068\u304d\u3082\u6b8b\u308b)\u3002\u753b\u9762\u3067\u4e00\u5ea6\u3082\u5909\u3048\u3066\u3044\u306a\u3051\u308c\u3070 null"
+                    },
+                    "updated_by": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "name": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    }
+                },
+                "required": [
+                    "key",
+                    "label",
+                    "description",
+                    "secret",
+                    "is_set",
+                    "value",
+                    "last_four",
+                    "source",
+                    "updated_at",
+                    "updated_by"
+                ],
+                "title": "SettingResource"
+            },
             "SkipWordResource": {
                 "type": "object",
                 "properties": {
@@ -6378,6 +7495,35 @@
                     "name"
                 ],
                 "title": "SkipWordResource"
+            },
+            "UpdateSettingRequest": {
+                "type": "object",
+                "description": "\u8a2d\u5b9a\u306e 1 \u9805\u76ee\u306e\u66f8\u304d\u63db\u3048(PUT /api/admin/settings\u3002#132)\u3002\n\nvalue \u3092 null(\u7a7a\u306e\u6587\u5b57\u3082\u3001\u7a7a\u306e\u6587\u5b57\u3092 null \u306b\u3059\u308b\u30df\u30c9\u30eb\u30a6\u30a7\u30a2\u3067 null \u306b\u306a\u308b)\u306b\u3059\u308b\u3068\u3001\u4fdd\u5b58\u3057\u305f\u5024\u3092\u6d88\u3057\u3066 .env \u306e\u5024\u306b\u623b\u3059\u3002",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "\u5b9a\u7fa9(SettingDefinitions)\u306b\u7121\u3044\u30ad\u30fc\u306f 422",
+                        "enum": [
+                            "amazon.credential_id",
+                            "amazon.credential_secret",
+                            "amazon.partner_tag",
+                            "rakuten.affiliate_id"
+                        ]
+                    },
+                    "value": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\u7701\u3044\u305f\u3068\u304d\u306b\u9ed9\u3063\u3066 .env \u306b\u623b\u3055\u306a\u3044\u3088\u3046\u3001\u6b04\u306f\u5fc5\u9808(null \u306f\u9001\u308c\u308b)\u3002\u5f62\u306f\u9805\u76ee\u3054\u3068\u306e\u898f\u5247\u3067\u78ba\u304b\u3081\u308b",
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "key",
+                    "value"
+                ],
+                "title": "UpdateSettingRequest"
             }
         },
         "responses": {

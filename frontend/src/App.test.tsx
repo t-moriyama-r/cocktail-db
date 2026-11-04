@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import App from './App'
 import type { paths } from './api/schema'
 import { buildCocktailDetail } from './features/cocktail-detail/buildCocktailDetail'
-import { mockApi } from './test/api'
+import { jsonResponse, mockApi, mockApiHandler } from './test/api'
 
 type DictionaryResponse = paths['/dictionaries/{dictionary}']['get']['responses'][200]['content']['application/json']
 type CategoryDetailResponse = paths['/categories/{category}']['get']['responses'][200]['content']['application/json']
+type BrandDetailResponse = paths['/brands/{brand}']['get']['responses'][200]['content']['application/json']
 
 /** トップの画面の見出し(API の応答によらず出る) */
 const TOP_HEADING = '宅飲みカクテルデータベース'
@@ -51,6 +52,29 @@ const CATEGORY: CategoryDetailResponse = {
   },
 }
 
+const BRAND: BrandDetailResponse = {
+  data: {
+    id: 1,
+    name: 'ビーフィーター 40度',
+    name_eng: 'Beefeater 40',
+    strength: 40,
+    description: null,
+    is_major: true,
+    is_like: false,
+    youtube: null,
+    youtube_created_at: null,
+    youtube_start_seconds: null,
+    image: null,
+    image_txt: null,
+    image_url: null,
+    created_at: null,
+    updated_at: null,
+    path: [ROOT_NODE],
+    same_node_brands: [],
+    parent_subtree_brands: [],
+  },
+}
+
 const renderAt = (path: string) =>
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -71,6 +95,9 @@ describe('App のルーティング', () => {
     mockApi('get', '/dictionaries/{dictionary}', 200, DICTIONARY)
     // カテゴリの詳細の画面が GET /api/categories/{id} を呼ぶ(#105)
     mockApi('get', '/categories/{category}', 200, CATEGORY)
+    // 銘柄の詳細の画面が GET /api/brands/{id} と、商品の欄の GET /api/affiliates を呼ぶ(#54。商品は行が無い 404)
+    mockApi('get', '/brands/{brand}', 200, BRAND)
+    mockApiHandler('get', '/affiliates', () => jsonResponse({ message: 'Not Found' }, 404))
     // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
     mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
     // 詳細の画面は、同じ名前・材料が似た・同じベースのカクテルの API も呼ぶ。どれも 0 件を返す。
@@ -90,12 +117,14 @@ describe('App のルーティング', () => {
   })
 
   test.each([
-    ['TC-97-03', '/helpme', '当DBの更新ボランティア募集について'],
+    // 更新ボランティア募集の画面(旧 /helpme)は #641 で消した。開くと 404 の画面(TC-641-01)
+    ['TC-641-01', '/helpme', 'ページが見つかりません'],
     ['TC-97-04', '/result/FromNameResult/%E3%82%B8%E3%83%B3', '結果'],
     ['TC-97-05', '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', '結果'],
     ['TC-97-06', '/result/Cocktails', '結果'],
     ['TC-97-07', '/category/1', '蒸留酒(Spirits)'],
-    ['TC-97-08', '/detail/brand/1', '銘柄の詳細'],
+    // 銘柄の詳細の題は「名前(英名)」(#54)
+    ['TC-97-08', '/detail/brand/1', 'ビーフィーター 40度(Beefeater 40)'],
     ['TC-97-09', '/detail/cocktail/1', 'マティーニ(Martini)'],
     ['TC-97-10', '/dictionary', '用語辞典'],
     ['TC-97-10', '/dictionary/', '用語辞典'],

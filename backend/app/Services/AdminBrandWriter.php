@@ -10,6 +10,7 @@ use App\Models\CategoryClosure;
 use App\Models\CocktailIngredient;
 use App\Support\NameNormalizer;
 use App\Support\YoutubeInput;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use UnexpectedValueException;
@@ -92,18 +93,30 @@ class AdminBrandWriter
     /**
      * 名前・英名が、ほかの銘柄と同じなら警告を返す(保存は止めない。旧の duplicate_check と同じ比べ方)。
      *
-     * 名前は name_search(正規化した名前)で、英名はそのまま比べる。
-     *
      * @return list<array{field: string, message: string}>
      */
     public function duplicateWarnings(Brand $brand): array
     {
-        $others = Brand::query()->whereKeyNot($brand->id);
+        return $this->nameDuplicates($brand->name, $brand->name_eng, $brand->id);
+    }
+
+    /**
+     * 名前・英名が、$excludeId の銘柄(編集している銘柄。新規なら null)のほかの銘柄と同じなら、項目ごとに警告を返す。
+     * 保存した後の警告(duplicateWarnings)と、入れたそばの問い合わせ(GET /api/admin/brands/duplicates。#632)で使う。
+     *
+     * 名前は name_search(正規化した名前)で、英名はそのまま比べる。銘柄は所属によらず表の全体で比べる(旧の duplicate_check と同じ)。
+     * 名前・英名が null か空なら、その項目は比べない。
+     *
+     * @return list<array{field: string, message: string}>
+     */
+    public function nameDuplicates(?string $name, ?string $nameEng, ?int $excludeId): array
+    {
+        $others = Brand::query()->when($excludeId !== null, fn (Builder $query) => $query->whereKeyNot($excludeId));
         $warnings = [];
-        if ((clone $others)->where('name_search', $brand->name_search)->exists()) {
+        if ($name !== null && $name !== '' && (clone $others)->where('name_search', NameNormalizer::normalize($name))->exists()) {
             $warnings[] = ['field' => 'name', 'message' => '同じ名前が存在しています'];
         }
-        if ((clone $others)->where('name_eng', $brand->name_eng)->exists()) {
+        if ($nameEng !== null && $nameEng !== '' && (clone $others)->where('name_eng', $nameEng)->exists()) {
             $warnings[] = ['field' => 'name_eng', 'message' => '同じ名前が存在しています'];
         }
 

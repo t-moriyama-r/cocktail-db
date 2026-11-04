@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import CocktailDetail from './CocktailDetail'
-import type { paths } from '../api/schema'
+import type { components, paths } from '../api/schema'
 import { buildCocktailRow as row } from '../components/CocktailTable/buildCocktailRow'
 import type { CocktailDetailData } from '../features/cocktail-detail/CocktailDetail.types'
 import { buildCocktailDetail as detail, buildIngredient as ingredient } from '../features/cocktail-detail/buildCocktailDetail'
@@ -23,17 +23,22 @@ type ListResponses = {
   sameName?: CocktailList
   related?: CocktailList
   sameBase?: CocktailList
+  /** 材料ごとの商品の欄の API(GET /api/affiliates)の応答。既定は、どの材料にも行が無い(404) */
+  affiliate?: (request: Request) => Response
 }
+
+const NO_AFFILIATE = () => jsonResponse({ message: 'No query results for model.' }, 404)
 
 /**
  * /detail/cocktail/59 を開き、GET /api/cocktails/59 にこのカクテルを返す。見出しが出るまで待つ。
- * 同じ名前(same-name)・材料が似た(related)・同じベース(random)のカクテルの API には lists の応答を返す
+ * 同じ名前(same-name)・材料が似た(related)・同じベース(random)のカクテルと、商品の欄(affiliates)の API には lists の応答を返す
  */
 const openDetail = async (cocktail: CocktailDetailData, lists: ListResponses = {}) => {
   mockApi('get', '/cocktails/{cocktail}', 200, { data: cocktail })
   mockApi('get', '/cocktails/{cocktail}/same-name', 200, lists.sameName ?? { data: [] })
   mockApi('get', '/cocktails/{cocktail}/related', 200, lists.related ?? { data: [] })
   mockApi('get', '/cocktails/random', 200, lists.sameBase ?? { data: [] })
+  mockApiHandler('get', '/affiliates', lists.affiliate ?? NO_AFFILIATE)
   render(
     <MemoryRouter initialEntries={[`/detail/cocktail/${cocktail.id}`]}>
       <Routes>
@@ -437,5 +442,145 @@ describe('カクテルの詳細の、同じ名前・別名・同じレシピ・�
     for (let i = 1; i < order.length; i++) {
       expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
+  })
+})
+
+type AffiliateResource = components['schemas']['AffiliateResource']
+
+const AFFILIATES = '使われている材料はこちら'
+
+/** 材料のノード(と銘柄)の商品の行。期限切れで、Amazon の検索結果のリンクだけがある(欄はボタン「Amazonで探す」だけになる) */
+const searchOnlyAffiliate = (categoryId: number, brandId: number | null): AffiliateResource => ({
+  category_id: categoryId,
+  brand_id: brandId,
+  name: `ノード ${categoryId}`,
+  display: null,
+  amazon: {
+    title: null,
+    price: null,
+    image_url: null,
+    detail_url: null,
+    search_url: amazonSearchUrl(categoryId),
+    fetched_at: null,
+  },
+  rakuten: { title: null, price: null, image_url: null, detail_url: null, search_url: null, fetched_at: null },
+  human: { title: null, price: null, image_url: null, amazon_detail_url: null, amazon_search_url: null },
+})
+
+/** 欄ごとに見分けられるよう、ノードの ID を入れた検索結果の URL にする */
+const amazonSearchUrl = (categoryId: number) => `https://www.amazon.co.jp/s?k=node-${categoryId}`
+
+/** category_id が withRow に入っている材料にだけ商品の行を返し、ほかは 404 にする */
+const affiliatesFor =
+  (...withRow: number[]) =>
+  (request: Request) => {
+    const query = new URL(request.url).searchParams
+    const categoryId = Number(query.get('category_id'))
+    if (!withRow.includes(categoryId)) {
+      return NO_AFFILIATE()
+    }
+    const brandId = query.get('brand_id')
+    return jsonResponse({ data: searchOnlyAffiliate(categoryId, brandId === null ? null : Number(brandId)) }, 200)
+  }
+
+/** 商品の欄の API に送ったリクエストの、クエリ */
+const affiliateQueries = () =>
+  apiRequests()
+    .map((request) => new URL(request.url))
+    .filter((url) => url.pathname === '/api/affiliates')
+    .map((url) => url.search)
+
+/** 材料ごとの商品の欄の API に、count 件の応答が届いて処理し終えるまで待つ(欄を出さないことを確かめる前に) */
+const waitForAffiliateResponses = async (count: number) => {
+  await waitFor(() => expect(affiliateQueries()).toHaveLength(count))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/** ジン(銘柄なし)とラム / ホワイトラム(銘柄バカルディ)とライムジュースの 3 つの材料 */
+const THREE_INGREDIENTS = [
+  ingredient({ position: 1, path: [SPIRITS, { id: 10, name: 'ジン', name_eng: 'Gin' }], brand: null }),
+  ingredient({ position: 2, path: [SPIRITS, RUM, CUBAN_RUM, WHITE_RUM], brand: BACARDI }),
+  ingredient({ position: 3, path: [SOFT_DRINK, LIME], brand: null }),
+]
+
+describe('カクテルの詳細の画像', () => {
+  test('TC-110-01: 画像があれば、カクテルの名前を代わりの文字にした画像と、その下に出典(リンク)を出す', async () => {
+    await openDetail(
+      detail({ name: 'マティーニ', image: 'martini.jpg', image_txt: '写真の出典', image_url: 'https://example.com/credit' }),
+    )
+
+    expect(screen.getByRole('img', { name: 'マティーニ' })).toHaveAttribute('src', '/storage/martini.jpg')
+    expect(screen.getByRole('link', { name: '写真の出典' })).toHaveAttribute('href', 'https://example.com/credit')
+  })
+
+  test('TC-110-02: 画像も出典も無ければ、画像を出さない', async () => {
+    await openDetail(detail({ name: 'マティーニ', image: null, image_txt: null, image_url: null }))
+
+    expect(screen.queryByRole('img', { name: 'マティーニ' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('figure')).not.toBeInTheDocument()
+  })
+
+  test('TC-110-03: 出典だけがあって画像が無ければ、旧と同じく画像も出典の文字も出さない', async () => {
+    await openDetail(detail({ name: 'マティーニ', image: null, image_txt: '写真の出典', image_url: 'https://example.com/credit' }))
+
+    expect(screen.queryByRole('img', { name: 'マティーニ' })).not.toBeInTheDocument()
+    expect(screen.queryByText('写真の出典')).not.toBeInTheDocument()
+  })
+})
+
+describe('カクテルの詳細の、材料ごとの商品の欄', () => {
+  test('TC-110-04: 材料ごとに、材料のノード(いちばん下の段)を category_id、銘柄があれば brand_id にして GET /api/affiliates を呼ぶ', async () => {
+    await openDetail(detail({ ingredients: THREE_INGREDIENTS }))
+
+    await waitForAffiliateResponses(3)
+    expect(affiliateQueries()).toEqual([
+      '?category_id=10',
+      `?category_id=${WHITE_RUM.id}&brand_id=${BACARDI.id}`,
+      `?category_id=${LIME.id}`,
+    ])
+  })
+
+  test('TC-110-05: 商品の欄が出る材料があれば、「使われている材料はこちら」の下に、材料の順に並べる', async () => {
+    await openDetail(detail({ ingredients: THREE_INGREDIENTS }), { affiliate: affiliatesFor(10, WHITE_RUM.id, LIME.id) })
+
+    const section = await screen.findByRole('region', { name: '使われている材料' })
+    expect(within(section).getByRole('heading', { level: 2, name: AFFILIATES })).toBeInTheDocument()
+    await waitFor(() => expect(within(section).getAllByRole('complementary', { name: '商品' })).toHaveLength(3))
+    expect(within(section).getAllByRole('link', { name: 'Amazonで探す' }).map((link) => link.getAttribute('href'))).toEqual([
+      amazonSearchUrl(10),
+      amazonSearchUrl(WHITE_RUM.id),
+      amazonSearchUrl(LIME.id),
+    ])
+  })
+
+  test('TC-110-06: 商品の行が無い(404)材料の欄は出さず、行のある材料の欄だけを出す', async () => {
+    await openDetail(detail({ ingredients: THREE_INGREDIENTS }), { affiliate: affiliatesFor(WHITE_RUM.id) })
+
+    const section = await screen.findByRole('region', { name: '使われている材料' })
+    await waitForAffiliateResponses(3)
+    expect(within(section).getByRole('heading', { level: 2, name: AFFILIATES })).toBeInTheDocument()
+    expect(within(section).getAllByRole('link', { name: 'Amazonで探す' }).map((link) => link.getAttribute('href'))).toEqual([
+      amazonSearchUrl(WHITE_RUM.id),
+    ])
+  })
+
+  test.each([
+    ['どの材料にも商品の行が無い(404)', NO_AFFILIATE],
+    ['API が失敗した(500)', () => jsonResponse({ message: 'Server Error' }, 500)],
+  ])('TC-110-07: %s ときは、商品の欄も見出し「使われている材料はこちら」も出さない', async (_label, affiliate) => {
+    await openDetail(detail({ ingredients: THREE_INGREDIENTS }), { affiliate })
+
+    await waitForAffiliateResponses(3)
+    expect(screen.queryByText(AFFILIATES)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '使われている材料' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: '商品' })).not.toBeInTheDocument()
+  })
+
+  test('TC-110-08: 商品の欄は、同じベースのカクテルの欄より後ろ(いちばん下)に置く', async () => {
+    await openDetail(detail({ ingredients: THREE_INGREDIENTS }), { affiliate: affiliatesFor(10) })
+
+    const section = await screen.findByRole('region', { name: '使われている材料' })
+    const sameBase = screen.getByRole('region', { name: '同じベースのカクテル' })
+    expect(sameBase.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

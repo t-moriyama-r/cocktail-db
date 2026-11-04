@@ -1,0 +1,30 @@
+# 画面から変える設定(項目の定義と管理 API)
+
+#132 で決めたこと。設定の保存と読み出し(暗号化・`.env` へのフォールバック)は #131(`App\Support\Settings`)、画面は #69 の FE の issue で作る。旧には設定の画面が無く、鍵などはすべてサーバーのファイルに書いていた(旧に無い)。
+
+## 決まったこと
+
+1. 画面から変えられる項目は、コードの一覧 `App\Support\SettingDefinitions` で定義する(キー・名前・説明・秘密かどうか・検証の規則)。いまの項目は、コードが `Settings` から読んでいる 4 つ
+
+   | キー | 秘密 | 形 |
+   |---|---|---|
+   | `amazon.credential_id` | ○ | 空白を含まない ASCII、255 文字まで |
+   | `amazon.credential_secret` | ○ | 同上 |
+   | `amazon.partner_tag` | | 英数字と `.`・`_`・`-`、100 文字まで(リンクの URL に入る) |
+   | `rakuten.affiliate_id` | | 同上 |
+
+   - Credential ID は OAuth の Client ID で、厳密には秘密ではないが、画面に出しても使い道が無いので秘密として扱う。パートナータグと楽天のアフィリエイト ID は公開のリンクに載る値なので、秘密にしない
+   - #69 の案にある楽天のアプリ ID・GA4 の測定 ID・アフィリエイト収集の間隔は、読むコードがまだ無いので載せない。読むコードを作る issue で、`SettingDefinitions` と `config/settings.php` の両方に足す(キーがそろっていることはテストで確かめる)
+   - `APP_KEY`・DB の接続・`APP_URL` は載せない(#69 の 5)
+2. API(`openapi/openapi.json` に出る。どちらもログインが要る)
+
+   | API | 中身 |
+   |---|---|
+   | `GET /api/admin/settings` | 定義にある項目をすべて、定義の順で返す |
+   | `PUT /api/admin/settings` | 本文 `{key, value}` で 1 項目を書き換え、書き換えた後の項目を返す |
+
+   - キーに `.` が入るので、キーは経路に載せず本文で受ける。定義に無いキーは 422(`errors.key`)
+   - `value` は必須の欄(省くと 422)。`null` か空の文字を送ると、保存した値を消して `.env` の値に戻す(行は残し、変えた人と日時を記録する)
+3. 返す 1 項目の形: `key`・`label`・`description`・`secret`・`is_set`(値があるか)・`value`・`last_four`・`source`(`saved`: 画面で保存した値 / `env`: `.env` の値 / `null`: どちらにも無い)・`updated_at`・`updated_by`(`{id, name}`)
+4. **秘密の項目は、値を平文で返さない**。`value` はいつも `null` で、`last_four` に末尾 4 文字だけを返す。`.env` から来た値でも同じ。値が 8 文字より短いときは、4 文字でも値のほとんどが分かるので、`last_four` も `null` にする(画面は `is_set` で「設定済み」だけを出す)。秘密でない項目は `value` に値を返し、`last_four` は `null`
+5. 変えた人と日時は、`settings` 表の行の `updated_by`・`updated_at`(最後に変えた 1 回分)。変えた履歴を 1 件ごとに残す表は、この issue では作らない(要るかは `docs/schema.md` の「settings」のとおり #69 で決める)

@@ -4,12 +4,12 @@ import { expect, test } from '@playwright/test'
 const pages = [
   { path: '/', heading: '宅飲みカクテルデータベース' },
   { path: '/index', heading: '宅飲みカクテルデータベース' },
-  { path: '/helpme', heading: '当DBの更新ボランティア募集について' },
   { path: '/result/FromNameResult/%E3%82%B8%E3%83%B3', heading: '結果' },
   { path: '/result/FromNameResultEx/%E3%82%B8%E3%83%B3', heading: '結果' },
   { path: '/result/Cocktails', heading: '結果' },
   { path: '/category/1', heading: '蒸留酒(蒸留酒)' },
-  { path: '/detail/brand/1', heading: '銘柄の詳細' },
+  // E2eSeeder のビーフィーター 40度(#54 で中身を出すようにした)
+  { path: '/detail/brand/1', heading: 'ビーフィーター 40度(Beefeater 40)' },
   // E2eSeeder のジントニック(#108 で中身を出すようにした)
   { path: '/detail/cocktail/1', heading: 'ジントニック(Gin and Tonic)' },
   { path: '/dictionary', heading: '用語辞典' },
@@ -30,6 +30,13 @@ for (const path of ['/nope', '/detail/cocktail/abc']) {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
   })
 }
+
+// 更新ボランティア募集の画面(旧 /helpme)は #641 で消した。URL を直に開くと 404 の画面が出て、募集の文は出ない
+test('TC-641-01: /helpme を開くと 404 の画面が出る', async ({ page }) => {
+  await page.goto('/helpme')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
+  await expect(page.getByRole('main')).not.toContainText('ボランティア')
+})
 
 test('TC-97-23: 404 の画面の「トップへ戻る」でトップの画面に移る', async ({ page }) => {
   await page.goto('/nope')
