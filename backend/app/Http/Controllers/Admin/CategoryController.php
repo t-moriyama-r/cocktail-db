@@ -50,7 +50,8 @@ class CategoryController extends Controller
     }
 
     /**
-     * ノードを書き換える。親を変えたときは部分木ごと移す。
+     * ノードを書き換える。親を変えたときは部分木ごと移す(#122)。自分・子孫の下へ移す、役割を持つ根をほかのノードの下へ移す、
+     * カクテルの材料・ベースが指すノードを根へ移す、祖先の有名な銘柄が部分木の外になる、のどれかなら 422 で理由を返す。
      * 英名が同じ親の下のほかのノードと同じなら、保存したうえで warnings に入れて返す。
      */
     public function update(SaveCategoryRequest $request, AdminCategoryWriter $writer, int $category): CategoryResource

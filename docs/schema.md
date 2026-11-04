@@ -469,7 +469,7 @@ LIMIT 1;
 
 ## 材料とベースに使ってよいノード
 
-材料(`cocktail_ingredients.category_id`)とベース(`cocktails.base_category_id`)には、**根以外のどのノードでも使ってよい**。根は使わない。保存のときの検証で止め、`data:verify`(#157)でも確かめる(#153)。
+材料(`cocktail_ingredients.category_id`)とベース(`cocktails.base_category_id`)には、**根以外のどのノードでも使ってよい**。根は使わない。保存のときの検証で止め、`data:verify`(#157)でも確かめる(#153)。材料・ベースが指しているノードを、管理 API の親の付け替えで根へ移すのも 422 で止める(#122)。
 
 旧の材料とベースは `m_category`(2 段目)か `m_middle`(3 段目)を指し、種別を指すことはできなかった。移行では、根以外のノードだけを指すことになる(旧のベース 5,707 件はすべて `m_category` にある)。
 
