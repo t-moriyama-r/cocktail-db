@@ -1,0 +1,34 @@
+/* 公開済み・下書きの切り替え。タブのように横に並べ、下に線を引く */
+.switcher {
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.switcherList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 押せる範囲を広げ、下の線に重ねる(選んでいるものは線の色で示す) */
+.switcherLink {
+  display: block;
+  margin-bottom: -1px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 3px solid transparent;
+  text-decoration: none;
+}
+
+.switcherLink:hover {
+  border-bottom-color: var(--color-border);
+}
+
+/* いま出している一覧(aria-current="page") */
+.switcherLink[aria-current='page'] {
+  border-bottom-color: var(--color-heading-line);
+  color: var(--color-text);
+  font-weight: bold;
+}
