@@ -48,8 +48,12 @@ main() {
 # マージ待ち・人のマージ待ちは、GitHub が実際にマージを許す(mergeStateStatus がマージできる値の)ときだけにする。ブランチ保護は
 # 必須のチェックの成功と会話の解決を求めるので、返信の済んだ指摘や、パスの絞り込みで CI が動かなかったコミットでも止まる。
 # 止めている理由ごとにラベルを分け、どれにも当てはまらない受け皿をマージ待ちにしない。
-# 保護の設定は GITHUB_TOKEN では読めないことがあるので、BLOCKED のうち実行中・未解決で説明できないものは、
-# 必須のチェックが付いていないものとみなす(いまの保護で、ほかに BLOCKED になる条件は無い)
+# BLOCKED のうち実行中・未解決で説明できないもので、必須のチェックがいまのコミットで揃って成功していると確かめられないもの
+# (保護の中身を読めなかったものを含む)は、必須のチェックが付いていないものとみなす。
+#
+# develop には、ブランチ保護のほかにルールセット「オーナー以外の PR は承認が要る」(#540。承認 1 件、管理者は bypass できる)があり、
+# GitHub はオーナーの PR にも BLOCKED・REVIEW_REQUIRED を返す。オーナーは bypass してマージできるので、必須のチェックが揃っていて、
+# 止めているのが承認だけ(REVIEW_REQUIRED)なら、マージできる PR として扱う。オーナー以外の PR は承認を待つ番にする(#660)
 #
 # 向き先が develop・staging・release 以外の PR(積み上げの PR。土台の PR のブランチに向けたもの)は、ai-auto-merge.yml が見送り、
 # test.yml も流れない。向き先のブランチに保護が無いので GitHub は CLEAN を返すが、マージ待ちにはせずベースブランチ待ちにする(#460)。
@@ -62,6 +66,9 @@ decide() {
     | ($base | IN("staging", "release")) as $promotion
     | ($base != "" and ($base | IN("develop", "staging", "release") | not)) as $stacked
     | ($l | index("needs-approval") != null) as $approval
+    | (.requiredChecksComplete == true) as $checksComplete
+    | (.mergeStateStatus == "BLOCKED" and $checksComplete and .reviewDecision == "REVIEW_REQUIRED") as $reviewOnly
+    | ($reviewOnly and .byOwner == true) as $ownerBypass
     | if .state != "OPEN" then ""
       elif ($l | index("needs-human") or index("needs-decision")) then $p + "人の判断待ち"
       elif ($l | index("needs-manual")) then $p + "手元の作業待ち"
@@ -73,9 +80,10 @@ decide() {
       elif ($approval | not) and (.headReviewed | not) then $p + "レビュー待ち"
       elif (.pendingChecks // 0) > 0 then $p + "CI実行中"
       elif (.unresolvedThreads // 0) > 0 then $p + "指摘の解決待ち"
-      elif .mergeStateStatus == "BLOCKED" then $p + "CI未実行"
+      elif .mergeStateStatus == "BLOCKED" and ($checksComplete | not) then $p + "CI未実行"
+      elif $reviewOnly and ($ownerBypass | not) then $p + "承認のレビュー待ち"
       elif .mergeStateStatus == "UNKNOWN" then $p + "確認中"
-      elif (.mergeStateStatus | IN("CLEAN", "HAS_HOOKS", "UNSTABLE") | not) then $p + "マージ不可"
+      elif (((.mergeStateStatus | IN("CLEAN", "HAS_HOOKS", "UNSTABLE")) or $ownerBypass) | not) then $p + "マージ不可"
       elif $promotion or $approval then $p + "人のマージ待ち"
       elif $stacked then $p + "ベースブランチ待ち"
       else $p + "マージ待ち"
@@ -84,7 +92,7 @@ decide() {
 
 facts() {
   local repo=$1 number=$2 pr
-  local fields=state,isDraft,labels,mergeable,mergeStateStatus,baseRefName
+  local fields=state,isDraft,labels,mergeable,mergeStateStatus,baseRefName,author,reviewDecision
   pr=$(gh pr view "$number" -R "$repo" --json "$fields")
   if [ "$(jq -r .state <<<"$pr")" != OPEN ]; then
     jq '{state, labels: [.labels[].name]}' <<<"$pr"
@@ -100,9 +108,9 @@ facts() {
   # CI はブランチ保護で必須にしたチェックだけを見る。AI のワークフローのジョブ(取り消し・見送りが多い)を CI の失敗と取り違えない。
   # gh pr checks は、終わっていないチェックがあると 8 で、失敗したチェックがあると 1 で終わる(どちらも JSON は標準出力に出る)。
   # 必須のチェックが 1 つも付いていないときも 1 で、標準出力は空になる
-  local checks rc=0 err failed pending unanswered unresolved reviewed
+  local checks rc=0 err failed pending unanswered unresolved reviewed complete=false
   err=$(mktemp)
-  checks=$(gh pr checks "$number" -R "$repo" --required --json bucket 2>"$err") || rc=$?
+  checks=$(gh pr checks "$number" -R "$repo" --required --json bucket,name 2>"$err") || rc=$?
   if jq -e 'type == "array"' <<<"$checks" >/dev/null 2>&1; then
     :
   elif [ "$rc" = 1 ] && grep -q "no required checks reported" "$err"; then
@@ -116,13 +124,37 @@ facts() {
   rm -f "$err"
   failed=$(jq '[.[] | select(.bucket == "fail")] | length' <<<"$checks")
   pending=$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$checks")
+  # 揃っているかは、BLOCKED の理由を分けるときにしか使わないので、そのときだけ向き先の保護を読む
+  if [ "$(jq -r .mergeStateStatus <<<"$pr")" = BLOCKED ]; then
+    complete=$(required_checks_complete "$repo" "$(jq -r .baseRefName <<<"$pr")" "$checks")
+  fi
   unanswered=$(bash "$HERE/unanswered-review-threads.sh" "$repo" "$number")
   unresolved=$(unresolved_threads "$repo" "$number")
   reviewed=$(bash "$HERE/head-reviewed.sh" "$repo" "$number")
+  # オーナーかどうかは、ほかのスクリプト(conflict-candidates.sh など)と同じく、PR の作者とリポジトリの持ち主で決める
   jq --argjson failed "$failed" --argjson pending "$pending" --argjson unanswered "$unanswered" \
-    --argjson unresolved "$unresolved" --argjson reviewed "$reviewed" \
+    --argjson unresolved "$unresolved" --argjson reviewed "$reviewed" --argjson complete "$complete" \
+    --arg owner "${repo%%/*}" \
     '{state, isDraft, mergeable, mergeStateStatus, baseRefName, labels: [.labels[].name],
-      failedChecks: $failed, pendingChecks: $pending, unansweredThreads: $unanswered, unresolvedThreads: $unresolved, headReviewed: $reviewed}' <<<"$pr"
+      failedChecks: $failed, pendingChecks: $pending, unansweredThreads: $unanswered, unresolvedThreads: $unresolved, headReviewed: $reviewed,
+      requiredChecksComplete: $complete, reviewDecision: (.reviewDecision // ""), author: (.author.login // ""),
+      byOwner: ((.author.login // "") == $owner)}' <<<"$pr"
+}
+
+# 向き先の保護で必須にしたチェックが、すべていまのコミットで成功(skipped を含む)で付いているかを true・false で出す。
+# 走らなかったワークフローのチェックは付かないので、付いたチェックに失敗・実行中が無いだけでは揃ったとは言えない。
+# 保護されているのに中身を読めないとき・読めなかったときは、揃っていないと取り違えないよう false にする
+required_checks_complete() {
+  local repo=$1 base=$2 checks=$3 branch
+  branch=$(gh api "repos/$repo/branches/$base" 2>/dev/null) || {
+    echo false
+    return
+  }
+  jq --argjson checks "$checks" '
+    if .protected == true and .protection == null then false
+    else ([.protection.required_status_checks.contexts // [] | .[]]
+      - [$checks[] | select(.bucket == "pass" or .bucket == "skipping") | .name]) == []
+    end' <<<"$branch"
 }
 
 # ブランチ保護の会話の解決は、AI レビュアーのものに限らず、すべてのスレッドを数える
@@ -172,6 +204,7 @@ ensure_label() {
     CI実行中) color=c5def5 description="必須のチェックが終わるのを待っている" ;;
     指摘の解決待ち) color=d93f0b description="指摘に返信は済んだが、スレッドが解決されていない。人が確かめて解決にする" ;;
     CI未実行) color=b60205 description="必須のチェックが、いまのコミットで成功していない(付いていない、など)" ;;
+    承認のレビュー待ち) color=fbca04 description="オーナー以外の PR。必須のチェックは揃っているが、develop のルールセットで承認のレビューが 1 件要る" ;;
     確認中) color=ededed description="GitHub がマージできるかを計算している。次の出し直しで決まる" ;;
     マージ不可) color=b60205 description="GitHub がマージを止めている(上のどのラベルでもない理由)" ;;
     ベースブランチ待ち) color=bfdadc description="向き先が develop 以外(積み上げの PR)。ベースブランチの PR がマージされると develop に付け替わり、CI が流れる" ;;

@@ -4,6 +4,7 @@ import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
 import AdminBrandEdit from './pages/AdminBrandEdit'
 import AdminBrands from './pages/AdminBrands'
+import AdminCocktails from './pages/AdminCocktails'
 import AdminDictionaries from './pages/AdminDictionaries'
 import AdminDictionaryEdit from './pages/AdminDictionaryEdit'
 import AdminDictionaryNew from './pages/AdminDictionaryNew'
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="dictionaries" element={<AdminDictionaries />} />
         <Route path="dictionaries/new" element={<AdminDictionaryNew />} />
         <Route path="dictionaries/:id" element={<RequireNumericId element={<AdminDictionaryEdit />} />} />
+        <Route path="cocktails" element={<AdminCocktails />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
       </Route>
