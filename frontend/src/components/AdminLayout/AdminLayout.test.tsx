@@ -88,7 +88,7 @@ describe('ログインしているとき', () => {
     expect(document.title).toBe('管理画面 ｜ 宅飲みカクテルデータベース(RC)')
   })
 
-  test('TC-119-05: メニューは、まだ画面の無い項目と引き継がない項目(オートインプット)を出さず、画面のある項目とログアウトを出す', async () => {
+  test('TC-119-05: メニューは、まだ画面の無い項目と引き継がない項目(オートインプット)を出さず、画面のある項目(銘柄・言い換え・スキップ語)とログアウトを出す', async () => {
     loggedIn()
     renderAt('/admin')
 
@@ -96,7 +96,7 @@ describe('ログインしているとき', () => {
     const items = within(menu)
       .getAllByRole('listitem')
       .map((item) => item.textContent)
-    expect(items).toEqual(['言い換え・スキップ語', 'ログアウト'])
+    expect(items).toEqual(['銘柄', '言い換え・スキップ語', 'ログアウト'])
     expect(within(menu).queryByText(/オートインプット/)).not.toBeInTheDocument()
   })
 

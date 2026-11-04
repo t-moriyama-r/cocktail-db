@@ -2,6 +2,8 @@ import { Route, Routes } from 'react-router'
 import RequireNumericId from './RequireNumericId'
 import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
+import AdminBrandEdit from './pages/AdminBrandEdit'
+import AdminBrands from './pages/AdminBrands'
 import AdminHome from './pages/AdminHome'
 import AdminLogin from './pages/AdminLogin'
 import AdminParaphrases from './pages/AdminParaphrases'
@@ -48,6 +50,9 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminHome />} />
+        <Route path="brands" element={<AdminBrands />} />
+        <Route path="brands/new" element={<AdminBrandEdit />} />
+        <Route path="brands/:id" element={<RequireNumericId element={<AdminBrandEdit />} />} />
         <Route path="paraphrases" element={<AdminParaphrases />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
