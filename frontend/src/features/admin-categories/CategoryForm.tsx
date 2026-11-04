@@ -1,12 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
-import type { CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
+import { pathTo, toCategoryTreeNode } from './adminCategoryTree'
 import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
 import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
 import styles from './CategoryForm.module.css'
+import { useMounted } from './useMounted'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
 
@@ -81,13 +82,7 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
   const set = <K extends keyof CategoryFormValues>(key: K, value: CategoryFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
 
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-    }
-  }, [])
+  const mounted = useMounted()
 
   const pickImage = (file: File | null) => {
     setValues((current) => ({ ...current, image: file, removeImage: false }))
@@ -388,19 +383,4 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'
   }
-}
-
-/** 管理 API の木のノードを、木の部品のノードにする */
-function toCategoryTreeNode(item: AdminTreeItem): CategoryTreeNode {
-  return { id: item.id, name: item.name, name_eng: item.name_eng, is_major: item.is_major, children: item.children.map(toCategoryTreeNode) }
-}
-
-/** 根から id のノードまでのノード(根を含む)。木に無ければ null */
-function pathTo(nodes: readonly AdminTreeItem[], id: number): AdminTreeItem[] | null {
-  for (const node of nodes) {
-    if (node.id === id) return [node]
-    const found = pathTo(node.children, id)
-    if (found !== null) return [node, ...found]
-  }
-  return null
 }
