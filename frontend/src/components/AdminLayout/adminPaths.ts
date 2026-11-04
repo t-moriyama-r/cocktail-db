@@ -1,6 +1,15 @@
 /** 管理画面のメニュー(トップ)の URL */
 export const ADMIN_HOME_PATH = '/admin'
 
+/** 管理画面の銘柄の一覧(#64)の URL */
+export const ADMIN_BRANDS_PATH = '/admin/brands'
+
+/** 管理画面の銘柄の新規の画面(#64)の URL。一覧の「新規」から開く */
+export const ADMIN_NEW_BRAND_PATH = `${ADMIN_BRANDS_PATH}/new`
+
+/** 管理画面の銘柄の編集画面(#64)の URL。一覧の 1 行から開く */
+export const adminBrandEditPath = (id: number): string => `${ADMIN_BRANDS_PATH}/${id}`
+
 /** 管理画面の用語辞典の一覧(#66)の URL */
 export const ADMIN_DICTIONARIES_PATH = '/admin/dictionaries'
 

@@ -1,4 +1,4 @@
-import { ADMIN_DICTIONARIES_PATH } from './adminPaths'
+import { ADMIN_BRANDS_PATH, ADMIN_DICTIONARIES_PATH } from './adminPaths'
 
 export type AdminMenuItem = {
   /** メニューに出す名前 */
@@ -15,4 +15,7 @@ export type AdminMenuItem = {
  * まだ画面が無い項目は、開いても何も無いので出さない。画面を作る issue で、この並びの位置に足す。
  * 旧のメニューにあったオートインプット(実行・該当ページを開く・カウント+1)は引き継がない(#68)ので足さない。
  */
-export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [{ label: '用語辞典', path: ADMIN_DICTIONARIES_PATH }]
+export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [
+  { label: '銘柄', path: ADMIN_BRANDS_PATH },
+  { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
+]

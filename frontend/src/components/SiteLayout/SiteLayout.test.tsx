@@ -47,17 +47,8 @@ describe('共通の枠(SiteLayout)', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
-  test('TC-296-03: フッターの「更新ボランティア募集中...」で /helpme の画面に移る', async () => {
-    renderAt('/')
-
-    fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
-
-    expect(await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })).toBeInTheDocument()
-  })
-
   test.each([
     ['/', '宅飲みカクテルデータベース'],
-    ['/helpme', '当DBの更新ボランティア募集について'],
     ['/detail/cocktail/1', 'マティーニ(Martini)'],
     ['/nope', 'ページが見つかりません'],
   ])('TC-296-04: %s でも、ヘッダーの場所とフッターの中に画面を出す', async (path, heading) => {
@@ -65,8 +56,22 @@ describe('共通の枠(SiteLayout)', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
-    expect(footer().getByRole('link', { name: '更新ボランティア募集中...' })).toBeInTheDocument()
+    expect(footer().getByRole('link', { name: 'ろんぐ' })).toBeInTheDocument()
   })
+
+  test.each([['/'], ['/detail/cocktail/1'], ['/nope']])(
+    'TC-641-02: %s のフッターに、更新ボランティア募集へのリンクが無い',
+    async (path) => {
+      renderAt(path)
+
+      await screen.findByRole('heading', { level: 1 })
+      expect(footer().getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+        'https://trc-vlackhistory.net/',
+        'https://twitter.com/virtualDollym',
+      ])
+      expect(screen.getByRole('contentinfo')).not.toHaveTextContent('ボランティア')
+    },
+  )
 
   test.each([
     ['/', 'トップページ ｜ 宅飲みカクテルデータベース(RC)'],
@@ -81,7 +86,7 @@ describe('共通の枠(SiteLayout)', () => {
     expect(document.title).toBe(title)
   })
 
-  test.each([['/helpme'], ['/detail/cocktail/1']])(
+  test.each([['/detail/cocktail/1']])(
     'TC-296-06: ページ名を渡さない画面 %s のタイトルはサイト名だけ',
     async (path) => {
       document.title = '前のタイトル'
@@ -93,13 +98,17 @@ describe('共通の枠(SiteLayout)', () => {
   )
 
   test('TC-296-07: 画面を移るとタイトルが変わり、ページ名の無い画面ではサイト名だけに戻る', async () => {
+    // ヘッダーの登録数のリンク(ランダムウォーク)で、ページ名を渡さないカクテルの詳細へ移る。
+    // /cocktails/count は `{cocktail}` の差し替えより後に登録して先に当てる
+    mockApi('get', '/cocktails/count', 200, { count: 1 })
+    mockApi('get', '/random-walk', 200, { type: 'cocktail', id: 1 })
     renderAt('/')
     await screen.findByRole('heading', { level: 1, name: '宅飲みカクテルデータベース' })
     expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)')
 
-    fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
+    fireEvent.click(await within(screen.getByRole('banner')).findByRole('link', { name: '現在の登録数：1' }))
 
-    await screen.findByRole('heading', { level: 1, name: '当DBの更新ボランティア募集について' })
+    await screen.findByRole('heading', { level: 1, name: 'マティーニ(Martini)' })
     expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
   })
 })

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\CategoryRole;
+use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
@@ -11,6 +12,7 @@ use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
 use App\Models\Ice;
+use App\Models\LegacyIdMap;
 use App\Models\Method;
 use App\Models\User;
 use App\Services\CategoryTree;
@@ -32,12 +34,27 @@ class E2eSeeder extends Seeder
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
         $this->seedCategoryImage($nodes['vodka']);
+        $this->seedBrandDetailData($nodes['liquor'], $nodes['dryGin']);
         $this->seedAdmin();
+        $this->seedLegacyIdMaps($nodes['gin'], $nodes['dryGin'], $nodes['vodka']);
+    }
+
+    /**
+     * 旧サイトが保存した検索条件の移し替え(#175)の E2E 用の、旧 ID と新しい ID の対応(legacy_id_maps)。
+     * 旧のカテゴリ 9001 → ジン(子のミドル 9101 → ドライジン)、9002 → ウォッカ(子のミドルなし)、旧の技法 9201 → ビルド。
+     * 旧 ID は、ほかの E2E のデータの ID と重ならないよう大きな値にする
+     */
+    private function seedLegacyIdMaps(Category $gin, Category $dryGin, Category $vodka): void
+    {
+        LegacyIdMap::record('m_category', 'categories', [9001 => $gin->id, 9002 => $vodka->id]);
+        LegacyIdMap::record('m_middle', 'categories', [9101 => $dryGin->id]);
+        LegacyIdMap::record('m_method', 'methods', [9201 => Method::query()->where('name', 'ビルド')->firstOrFail()->id]);
     }
 
     /**
      * カテゴリ詳細の画像の E2E(#585)用。image 列にはファイル名だけを入れ、画像のファイルは public ディスクに置く。
      * /storage/<ファイル名> を Laravel が返せるよう、public/storage の symlink も無ければ作る。
+     * カクテルの詳細の画像の E2E(#110)も、同じファイルを使う(seedTopData のモスコミュール)。
      */
     private function seedCategoryImage(Category $vodka): void
     {
@@ -50,6 +67,58 @@ class E2eSeeder extends Seeder
             Artisan::call('storage:link');
         }
         $vodka->update(['image' => 'e2e-vodka.png']);
+    }
+
+    /**
+     * 銘柄の詳細(#54)の E2E 用の銘柄。ヘッダーのビーフィーター 40度(ビーフィーター。深さ 5)に、次の 3 つを足す。
+     *
+     * - スピリタス: 根の蒸留酒(深さ 1)に所属する。パンくずは 1 段で、親が無いので銘柄の一覧はどちらも出ない
+     * - タンカレー・ゴードン: ドライジン(深さ 3)に所属する。パンくずは 3 段。同じノードの一覧に互いが出て、
+     *   ジンの配下の一覧にビーフィーター 40度が出る。タンカレーだけ画像を持ち、どちらも商品の行を持つ
+     *   (画像の有無で商品の欄の場所が変わることを見る)
+     *
+     * 名前検索の E2E の件数を変えないよう、名前に「ジン」「ミント」「ビーフィーター」を入れない。
+     * 画像のファイルは seedCategoryImage と同じく public ディスクに置く(symlink は seedCategoryImage が作る)。
+     */
+    private function seedBrandDetailData(Category $liquor, Category $dryGin): void
+    {
+        $affiliate = fn (Brand $brand) => Affiliate::factory()->create([
+            'category_id' => $brand->category_id,
+            'brand_id' => $brand->id,
+            'human_title' => "{$brand->name} 700ml",
+            'human_amazon_detail_url' => 'https://www.amazon.co.jp/dp/B000000099',
+        ]);
+
+        $this->createBrand($liquor, 'スピリタス', 'Spirytus', 96);
+
+        // 1x1 の PNG
+        Storage::disk('public')->put(
+            'e2e-tanqueray.png',
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+        );
+        $affiliate($this->createBrand($dryGin, 'タンカレー', 'Tanqueray', 47.3, [
+            'description' => 'ロンドンの辛口。',
+            'image' => 'e2e-tanqueray.png',
+            'image_txt' => '画像の出典',
+        ]));
+        $affiliate($this->createBrand($dryGin, 'ゴードン', "Gordon's", 37.5));
+    }
+
+    /**
+     * 銘柄の詳細の E2E 用の銘柄を 1 件作る。検索用の名前は名前と同じにする。
+     *
+     * @param  array<string, mixed>  $attributes  ほかに入れる列
+     */
+    private function createBrand(Category $node, string $name, string $nameEng, float $volume, array $attributes = []): Brand
+    {
+        return Brand::factory()->create([
+            'category_id' => $node->id,
+            'name' => $name,
+            'name_search' => $name,
+            'name_eng' => $nameEng,
+            'volume' => $volume,
+            ...$attributes,
+        ]);
     }
 
     /**
@@ -83,6 +152,9 @@ class E2eSeeder extends Seeder
             'youtube' => 'x9gaP5Q8lc4',
             'youtube_created_at' => '2024-05-06 07:08:09',
             'description' => "銅のマグで飲む、@n{$vodka->id}@のカクテル",
+            // カクテルの詳細の画像の E2E(#110)用。ファイルは seedCategoryImage が置く
+            'image' => 'e2e-vodka.png',
+            'image_txt' => 'E2E の出典',
         ]);
         foreach (
             [
@@ -120,6 +192,10 @@ class E2eSeeder extends Seeder
      * 詳細の別名の欄(#109)のために、別名「G&T」を持たせる(名前検索「ジン」には当たらない名前にし、件数を変えない)。
      *
      * 銘柄はジンの有名な銘柄にもする(カテゴリの詳細の E2E(#105)で、有名な銘柄の欄が出るノードと出ないノードを作る)。
+     *
+     * 詳細の商品の欄(#110)のために、銘柄にだけ商品の行を作る(ミントには作らないので、ミントの商品の欄は出ない)。
+     * 商品の値は空で、E2E では Amazon の設定が無いので、API は名前から組み立てた Amazon の検索結果のリンクだけを返す
+     * (ボタン「Amazonで探す」だけが出る)。画像は持たせない(OGP の E2E(#112)が既定の画像を見ている)。
      */
     private function seedHeaderData(Category $gin, Category $beefeater, Category $mint, Dictionary $build, Dictionary $tumbler): void
     {
@@ -144,6 +220,7 @@ class E2eSeeder extends Seeder
             'description' => '定番のロングカクテル。',
             'note' => 'ライムを添える。',
         ]);
+        Affiliate::factory()->create(['category_id' => $beefeater->id, 'brand_id' => $beefeater40->id]);
         CocktailIngredient::factory()->forBrand($beefeater40)->create([
             'cocktail_id' => $cocktail->id,
             'position' => 1,
@@ -200,7 +277,7 @@ class E2eSeeder extends Seeder
      * (蒸留酒 > ジン > ドライジン > ロンドンドライジン > ビーフィーター)。
      * 閉包表は CategoryTree 経由でだけ書き換える決まりなので、ノードは addNode で作る。
      *
-     * @return array{gin: Category, beefeater: Category, mint: Category, vodka: Category} ヘッダー(seedHeaderData)・トップ(seedTopData)のデータが使うノード
+     * @return array{liquor: Category, gin: Category, dryGin: Category, beefeater: Category, mint: Category, vodka: Category} ヘッダー(seedHeaderData)・トップ(seedTopData)・銘柄の詳細(seedBrandDetailData)・旧 ID の対応(seedLegacyIdMaps)のデータが使うノード
      */
     private function seedIngredientTree(CategoryTree $tree): array
     {
@@ -223,7 +300,7 @@ class E2eSeeder extends Seeder
         $other = $node(null, 'その他', CategoryRole::Other);
         $mint = $node($other, 'ミント');
 
-        return ['gin' => $gin, 'beefeater' => $beefeater, 'mint' => $mint, 'vodka' => $vodka];
+        return ['liquor' => $liquor, 'gin' => $gin, 'dryGin' => $dryGin, 'beefeater' => $beefeater, 'mint' => $mint, 'vodka' => $vodka];
     }
 
     /**
