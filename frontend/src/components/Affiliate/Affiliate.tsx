@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from 'react'
+import { useCallback, useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useApi } from '../../api/useApi'
 import { defaultSearchQuery, searchResultUrl } from '../../features/search/searchQuery'
@@ -39,16 +39,26 @@ type Props = {
   brandId?: number | null
   /** 画像の代わりに画像の欄に出すとき(旧の is_photo_space)。幅に関わらず縦に並べる */
   inImage?: boolean
+  /**
+   * 欄を出したか(true)・出さなかったか(false)を知らせる。読み込み中は出していないので false。
+   * 並べた欄の上に見出しを置く画面(カクテルの詳細の「使われている材料はこちら」)が、1 つも出ないときに見出しを消すのに使う
+   */
+  onShownChange?: (shown: boolean) => void
 }
 
 /** 外のサイト(Amazon・楽天)へのリンクに付ける rel。広告のリンクなので sponsored を付ける */
 const EXTERNAL_REL = 'nofollow sponsored'
 
-export default function Affiliate({ categoryId, brandId = null, inImage = false }: Props) {
+export default function Affiliate({ categoryId, brandId = null, inImage = false, onShownChange }: Props) {
   const request = useCallback(() => fetchAffiliate(categoryId, brandId), [categoryId, brandId])
   const { state } = useApi(request)
+  const shown = state.kind === 'success' && hasAffiliate(state.data.data)
 
-  if (state.kind !== 'success' || !hasAffiliate(state.data.data)) {
+  useEffect(() => {
+    onShownChange?.(shown)
+  }, [onShownChange, shown])
+
+  if (state.kind !== 'success' || !shown) {
     return null
   }
   return <AffiliateBox data={state.data.data} categoryId={categoryId} inImage={inImage} />

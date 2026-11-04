@@ -54,6 +54,7 @@ class E2eSeeder extends Seeder
     /**
      * カテゴリ詳細の画像の E2E(#585)用。image 列にはファイル名だけを入れ、画像のファイルは public ディスクに置く。
      * /storage/<ファイル名> を Laravel が返せるよう、public/storage の symlink も無ければ作る。
+     * カクテルの詳細の画像の E2E(#110)も、同じファイルを使う(seedTopData のモスコミュール)。
      */
     private function seedCategoryImage(Category $vodka): void
     {
@@ -151,6 +152,9 @@ class E2eSeeder extends Seeder
             'youtube' => 'x9gaP5Q8lc4',
             'youtube_created_at' => '2024-05-06 07:08:09',
             'description' => "銅のマグで飲む、@n{$vodka->id}@のカクテル",
+            // カクテルの詳細の画像の E2E(#110)用。ファイルは seedCategoryImage が置く
+            'image' => 'e2e-vodka.png',
+            'image_txt' => 'E2E の出典',
         ]);
         foreach (
             [
@@ -188,6 +192,10 @@ class E2eSeeder extends Seeder
      * 詳細の別名の欄(#109)のために、別名「G&T」を持たせる(名前検索「ジン」には当たらない名前にし、件数を変えない)。
      *
      * 銘柄はジンの有名な銘柄にもする(カテゴリの詳細の E2E(#105)で、有名な銘柄の欄が出るノードと出ないノードを作る)。
+     *
+     * 詳細の商品の欄(#110)のために、銘柄にだけ商品の行を作る(ミントには作らないので、ミントの商品の欄は出ない)。
+     * 商品の値は空で、E2E では Amazon の設定が無いので、API は名前から組み立てた Amazon の検索結果のリンクだけを返す
+     * (ボタン「Amazonで探す」だけが出る)。画像は持たせない(OGP の E2E(#112)が既定の画像を見ている)。
      */
     private function seedHeaderData(Category $gin, Category $beefeater, Category $mint, Dictionary $build, Dictionary $tumbler): void
     {
@@ -212,6 +220,7 @@ class E2eSeeder extends Seeder
             'description' => '定番のロングカクテル。',
             'note' => 'ライムを添える。',
         ]);
+        Affiliate::factory()->create(['category_id' => $beefeater->id, 'brand_id' => $beefeater40->id]);
         CocktailIngredient::factory()->forBrand($beefeater40)->create([
             'cocktail_id' => $cocktail->id,
             'position' => 1,
