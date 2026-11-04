@@ -2,6 +2,8 @@ import { Route, Routes } from 'react-router'
 import RequireNumericId from './RequireNumericId'
 import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
+import AdminBrandEdit from './pages/AdminBrandEdit'
+import AdminBrands from './pages/AdminBrands'
 import AdminCocktails from './pages/AdminCocktails'
 import AdminHome from './pages/AdminHome'
 import AdminLogin from './pages/AdminLogin'
@@ -11,7 +13,6 @@ import CocktailDetail from './pages/CocktailDetail'
 import CocktailSearchResult from './pages/CocktailSearchResult'
 import DictionaryDetail from './pages/DictionaryDetail'
 import DictionaryIndex from './pages/DictionaryIndex'
-import HelpMe from './pages/HelpMe'
 import NameSearchResult from './pages/NameSearchResult'
 import NotFound from './pages/NotFound'
 import Top from './pages/Top'
@@ -34,7 +35,6 @@ export default function App() {
       <Route element={<SiteLayout />}>
         <Route path="/" element={<Top />} />
         <Route path="/index" element={<Top />} />
-        <Route path="/helpme" element={<HelpMe />} />
         <Route path="/result/FromNameResult/:word" element={<NameSearchResult />} />
         {/* 旧で URL の語で検索し直すための別名。画面は同じ */}
         <Route path="/result/FromNameResultEx/:word" element={<NameSearchResult />} />
@@ -50,6 +50,9 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminHome />} />
+        <Route path="brands" element={<AdminBrands />} />
+        <Route path="brands/new" element={<AdminBrandEdit />} />
+        <Route path="brands/:id" element={<RequireNumericId element={<AdminBrandEdit />} />} />
         <Route path="cocktails" element={<AdminCocktails />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
