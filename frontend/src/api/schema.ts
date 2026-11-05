@@ -146,7 +146,10 @@ export interface paths {
          */
         put: operations["categories.update"];
         post?: never;
-        /** ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。 */
+        /**
+         * ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。
+         * @description ほかのノード・カクテル・技法・銘柄・用語の説明文から `@n<ID>@` で参照されているときも消さず、409 で理由と参照している行を返す(#629)。
+         */
         delete: operations["categories.destroy"];
         options?: never;
         head?: never;
@@ -1153,8 +1156,12 @@ export interface components {
             image_url: string | null;
             delete_blockers: {
                 /** @enum {string} */
-                code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates";
+                code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates" | "referenced_by_cocktail" | "referenced_by_node" | "referenced_by_method" | "referenced_by_brand" | "referenced_by_dictionary";
                 message: string;
+                referrers?: {
+                    id: number;
+                    name: string;
+                }[];
             }[];
             updated_at: string | null;
         };
@@ -1513,7 +1520,7 @@ export interface components {
         };
         /** FormOptionResource */
         FormOptionResource: {
-            id: string;
+            id: number;
             name: string;
         };
         /** LatestVideoCocktailResource */
@@ -2365,8 +2372,12 @@ export interface operations {
                         message: "このノードは消せません";
                         reasons: {
                             /** @enum {string} */
-                            code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates";
+                            code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates" | "referenced_by_cocktail" | "referenced_by_node" | "referenced_by_method" | "referenced_by_brand" | "referenced_by_dictionary";
                             message: string;
+                            referrers?: {
+                                id: number;
+                                name: string;
+                            }[];
                         }[];
                     };
                 };
