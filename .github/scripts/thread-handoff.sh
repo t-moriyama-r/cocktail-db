@@ -84,7 +84,7 @@ ask() {
     return
   fi
   if jq -e 'any(.local == "open")' <<<"$threads" >/dev/null; then
-    ask_local "$repo" "$n" "$sha" "$threads"
+    ask_local "$repo" "$n" "$sha" "$threads" "$comments"
     return
   fi
 
@@ -132,7 +132,7 @@ classify_local_pending() {
         | (if $pending then ($body | capture("ai-dev:local-pending kind=(?<k>[a-z]+)").k) else "" end) as $kind
         | .lastAt as $at
         | ([$comments[] | select(.created_at > $at and (.body // "" | test("ai-dev:local-done kind=\($kind)\\b")))] | last | .html_url // "") as $done
-        | . + {doneUrl: $done, local: (
+        | . + {kind: $kind, doneUrl: $done, local: (
             if ($pending | not) then "none"
             elif $done != "" then "done"
             elif $already then "stuck"
@@ -170,15 +170,22 @@ resolve_with_reply() {
 
 # 手元に頼んだのに needs-local が付いていないスレッドを、見回りの番に戻す。
 # 人に頼むスレッドが一緒にあっても先にこちらをする。手元の作業で中身が変わりうるうえ、needs-local が外れると判定が呼び直される。
+# 種類はスレッドの目印に合わせる。違う種類の local-done では、片付いたと判定できないため。
+# 見回りが読む目印は 1 コメントに 1 つなので、種類が混ざるときは重いほうを書く。
 # 見回りには Slack で知らせない(人がすることが無いため)
 ask_local() {
-  local repo=$1 n=$2 sha=$3 threads=$4 open links
+  local repo=$1 n=$2 sha=$3 threads=$4 comments=$5 open links kind request
   open=$(jq '[.[] | select(.local == "open")]' <<<"$threads")
-  links=$(jq -r '.[] | "- \(.url)\(if .path then " (`\(.path)`)" else "" end)"' <<<"$open")
-  gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- $LOCAL_MARKER sha=$sha -->
+  links=$(jq -r '.[] | "- \(.url)\(if .path then " (`\(.path)`)" else "" end)"' <<<"$open" | tr -d '\r')
+  kind=$(jq -r '[.[].kind] as $k | if ($k | index("evidence")) then "evidence" elif ($k | index("push")) then "push" else "other" end' <<<"$open" | tr -d '\r')
+  # 差分や撮るものは前の頼むコメントにあるので、そこへのリンクを添える
+  request=$(jq -r --arg k "$kind" '[.[] | select(.body // "" | contains("ai-dev:needs-local kind=\($k)"))] | last | .html_url // "(見つからなかった)"' <<<"$comments" | tr -d '\r')
+  gh pr comment "$n" -R "$repo" --body "<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=$kind --> <!-- $LOCAL_MARKER sha=$sha -->
 手元に頼んだと返したスレッドが $(jq length <<<"$open") 件、片付かないまま残っている(needs-local も local-done も無い)。人の判断は要らない。
 
-スレッドと、その前に PR に書いた頼むコメントのとおりに作業し、スレッドに何をしたかを返して解決にしてほしい。
+スレッドと、前に PR に書いた頼むコメントのとおりに作業し、スレッドに何をしたかを返して解決にしてほしい。
+
+前の頼むコメント: $request
 
 $links"
   gh pr edit "$n" -R "$repo" --add-label needs-local
