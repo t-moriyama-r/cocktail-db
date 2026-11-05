@@ -1,11 +1,11 @@
 # 楽天の商品検索 API のクライアント(`RakutenClient`)の決定
 
-#72 で作る、楽天市場の商品検索 API(`docs/rakuten-api.md`)を呼ぶクライアント `App\Services\Affiliate\RakutenClient` で決めたこと。旧は `App\Classes\Factory\RakutenFactory::generateFromWord`(と、値を持つ `App\Classes\Rakuten`)。呼ぶ側(名前で探して保存する #248・商品のコードで取り直す #249)は、まだ無い。
+#72 で作る、楽天市場の商品検索 API(`docs/rakuten-api.md`)を呼ぶクライアント `App\Services\Affiliate\RakutenClient` で決めたこと。旧は `App\Classes\Factory\RakutenFactory::generateFromWord`(と、値を持つ `App\Classes\Rakuten`)。呼ぶ側は、名前で探して保存する `affiliates:collect --new`(#248。`App\Services\Affiliate\AffiliateCollector`)と、商品のコードで取り直す #249(まだ無い)。
 
 ## 決まったこと
 
 1. 持つ操作は 2 つ
-   - `searchItems(語, ジャンル)`: 語で探し、検索結果の先頭の 1 ページを楽天の順で返す。ジャンルの既定は旧と同じ `510915`(ビール・洋酒)。`null` を渡すとジャンルで絞らない。どの商品に `null` を渡すか(#155 の「洋酒ではない」の述語を使うか)は、呼ぶ側の #248 で決める(このクライアントでは決めない)
+   - `searchItems(語, ジャンル)`: 語で探し、検索結果の先頭の 1 ページを楽天の順で返す。ジャンルの既定は旧と同じ `510915`(ビール・洋酒)。`null` を渡すとジャンルで絞らない。どの商品に `null` を渡すか(#155 の「洋酒ではない」の述語を使うか)は、呼ぶ側で決める(このクライアントでは決めない)。#248 の `affiliates:collect --new` は、旧が本番で実際にしていたとおり、いつも `510915` で絞る(旧の「洋酒ではない」の判定は本番で効いていなかった。`docs/decisions/category-root-role.md` の「洋酒ではない(kind 4 以上)は、本番では効いていない」)。述語で絞らないようにするのは旧との差分になり、まだ決まっていない
    - `getItem(商品のコード)`: 商品のコード(`shop:1234` の形)で 1 件を取り直す。売り切れも取る(`availability=0`)。見つからない(404・0 件・別のコードの商品だけが返る)ときは `null`
 2. 設定(`App\Support\Settings`)から読むもの: アプリ ID(`rakuten.application_id`)・アクセスキー(`rakuten.access_key`)・アフィリエイト ID(`rakuten.affiliate_id`。前からある)。アプリ ID とアクセスキーは秘密の項目(規約 第5条でアプリ ID を他人に知られないよう管理するとあるため。`docs/decisions/settings.md`)
    - アプリ ID かアクセスキーが無いあいだは、楽天に問い合わせない。`searchItems` は `null` を返す。`getItem` は、見つからない(`null`。#249 が商品のコードを消す)と取り違えないよう、例外 `RakutenNotConfiguredException` を投げる。呼ぶ側は先に `isConfigured()` で確かめる
