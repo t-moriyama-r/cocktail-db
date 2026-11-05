@@ -109,7 +109,8 @@ merge() {
 # PR が開いているか。閉じた PR には貼らない・コメントしない(撮っているあいだに閉じられた。RC-07)
 still_open() {
   local repo=$1 number=$2 state
-  state=$(gh api "repos/$repo/pulls/$number" --jq .state)
+  # 読めなかったときに「閉じた」と取り違えて黙って終えない(落として気づけるようにする)
+  state=$(gh api "repos/$repo/pulls/$number" --jq .state) || { echo "PR #$number の状態を読めなかった" >&2; exit 1; }
   if [ "$state" != open ]; then
     echo "PR #$number は閉じられたので、貼らない"
     return 1
@@ -118,16 +119,32 @@ still_open() {
 
 has_label() {
   local repo=$1 number=$2 label=$3 labels
-  labels=$(gh api "repos/$repo/issues/$number" --jq '[.labels[].name] | join(",")')
+  # 読めなかったときに「ラベルなし」と取り違えない
+  labels=$(gh api "repos/$repo/issues/$number" --jq '[.labels[].name] | join(",")') \
+    || { echo "PR #$number のラベルを読めなかった" >&2; exit 1; }
   [[ ",$labels," == *",$label,"* ]]
 }
 
 attach() {
-  local repo=$1 number=$2 request=$3 urls=$4 before=$5 after=$6 run_url=$7 work gate rc=0
+  local repo=$1 number=$2 request=$3 urls=$4 before=$5 after=$6 run_url=$7 work gate head rc=0
   still_open "$repo" "$number" || return 0
   work=$(mktemp -d)
   WORK=$work
   trap 'rm -rf "$WORK"' EXIT
+  # 撮っているあいだに head が進んだら、撮った物は今の head のものではないので、貼らず needs-local も外さない
+  head=$(gh api "repos/$repo/pulls/$number" --jq .head.sha) || { echo "PR #$number の head を読めなかった" >&2; exit 1; }
+  if [ "$head" != "$after" ]; then
+    {
+      echo '<!-- ai-dev:agent -->'
+      echo "Actions(\`evidence-capture.yml\`)で撮っているあいだに、PR の head が \`${after:0:7}\` から \`${head:0:7}\` に進んだので、証跡は貼らず \`needs-local\` も残した。"
+      echo
+      echo "- 撮った回: $run_url"
+      echo "- 撮り直すには、\`needs-local\` を付け直す"
+    } >"$work/comment.md"
+    gh api "repos/$repo/issues/$number/comments" -F "body=@$work/comment.md" >/dev/null
+    echo "PR #$number の head が進んだので、貼らずに needs-local を残してコメントした"
+    return 0
+  fi
   section "$request" "$urls" "$before" "$after" "$run_url" >"$work/block.md"
   gh api "repos/$repo/pulls/$number" --jq '.body // ""' >"$work/body.md"
   merge "$work/body.md" "$work/block.md" >"$work/new.md"

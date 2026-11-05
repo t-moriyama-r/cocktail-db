@@ -85,6 +85,11 @@ main() {
 	run nope
 	expect TC-601-16 '引数の誤りは 2 で終わる' "$few|$bad_number|$RC" '2|2|2'
 
+	HEAD_SHA=ffffffffffffffffffffffffffffffffffffffff pr open needs-local 'Closes #7'
+	run attach o/r 7 "$FAKE/request.json" "$FAKE/urls" "$BEFORE" "$AFTER" "$RUN_URL"
+	expect TC-601-17 '撮っているあいだに head が進んだら、貼らず needs-local も残し、理由をコメントする' \
+		"$RC|$(writes)|$(grep -c 'fffffff' "$FAKE/comment")" '0|comment|1'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -141,8 +146,8 @@ urls() {
 
 # PR の状態を決める: pr <state> <ラベル(空なら無し)> <本文>
 pr() {
-	jq -n -c --arg state "$1" --arg label "$2" --arg body "$3" \
-		'{state: $state, body: $body, labels: (if $label == "" then [] else [{name: $label}] end)}' >"$FAKE/pr"
+	jq -n -c --arg state "$1" --arg label "$2" --arg body "$3" --arg sha "${HEAD_SHA:-$AFTER}" \
+		'{state: $state, body: $body, head: {sha: $sha}, labels: (if $label == "" then [] else [{name: $label}] end)}' >"$FAKE/pr"
 	rm -f "$FAKE/writes" "$FAKE/comment"
 }
 
