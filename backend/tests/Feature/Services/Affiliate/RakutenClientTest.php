@@ -209,7 +209,7 @@ it('TC-72-08: 語に空白があって 400 が返ったら、1 秒空けて、�
     $responses = Http::sequence()
         ->push(['error' => 'wrong_parameter', 'error_description' => 'keyword is not valid'], 400)
         ->push(rakutenFixture('search'));
-    Http::fake([RAKUTEN_SEARCH_URL.'*' => function ($request) use (&$sentAt, $responses) {
+    Http::fake([RAKUTEN_SEARCH_URL.'*' => function (Request $request) use (&$sentAt, $responses) {
         $sentAt[] = (int) now()->getPreciseTimestamp(3);
 
         return $responses->__invoke($request);
