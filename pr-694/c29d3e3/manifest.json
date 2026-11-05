@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "before": "1c7ceb9305f4c3e35e8c2f648faea5a70379c6fb",
+  "after": "c29d3e33c16bb440f0d09ece390d40ecde2e503d",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-248-18"
+      ],
+      "note": "修正前はコマンドが無い。修正後は --new と --limit の説明が出る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-248-11"
+      ],
+      "note": "認証情報の無い環境で流す。修正後は「何もしない」と出て、行は増えない",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    },
+    {
+      "id": "03-command",
+      "kind": "command",
+      "cases": [
+        "TC-248-01",
+        "TC-248-02",
+        "TC-248-03",
+        "TC-248-04",
+        "TC-248-05",
+        "TC-248-06",
+        "TC-248-07",
+        "TC-248-08",
+        "TC-248-09",
+        "TC-248-10",
+        "TC-248-11",
+        "TC-248-12",
+        "TC-248-13",
+        "TC-248-14",
+        "TC-248-15",
+        "TC-248-16",
+        "TC-248-17",
+        "TC-248-18"
+      ],
+      "note": "修正前はテストのファイルが無い。修正後は 21 件通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "03-command-before.png",
+        "03-command-after.png",
+        "03-command-compare.png"
+      ]
+    }
+  ]
+}
