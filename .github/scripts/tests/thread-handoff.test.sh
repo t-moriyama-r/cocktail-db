@@ -328,6 +328,29 @@ main() {
 	expect TC-682-12 '目印の無いスレッドは、local-done が後にあっても解決せず、これまでどおり人に頼む' \
 		"$(resolved_threads)|$(commented | grep -c 'https://example.test/t')|$(labeled)" '|2|7 -R o/r --add-label needs-human'
 
+	reset
+	pr 7
+	threads '<!-- ai-dev:agent --> <!-- ai-dev:local-pending kind=push --> 手元に頼んだ'
+	comments '<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=push --> 差分を当ててほしい'
+	run ask
+	expect TC-684-01 '頼み直すコメントは、スレッドと同じ種類の目印にし、前の頼むコメントへのリンクを添える' \
+		"$(commented | grep -c 'ai-dev:needs-local kind=push')|$(commented | grep -c 'https://example.test/c1')" '1|1'
+
+	reset
+	pr 7
+	threads '<!-- ai-dev:agent --> <!-- ai-dev:local-pending kind=push --> 手元に頼んだ' '<!-- ai-dev:agent --> <!-- ai-dev:local-pending kind=evidence --> 手元に頼んだ'
+	run ask
+	expect TC-684-02 '種類が混ざるときは、重いほうの目印を 1 つだけ書く(見回りは 1 コメントの最初の目印を読む)' \
+		"$(commented | grep -o 'ai-dev:needs-local kind=[a-z]*')" 'ai-dev:needs-local kind=evidence'
+
+	reset
+	pr 7
+	threads '<!-- ai-dev:agent --> <!-- ai-dev:local-pending kind=push --> 手元に頼んだ'
+	comments '<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=push --> <!-- ai-dev:thread-handoff-local sha=sha7 -->' '<!-- ai-dev:agent --> <!-- ai-dev:local-done kind=push --> 片付けた'
+	run ask
+	expect TC-684-03 '頼み直しに手元が同じ種類の local-done で答えたら、人に頼まず解決する' \
+		"$(resolved_threads)|$(labeled)|$(dispatched)" 'thread1||ai-auto-merge.yml -R o/r -f number=7'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
