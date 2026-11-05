@@ -26,5 +26,6 @@ export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [
   { label: '銘柄', path: ADMIN_BRANDS_PATH },
   { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
   { label: 'カクテル', path: ADMIN_COCKTAILS_PATH },
+  { label: '設定', path: '/admin/settings' },
   { label: 'パスキー', path: ADMIN_PASSKEYS_PATH },
 ]

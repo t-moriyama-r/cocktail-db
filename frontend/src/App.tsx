@@ -12,6 +12,7 @@ import AdminDictionaryNew from './pages/AdminDictionaryNew'
 import AdminHome from './pages/AdminHome'
 import AdminLogin from './pages/AdminLogin'
 import AdminPasskeys from './pages/AdminPasskeys'
+import AdminSettings from './pages/AdminSettings'
 import BrandDetail from './pages/BrandDetail'
 import CategoryDetail from './pages/CategoryDetail'
 import CocktailDetail from './pages/CocktailDetail'
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="dictionaries/new" element={<AdminDictionaryNew />} />
         <Route path="dictionaries/:id" element={<RequireNumericId element={<AdminDictionaryEdit />} />} />
         <Route path="cocktails" element={<AdminCocktails />} />
+        <Route path="settings" element={<AdminSettings />} />
         <Route path="passkeys" element={<AdminPasskeys />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
