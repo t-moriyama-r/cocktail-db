@@ -46,6 +46,7 @@ agent_write() {
       body_file "$2"
       # 実行の開始時の本文の sha256(agent-write.target の body_sha=)があれば、いまの本文と比べ、実行中に人が編集していたら書かない
       if [ -n "$BODY_SHA" ]; then
+        [ -s "$(body_sha_state "$REPO" "$PR")" ] && BODY_SHA=$(cat "$(body_sha_state "$REPO" "$PR")")
         now=$(gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1)
         if [ "$now" != "$BODY_SHA" ]; then
           echo "PR の本文が実行中に編集されたので書かない(人の編集を消さないため)" >&2
@@ -53,10 +54,20 @@ agent_write() {
         fi
       fi
       gh api -X PATCH "repos/$REPO/pulls/$PR" -F body=@"$2" --silent
+      # 同じ実行内で本文を続けて書けるよう、書いた後の本文の sha256 を次の比較の基準にする(その後の人の編集は引き続き見つける)。
+      # agent-write.target は読み取り専用の置き場にあって書き換えられないので、基準は別のファイルに残す
+      if [ -n "$BODY_SHA" ]; then
+        gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1 >"$(body_sha_state "$REPO" "$PR")"
+      fi
       echo "updated #$PR"
       ;;
     *) usage ;;
   esac
+}
+
+# 本文を書いた後の sha256 を残すファイル(実行ごとの一時の置き場。PR ごとに分ける)
+body_sha_state() {
+  echo "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/agent-write-body-sha-${1//\//_}-$2"
 }
 
 usage() {
