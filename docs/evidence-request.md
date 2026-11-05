@@ -25,11 +25,11 @@ flowchart LR
 
 - **起こし方**: PR に `needs-local` が付いたとき(`pull_request_target` の `labeled`)と、PR の番号での `workflow_dispatch`。`GITHUB_TOKEN` で付けたラベルではワークフローが起きないので、Actions の中から頼んだときは `workflow_dispatch` で起こす
 - **撮らない PR**(`evidence-target.sh`): 開いていない PR・フォークからの PR・昇格の PR(`staging`・`release` 向け)。ラベルで起きた回は、いまも `needs-local` が付いていて、信頼する人・bot のいちばん新しい手元に頼むコメント(`<!-- ai-dev:needs-local kind=… -->`)が `kind=evidence` のときだけ撮る(`push`・`other` の頼みでは撮らない)
-- **信頼しない人の書き込み**: 撮る前に `untrusted-hold.sh` で、PR と閉じる issue に、オーナー・コラボレーター・決まった bot 以外の人が書いたものが無いかを見る。あれば撮らず、URL を並べたコメントと `needs-human` を付ける(CLAUDE.md の手順 8。撮る側はブロックの `run` をシェルで流すため)
+- **信頼しない人の書き込み**: 撮る前に `untrusted-hold.sh` で、PR と閉じる issue に、オーナー・コラボレーター・決まった bot 以外の人が書いたものが無いかを見る。あれば撮らず、URL を並べたコメントと `needs-human` を付ける(CLAUDE.md の手順 8。撮る側はブロックの `run` をシェルで流すため)。確かめるための読み取り(PR・閉じる issue・コメント)に失敗したとき(`untrusted-hold.sh` の終わりのコード 3)も撮らず、下の「撮れなかったとき」と同じく、`needs-local` を残して読めなかったことをコメントする(#688)
 - **撮るもの**: 信頼する人が書いたいちばん新しい頼むコメント(`evidence-pick.sh`)のブロック。修正前(PR の向き先のブランチの今の先頭か `before`)と修正後(PR の head か `after`)を `APP_DEBUG=false` で起こして撮る。画面は、撮る前に修正後の画面の HTTP の状態を見て、5xx なら撮らない
 - **置き場所**: 証跡だけの孤立したブランチ `evidence`(保護しない)の `pr-<番号>/<修正後の短い SHA>/`。ファイルの名前は `<連番 2 桁>-<kind>[-<幅>]-<before|after|compare>.<png|mp4|gif>` と `manifest.json`。同じ SHA で撮り直すと、そのディレクトリを入れ替える。撮った画面・応答・コマンドの結果にランナーのパス・ホスト名が出ていたら、置かずに落ちる(`evidence-leak-check.sh`・`evidence-publish.sh`)
 - **貼り方**(`evidence-report.sh`): 本文の「## 証跡」の見出しのすぐ下に、`<!-- ai-dev:evidence-capture start -->` 〜 `<!-- ai-dev:evidence-capture end -->` の塊を入れる(撮り直したら塊を入れ替える。見出しが無ければ末尾に足す)。塊には、項目ごとの比較画像(`raw.githubusercontent.com` の `evidence` ブランチの URL の `<img>`)・修正前後の静止画・mp4 へのリンク・GIF・撮った幅(`<数字>px`)を書く(`evidence-gate.sh` が数える形)。貼ったら `needs-local` を外し、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:local-done kind=evidence -->` のコメントに、撮った回と `evidence-gate.sh` の結果を書く
-- **撮れなかったとき**(指定が無い・形の誤り・アプリの起動やデータの投入の失敗・修正後の画面がエラー・置けなかった): `needs-local` を残し(外されていれば付け直し)、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` のコメントに、どこで止まったかと撮った回の URL を書く。手元の見回りがそれを拾って撮る
+- **撮れなかったとき**(信頼の確認で読めなかった・指定が無い・形の誤り・アプリの起動やデータの投入の失敗・修正後の画面がエラー・置けなかった): `needs-local` を残し(外されていれば付け直し)、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` のコメントに、どこで止まったかと撮った回の URL を書く。手元の見回りがそれを拾って撮る
 - 見た目の案を人に選んでもらう PR の撮影(案ごとに手元で一時的に書き換えて撮るもの)は、今までどおり手元で撮る(#487 の対象外)
 
 ## 形
