@@ -1,15 +1,19 @@
-import { useCallback, type ReactNode } from 'react'
+import { useCallback, useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useApi } from '../../api/useApi'
 import { defaultSearchQuery, searchResultUrl } from '../../features/search/searchQuery'
 import styles from './Affiliate.module.css'
 import {
+  AMAZON_ATTRIBUTION,
   formatFetchedAt,
   hasAffiliate,
   hasPrice,
   imageHref,
   lowerPriceSource,
   PRICE_DISCLAIMER,
+  RAKUTEN_CREDIT_HTML,
+  shownButtonPrice,
+  showsSourceContent,
   type AffiliateData,
   type PriceSource,
 } from './affiliateView'
@@ -25,6 +29,8 @@ import { fetchAffiliate } from './fetchAffiliate'
  * - 画像・題名・価格は、API の display(手で入れた価格 → Amazon → 楽天の順に選んだもの)を出す。display が無ければボタンだけ
  * - 価格には、取った時刻(日本時間の日付と時刻)と、規約の免責の文言を添える。期限切れの価格は API が返さないので出ない
  *   (docs/decisions/affiliate-freshness.md の 3・4)
+ * - 欄のいちばん下に、Amazon の商品の情報を出すときは Amazon の提供の文言、楽天の商品の情報を出すときは楽天のクレジットを出す
+ *   (docs/decisions/affiliate-freshness.md の 3。affiliateView.ts の showsSourceContent)
  */
 type Props = {
   /** 詳細のノード(カテゴリ)の ID。「このアイテムが使われているカクテルを探す」の条件にもする */
@@ -33,16 +39,26 @@ type Props = {
   brandId?: number | null
   /** 画像の代わりに画像の欄に出すとき(旧の is_photo_space)。幅に関わらず縦に並べる */
   inImage?: boolean
+  /**
+   * 欄を出したか(true)・出さなかったか(false)を知らせる。読み込み中は出していないので false。
+   * 並べた欄の上に見出しを置く画面(カクテルの詳細の「使われている材料はこちら」)が、1 つも出ないときに見出しを消すのに使う
+   */
+  onShownChange?: (shown: boolean) => void
 }
 
 /** 外のサイト(Amazon・楽天)へのリンクに付ける rel。広告のリンクなので sponsored を付ける */
 const EXTERNAL_REL = 'nofollow sponsored'
 
-export default function Affiliate({ categoryId, brandId = null, inImage = false }: Props) {
+export default function Affiliate({ categoryId, brandId = null, inImage = false, onShownChange }: Props) {
   const request = useCallback(() => fetchAffiliate(categoryId, brandId), [categoryId, brandId])
   const { state } = useApi(request)
+  const shown = state.kind === 'success' && hasAffiliate(state.data.data)
 
-  if (state.kind !== 'success' || !hasAffiliate(state.data.data)) {
+  useEffect(() => {
+    onShownChange?.(shown)
+  }, [onShownChange, shown])
+
+  if (state.kind !== 'success' || !shown) {
     return null
   }
   return <AffiliateBox data={state.data.data} categoryId={categoryId} inImage={inImage} />
@@ -103,6 +119,7 @@ function AffiliateBox({ data, categoryId, inImage }: { data: AffiliateData; cate
         <div className={styles.searchByItem}>
           <Link to={searchResultUrl({ ...defaultSearchQuery, nodeIds: [categoryId] })}>⇒このアイテムが使われているカクテルを探す</Link>
         </div>
+        <Credits amazon={showsSourceContent(data, 'amazon')} rakuten={showsSourceContent(data, 'rakuten')} />
       </div>
     </aside>
   )
@@ -131,9 +148,7 @@ function ShopButton(props: {
   isLower: boolean
 }) {
   const { source, label, href, price, fetchedAt, isLower } = props
-  const fetched = fetchedAt === null ? null : formatFetchedAt(fetchedAt)
-  // 価格は取った時刻と一緒にしか出さない(規約。docs/decisions/affiliate-freshness.md の 3)
-  const shownPrice = hasPrice(price) && fetched !== null ? price : null
+  const shownPrice = shownButtonPrice(price, fetchedAt)
   return (
     <div className={`${styles.shopLink} ${styles[source]}`}>
       <a href={href} target="_blank" rel={EXTERNAL_REL}>
@@ -187,6 +202,20 @@ function FetchedNote({ source, fetchedAt }: { source: PriceSource; fetchedAt: st
         <span className={styles.disclaimerText}>{PRICE_DISCLAIMER[source]}</span>
       </details>
       )
+    </div>
+  )
+}
+
+/**
+ * 欄のいちばん下の、Amazon の提供の文言と楽天のクレジット(docs/decisions/affiliate-freshness.md の 3)。
+ * 楽天のクレジットは公式の HTML のソースを変えずに使うので、JSX に書き直さず、そのまま差し込む(中身は定数で、外から来る値は入らない)
+ */
+function Credits({ amazon, rakuten }: { amazon: boolean; rakuten: boolean }) {
+  if (!amazon && !rakuten) return null
+  return (
+    <div className={styles.credits}>
+      {amazon && <p className={styles.credit}>{AMAZON_ATTRIBUTION}</p>}
+      {rakuten && <p className={styles.credit} dangerouslySetInnerHTML={{ __html: RAKUTEN_CREDIT_HTML }} />}
     </div>
   )
 }

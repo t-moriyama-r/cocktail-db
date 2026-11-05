@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import Top from './Top'
@@ -362,6 +362,6 @@ describe('トップページの条件検索のフォーム', () => {
     fireEvent.click(form.getByRole('button', { name: '検索' }))
 
     // 条件を URL のクエリに入れて移る(#102)。ジンは蒸留酒のただ 1 つの子なので、蒸留酒 1 つに畳む
-    expect(screen.getByTestId('location')).toHaveTextContent(/^\/result\/Cocktails\?n=1$/)
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/result\/Cocktails\?n=1$/))
   })
 })

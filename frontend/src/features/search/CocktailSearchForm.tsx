@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { components } from '../../api/schema'
 import MethodIcon from '../../components/CocktailTable/MethodIcon'
 import IngredientTreeField from './IngredientTreeField'
@@ -13,7 +13,13 @@ import {
 } from './searchForm'
 import { buildSelectionTree } from './selection'
 import { sortSearchFormTree } from './sortSearchFormTree'
-import { hasSavedSearch, loadSearch, saveSearch, type SearchStorageSlot } from './searchStorage'
+import {
+  hasSavedSearch,
+  loadSearch,
+  saveSearch,
+  SEARCH_STORAGE_CHANGED_EVENT,
+  type SearchStorageSlot,
+} from './searchStorage'
 import styles from './CocktailSearchForm.module.css'
 
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
@@ -84,7 +90,8 @@ const readSavedSlots = (): Record<SearchStorageSlot, boolean> => ({
  * - 製法は 0 個でも検索できる(docs/decisions/search-screen.md の 6。旧は「製法は必須です。」で押せなかった)
  * - 「リセット」で既定値に戻す
  * - 「保存」「読み込み」「リロード」(#104。旧 localStorageHelper.js。searchStorage.ts)。「保存」は今の値を、「検索」は押した条件を
- *   保存する。「読み込み」「リロード」は、保存が無ければ押せない。開いたときには読まない(docs/decisions/search-screen.md の 4)
+ *   保存する。「読み込み」「リロード」は、保存が無ければ押せない。開いたときには読まない(docs/decisions/search-screen.md の 4)。
+ *   旧サイトの保存値を後から新しい保存に移したとき(#175)は、押せるかを読み直す
  */
 export default function CocktailSearchForm({
   categories,
@@ -103,6 +110,12 @@ export default function CocktailSearchForm({
   const tree = useMemo(() => buildSelectionTree(sortSearchFormTree(categories)), [categories])
   // 開いたときに 1 度読み、保存・検索の後に読み直す(保存できたかは localStorage を読み直して決める)
   const [savedSlots, setSavedSlots] = useState(readSavedSlots)
+  // 旧サイトの保存値を、開いた後に新しい保存へ移したとき(#175)も読み直す
+  useEffect(() => {
+    const reread = () => setSavedSlots(readSavedSlots())
+    window.addEventListener(SEARCH_STORAGE_CHANGED_EVENT, reread)
+    return () => window.removeEventListener(SEARCH_STORAGE_CHANGED_EVENT, reread)
+  }, [])
   // 保存に失敗したとき(容量不足・localStorage が使えない)は、古い保存が残っていても保存できたことにしない
   const [saveFailed, setSaveFailed] = useState(false)
 

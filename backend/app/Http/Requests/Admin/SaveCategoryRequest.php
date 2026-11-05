@@ -6,6 +6,8 @@ use App\Enums\CategoryRole;
 use App\Http\Requests\Admin\Concerns\AdminFormInput;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
 use App\Services\AdminImageStore;
 use App\Services\CategoryTree;
 use Illuminate\Foundation\Http\FormRequest;
@@ -181,6 +183,17 @@ class SaveCategoryRequest extends FormRequest
                 $validator->errors()->add('parent_id', '自分自身と、自分より下のノードは親にできません');
             } elseif ($node->role !== null) {
                 $validator->errors()->add('parent_id', '役割を持つ根は、ほかのノードの下へ移せません');
+            }
+        }
+
+        // 根へ移すノードを、カクテルの材料・ベースが直接指しているなら止める(根は材料・ベースに使えない。
+        // docs/decisions/category-root-role.md の決まったこと 4。#122)。子孫は根にならないので見ない
+        if ($node !== null && $parent === null && ! $tree->isRoot($node)) {
+            if (CocktailIngredient::query()->where('category_id', $node->id)->exists()) {
+                $validator->errors()->add('parent_id', 'カクテルの材料に使われているノードは、根にできません');
+            }
+            if (Cocktail::query()->where('base_category_id', $node->id)->exists()) {
+                $validator->errors()->add('parent_id', 'カクテルのベースに使われているノードは、根にできません');
             }
         }
 

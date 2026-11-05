@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-shoot.js のテスト(TC-600-16〜21)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
+# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
 # 流す手順を出す)に渡して、撮る幅・動画・操作・リクエスト・出すファイルの名前を見る。撮影そのもの(Chrome・ffmpeg)は流さない。
 #
 # 使い方: .github/scripts/tests/evidence-shoot.test.sh
@@ -56,6 +56,10 @@ main() {
 	expect TC-600-21 'コマンドは修正前・修正後の checkout の workdir で流す。項目ごとに連番を付け、video を書けばその幅だけ録る' \
 		"$RC|$(jq -c '[.items[0].steps[] | select(.type == "command") | [.side, .workdir, .run]]' "$WORK/out")|$(jq -r '[.items[] | .id] | join(" ")' "$WORK/out")|$(jq -r '[.items[1].files[] | select(test("mp4$"))] | join(" ")' "$WORK/out")" \
 		'0|[["before","backend","php artisan db:show --table=cocktails"],["after","backend","php artisan db:show --table=cocktails"]]|01-command 02-screen|02-screen-375-before.mp4 02-screen-375-after.mp4 02-screen-1600-before.mp4 02-screen-1600-after.mp4'
+
+	expect TC-601-17 '画面は、データを入れた後・撮る前に、修正後の画面の HTTP の状態を確かめる(5xx なら撮らない。#601)。コマンドには確かめない' \
+		"$(jq -c '[.items[] | [.kind, (.steps[0:2] | map(.type)), ([.steps[] | select(.type == "probe") | [.side, .path]])]]' "$WORK/out")" \
+		'[["command",["seed","command"],[]],["screen",["seed","probe"],[["after","/"]]]]'
 
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
