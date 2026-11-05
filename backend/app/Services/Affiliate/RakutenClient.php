@@ -53,7 +53,7 @@ class RakutenClient
      *
      * アプリ ID かアクセスキーが無ければ、問い合わせずに null を返す。1 件も無ければ空の一覧を返す。
      *
-     * @param  string|null  $genreId  ジャンルで絞る。null なら絞らない(洋酒でないものを探すとき。#248 で決める)
+     * @param  string|null  $genreId  ジャンルで絞る。null なら絞らない(洋酒でないものを探すとき。#248 の AffiliateCollector は旧に合わせていつも絞る)
      * @return list<RakutenItem>|null
      *
      * @throws RakutenRetryLaterException
