@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "before": "c03c49b4519875644247bb439861fff659833d36",
+  "after": "a08f1acd57b79ef93d354df5285740b374d327c0",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-72-01",
+        "TC-72-02",
+        "TC-72-03",
+        "TC-72-04",
+        "TC-72-05",
+        "TC-72-06",
+        "TC-72-07",
+        "TC-72-08",
+        "TC-72-09",
+        "TC-72-10",
+        "TC-72-11",
+        "TC-72-12",
+        "TC-72-13",
+        "TC-72-14",
+        "TC-72-15",
+        "TC-72-16",
+        "TC-72-17",
+        "TC-72-18",
+        "TC-72-19"
+      ],
+      "note": "修正前は TC-72 のテストが 0 件(No tests found)、修正後は TC-72-01〜19 がすべて通ること",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-72-19",
+        "TC-132-01"
+      ],
+      "note": "修正後に rakuten.application_id・rakuten.access_key が秘密(true)として増えていること",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
