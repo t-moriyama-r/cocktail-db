@@ -177,7 +177,6 @@ jobs:
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
           printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
-          gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
           chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
@@ -194,6 +193,9 @@ jobs:
         if: steps.target.outputs.skip != 'true' && steps.trust.outputs.held != 'true'
         run: |
           bash "$RUNNER_TEMP/ai-dev/trusted-context.sh" "$REPO" "$PR" "$RUNNER_TEMP/ai-context.json"
+          chmod u+w "$RUNNER_TEMP/ai-dev/agent-write.target"
+          jq -r '.item.body // ""' "$RUNNER_TEMP/ai-context.json" | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
+          chmod u-w "$RUNNER_TEMP/ai-dev/agent-write.target"
 
       # Edit・Write は作業ディレクトリの中(./**)だけにする(外の ~/.gitconfig や、上で置いたスクリプトを書き換えさせない)。
       # git はサブコマンドで絞る(git:* だと -c alias.x='!…' でどんなコマンドも動かせる)。
@@ -495,7 +497,6 @@ jobs:
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
           printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
-          gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
           chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # 判断表(docs/judgment-criteria.md)は、PR の head ではなく既定のブランチの版をプロンプトに入れる。
@@ -520,6 +521,9 @@ jobs:
         if: steps.pr.outputs.run
         run: |
           bash "$RUNNER_TEMP/ai-dev/trusted-context.sh" "$REPO" "$PR" "$RUNNER_TEMP/ai-context.json"
+          chmod u+w "$RUNNER_TEMP/ai-dev/agent-write.target"
+          jq -r '.item.body // ""' "$RUNNER_TEMP/ai-context.json" | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
+          chmod u-w "$RUNNER_TEMP/ai-dev/agent-write.target"
 
       # 渡すツールの絞り方は resume と同じ
       - uses: anthropics/claude-code-action@v1
