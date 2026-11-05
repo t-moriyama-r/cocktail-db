@@ -67,6 +67,8 @@ CodeRabbit の指摘への対応が終わり(最新のコミットを見てい�
 
 ほかの条件がそろい、止めているのがエージェントの返信済みで未解決のスレッドだけのとき(Actions の Claude Code が直さない理由を返したスレッドは解決にしない。人が立てたスレッドも含む)は、人が解決するまで止まるので、`ai-auto-merge.yml` が残っているスレッドへのリンクと決めてほしいこと(返信で良ければ解決する・直してほしければそのスレッドに返信する)をコメントし、`needs-human` を付けて Slack に知らせる(`.github/scripts/thread-handoff.sh`。同じコミットでは 1 回だけ)。スレッドの解決ではワークフローが起きないので、人がすべて解決したら、`ai-review-sweep.yml` の見回りがこの理由で付けた `needs-human` を外し、`ai-auto-merge.yml` を呼び直す。
 
+手元に頼んだと返したスレッド(返信に目印 `<!-- ai-dev:local-pending kind=<種類> -->` があるもの)は、人が決めることが無いので、この頼みごとに入れない。返信より後に同じ種類の `ai-dev:local-done` があれば、`thread-handoff.sh` が返信して解決にする。まだ無ければ `needs-local` で手元の見回りに頼む(同じコミットで頼み直しても片付かなければ、人に頼む。解決できなかったものも人に頼む。#682)。
+
 人の手でマージする PR(`.github/ai-dev.yml` が `merge: auto` でない・`no-auto-merge` が付いている・閉じる issue に `needs-review` が付いている・判断表 `docs/judgment-criteria.md` を変えている)は、同じ条件がそろったところで、マージせずに `needs-approval` を付けて Slack に知らせる(下の「人に頼む」)。直さない理由を返して未解決のまま残るスレッドもあるので、こちらは未解決ではなく返信待ちのスレッドが 0 件かで見る。自動のレビューと CI が終わる前には人を呼ばない。
 
 自動でマージする PR でも、条件を満たして `gh pr merge` まで進んだのに GitHub に断られることがある(ワークフローを書き換える PR で `workflows` の権限が無い・base branch policy で断られる、など)。そのときは、断られた理由(エラーの 1 行)を PR にコメントし(目印 `<!-- ai-dev:agent --> <!-- ai-dev:needs-approval -->`)、`needs-approval` を付けて Slack に知らせ、状態のラベルを付け直す(#218)。もう `needs-approval` が付いていれば知らせない。`needs-approval` の付いた PR は見回り(`ai-review-sweep.yml`)も見送るので、同じ失敗を繰り返さない。
