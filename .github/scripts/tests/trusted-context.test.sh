@@ -51,7 +51,7 @@ main() {
 	reset
 	item 7 none
 	run 7
-	expect TC-498-05 'PR・issue を作ったのが信頼しない人なら、本文を書き出さない(null)' "$RC|$(q '.item.body')|$(q '.item.title')" '0|null|タイトル7'
+	expect TC-498-05 'PR・issue を作ったのが信頼しない人なら、本文を書き出さない(null)' "$RC|$(q '.item.body')|$(q '.item.title')" '0|null|null'
 
 	reset
 	pr_view 7 '[{"number":12,"repository":{"name":"r","owner":{"login":"o"}}},{"number":3,"repository":{"name":"other","owner":{"login":"o"}}}]'

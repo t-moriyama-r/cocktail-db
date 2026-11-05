@@ -53,11 +53,13 @@ agent_write() {
           return 3
         fi
       fi
-      gh api -X PATCH "repos/$REPO/pulls/$PR" -F body=@"$2" --silent
       # 同じ実行内で本文を続けて書けるよう、書いた後の本文の sha256 を次の比較の基準にする(その後の人の編集は引き続き見つける)。
+      # 基準は PATCH の応答の本文から作る(PATCH と取り直しの間の人の編集を、基準に取り込まないため)。
       # agent-write.target は読み取り専用の置き場にあって書き換えられないので、基準は別のファイルに残す
       if [ -n "$BODY_SHA" ]; then
-        gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1 >"$(body_sha_state "$REPO" "$PR")"
+        gh api -X PATCH "repos/$REPO/pulls/$PR" -F body=@"$2" --jq '.body // ""' | sha256sum | cut -d' ' -f1 >"$(body_sha_state "$REPO" "$PR")"
+      else
+        gh api -X PATCH "repos/$REPO/pulls/$PR" -F body=@"$2" --silent
       fi
       echo "updated #$PR"
       ;;

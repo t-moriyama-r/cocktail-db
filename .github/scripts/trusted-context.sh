@@ -58,7 +58,7 @@ trusted_context() {
       def entry: {id, url: .html_url, author: .user.login, association: .author_association, created_at: (.created_at // .submitted_at), body}
         + (if .state then {state, commit_id} else {} end);
       def keep: map(select(trusted($owner))) | sort_by(.created_at // .submitted_at) | map(entry);
-      def item_of: {number, title, url: .html_url, author: .user.login, labels: [.labels[].name],
+      def item_of: {number, title: (if trusted($owner) then .title else null end), url: .html_url, author: .user.login, labels: [.labels[].name],
         body: (if trusted($owner) then .body else null end)};
       input as $item | input as $comments | input as $pr | input as $rc | input as $reviews | input as $threads | [inputs] as $closing
       | ($rc | add // []) as $rc
