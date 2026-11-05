@@ -79,7 +79,7 @@ ask() {
   count=$(jq length <<<"$threads")
   if [ "$count" = 0 ]; then
     # GITHUB_TOKEN の解決はワークフローを起こさないので、止めるものが無くなった判定を直接呼び直す
-    gh workflow run ai-auto-merge.yml -R "$repo" -f number="$n"
+    gh workflow run ai-auto-merge.yml -R "$repo" -f number="$n" || echo "::warning::#$n の ai-auto-merge.yml を呼べなかった" >&2
     echo "#$n 手元が片付けたスレッドを解決したので、ai-auto-merge.yml を呼んだ"
     return
   fi
