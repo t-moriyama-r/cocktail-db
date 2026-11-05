@@ -177,6 +177,7 @@ jobs:
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
           printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
+          gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
           chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # Claude Code がこの checkout から PR のブランチへ push する(git push)ので、persist-credentials: false は付けない(RC-04 の例外)
@@ -494,6 +495,7 @@ jobs:
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
           printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
+          gh api "repos/$REPO/pulls/$PR" --jq '.body // ""' | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
           chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # 判断表(docs/judgment-criteria.md)は、PR の head ではなく既定のブランチの版をプロンプトに入れる。
