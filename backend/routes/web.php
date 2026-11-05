@@ -46,5 +46,31 @@ Route::get('/sitemap.xml', [SitemapController::class, 'index']);
 Route::get('/sitemap-{page}.xml', [SitemapController::class, 'page'])->where('page', '[1-9][0-9]*');
 Route::get('/robots.txt', [SitemapController::class, 'robots']);
 
+// 旧の管理画面の一覧・編集の URL は、ブックマークから来た管理者を、新の同じ画面へ移す(#626)。
+// #117 と同じく GET だけを受けて 302 で移し、クエリは持ち越さない。ログインの確かめは移った先の画面がする。
+// 新の画面がまだ無いもの(カクテル・カテゴリ・ミドルの編集、言い換え)はここに無く、下の SPA へ渡すルートが 404 の画面を出す。
+// 決めたことと旧と変えたところは docs/decisions/legacy-admin-urls.md
+foreach ([
+    'admin/list/Category' => '/admin/categories',
+    'admin/list/Middle' => '/admin/categories',
+    'admin/list/Brand' => '/admin/brands',
+    'admin/list/Dictionary' => '/admin/dictionaries',
+    'admin/list/Cocktail' => '/admin/cocktails',
+    'admin/list/CocktailDraft' => '/admin/cocktails?status=draft',
+    'admin/edit/Brand' => '/admin/brands/new',
+    'admin/edit/Dictionary' => '/admin/dictionaries/new',
+] as $legacyAdminUrl => $destination) {
+    Route::get($legacyAdminUrl, RedirectController::class)
+        ->defaults('destination', $destination)
+        ->defaults('status', 302);
+}
+// 銘柄・用語辞典は旧の ID のまま移したので(docs/schema.md)、ID はそのまま新の編集画面へ渡す
+foreach (['admin/edit/Brand/{id}' => '/admin/brands/{id}', 'admin/edit/Dictionary/{id}' => '/admin/dictionaries/{id}'] as $legacyAdminUrl => $destination) {
+    Route::get($legacyAdminUrl, RedirectController::class)
+        ->whereNumber('id')
+        ->defaults('destination', $destination)
+        ->defaults('status', 302);
+}
+
 // API 以外のパスはすべて SPA に渡し、画面の出し分けは React 側のルーターに任せる
 Route::view('/{any?}', 'spa')->where('any', '^(?!api(/|$)|up$).*');
