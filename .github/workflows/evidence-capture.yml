@@ -16,7 +16,8 @@ name: evidence-capture
 #
 # pull_request_target でも PR のコードを動かすのは capture ジョブだけで、そのジョブには書き込みの権限も Secret も渡さない
 # (workflow_dispatch のときと同じ)。起こすきっかけを広げた分、撮る前に gate ジョブが untrusted-hold.sh で、PR と閉じる issue に
-# 信頼しない人の書いたものが無いかを確かめ、あれば撮らずに止める(URL を並べたコメントと needs-human。CLAUDE.md の手順 8。#494)
+# 信頼しない人の書いたものが無いかを確かめ、あれば撮らずに止める(URL を並べたコメントと needs-human。CLAUDE.md の手順 8。#494)。
+# 確かめるための読み取りに失敗したときも撮らず、needs-local を残して読めなかったことを report がコメントする(#688)
 #
 # - gate: 撮ってよい PR かを決める(evidence-target.sh・untrusted-hold.sh)。PR のコードは動かさない
 # - request: PR のコメントを読み、撮るものを決める。指定が無い・形が誤っていれば、撮らずに report に回す
@@ -25,7 +26,7 @@ name: evidence-capture
 # - publish: 撮った物を GITHUB_TOKEN で evidence ブランチの pr-<番号>/<head の短い SHA>/ に push する。contents: write はこのジョブだけ。
 #   PR のコードは動かさず、置いてよい名前のファイルだけを置き、パス・ホスト名をもう一度確かめる(evidence-publish.sh)
 # - report: 撮れたら本文に貼り、needs-local を外して <!-- ai-dev:local-done kind=evidence --> のコメントを書く。撮れなかったら
-#   needs-local を残してコメントする(evidence-report.sh)。PR のコードは動かさない
+#   needs-local を残してコメントする(evidence-report.sh)。gate の信頼の確認で読めなかったときも、同じくコメントする。PR のコードは動かさない
 on:
   workflow_dispatch:
     inputs:
@@ -64,6 +65,8 @@ jobs:
       pull-requests: write
     outputs:
       go: ${{ steps.gate.outputs.go }}
+      # 信頼の確認(untrusted-hold.sh)で PR・issue・コメントを読めなかった。撮らずに report がそのことをコメントする(#688)
+      read_failed: ${{ steps.gate.outputs.read_failed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -89,9 +92,15 @@ jobs:
           fi
           [ "$rc" -eq 0 ] || exit "$rc"
           # 信頼しない人の書いたものがある PR では撮らない(撮る側はブロックの run をシェルで流す。#494)。
-          # 見つけたら untrusted-hold.sh がコメントと needs-human を付ける。読めなかったときも撮らない
-          if ! bash .github/scripts/untrusted-hold.sh "$REPO" "$NUMBER"; then
+          # 見つけたら untrusted-hold.sh がコメントと needs-human を付ける(1)。読めなかったとき(3)も撮らない。
+          # 3 のときは untrusted-hold.sh が何も書かず、この起動の後に起こすものも無いので、report が読めなかったことをコメントする(#688)
+          rc=0
+          bash .github/scripts/untrusted-hold.sh "$REPO" "$NUMBER" || rc=$?
+          if [ "$rc" -ne 0 ]; then
             echo "go=false" >>"$GITHUB_OUTPUT"
+            if [ "$rc" -eq 3 ]; then
+              echo "read_failed=true" >>"$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           echo "go=true" >>"$GITHUB_OUTPUT"
@@ -338,8 +347,8 @@ jobs:
 
   report:
     needs: [gate, request, capture, publish]
-    # 撮ってよいと決めた PR だけ。途中のジョブが落ちても動き、撮れなかったことを手元に残す(取り消した回は除く)
-    if: ${{ !cancelled() && needs.gate.outputs.go == 'true' }}
+    # 撮ってよいと決めた PR と、信頼の確認で読めなかった PR だけ。途中のジョブが落ちても動き、撮れなかったことを手元に残す(取り消した回は除く)
+    if: ${{ !cancelled() && (needs.gate.outputs.go == 'true' || needs.gate.outputs.read_failed == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -359,6 +368,7 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ inputs.number || github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          READ_FAILED: ${{ needs.gate.outputs.read_failed }}
           REQUEST_RESULT: ${{ needs.request.result }}
           REQUEST_OK: ${{ needs.request.outputs.ok }}
           REQUEST_ERROR: ${{ needs.request.outputs.error }}
@@ -370,6 +380,12 @@ jobs:
           AFTER: ${{ needs.request.outputs.after }}
         run: |
           set -euo pipefail
+          # 信頼の確認で読めなかったときは、撮っていない(request 以降は動いていない)
+          if [ "$READ_FAILED" = true ]; then
+            echo "撮る前の信頼の確認(untrusted-hold.sh)で、PR・閉じる issue・コメントを GitHub から読めなかったので、撮らなかった(API の一時的な失敗・レート制限など)。理由は撮った回のログの Decide のステップを見る。needs-local を付け直すと撮り直す" >"$RUNNER_TEMP/reason.txt"
+            bash .github/scripts/evidence-report.sh failed "$REPO" "$NUMBER" "$RUNNER_TEMP/reason.txt" "$RUN_URL"
+            exit 0
+          fi
           if [ "$PUBLISH_RESULT" = success ] && [ -n "$URLS" ]; then
             printf '%s\n' "$REQUEST" >"$RUNNER_TEMP/request.json"
             tr ' ' '\n' <<<"$URLS" >"$RUNNER_TEMP/urls.txt"
