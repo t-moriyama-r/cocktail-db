@@ -20,6 +20,8 @@ beforeEach(function () {
         'amazon.credential_id' => null,
         'amazon.credential_secret' => null,
         'amazon.partner_tag' => null,
+        'rakuten.application_id' => null,
+        'rakuten.access_key' => null,
         'rakuten.affiliate_id' => null,
     ]);
 });
@@ -40,14 +42,15 @@ function settingItem(mixed $json, string $key): array
     throw new RuntimeException("一覧に {$key} が無い");
 }
 
-it('TC-132-01: 一覧は、定義の 4 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
+it('TC-132-01: 一覧は、定義の 6 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
     $response = $this->getJson('/api/admin/settings')->assertOk();
     $json = $response->json();
 
     expect($response->json('data.*.key'))->toBe([
-        'amazon.credential_id', 'amazon.credential_secret', 'amazon.partner_tag', 'rakuten.affiliate_id',
+        'amazon.credential_id', 'amazon.credential_secret', 'amazon.partner_tag',
+        'rakuten.application_id', 'rakuten.access_key', 'rakuten.affiliate_id',
     ])
-        ->and($response->json('data.*.secret'))->toBe([true, true, false, false])
+        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false])
         ->and(settingItem($json, 'amazon.partner_tag'))->toBe([
             'key' => 'amazon.partner_tag',
             'label' => 'Amazon のパートナータグ',
@@ -236,4 +239,20 @@ it('TC-132-14: 変えた人のユーザーを消しても、一覧は返り、�
 
     expect(settingItem($this->getJson('/api/admin/settings')->assertOk()->json(), 'amazon.partner_tag'))
         ->toMatchArray(['value' => 'saved-tag-22', 'updated_by' => null]);
+});
+
+it('TC-72-19: 楽天のアプリ ID・アクセスキーは秘密の項目で、画面で保存した値も .env の値も、一覧に平文で出ない', function () {
+    app(Settings::class)->set('rakuten.access_key', 'SAVED-rakuten-access-key-WXYZ', $this->admin);
+    config()->set('settings', array_merge(config()->array('settings'), ['rakuten.application_id' => 'ENV-rakuten-application-1234']));
+
+    $response = $this->getJson('/api/admin/settings')->assertOk();
+
+    expect($response->getContent())->not->toContain('SAVED-rakuten-access-key')
+        ->and($response->getContent())->not->toContain('ENV-rakuten-application')
+        ->and(settingItem($response->json(), 'rakuten.access_key'))->toMatchArray([
+            'secret' => true, 'is_set' => true, 'value' => null, 'last_four' => 'WXYZ', 'source' => 'saved',
+        ])
+        ->and(settingItem($response->json(), 'rakuten.application_id'))->toMatchArray([
+            'secret' => true, 'is_set' => true, 'value' => null, 'last_four' => '1234', 'source' => 'env',
+        ]);
 });

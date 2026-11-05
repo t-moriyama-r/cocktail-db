@@ -141,7 +141,8 @@ export interface paths {
         /** 編集で開くノード。 */
         get: operations["categories.show"];
         /**
-         * ノードを書き換える。親を変えたときは部分木ごと移す。
+         * ノードを書き換える。親を変えたときは部分木ごと移す(#122)。自分・子孫の下へ移す、役割を持つ根をほかのノードの下へ移す、
+         *     カクテルの材料・ベースが指すノードを根へ移す、祖先の有名な銘柄が部分木の外になる、のどれかなら 422 で理由を返す。
          *     英名が同じ親の下のほかのノードと同じなら、保存したうえで warnings に入れて返す。
          */
         put: operations["categories.update"];
@@ -1917,7 +1918,7 @@ export interface components {
              * @description 定義(SettingDefinitions)に無いキーは 422
              * @enum {string}
              */
-            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.affiliate_id";
+            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.application_id" | "rakuten.access_key" | "rakuten.affiliate_id";
             /** @description 省いたときに黙って .env に戻さないよう、欄は必須(null は送れる)。形は項目ごとの規則で確かめる */
             value: string | null;
         };

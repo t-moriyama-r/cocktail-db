@@ -7554,6 +7554,8 @@
                             "amazon.credential_id",
                             "amazon.credential_secret",
                             "amazon.partner_tag",
+                            "rakuten.application_id",
+                            "rakuten.access_key",
                             "rakuten.affiliate_id"
                         ]
                     },
