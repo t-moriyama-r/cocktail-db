@@ -17,6 +17,9 @@ PASSED=0
 
 AGENT='<!-- ai-dev:agent --> 直さない理由'
 ASKED='<!-- ai-dev:agent --> <!-- ai-dev:needs-human --> <!-- ai-dev:thread-handoff sha=sha7 -->'
+PENDING='<!-- ai-dev:agent --> <!-- ai-dev:local-pending kind=other --> 手元に頼んだ'
+LOCAL_DONE='<!-- ai-dev:agent --> <!-- ai-dev:local-done kind=other --> 片付けた'
+LOCAL_ASKED='<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=other --> <!-- ai-dev:thread-handoff-local sha=sha7 -->'
 
 main() {
 	setup_fake_gh
@@ -227,6 +230,104 @@ main() {
 	run release
 	expect TC-388-26 'Actions(GitHub App)が書いた頼むコメントの目印は信じる' "$(dispatched)" 'ai-auto-merge.yml -R o/r -f number=7'
 
+	# --- ask: 手元に頼んだスレッドは、人の判断待ちにしない(#682) ---
+
+	reset
+	pr 7
+	threads "$AGENT" "$PENDING"
+	comments "$LOCAL_DONE"
+	run ask
+	expect TC-682-01 '#638 の再現: 手元が片付けたスレッドは解決し、直さないと返したスレッドだけを人に頼む' \
+		"$(resolved_threads)|$(commented | grep -c 'https://example.test/t1')|$(commented | grep -c 'https://example.test/t2')|$(commented | grep -c '1 件残っていて')|$(labeled)" \
+		'thread2|1|0|1|7 -R o/r --add-label needs-human'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	comments "$LOCAL_DONE"
+	run ask
+	expect TC-682-02 '手元が片付けたスレッドだけなら、needs-human を付けず、解決して自動マージの判定に戻す' \
+		"$(resolved_threads)|$(labeled)|$(notified)|$(dispatched)" 'thread1|||ai-auto-merge.yml -R o/r -f number=7'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	comments "$LOCAL_DONE"
+	run ask
+	expect TC-682-03 '解決する前に、片付けたコメントのリンクを添えて返信する(返信に目印は残さない)' \
+		"$(replied | grep -c 'https://example.test/c1 ')|$(replied | grep -c 'local-pending')|$(grep -oE '(addPullRequestReviewThreadReply|resolveReviewThread)' "$FAKE/calls" | paste -sd, -)" \
+		'1|0|addPullRequestReviewThreadReply,resolveReviewThread'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	run ask
+	expect TC-682-04 '手元がまだ片付けていなければ、needs-human ではなく needs-local を付け、Slack には知らせない' \
+		"$(commented | grep -c 'ai-dev:needs-local kind=other')|$(commented | grep -c 'ai-dev:needs-human')|$(labeled)|$(notified)|$(resolved_threads)" \
+		'1|0|7 -R o/r --add-label needs-local||'
+
+	reset
+	pr 7
+	threads "$AGENT" "$PENDING"
+	run ask
+	expect TC-682-05 '人に頼むスレッドが一緒にあっても、手元の番を先にする(手元が終わると自動マージの判定に戻る)' \
+		"$(labeled)|$(commented | grep -c 'https://example.test/t2')|$(commented | grep -c 'https://example.test/t1')" \
+		'7 -R o/r --add-label needs-local|1|0'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	comments "early:$LOCAL_DONE"
+	run ask
+	expect TC-682-06 '返信より前の local-done は、この頼みごとを片付けたものに数えない' "$(resolved_threads)|$(labeled)" '|7 -R o/r --add-label needs-local'
+
+	reset
+	pr 7
+	threads '<!-- ai-dev:agent --> <!-- ai-dev:local-pending kind=push --> 手元に頼んだ'
+	comments "$LOCAL_DONE"
+	run ask
+	expect TC-682-07 '別の種類の local-done は、片付けたものに数えない' "$(resolved_threads)|$(labeled)" '|7 -R o/r --add-label needs-local'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	comments "outsider:$LOCAL_DONE"
+	run ask
+	expect TC-682-08 '書き込み権限の無い人が書いた local-done では解決しない' "$(resolved_threads)|$(labeled)" '|7 -R o/r --add-label needs-local'
+
+	reset
+	pr 7
+	threads "outsider-reply:$PENDING"
+	comments "$LOCAL_DONE"
+	run ask
+	expect TC-682-09 '書き込み権限の無い人がスレッドに書いた目印は信じず、人に頼む' \
+		"$(resolved_threads)|$(labeled)" '|7 -R o/r --add-label needs-human'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	comments "$LOCAL_DONE"
+	touch "$FAKE/resolve-fails"
+	run ask
+	expect TC-682-10 '解決できなかったスレッドは人に頼む一覧に残す(黙って止めない)' \
+		"$(commented | grep -c 'https://example.test/t1')|$(labeled)|$(dispatched)|$RC" '1|7 -R o/r --add-label needs-human||0'
+
+	reset
+	pr 7
+	threads "$PENDING"
+	comments "$LOCAL_ASKED"
+	run ask
+	expect TC-682-11 '同じコミットで手元に頼み直した後も片付いていなければ、頼み続けずに人に頼む(黙って回り続けない)' \
+		"$(commented | grep -c 'ai-dev:needs-human')|$(labeled)" '1|7 -R o/r --add-label needs-human'
+
+	reset
+	pr 7
+	threads "$AGENT" "$AGENT"
+	comments "$LOCAL_DONE"
+	run ask
+	expect TC-682-12 '目印の無いスレッドは、local-done が後にあっても解決せず、これまでどおり人に頼む' \
+		"$(resolved_threads)|$(commented | grep -c 'https://example.test/t')|$(labeled)" '|2|7 -R o/r --add-label needs-human'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -239,6 +340,11 @@ setup_fake_gh() {
 echo "gh $*" >>"$FAKE/calls"
 case "$*" in
 	"pr view"*) cat "$FAKE/pr.json" ;;
+	"api graphql"*addPullRequestReviewThreadReply*)
+		printf '%s\n' "$*" >>"$FAKE/replied" ;;
+	"api graphql"*resolveReviewThread*)
+		if [ -f "$FAKE/resolve-fails" ]; then echo "HTTP 403: resource not accessible" >&2; exit 1; fi
+		printf '%s\n' "$*" | grep -oE 'threadId=[^ ]+' | sed 's/threadId=//' >>"$FAKE/resolved" ;;
 	"api graphql"*)
 		if [ -f "$FAKE/graphql-fails" ]; then echo "HTTP 502: graphql failed" >&2; exit 1; fi
 		# --jq はページごとに当てる(unanswered-review-threads.sh が使う)
@@ -268,7 +374,7 @@ SH
 
 reset() {
 	rm -f "$FAKE"/pr.json "$FAKE"/calls "$FAKE"/commented "$FAKE"/labeled "$FAKE"/notified "$FAKE"/dispatched \
-		"$FAKE"/graphql-fails "$FAKE"/done-fails "$FAKE"/out
+		"$FAKE"/graphql-fails "$FAKE"/done-fails "$FAKE"/out "$FAKE"/replied "$FAKE"/resolved "$FAKE"/resolve-fails
 	: >"$FAKE/calls"
 	threads
 	comments
@@ -292,6 +398,8 @@ threads() {
 		i=$((i + 1))
 		if [ "$body" = resolved ]; then
 			nodes+=("$(node_json "$i" true coderabbitai x)")
+		elif [ "${body#outsider-reply:}" != "$body" ]; then
+			nodes+=("$(node_json "$i" false coderabbitai "${body#outsider-reply:}" NONE)")
 		elif [ "${body#human:}" != "$body" ]; then
 			nodes+=("$(node_json "$i" false t-moriyama-r "${body#human:}")")
 		else
@@ -304,22 +412,27 @@ threads() {
 	} >"$FAKE/threads"
 }
 node_json() {
-	jq -n -c --arg i "$1" --argjson resolved "$2" --arg author "$3" --arg b "$4" \
-		'{isResolved: $resolved, path: "a.php",
+	jq -n -c --arg i "$1" --argjson resolved "$2" --arg author "$3" --arg b "$4" --arg assoc "${5:-OWNER}" \
+		'{id: "thread\($i)", isResolved: $resolved, path: "a.php",
 		  first: {nodes: [{url: "https://example.test/t\($i)", author: {login: $author}, body: "指摘"}]},
-		  last: {nodes: [{body: $b}]}}'
+		  last: {nodes: [{body: $b, createdAt: "2026-01-02T00:00:00Z", authorAssociation: $assoc, author: {__typename: "User"}}]}}'
 }
 page() {
 	printf '%s\n' "$@" | jq -s -c '{data: {repository: {pullRequest: {reviewThreads: {nodes: .}}}}}'
 }
 
 # PR のコメント(--slurp なので、ページの配列を 1 つの配列に入れて返す)。既定はオーナーが書いたもの。
-# 先頭が bot: なら Actions(github-actions[bot])、outsider: なら書き込み権限の無い人のコメント
+# 先頭が bot: なら Actions(github-actions[bot])、outsider: なら書き込み権限の無い人のコメント。
+# 書いた時刻はスレッドの最後のコメント(2026-01-02)より後で、先頭が early: なら前
 comments() {
 	printf '%s\n' "$@" | jq -R -s -c 'split("\n") | map(select(. != "")
-		| if startswith("bot:") then {body: .[4:], author_association: "NONE", user: {type: "Bot"}}
+		| (if startswith("early:") then {at: "2026-01-01T00:00:00Z", b: .[6:]} else {at: "2026-01-03T00:00:00Z", b: .} end) as $c
+		| $c.b
+		| (if startswith("bot:") then {body: .[4:], author_association: "NONE", user: {type: "Bot"}}
 		  elif startswith("outsider:") then {body: .[9:], author_association: "NONE", user: {type: "User"}}
-		  else {body: ., author_association: "OWNER", user: {type: "User"}} end) | [.]' >"$FAKE/comments"
+		  else {body: ., author_association: "OWNER", user: {type: "User"}} end)
+		| . + {created_at: $c.at})
+		| to_entries | map(.value + {html_url: "https://example.test/c\(.key + 1)"}) | [.]' >"$FAKE/comments"
 }
 
 # needs-human を付けた人(古い順)
@@ -327,6 +440,8 @@ label_events() {
 	printf '%s\n' "$@" | jq -R -s -c 'split("\n") | map(select(. != "") | {event: "labeled", label: {name: "needs-human"}, actor: {login: .}}) | [.]' >"$FAKE/events"
 }
 
+replied() { cat "$FAKE/replied" 2>/dev/null; }
+resolved_threads() { cat "$FAKE/resolved" 2>/dev/null; }
 commented() { cat "$FAKE/commented" 2>/dev/null; }
 labeled() { cat "$FAKE/labeled" 2>/dev/null; }
 notified() { cat "$FAKE/notified" 2>/dev/null; }
