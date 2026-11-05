@@ -3,7 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import App from '../App'
 import type { components, paths } from '../api/schema'
-import { jsonResponse, mockApi, mockApiHandler } from '../test/api'
+import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
 
 type BrandIndex = paths['/admin/brands']['get']['responses'][200]['content']['application/json']
 type BrandItem = BrandIndex['data'][number]
@@ -11,6 +11,7 @@ type BrandResource = components['schemas']['BrandResource']
 type SearchForm = paths['/search-form']['get']['responses'][200]['content']['application/json']
 type SearchFormNode = components['schemas']['SearchFormNodeResource']
 type Saved = paths['/admin/brands']['post']['responses'][201]['content']['application/json']
+type Duplicates = paths['/admin/brands/duplicates']['get']['responses'][200]['content']['application/json']
 
 const loggedIn = () => mockApi('get', '/admin/me', 200, { id: 1, name: '管理者' })
 
@@ -431,5 +432,221 @@ describe('編集', () => {
     renderAt('/admin/brands/999')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'ページが見つかりません' })).toBeInTheDocument()
+  })
+})
+
+describe('名前・英名の重なり(#633)', () => {
+  const DUPLICATE = '同じ名前が存在しています'
+
+  /**
+   * 重なりの問い合わせに、既にある名前・英名と同じ値なら重なりありを返す(比べ方の細かいところは BE の #632 のテスト)。
+   * respond を渡すと、その応答を返す(エラー・通信の失敗・遅れて返る応答を作るため)
+   */
+  const mockDuplicates = (existing: { name?: string[]; name_eng?: string[] }) =>
+    mockApiHandler('get', '/admin/brands/duplicates', (request) => {
+      const query = new URL(request.url).searchParams
+      const warnings: Duplicates['warnings'] = []
+      const name = query.get('name')
+      const nameEng = query.get('name_eng')
+      if (name !== null && existing.name?.includes(name)) warnings.push({ field: 'name', message: DUPLICATE })
+      if (nameEng !== null && existing.name_eng?.includes(nameEng)) warnings.push({ field: 'name_eng', message: DUPLICATE })
+      return jsonResponse({ warnings } satisfies Duplicates, 200)
+    })
+
+  /** 送った重なりの問い合わせのクエリ(送った順) */
+  const duplicateQueries = () =>
+    apiRequests()
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === '/api/admin/brands/duplicates')
+      .map((url) => Object.fromEntries(url.searchParams))
+
+  /** 欄に値を入れて離れる(旧の @change と同じく、値を変えて離れたときに問い合わせる) */
+  const enter = (label: string, value: string) => {
+    const field = screen.getByLabelText(label)
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value } })
+    fireEvent.blur(field)
+  }
+
+  test('TC-633-01: 重なる名前を入れて欄を離れると、名前の欄の下に「同じ名前が存在しています」が出て、欄の説明にもなる', async () => {
+    loggedIn()
+    mockTree()
+    mockDuplicates({ name: ['ビーフィーター'] })
+    renderAt('/admin/brands/new')
+
+    await screen.findByLabelText('名前')
+    enter('名前', 'ビーフィーター')
+
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).toHaveAccessibleDescription(DUPLICATE)
+    // 保存は止めないので、検証の誤りの印は付けない
+    expect(screen.getByLabelText('名前')).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByLabelText('英名')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([{ name: 'ビーフィーター' }])
+  })
+
+  test('TC-633-02: 重ならない値に直して欄を離れると、出ていた知らせが消える', async () => {
+    loggedIn()
+    mockTree()
+    mockDuplicates({ name: ['ビーフィーター'] })
+    renderAt('/admin/brands/new')
+
+    await screen.findByLabelText('名前')
+    enter('名前', 'ビーフィーター')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    enter('名前', 'タンカレー')
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument())
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([{ name: 'ビーフィーター' }, { name: 'タンカレー' }])
+  })
+
+  test('TC-633-03: 英名は、全角の英数字を半角にした値で問い合わせ、重なれば英名の欄の下に出る。直すと消える', async () => {
+    loggedIn()
+    mockTree()
+    mockDuplicates({ name_eng: ['Beefeater'] })
+    renderAt('/admin/brands/new')
+
+    await screen.findByLabelText('英名')
+    enter('英名', 'Ｂｅｅｆｅａｔｅｒ')
+
+    await waitFor(() => expect(screen.getByLabelText('英名')).toHaveAccessibleDescription(DUPLICATE))
+    expect(screen.getByLabelText('英名')).toHaveValue('Beefeater')
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([{ name_eng: 'Beefeater' }])
+
+    enter('英名', 'Tanqueray')
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument())
+  })
+
+  test('TC-633-04: 編集では、編集している銘柄の ID を exclude_id で送る(自身とは比べない)', async () => {
+    loggedIn()
+    mockTree()
+    mockApi('get', '/admin/brands/{brand}', 200, { data: BRAND })
+    mockDuplicates({})
+    renderAt('/admin/brands/7')
+
+    await screen.findByRole('list', { name: '所属' })
+    enter('名前', 'ビーフィーター ロンドン')
+    enter('英名', 'Beefeater London')
+
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+    expect(duplicateQueries()).toEqual([
+      { name: 'ビーフィーター ロンドン', exclude_id: '7' },
+      { name_eng: 'Beefeater London', exclude_id: '7' },
+    ])
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+  })
+
+  test('TC-633-05: 値を変えずに欄を離れたときは、問い合わせない', async () => {
+    loggedIn()
+    mockTree()
+    mockApi('get', '/admin/brands/{brand}', 200, { data: BRAND })
+    mockDuplicates({ name: ['ビーフィーター'] })
+    renderAt('/admin/brands/7')
+
+    await screen.findByRole('list', { name: '所属' })
+    // 開いたときの値のまま
+    fireEvent.focus(screen.getByLabelText('名前'))
+    fireEvent.blur(screen.getByLabelText('名前'))
+    fireEvent.focus(screen.getByLabelText('英名'))
+    fireEvent.blur(screen.getByLabelText('英名'))
+    // 入れている途中で一度変えても、元の値に戻してから離れる
+    const name = screen.getByLabelText('名前')
+    fireEvent.focus(name)
+    fireEvent.change(name, { target: { value: 'ビーフィーター ロンドン' } })
+    fireEvent.change(name, { target: { value: 'ビーフィーター' } })
+    fireEvent.blur(name)
+
+    expect(duplicateQueries()).toEqual([])
+  })
+
+  test('TC-633-06: 空にして欄を離れると、問い合わせずに、出ていた知らせを消す', async () => {
+    loggedIn()
+    mockTree()
+    mockDuplicates({ name: ['ビーフィーター'] })
+    renderAt('/admin/brands/new')
+
+    await screen.findByLabelText('名前')
+    enter('名前', 'ビーフィーター')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    enter('名前', '')
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(duplicateQueries()).toEqual([{ name: 'ビーフィーター' }])
+  })
+
+  test('TC-633-07: 重なりが出ていても送信でき、保存できたら一覧へ戻る', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    mockDuplicates({ name: ['ビーフィーター'], name_eng: ['Beefeater'] })
+    const sent = captureSave('post', () => jsonResponse(savedBody(BRAND), 201))
+    renderAt('/admin/brands/new')
+
+    const tree = await screen.findByRole('list', { name: '所属' })
+    fireEvent.click(within(tree).getByRole('radio', { name: 'ミント' }))
+    enter('名前', 'ビーフィーター')
+    enter('英名', 'Beefeater')
+    await waitFor(() => expect(screen.getAllByText(DUPLICATE)).toHaveLength(2))
+
+    fireEvent.click(screen.getByRole('button', { name: '送信' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    expect(currentUrl()).toBe('/admin/brands')
+    expect(sent()!.get('name')).toBe('ビーフィーター')
+    expect(sent()!.get('name_eng')).toBe('Beefeater')
+  })
+
+  test('TC-633-08: 問い合わせがエラーや通信の失敗になったら、知らせを出さず、送信も止めない', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    mockApiHandler('get', '/admin/brands/duplicates', () => jsonResponse({ message: 'Server Error' }, 500))
+    captureSave('post', () => jsonResponse(savedBody(BRAND), 201))
+    renderAt('/admin/brands/new')
+
+    await screen.findByLabelText('名前')
+    enter('名前', 'ビーフィーター')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(1))
+    mockApiHandler('get', '/admin/brands/duplicates', () => Promise.reject(new TypeError('Failed to fetch')))
+    enter('英名', 'Beefeater')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '送信' }))
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+  })
+
+  test('TC-633-09: 続けて問い合わせ、先の応答が後から返っても、最後に入れた値の結果を出す', async () => {
+    loggedIn()
+    mockTree()
+    // 1 つめ(重なる値)の応答は、2 つめ(重ならない値)の応答より後に返す
+    let releaseFirst: () => void = () => {}
+    const firstReleased = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    mockApiHandler('get', '/admin/brands/duplicates', async (request) => {
+      const name = new URL(request.url).searchParams.get('name')
+      if (name === 'ビーフィーター') {
+        await firstReleased
+        return jsonResponse({ warnings: [{ field: 'name', message: DUPLICATE }] } satisfies Duplicates, 200)
+      }
+      return jsonResponse({ warnings: [] } satisfies Duplicates, 200)
+    })
+    renderAt('/admin/brands/new')
+
+    await screen.findByLabelText('名前')
+    enter('名前', 'ビーフィーター')
+    enter('名前', 'タンカレー')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+    releaseFirst()
+    await firstReleased
+    // 遅れて返った 1 つめの応答の結果を出さない
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).toHaveValue('タンカレー')
   })
 })
