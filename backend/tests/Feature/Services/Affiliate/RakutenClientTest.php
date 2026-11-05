@@ -198,7 +198,16 @@ it('TC-72-06: 1 件も無い応答(200・Items が空)は、空の一覧を返�
     expect(rakutenClient()->searchItems('存在しない銘柄'))->toBe([]);
 });
 
-it('TC-72-07: 対象のデータが無い 404(not_found)は、空の一覧を返す', function () {
+it('TC-72-19: 200 でも JSON でない・Items が無い応答は、空の一覧にせず RakutenApiException にする', function (Closure $response) {
+    Http::fake([RAKUTEN_SEARCH_URL.'*' => $response()]);
+
+    rakutenThrown(RakutenApiException::class, fn () => rakutenClient()->searchItems('ジン'));
+})->with([
+    'JSON でない' => fn () => fn () => Http::response('<html>maintenance</html>', 200),
+    'Items が無い' => fn () => fn () => Http::response(['count' => 0]),
+]);
+
+it('TC-72-07:対象のデータが無い 404(not_found)は、空の一覧を返す', function () {
     Http::fake([RAKUTEN_SEARCH_URL.'*' => Http::response(['error' => 'not_found', 'error_description' => 'not found'], 404)]);
 
     expect(rakutenClient()->searchItems('存在しない銘柄'))->toBe([]);

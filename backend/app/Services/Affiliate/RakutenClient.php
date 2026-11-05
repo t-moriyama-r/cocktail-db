@@ -212,7 +212,11 @@ class RakutenClient
 
         $body = $response->json();
 
-        return is_array($body) ? $body : [];
+        if (! is_array($body) || ! is_array($body['Items'] ?? null)) {
+            throw new RakutenApiException("楽天の商品検索 API が {$status} で、読めない応答(JSON でない・Items が無い)を返した", $status);
+        }
+
+        return $body;
     }
 
     /**

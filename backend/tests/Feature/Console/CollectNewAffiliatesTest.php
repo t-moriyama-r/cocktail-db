@@ -436,7 +436,22 @@ it('TC-248-16: 時間を置いても通らない API の失敗(Amazon の 403)�
     expect(Affiliate::query()->pluck('category_id')->all())->toBe([$nodes[1]->id]);
 });
 
-it('TC-248-17: 件と件のあいだに 1 秒あけて探す', function () {
+it('TC-248-19: 探しているあいだにノードが消されたら、保存せずに失敗として飛ばし、次の件へ進む', function () {
+    $nodes = [collectTree('A')['node'], collectTree('B')['node']];
+    collectFake(rakuten: function (?string $keyword) use ($nodes) {
+        if ($keyword === 'Aジン') {
+            $nodes[0]->delete();
+        }
+
+        return Http::response(collectFixture('rakuten-ichiba-item-search/search'));
+    });
+
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    expect(Affiliate::query()->pluck('category_id')->all())->toBe([$nodes[1]->id]);
+});
+
+it('TC-248-17:件と件のあいだに 1 秒あけて探す', function () {
     collectTree('A');
     collectTree('B');
     collectTree('C');

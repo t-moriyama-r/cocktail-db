@@ -149,6 +149,14 @@ final class AffiliateCollector
             return new CollectOutcome($target, CollectOutcome::FAILED, message: $e->getMessage());
         }
 
+        // 探しているあいだに管理画面でノード・銘柄が消されたら、外部キー違反で残りの件が止まらないよう、保存せずに飛ばす
+        $exists = $target->brandId !== null
+            ? Brand::query()->whereKey($target->brandId)->exists()
+            : Category::query()->whereKey($target->categoryId)->exists();
+        if (! $exists) {
+            return new CollectOutcome($target, CollectOutcome::FAILED, message: '探しているあいだにノード・銘柄が消された');
+        }
+
         $affiliate = Affiliate::query()->createOrFirst(
             ['category_id' => $target->categoryId, 'brand_id' => $target->brandId],
             [...$amazon, ...$rakuten],
