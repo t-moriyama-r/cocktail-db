@@ -205,13 +205,21 @@ it('TC-72-07: 対象のデータが無い 404(not_found)は、空の一覧を返
 });
 
 it('TC-72-08: 語に空白があって 400 が返ったら、1 秒空けて、空白(半角・全角)を取り除いた語で 1 回だけやり直す', function () {
-    Http::fake([RAKUTEN_SEARCH_URL.'*' => Http::sequence()
+    $sentAt = [];
+    $responses = Http::sequence()
         ->push(['error' => 'wrong_parameter', 'error_description' => 'keyword is not valid'], 400)
-        ->push(rakutenFixture('search'))]);
+        ->push(rakutenFixture('search'));
+    Http::fake([RAKUTEN_SEARCH_URL.'*' => function ($request) use (&$sentAt, $responses) {
+        $sentAt[] = (int) now()->getPreciseTimestamp(3);
+
+        return $responses->__invoke($request);
+    }]);
 
     $items = rakutenClient()->searchItems('ジン A　B');
 
-    expect(array_column(rakutenQueries(), 'keyword'))->toBe(['ジン A　B', 'ジンAB'])
+    expect($sentAt)->toHaveCount(2)
+        ->and($sentAt[1] - $sentAt[0])->toBeGreaterThanOrEqual(1000)
+        ->and(array_column(rakutenQueries(), 'keyword'))->toBe(['ジン A　B', 'ジンAB'])
         ->and(rakutenQueries()[1]['genreId'])->toBe('510915')
         ->and($items)->toHaveCount(2);
     Sleep::assertSequence([Sleep::for(1000)->milliseconds()]);
@@ -316,7 +324,12 @@ it('TC-72-16: アプリ ID かアクセスキーが無いのに商品のコー�
 });
 
 it('TC-72-17: 同じクライアントで続けて呼ぶと、前の呼び出しから 1 秒たつまで待ってから送る。1 秒たっていれば待たない', function () {
-    Http::fake([RAKUTEN_SEARCH_URL.'*' => Http::response(rakutenFixture('search'))]);
+    $sentAt = [];
+    Http::fake([RAKUTEN_SEARCH_URL.'*' => function () use (&$sentAt) {
+        $sentAt[] = (int) now()->getPreciseTimestamp(3);
+
+        return Http::response(rakutenFixture('search'));
+    }]);
     $client = rakutenClient();
 
     $client->searchItems('ジン');
@@ -326,6 +339,8 @@ it('TC-72-17: 同じクライアントで続けて呼ぶと、前の呼び出し
     $client->searchItems('ラム');
 
     Http::assertSentCount(3);
+    expect($sentAt[1] - $sentAt[0])->toBeGreaterThanOrEqual(1000)
+        ->and($sentAt[2] - $sentAt[1])->toBeGreaterThanOrEqual(1000);
     Sleep::assertSequence([Sleep::for(700)->milliseconds()]);
 });
 
