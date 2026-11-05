@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminLoginLinkController;
 use App\Http\Controllers\DetailPageController;
+use App\Http\Controllers\LegacyCategoryUrlController;
 use App\Http\Controllers\SitemapController;
 use Illuminate\Routing\RedirectController;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +21,17 @@ foreach (['auth/twitter', 'Cocktail/auth/twitter/callback', 'auth/logout'] as $l
         ->defaults('destination', '/admin')
         ->defaults('status', 302);
 }
+
+// 旧のカテゴリ・ミドルの詳細は、移した先のノードの /category/{新ID} へ 301 で移す。対応表に無い ID は 404(#78)。
+// 数字でない ID も 404 にするので、ID の形で絞らない。旧の管理画面の URL(/Cocktail/admin 以下)は /admin へ 301 で移す。
+// どちらも GET だけを受け、クエリは持ち越さない。旧と変えたところは docs/decisions/legacy-urls.md の「旧との差分」。
+// カクテルと銘柄は ID が変わらないので転送しない
+Route::get('/detail/category/{id}', [LegacyCategoryUrlController::class, 'category']);
+Route::get('/detail/middle/{id}', [LegacyCategoryUrlController::class, 'middle']);
+Route::get('/Cocktail/admin/{any?}', RedirectController::class)
+    ->where('any', '.*')
+    ->defaults('destination', '/admin')
+    ->defaults('status', 301);
 
 // 詳細ページは、SPA の HTML にページごとの title・description・canonical を入れ、無い ID・下書きは 404 で返す(#111)。
 // 数字でない ID は下の SPA へ渡すルートに任せ、画面が 404 の画面を出す

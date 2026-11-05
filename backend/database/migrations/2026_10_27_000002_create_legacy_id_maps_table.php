@@ -19,7 +19,7 @@ return new class extends Migration
             $table->unsignedBigInteger('new_id');
 
             $table->primary(['legacy_table', 'legacy_id']);
-            // 新から旧へ戻す検証(#35)と、旧 URL の転送に使う
+            // 新から旧へ戻す検証(#35)に使う。旧 URL の転送(#78)は旧の表と旧 ID から引くので主キーを使う
             $table->index(['new_table', 'new_id']);
         });
     }
