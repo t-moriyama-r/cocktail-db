@@ -53,7 +53,7 @@ FE の画面を変えるなら、静止画の修正前後を、.css を変えた
 (docs/design/style.md の「証跡を撮る幅」。evidence-gate.sh が幅を数える。画面に出ない .tsx・.css の変更なら、本文に ai-dev:no-viewport-evidence と理由の HTML コメントを書く)。
 振る舞いを変えないリファクタ(既存のテストを変えずに通る)なら、修正前後を撮らず、本文に ai-dev:refactor-evidence と理由の HTML コメントを書いて、修正後の画面か既存のテストが通った結果の静止画を 1 枚貼る。
 文書・テスト・CI の設定だけの変更は下の見出しを消し、「撮らない理由」だけ書く。CI の変更なら CI の画面を貼る。
-撮れない環境なら「撮れなかった」と書いて ready にせず、draft のまま needs-local で撮影を頼む。
+撮れない環境なら「撮れなかった」と書いて ready にせず、draft のまま needs-local で撮影を頼む(evidence-capture.yml が撮ってこの節に貼る。撮れなかったものだけ手元)。
 -->
 
 ### 修正前後のスクリーンショット
