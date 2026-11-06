@@ -4,13 +4,29 @@ name: evidence-capture
 # 撮るものは、PR の証跡を頼むコメントの ```evidence のブロック(docs/evidence-request.md)。修正前は PR の向き先のブランチの今の先頭
 # (ブロックの before があればそのコミット)、修正後は PR の head(after があればそのコミット)を別のディレクトリに取り出し、
 # test.yml の e2e ジョブと同じ準備(MariaDB・シーダー・FE のビルド・Playwright)で順に起こして撮る。撮るのは公開リポジトリ
-# t-moriyama-r/evidence-capture の scripts(コミットを固定して取る)。PR 本文への貼り付け・needs-local の付け外しはしない(別の issue)。
+# t-moriyama-r/evidence-capture の scripts(コミットを固定して取る)。撮れたら PR 本文の「## 証跡」に貼って needs-local を外し、
+# 撮れなかったら needs-local を残して何が撮れなかったかをコメントする(#601)。
 #
-# - request: PR とコメントを読み、撮るものを決める(信頼しない人の書いたものがあれば撮らない。#494)
+# 起こし方は 2 つ(#601 でオーナーが案A に決めた)
+# - PR に needs-local が付いたとき(pull_request_target の labeled)。いまも needs-local が付いていて、信頼する人・bot の
+#   いちばん新しい手元に頼むコメントが kind=evidence のときだけ撮る(push・other の頼みでは撮らない。evidence-target.sh)
+# - workflow_dispatch(PR の番号を渡す)
+# どちらでも、開いていない PR・フォークからの PR・昇格の PR(staging・release 向け)では撮らない。
+# GITHUB_TOKEN で付けたラベルはワークフローを起こさないので、Actions の中から頼んだときは workflow_dispatch で起こす。
+#
+# pull_request_target でも PR のコードを動かすのは capture ジョブだけで、そのジョブには書き込みの権限も Secret も渡さない
+# (workflow_dispatch のときと同じ)。起こすきっかけを広げた分、撮る前に gate ジョブが untrusted-hold.sh で、PR と閉じる issue に
+# 信頼しない人の書いたものが無いかを確かめ、あれば撮らずに止める(URL を並べたコメントと needs-human。CLAUDE.md の手順 8。#494)。
+# 確かめるための読み取りに失敗したときも撮らず、needs-local を残して読めなかったことを report がコメントする(#688)
+#
+# - gate: 撮ってよい PR かを決める(evidence-target.sh・untrusted-hold.sh)。PR のコードは動かさない
+# - request: PR のコメントを読み、撮るものを決める。指定が無い・形が誤っていれば、撮らずに report に回す
 # - capture: PR のコードを動かして撮る。トークンは読むだけで、checkout に残さない。ランナーのパス・ホスト名が画面・応答に
 #   出ていたら、アーティファクトにも上げずに落ちる(アーティファクトも public のリポジトリでは読める)
 # - publish: 撮った物を GITHUB_TOKEN で evidence ブランチの pr-<番号>/<head の短い SHA>/ に push する。contents: write はこのジョブだけ。
 #   PR のコードは動かさず、置いてよい名前のファイルだけを置き、パス・ホスト名をもう一度確かめる(evidence-publish.sh)
+# - report: 撮れたら本文に貼り、needs-local を外して <!-- ai-dev:local-done kind=evidence --> のコメントを書く。撮れなかったら
+#   needs-local を残してコメントする(evidence-report.sh)。gate の信頼の確認で読めなかったときも、同じくコメントする。PR のコードは動かさない
 on:
   workflow_dispatch:
     inputs:
@@ -18,21 +34,88 @@ on:
         description: 証跡を撮る PR の番号
         required: true
         type: number
+  # checkout するのは既定のブランチの .github/scripts と、capture ジョブの PR のコード(書き込みの権限の無いジョブ)だけ
+  pull_request_target:
+    types: [labeled]
 
 permissions: {}
 
+# 撮る起動(手動と、needs-local が付いたとき)だけを PR ごとに並べ、ほかのラベルの起動は実行ごとのグループに逃がす。
+# concurrency はジョブの if より前に効くので、関係のないラベルの起動が、待っている撮る回を押し出さないようにする(RC-03)
 concurrency:
-  group: evidence-capture-${{ inputs.number }}
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch' || github.event.label.name == 'needs-local')
+      && format('evidence-capture-{0}', inputs.number || github.event.pull_request.number)
+      || format('evidence-capture-run-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
+  gate:
+    # ラベルの起動は、needs-local が付いた同じリポジトリの PR だけ。昇格の PR(staging・release 向け)は見ない
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.label.name == 'needs-local'
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && !contains(fromJSON('["staging","release"]'), github.event.pull_request.base.ref))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # untrusted-hold.sh が、信頼しない人の書いたものを見つけたときに、URL を並べたコメントと needs-human を付ける
+      issues: write
+      pull-requests: write
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
+      # 信頼の確認(untrusted-hold.sh)で PR・issue・コメントを読めなかった。撮らずに report がそのことをコメントする(#688)
+      read_failed: ${{ steps.gate.outputs.read_failed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Decide whether to capture
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.number || github.event.pull_request.number }}
+          LABELED: ${{ github.event_name == 'pull_request_target' && '--labeled' || '' }}
+        run: |
+          set -euo pipefail
+          rc=0
+          # shellcheck disable=SC2086 # LABELED は空か --labeled の 1 語
+          bash .github/scripts/evidence-target.sh "$REPO" "$NUMBER" $LABELED || rc=$?
+          if [ "$rc" -eq 1 ]; then
+            echo "go=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ "$rc" -eq 0 ] || exit "$rc"
+          # 信頼しない人の書いたものがある PR では撮らない(撮る側はブロックの run をシェルで流す。#494)。
+          # 見つけたら untrusted-hold.sh がコメントと needs-human を付ける(1)。読めなかったとき(3)も撮らない。
+          # 3 のときは untrusted-hold.sh が何も書かず、この起動の後に起こすものも無いので、report が読めなかったことをコメントする(#688)
+          rc=0
+          bash .github/scripts/untrusted-hold.sh "$REPO" "$NUMBER" || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "go=false" >>"$GITHUB_OUTPUT"
+            if [ "$rc" -eq 3 ]; then
+              echo "read_failed=true" >>"$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+          echo "go=true" >>"$GITHUB_OUTPUT"
+
   request:
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
       issues: read
     outputs:
+      ok: ${{ steps.pick.outputs.ok }}
+      error: ${{ steps.pick.outputs.error }}
       request: ${{ steps.pick.outputs.request }}
       before: ${{ steps.pick.outputs.before }}
       after: ${{ steps.pick.outputs.after }}
@@ -49,25 +132,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          NUMBER: ${{ inputs.number }}
+          NUMBER: ${{ inputs.number || github.event.pull_request.number }}
         run: |
           set -euo pipefail
           pr=$(gh api "repos/$REPO/pulls/$NUMBER")
-          state=$(jq -r .state <<<"$pr")
-          head_repo=$(jq -r '.head.repo.full_name // ""' <<<"$pr")
-          if [ "$state" != open ] || [ "$head_repo" != "$REPO" ]; then
-            echo "::error::PR #$NUMBER は開いていないか、フォークからの PR なので撮らない"
-            exit 1
-          fi
-          # 信頼しない人の書いたものがある PR では撮らない(撮る側はブロックの run をシェルで流すため。#494)
-          untrusted=$(bash .github/scripts/untrusted-comments.sh "$REPO" "$NUMBER")
-          if [ -n "$untrusted" ]; then
-            echo "::error::PR #$NUMBER に、オーナー・コラボレーター・決まった bot 以外の人が書いたものがあるので撮らない"
-            printf '%s\n' "$untrusted"
-            exit 1
-          fi
-          bash .github/scripts/evidence-pick.sh "$REPO" "$NUMBER" >"$RUNNER_TEMP/request.md"
-          request=$(bash .github/scripts/evidence-request.sh "$RUNNER_TEMP/request.md")
+          # 頼むコメントが無い・ブロックの形が誤っているときは、撮らずに report ジョブがコメントする(needs-local を残して手元に頼む)。
+          # 理由は複数行なので base64 で 1 行にして渡す
+          fail() {
+            local detail error
+            echo "::error::$1"
+            detail=$(cat "$RUNNER_TEMP/pick.err" 2>/dev/null || true)
+            error=$(printf '%s\n\n%s\n' "$1" "$detail" | base64 -w0)
+            printf '%s\n' "ok=false" "error=$error" >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          bash .github/scripts/evidence-pick.sh "$REPO" "$NUMBER" >"$RUNNER_TEMP/request.md" 2>"$RUNNER_TEMP/pick.err" \
+            || fail "撮るものの指定(信頼する人が書いた、証跡を頼むコメントの \`\`\`evidence のブロック)が無い・読めない"
+          request=$(bash .github/scripts/evidence-request.sh "$RUNNER_TEMP/request.md" 2>"$RUNNER_TEMP/pick.err") \
+            || fail "撮るものの指定(\`\`\`evidence のブロック)の形が誤っている(docs/evidence-request.md)"
           base_ref=$(jq -r .base.ref <<<"$pr")
           base_sha=$(gh api "repos/$REPO/branches/$base_ref" --jq .commit.sha)
           before=$(jq -r --arg d "$base_sha" '.before // $d' <<<"$request")
@@ -77,8 +159,10 @@ jobs:
           done
           echo "修正前: $before(${base_ref} の先頭か、ブロックの before)/ 修正後: $after"
           jq . <<<"$request"
+          request_line=$(jq -c . <<<"$request")
           {
-            echo "request=$(jq -c . <<<"$request")"
+            echo "ok=true"
+            echo "request=$request_line"
             echo "before=$before"
             echo "after=$after"
             echo "short=${after:0:7}"
@@ -86,6 +170,7 @@ jobs:
 
   capture:
     needs: request
+    if: needs.request.outputs.ok == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -226,6 +311,8 @@ jobs:
     permissions:
       # evidence ブランチへの push に使う。書き込みの権限はこのジョブだけに渡す
       contents: write
+    outputs:
+      urls: ${{ steps.push.outputs.urls }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -239,17 +326,83 @@ jobs:
           path: ${{ runner.temp }}/evidence
 
       - name: Push to the evidence branch
+        id: push
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          NUMBER: ${{ inputs.number }}
+          NUMBER: ${{ inputs.number || github.event.pull_request.number }}
           SHORT: ${{ needs.request.outputs.short }}
         run: |
           set -euo pipefail
           urls=$(bash .github/scripts/evidence-publish.sh "$RUNNER_TEMP/evidence" "$REPO" "$NUMBER" "$SHORT")
           printf '%s\n' "$urls"
+          # report ジョブに渡す。URL は空白を含まない(置いてよい名前だけ)ので、空白でつないで 1 行にする
+          line=$(paste -sd' ' <<<"$urls")
+          echo "urls=$line" >>"$GITHUB_OUTPUT"
           {
             echo "## PR #$NUMBER の証跡($SHORT)"
             echo
             while IFS= read -r url; do echo "- $url"; done <<<"$urls"
           } >>"$GITHUB_STEP_SUMMARY"
+
+  report:
+    needs: [gate, request, capture, publish]
+    # 撮ってよいと決めた PR と、信頼の確認で読めなかった PR だけ。途中のジョブが落ちても動き、撮れなかったことを手元に残す(取り消した回は除く)
+    if: ${{ !cancelled() && (needs.gate.outputs.go == 'true' || needs.gate.outputs.read_failed == 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # 本文の「## 証跡」に貼る・needs-local を外す(付ける)・コメントを書く
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Attach to the PR body or report what could not be captured
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.number || github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          READ_FAILED: ${{ needs.gate.outputs.read_failed }}
+          REQUEST_RESULT: ${{ needs.request.result }}
+          REQUEST_OK: ${{ needs.request.outputs.ok }}
+          REQUEST_ERROR: ${{ needs.request.outputs.error }}
+          CAPTURE_RESULT: ${{ needs.capture.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          REQUEST: ${{ needs.request.outputs.request }}
+          URLS: ${{ needs.publish.outputs.urls }}
+          BEFORE: ${{ needs.request.outputs.before }}
+          AFTER: ${{ needs.request.outputs.after }}
+        run: |
+          set -euo pipefail
+          # 信頼の確認で読めなかったときは、撮っていない(request 以降は動いていない)
+          if [ "$READ_FAILED" = true ]; then
+            echo "撮る前の信頼の確認(untrusted-hold.sh)で、PR・閉じる issue・コメントを GitHub から読めなかったので、撮らなかった(API の一時的な失敗・レート制限など)。理由は撮った回のログの Decide のステップを見る。needs-local を付け直すと撮り直す" >"$RUNNER_TEMP/reason.txt"
+            bash .github/scripts/evidence-report.sh failed "$REPO" "$NUMBER" "$RUNNER_TEMP/reason.txt" "$RUN_URL"
+            exit 0
+          fi
+          if [ "$PUBLISH_RESULT" = success ] && [ -n "$URLS" ]; then
+            printf '%s\n' "$REQUEST" >"$RUNNER_TEMP/request.json"
+            tr ' ' '\n' <<<"$URLS" >"$RUNNER_TEMP/urls.txt"
+            bash .github/scripts/evidence-report.sh attach "$REPO" "$NUMBER" "$RUNNER_TEMP/request.json" "$RUNNER_TEMP/urls.txt" \
+              "$BEFORE" "$AFTER" "$RUN_URL"
+            exit 0
+          fi
+          # どこで止まったか。ジョブのログは公開だが、ランナーのパス・ホスト名が出うるので、コメントには写さずに回の URL を書く
+          if [ "$REQUEST_RESULT" != success ] || [ "$REQUEST_OK" != true ]; then
+            if [ -n "$REQUEST_ERROR" ]; then
+              base64 -d <<<"$REQUEST_ERROR" >"$RUNNER_TEMP/reason.txt"
+            else
+              echo "撮るもの(PR と頼むコメント)を読めなかった" >"$RUNNER_TEMP/reason.txt"
+            fi
+          elif [ "$CAPTURE_RESULT" != success ]; then
+            echo "撮る途中で落ちた(アプリの起動・データの投入・画面の操作の失敗、修正後の画面がエラー、または撮った物にランナーのパス・ホスト名が出ていた)。理由は撮った回のログの Capture・Check のステップを見る" >"$RUNNER_TEMP/reason.txt"
+          else
+            echo "撮った物を evidence ブランチに置けなかった(置いてよい名前でないファイル・push の失敗)。理由は撮った回のログの Push のステップを見る" >"$RUNNER_TEMP/reason.txt"
+          fi
+          bash .github/scripts/evidence-report.sh failed "$REPO" "$NUMBER" "$RUNNER_TEMP/reason.txt" "$RUN_URL"

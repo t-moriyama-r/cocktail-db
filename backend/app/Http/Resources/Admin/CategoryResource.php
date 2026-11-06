@@ -2,9 +2,9 @@
 
 namespace App\Http\Resources\Admin;
 
-use App\Enums\CategoryDeleteBlocker;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Services\AdminCategoryWriter;
 use App\Services\CategoryTree;
 use App\Services\DescriptionMarkup;
 use App\Support\YoutubeInput;
@@ -23,7 +23,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class CategoryResource extends JsonResource
 {
     /**
-     * @return array{id: int, parent_id: int|null, path: list<array{id: int, name: string}>, role: string|null, root_role: string|null, famous_brand_requirement: 'required'|'optional'|'none', name: string, name_eng: string, description: string|null, is_major: bool, is_like: bool, is_powder: bool, famous_brand_id: int|null, famous_brand_candidates: list<array{id: int, name: string, name_eng: string}>, children: list<array{id: int, name: string, name_eng: string}>, brands: list<array{id: int, name: string, name_eng: string}>, youtube: string|null, youtube_start_hour: int|null, youtube_start_minute: int|null, youtube_start_second: int|null, youtube_created_at: string|null, image: string|null, image_txt: string|null, image_url: string|null, delete_blockers: list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates', message: string}>, updated_at: string|null}
+     * @return array{id: int, parent_id: int|null, path: list<array{id: int, name: string}>, role: string|null, root_role: string|null, famous_brand_requirement: 'required'|'optional'|'none', name: string, name_eng: string, description: string|null, is_major: bool, is_like: bool, is_powder: bool, famous_brand_id: int|null, famous_brand_candidates: list<array{id: int, name: string, name_eng: string}>, children: list<array{id: int, name: string, name_eng: string}>, brands: list<array{id: int, name: string, name_eng: string}>, youtube: string|null, youtube_start_hour: int|null, youtube_start_minute: int|null, youtube_start_second: int|null, youtube_created_at: string|null, image: string|null, image_txt: string|null, image_url: string|null, delete_blockers: list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates'|'referenced_by_cocktail'|'referenced_by_node'|'referenced_by_method'|'referenced_by_brand'|'referenced_by_dictionary', message: string, referrers?: list<array{id: int, name: string}>}>, updated_at: string|null}
      */
     public function toArray(Request $request): array
     {
@@ -93,11 +93,8 @@ class CategoryResource extends JsonResource
             'image_txt' => $node->image_txt,
             'image_url' => $node->image_url,
             // 消せない理由(DELETE が 409 で返すものと同じ)。消せるなら空
-            /** @var list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates', message: string}> */
-            'delete_blockers' => array_map(
-                fn (CategoryDeleteBlocker $blocker): array => ['code' => $blocker->value, 'message' => $blocker->message()],
-                $tree->deleteBlockers($node),
-            ),
+            /** @var list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates'|'referenced_by_cocktail'|'referenced_by_node'|'referenced_by_method'|'referenced_by_brand'|'referenced_by_dictionary', message: string, referrers?: list<array{id: int, name: string}>}> */
+            'delete_blockers' => app(AdminCategoryWriter::class)->whyNotDeletable($node)?->reasons() ?? [],
             'updated_at' => $node->updated_at?->toJSON(),
         ];
     }

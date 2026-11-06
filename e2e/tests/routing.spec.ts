@@ -86,3 +86,26 @@ test('TC-112-14: 詳細ページの HTML(JS を動かす前)に OGP・Twitter �
   expect(imageResponse.status()).toBe(200)
   expect(imageResponse.headers()['content-type']).toBe('image/png')
 })
+
+// 旧のカテゴリ・ミドルの詳細の URL(#78): サーバーが legacy_id_maps で引いた新しいノードの詳細へ 301 で移す。
+// E2eSeeder の対応は、旧のカテゴリ 9001 → ジン、旧のミドル 9101 → ドライジン。ノードの ID には頼らず、名前で確かめる
+for (const { path, heading } of [
+  { path: '/detail/category/9001', heading: 'ジン(ジン)' },
+  { path: '/detail/middle/9101', heading: 'ドライジン(ドライジン)' },
+]) {
+  test(`TC-78-10: 旧の ${path} を開くと、/category/<新しい ID> の「${heading}」の画面に移る`, async ({ page, request }) => {
+    const response = await request.get(path, { maxRedirects: 0 })
+    expect(response.status()).toBe(301)
+
+    await page.goto(path)
+    await expect(page).toHaveURL(/\/category\/[0-9]+$/)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading)
+  })
+}
+
+test('TC-78-11: 対応表に無い旧のカテゴリの URL は、移らずに 404 の状態で 404 の画面が出る', async ({ page }) => {
+  const response = await page.goto('/detail/category/999999')
+  expect(response?.status()).toBe(404)
+  await expect(page).toHaveURL(/\/detail\/category\/999999$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
+})

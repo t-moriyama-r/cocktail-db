@@ -8,11 +8,14 @@
 # 読めなかった(API が失敗した)ときも 1(無いことと取り違えないよう、出す文を変える)。引数の誤りは 2。
 #
 # 目印だけで選ぶと、外の人が同じ目印を書いたコメントを撮らせられる(撮る側はブロックの run をシェルで流す)ので、
-# 書いた人も見る(RC-05)。選ぶのは author_association が OWNER・MEMBER・COLLABORATOR のコメントだけ。
+# 書いた人も見る(RC-05)。選ぶのは author_association が OWNER・MEMBER・COLLABORATOR の人と、決まった bot(TRUSTED_BOTS。evidence-target.sh と同じ)のコメントだけ。
 # PR に信頼しない人が書いたものがあるかは、呼ぶ側が untrusted-comments.sh で別に確かめる(#494)。
 set -euo pipefail
 
 USAGE="使い方: evidence-pick.sh <owner/repo> <PR の番号>"
+
+# evidence-target.sh の TRUSTED_BOTS と同じ(target が通した bot の頼みを、ここでも選べるようにする)
+TRUSTED_BOTS='["github-actions[bot]","claude[bot]"]'
 
 evidence_pick() {
   local repo=${1:-} number=${2:-} comments body
@@ -25,9 +28,9 @@ evidence_pick() {
     return 1
   fi
   # コメントの多い PR では JSON が 1 引数の上限を超えるので、jq には標準入力で渡す(#469)
-  body=$(jq -r '
+  body=$(jq -r --argjson bots "$TRUSTED_BOTS" '
     add // []
-    | map(select(.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")))
+    | map(select((.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")) or (.user.login as $l | $bots | index($l))))
     | map(select((.body // "") | test("<!--\\s*ai-dev:needs-local\\s+kind=evidence\\s*-->") and test("(?m)^```evidence\\s*$")))
     | sort_by(.created_at) | last | .body // empty' <<<"$comments")
   if [ -z "$body" ]; then

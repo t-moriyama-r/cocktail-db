@@ -141,13 +141,40 @@ export interface paths {
         /** 編集で開くノード。 */
         get: operations["categories.show"];
         /**
-         * ノードを書き換える。親を変えたときは部分木ごと移す。
+         * ノードを書き換える。親を変えたときは部分木ごと移す(#122)。自分・子孫の下へ移す、役割を持つ根をほかのノードの下へ移す、
+         *     カクテルの材料・ベースが指すノードを根へ移す、祖先の有名な銘柄が部分木の外になる、のどれかなら 422 で理由を返す。
          *     英名が同じ親の下のほかのノードと同じなら、保存したうえで warnings に入れて返す。
          */
         put: operations["categories.update"];
         post?: never;
-        /** ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。 */
+        /**
+         * ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。
+         * @description ほかのノード・カクテル・技法・銘柄・用語の説明文から `@n<ID>@` で参照されているときも消さず、409 で理由と参照している行を返す(#629)。
+         */
         delete: operations["categories.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/categories/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 名前・英名の重なりの問い合わせ(#673)。ノードの編集画面で、名前・英名を入れたそばに「同じ名前が存在しています」を出すため。
+         *     旧 DetailEditController@duplicate_check のカテゴリ・ミドルの分の置き換え。
+         * @description 比べる相手は parent_id の子(送らないか空なら根どうし)のうち、exclude_id のノード(編集しているノード)のほか。
+         *     比べ方は保存の API と同じ(名前は検索用の名前で、英名はそのまま)。名前・英名は、空なら比べない(どちらか 1 つは要る)。
+         *     保存では名前の重なりは 422・英名の重なりは warnings だが、ここではどちらも warnings で返す(保存は止めない問い合わせのため)。
+         */
+        get: operations["category.duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1153,8 +1180,12 @@ export interface components {
             image_url: string | null;
             delete_blockers: {
                 /** @enum {string} */
-                code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates";
+                code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates" | "referenced_by_cocktail" | "referenced_by_node" | "referenced_by_method" | "referenced_by_brand" | "referenced_by_dictionary";
                 message: string;
+                referrers?: {
+                    id: number;
+                    name: string;
+                }[];
             }[];
             updated_at: string | null;
         };
@@ -1513,7 +1544,7 @@ export interface components {
         };
         /** FormOptionResource */
         FormOptionResource: {
-            id: string;
+            id: number;
             name: string;
         };
         /** LatestVideoCocktailResource */
@@ -1910,7 +1941,7 @@ export interface components {
              * @description 定義(SettingDefinitions)に無いキーは 422
              * @enum {string}
              */
-            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.affiliate_id";
+            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.application_id" | "rakuten.access_key" | "rakuten.affiliate_id";
             /** @description 省いたときに黙って .env に戻さないよう、欄は必須(null は送れる)。形は項目ごとの規則で確かめる */
             value: string | null;
         };
@@ -2365,12 +2396,58 @@ export interface operations {
                         message: "このノードは消せません";
                         reasons: {
                             /** @enum {string} */
-                            code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates";
+                            code: "children" | "brands" | "ingredients" | "base_cocktails" | "affiliates" | "referenced_by_cocktail" | "referenced_by_node" | "referenced_by_method" | "referenced_by_brand" | "referenced_by_dictionary";
                             message: string;
+                            referrers?: {
+                                id: number;
+                                name: string;
+                            }[];
                         }[];
                     };
                 };
             };
+        };
+    };
+    "category.duplicates": {
+        parameters: {
+            query?: {
+                /** @description 親のノードの ID。根どうしで比べるときは送らないか空にする */
+                parent_id?: number | null;
+                /** @description 名前。英名と、どちらか 1 つは要る */
+                name?: string | null;
+                /** @description 英名。名前と、どちらか 1 つは要る */
+                name_eng?: string | null;
+                /** @description 編集しているノードの ID。新規なら送らない */
+                exclude_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        warnings: ({
+                            /** @constant */
+                            field: "name";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        } | {
+                            /** @constant */
+                            field: "name_eng";
+                            /** @constant */
+                            message: "同じ名前が存在しています";
+                        })[];
+                    };
+                };
+            };
+            404: components["responses"]["ModelNotFoundException"];
+            422: components["responses"]["ValidationException"];
         };
     };
     categoryDetail: {

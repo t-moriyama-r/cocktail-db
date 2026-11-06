@@ -44,7 +44,7 @@ async function addVirtualAuthenticator(page: Page) {
 
 /**
  * 非常用のログイン URL でログインし、仮想の認証器にパスキーを登録して、登録したパスキーの ID を返す。
- * 登録の画面は #313 で作るので、ここでは登録の API(docs/decisions/passkey.md の 3)をページの中から呼ぶ。
+ * ログインの画面を確かめるテストなので、登録の画面(#313。passkey-management.spec.ts)は通さず、登録の API(docs/decisions/passkey.md の 3)をページの中から呼ぶ。
  */
 async function registerPasskey(page: Page, origin: string): Promise<number> {
   await page.goto(issueLoginLink(origin))

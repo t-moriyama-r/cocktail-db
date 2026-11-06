@@ -3,7 +3,7 @@ import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
-import { saveBrand, type BrandFieldErrors, type SaveBrandResult } from './brandApi'
+import { findBrandDuplicate, saveBrand, type BrandFieldErrors, type DuplicateField, type SaveBrandResult } from './brandApi'
 import { sanitizeDigits, sanitizeStrength, toHalfWidthAlphanumeric, type BrandFormValues } from './brandFormValues'
 import styles from './BrandForm.module.css'
 
@@ -41,11 +41,14 @@ const MINUTE_OR_SECOND_DIGITS = 2
  * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定。
  *   旧はサーバーのメッセージを alert で出していた)
  *
- * 名前・英名の重なりを入れたそばに出す(旧の duplicate_check)のは、問い合わせる API(#632)ができてから #633 で足す。
+ * - 名前・英名は、値を変えて欄を離れたら重なりを問い合わせ(#632 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
+ *   (旧の duplicate_check。#633)。知らせるだけで、送信は止めない(旧と同じ)
  */
 export default function BrandForm({ brandId, initialValues, currentImage, categories, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<BrandFieldErrors>({})
+  const nameDuplicate = useDuplicateWarning('name', brandId, initialValues.name)
+  const nameEngDuplicate = useDuplicateWarning('name_eng', brandId, initialValues.nameEng)
   const categoryErrorId = useId()
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [preview, setPreview] = useState<string | null>(currentImage === null ? null : storageImageUrl(currentImage))
@@ -132,13 +135,26 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
       </fieldset>
 
       <div className={styles.row}>
-        <TextField label="名前" errors={errors.name} value={values.name} onChange={(value) => set('name', value)} />
+        <TextField
+          label="名前"
+          errors={errors.name}
+          warning={nameDuplicate.warning}
+          value={values.name}
+          onChange={(value) => set('name', value)}
+          onBlur={() => nameDuplicate.check(values.name)}
+        />
         <TextField
           label="英名"
           errors={errors.name_eng}
+          warning={nameEngDuplicate.warning}
           value={values.nameEng}
           onChange={(value) => set('nameEng', value)}
-          onBlur={() => set('nameEng', toHalfWidthAlphanumeric(values.nameEng))}
+          onBlur={() => {
+            // 保存するのは半角にした値なので、重なりも半角にした値で問い合わせる
+            const nameEng = toHalfWidthAlphanumeric(values.nameEng)
+            set('nameEng', nameEng)
+            nameEngDuplicate.check(nameEng)
+          }}
         />
         <TextField
           label="度数(%)"
@@ -236,30 +252,63 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
   )
 }
 
+/**
+ * 名前・英名の重なりの知らせ。値を変えて欄を離れたら(旧の `@change`)check に今の値を渡すと、問い合わせて warning を更新する。
+ * - 前に問い合わせた値(最初は開いたときの値)から変わっていなければ問い合わせない
+ * - 空なら問い合わせず、出ていた知らせを消す(空の名前は重ならない)
+ * - 続けて問い合わせたときは、最後に問い合わせた値の結果だけを出す(先の応答が後から返っても上書きしない)
+ */
+function useDuplicateWarning(field: DuplicateField, brandId: number | null, initialValue: string) {
+  const [warning, setWarning] = useState<string | null>(null)
+  const checkedValue = useRef(initialValue)
+  const latest = useRef(0)
+  const check = (value: string) => {
+    if (value === checkedValue.current) return
+    checkedValue.current = value
+    const request = ++latest.current
+    if (value === '') {
+      setWarning(null)
+      return
+    }
+    void findBrandDuplicate(field, value, brandId).then((message) => {
+      if (request === latest.current) setWarning(message)
+    })
+  }
+  return { warning, check }
+}
+
 type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
 
-/** ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする */
+/**
+ * ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする。
+ * warning(名前・英名の重なり)は、保存を止めないので欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
+ */
 function Field({
   label,
   errors,
+  warning = null,
   narrow = false,
   children,
 }: {
   label: string
   errors: readonly string[] | undefined
+  warning?: string | null
   narrow?: boolean
   children: (props: ControlProps) => ReactNode
 }) {
   const id = useId()
   const errorId = useId()
+  const warningId = useId()
   const hasErrors = errors !== undefined && errors.length > 0
+  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
   return (
     <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
       <label className={styles.label} htmlFor={id}>
         {label}
       </label>
-      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': hasErrors ? errorId : undefined })}
+      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': describedBy === '' ? undefined : describedBy })}
       <FieldErrors id={errorId} messages={errors} />
+      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
     </div>
   )
 }
@@ -267,6 +316,7 @@ function Field({
 function TextField({
   label,
   errors,
+  warning,
   value,
   onChange,
   onBlur,
@@ -275,6 +325,7 @@ function TextField({
 }: {
   label: string
   errors: readonly string[] | undefined
+  warning?: string | null
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
@@ -282,7 +333,7 @@ function TextField({
   narrow?: boolean
 }) {
   return (
-    <Field label={label} errors={errors} narrow={narrow}>
+    <Field label={label} errors={errors} warning={warning} narrow={narrow}>
       {(props) => (
         <input
           {...props}

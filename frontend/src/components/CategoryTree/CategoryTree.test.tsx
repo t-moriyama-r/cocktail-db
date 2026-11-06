@@ -9,6 +9,7 @@ import type {
 } from './CategoryTree.types'
 import { buildCategoryTreeNode as buildNode } from './buildCategoryTreeNode'
 import { buildTestTree } from './buildTestTree'
+import { cpuTimeMs } from '../../test/cpuTime'
 
 const singleSelection = (overrides: Partial<CategoryTreeSingleSelection> = {}): CategoryTreeSingleSelection => ({
   mode: 'single',
@@ -270,7 +271,7 @@ describe('CategoryTree', () => {
     expect(screen.getAllByText('注記')).toHaveLength(1)
   })
 
-  test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでが 1 秒以内で、閉じた子は描かない', () => {
+  test('TC-297-18: 600 ノードの木で、すべて開いてから閉じるまでの処理が 1 秒以内(CPU 時間)で、閉じた子は描かない', () => {
     const { container } = render(
       <CategoryTree label="カテゴリ" nodes={buildLargeTree()} selection={multipleSelection()} />,
     )
@@ -280,17 +281,18 @@ describe('CategoryTree', () => {
     const countRows = () => container.querySelectorAll('input[type="checkbox"]').length
 
     // 1 回目は JIT のコンパイルと jsdom の初期化の時間が大きく混ざるので、一度開いて閉じてから測る。
-    // 同じ PC で動くほかの処理に割り込まれた回で落ちないよう、3 回測っていちばん速い回を見る
+    // 経過時間ではなく CPU 時間で測る。経過時間は、並べて流すほかのテストや CI のほかの処理に CPU を取られた分も数え、
+    // 負荷がかかると 1 秒を何倍も超えた(#663)。それでも混ざる揺れ(GC など)で落ちないよう、3 回測っていちばん速い回を見る
     fireEvent.click(openAll)
     fireEvent.click(closeAll)
 
     const trials = Array.from({ length: 3 }, () => {
-      const started = performance.now()
+      const started = cpuTimeMs()
       fireEvent.click(openAll)
       const openedCount = countRows()
       fireEvent.click(closeAll)
       const closedCount = countRows()
-      return { openedCount, closedCount, elapsed: performance.now() - started }
+      return { openedCount, closedCount, elapsed: cpuTimeMs() - started }
     })
 
     for (const { openedCount, closedCount } of trials) {

@@ -85,6 +85,9 @@ function plan(req, opt = {}) {
     };
     if (item.kind === "screen") {
       const actions = toActions(item.steps, where);
+      // 修正後の画面が 5xx を返すなら、エラーの画面を証跡として貼らずに撮れなかったことにする(#601)。
+      // 修正前は直す前の不具合で 5xx のこともあるので見ない
+      steps.push({ type: "probe", side: "after", path: item.path });
       const page = (name, extra) => ({ name, url: item.path, read: ["body"], actions, ...extra });
       for (const width of item.widths) {
         const wdir = path.join(dir, String(width));
@@ -207,6 +210,15 @@ function seed(opt, name) {
   }
 }
 
+// 開く画面の HTTP の状態だけを見る(画面の中身は撮るときに読む)。5xx か、つながらなければ落とす
+function probe(opt, step) {
+  const r = sh("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "60", `${opt[step.side].url}${step.path}`], { allowFail: true });
+  const code = Number(r.stdout);
+  if (r.status !== 0 || !(code > 0) || code >= 500) {
+    throw new Error(`修正後の ${step.path} が ${code || "応答なし"} を返した(画面がエラーなので撮らない)`);
+  }
+}
+
 function capture(opt, step) {
   const cfgFile = path.join(step.config.outDir, `${step.config.label}-${step.config.port}.json`);
   fs.mkdirSync(step.config.outDir, { recursive: true });
@@ -231,6 +243,7 @@ function run(req, opt) {
     console.error(`== ${item.id} (${item.cases.join(" ")})`);
     for (const step of item.steps) {
       if (step.type === "seed") seed(opt, step.seed);
+      else if (step.type === "probe") probe(opt, step);
       else if (step.type === "capture") capture(opt, step);
       else if (step.type === "compose") {
         const cfgFile = path.join(step.config.outDir, `compose-${step.config.port}.json`);
