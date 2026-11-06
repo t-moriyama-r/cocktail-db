@@ -907,3 +907,59 @@ it('TC-122-08: 子孫だけが材料・ベースに使われているノード�
     $this->putJson("/api/admin/categories/{$n['ダークラム']->id}", categoryAdminCurrentInput($n['ダークラム'], ['name_eng' => 'Dark Rum']))
         ->assertOk();
 });
+
+it('TC-647-01: 有名な銘柄を持つノードを根へ移すと、有名な銘柄の欄を送らなくても空で送っても、根の有名な銘柄は空になる', function (array $famousBrandInput) {
+    ['nodes' => $n] = categoryAdminTree();
+    $input = [...categoryAdminCurrentInput($n['ジン'], ['parent_id' => null]), ...$famousBrandInput];
+    if ($famousBrandInput === []) {
+        unset($input['famous_brand_id']);
+    }
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", $input)
+        ->assertOk()
+        ->assertJsonPath('data.parent_id', null)
+        ->assertJsonPath('data.famous_brand_id', null);
+
+    expect($n['ジン']->refresh()->famous_brand_id)->toBeNull()
+        ->and(app(CategoryTree::class)->isRoot($n['ジン']))->toBeTrue();
+    // 根を開き直しても有名な銘柄は空で、根のまま保存し直せる(有名な銘柄の欄を送らない)
+    $this->getJson("/api/admin/categories/{$n['ジン']->id}")
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', null);
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['name_eng' => 'Gin']))
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', null);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+})->with([
+    '欄を送らない' => [[]],
+    'null で送る' => [['famous_brand_id' => null]],
+    '空の文字列で送る' => [['famous_brand_id' => '']],
+]);
+
+it('TC-647-02: 根でない親の下へ移すときは、有名な銘柄を空にしない', function () {
+    ['nodes' => $n, 'gordons' => $gordons] = categoryAdminTree();
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['ラム']->id]))
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', $gordons->id);
+
+    expect($n['ジン']->refresh()->famous_brand_id)->toBe($gordons->id)
+        ->and(categoryAdminPathNames($n['ジン']))->toBe(['洋酒', 'ラム', 'ジン']);
+});
+
+it('TC-647-03: 根へ移して空になったノードを洋酒の下へ戻すときは、有名な銘柄を選び直さないと 422 で、選び直せば戻せる', function () {
+    ['nodes' => $n, 'gordons' => $gordons] = categoryAdminTree();
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => null, 'famous_brand_id' => null]))
+        ->assertOk();
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['洋酒']->id]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['brand_name']);
+    expect(app(CategoryTree::class)->isRoot($n['ジン']->refresh()))->toBeTrue();
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['洋酒']->id, 'famous_brand_id' => $gordons->id]))
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', $gordons->id);
+    expect(categoryAdminPathNames($n['ジン']))->toBe(['洋酒', 'ジン']);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});

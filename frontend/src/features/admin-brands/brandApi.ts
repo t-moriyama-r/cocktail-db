@@ -35,6 +35,27 @@ const sendAsPost: Middleware = {
   },
 }
 
+/** 重なりを問い合わせる欄(API の項目名) */
+export type DuplicateField = 'name' | 'name_eng'
+
+/**
+ * 名前か英名が、ほかの銘柄と重なるかを問い合わせる(GET /api/admin/brands/duplicates。#632)。
+ * 重なれば API の文(「同じ名前が存在しています」)を、重ならなければ null を返す。brandId(編集している銘柄)は数えない。
+ * 問い合わせに失敗したときも null を返す(重なりは知らせるだけで保存を止めないので、失敗を画面に出さない。
+ * 旧も失敗したときは何も出さなかった)
+ */
+export async function findBrandDuplicate(field: DuplicateField, value: string, brandId: number | null): Promise<string | null> {
+  const excludeId = brandId ?? undefined
+  try {
+    const { data } = await api.GET('/admin/brands/duplicates', {
+      params: { query: field === 'name' ? { name: value, exclude_id: excludeId } : { name_eng: value, exclude_id: excludeId } },
+    })
+    return data?.warnings.find((warning) => warning.field === field)?.message ?? null
+  } catch {
+    return null
+  }
+}
+
 /** 銘柄を保存する。brandId が null なら新規(POST /api/admin/brands)、あれば更新(PUT /api/admin/brands/{id}) */
 export async function saveBrand(brandId: number | null, values: BrandFormValues): Promise<SaveBrandResult> {
   try {

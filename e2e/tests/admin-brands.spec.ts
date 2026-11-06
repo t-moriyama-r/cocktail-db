@@ -93,3 +93,43 @@ test('TC-64-26: 度数・開始位置の欄に文字の混ざった値を貼り�
   await minute.fill('6a7')
   await expect(minute).toHaveValue('67')
 })
+
+test('TC-654-06: 深さ 5 のノードを所属に持つ銘柄の編集を開くと、そこまでの枝が開いていて、そのラジオがチェックされて見えている', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/brands')
+  await page.getByRole('searchbox', { name: '絞り込み' }).fill('ビーフィーター 40度')
+  await page.getByRole('link', { name: 'ビーフィーター 40度(Beefeater 40)' }).click()
+  await expect(page).toHaveURL(/\/admin\/brands\/\d+$/)
+
+  const tree = page.getByRole('list', { name: '所属' })
+  await expect(page.getByText('選んでいる所属: ジン / ドライジン / ロンドンドライジン / ビーフィーター')).toBeVisible()
+  await expect(tree.getByRole('radio', { name: 'ビーフィーター', exact: true })).toBeVisible()
+  await expect(tree.getByRole('radio', { name: 'ビーフィーター', exact: true })).toBeChecked()
+})
+
+test('TC-633-10: 新規の画面で、既にある銘柄の名前・英名を入れて欄を離れると、それぞれの欄の下に「同じ名前が存在しています」が出て、直すと消える', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/brands/new')
+
+  // E2eSeeder の銘柄「ビーフィーター 40度」(英名 Beefeater 40)。名前は区切りの空白の有無を問わずに比べる(#632)
+  const name = page.getByLabel('名前', { exact: true })
+  const nameEng = page.getByLabel('英名')
+  await name.fill('ビーフィーター40度')
+  await name.blur()
+  await nameEng.fill('Beefeater 40')
+  await nameEng.blur()
+
+  await expect(name).toHaveAccessibleDescription('同じ名前が存在しています')
+  await expect(nameEng).toHaveAccessibleDescription('同じ名前が存在しています')
+
+  await name.fill('E2E の重ならない銘柄')
+  await name.blur()
+  await expect(name).not.toHaveAccessibleDescription('同じ名前が存在しています')
+  await expect(nameEng).toHaveAccessibleDescription('同じ名前が存在しています')
+})

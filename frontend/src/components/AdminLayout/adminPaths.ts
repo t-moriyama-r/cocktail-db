@@ -34,6 +34,9 @@ export const ADMIN_PASSKEYS_PATH = '/admin/passkeys'
 /** 管理画面へのログインの画面の URL。ログインの前に開くので、管理画面の枠(AdminLayout)の外に置く */
 export const ADMIN_LOGIN_PATH = '/admin/login'
 
+/** 言い換え辞書・スキップ語の編集の画面の URL(#67) */
+export const ADMIN_PARAPHRASES_PATH = '/admin/paraphrases'
+
 /** ログインの後に戻す URL を持たせる、ログインの画面のクエリの名前 */
 const REDIRECT_PARAM = 'redirect'
 

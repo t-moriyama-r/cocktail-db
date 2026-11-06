@@ -72,8 +72,12 @@ class AdminCategoryWriter
                 'image_txt' => $request->nullableString('image_txt'),
                 'image_url' => $request->nullableString('image_url'),
             ];
-            // 有名な銘柄は、選んだときだけ書き換える。選ばず、その場でも作らないときは前の値のまま(旧と同じ)
-            if ($request->filled('famous_brand_id')) {
+            // 有名な銘柄は、選んだときだけ書き換える。選ばず、その場でも作らないときは前の値のまま(旧と同じ)。
+            // 根は有名な銘柄を持たない(docs/decisions/strength.md の「根のノード」)ので、根へ移す・根を保存するときは空にする。
+            // 前の値のままにすると、有名な銘柄を持つノードを根へ移したときに、移す前の値が根に残る(#647)
+            if ($parent === null) {
+                $attrs['famous_brand_id'] = null;
+            } elseif ($request->filled('famous_brand_id')) {
                 $attrs['famous_brand_id'] = $request->integer('famous_brand_id');
             }
 
@@ -126,6 +130,29 @@ class AdminCategoryWriter
         $exists = $this->siblings($node->parent()->first(), $node)->where('name_eng', $node->name_eng)->exists();
 
         return $exists ? [['field' => 'name_eng', 'message' => '同じ名前が存在しています']] : [];
+    }
+
+    /**
+     * 名前・英名が、$parent の下(null なら根どうし)の、$excludeId のノード(編集しているノード。新規なら null)のほかの
+     * ノードと同じなら、項目ごとに警告を返す。入れたそばの問い合わせ(GET /api/admin/categories/duplicates。#673)で使う。
+     *
+     * 比べ方は保存の API と同じ(名前は検索用の名前で比べ(保存では 422)、英名はそのまま比べる(保存では warnings))。
+     * 名前・英名が null か空なら、その項目は比べない。
+     *
+     * @return list<array{field: string, message: string}>
+     */
+    public function nameDuplicates(?Category $parent, ?string $name, ?string $nameEng, ?int $excludeId): array
+    {
+        $siblings = $this->siblings($parent, null)->when($excludeId !== null, fn (Builder $query) => $query->whereKeyNot($excludeId));
+        $warnings = [];
+        if ($name !== null && $name !== '' && (clone $siblings)->where('name_search', NameNormalizer::normalize($name))->exists()) {
+            $warnings[] = ['field' => 'name', 'message' => '同じ名前が存在しています'];
+        }
+        if ($nameEng !== null && $nameEng !== '' && (clone $siblings)->where('name_eng', $nameEng)->exists()) {
+            $warnings[] = ['field' => 'name_eng', 'message' => '同じ名前が存在しています'];
+        }
+
+        return $warnings;
     }
 
     /**

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# untrusted-hold.sh のテスト(TC-494-15〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
+# untrusted-hold.sh のテスト(TC-494-15〜・TC-688-01〜)。gh を、決まった値を返す偽物に差し替えて流す。GitHub には触らない。
 # 信頼しないものの見分け方は untrusted-comments.test.sh で確かめるので、ここでは止めるか・頼むコメントとラベルだけを見る。
 #
 # 使い方: .github/scripts/tests/untrusted-hold.test.sh
@@ -62,7 +62,7 @@ main() {
 	echo "$OUTSIDER" >"$FAKE/comments-7"
 	touch "$FAKE/api-fails"
 	run 7
-	expect TC-494-19 '読めなかったら止める(1)が、たまたまの失敗かもしれないのでコメントもラベルも付けない' "$RC|$(posts)" '1|'
+	expect TC-494-19 '読めなかったら止める(3)が、たまたまの失敗かもしれないのでコメントもラベルも付けない' "$RC|$(posts)" '3|'
 
 	reset
 	issue_only 7
@@ -75,14 +75,29 @@ main() {
 	echo "$OUTSIDER" >"$FAKE/comments-12"
 	touch "$FAKE/kind-fails"
 	run 7
-	expect TC-494-29 'PR か issue かを読めなかったら、閉じる issue を見ないまま動かさずに止める(1)。何も書かない' "$RC|$(posts)" '1|'
+	expect TC-494-29 'PR か issue かを読めなかったら、閉じる issue を見ないまま動かさずに止める(3)。何も書かない' "$RC|$(posts)" '3|'
 
 	reset
 	echo 12 >"$FAKE/closing-7"
 	echo "$OUTSIDER" >"$FAKE/comments-12"
 	touch "$FAKE/pr-view-fails"
 	run 7
-	expect TC-494-30 '閉じる issue を読めなかったら、PR だけ見て動かさずに止める(1)。何も書かない' "$RC|$(posts)" '1|'
+	expect TC-494-30 '閉じる issue を読めなかったら、PR だけ見て動かさずに止める(3)。何も書かない' "$RC|$(posts)" '3|'
+
+	reset
+	echo "$OUTSIDER" >"$FAKE/comments-7"
+	touch "$FAKE/hold-read-fails"
+	run 7
+	expect TC-688-01 '信頼しないものがあっても、前に頼んだコメントを読めなければ、読めなかった(3)で止める。何も書かない' "$RC|$(posts)" '3|'
+
+	reset
+	run
+	expect TC-688-02 '番号が無ければ引数の誤り(2)で、読めなかった(3)と取り違えない。GitHub を読まない' "$RC|$(posts)|$(wc -l <"$FAKE/calls" | tr -d ' ')" '2||0'
+
+	reset
+	echo "$OUTSIDER" >"$FAKE/comments-7"
+	run 7
+	expect TC-688-03 '信頼しないものがあるとき(通常の保留)は、読めなかった(3)ではなく 1 で終わる' "$RC|$(posts)" '1|comments,labels:needs-human'
 
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
@@ -96,6 +111,7 @@ setup_fake_gh() {
 echo "gh $*" >>"$FAKE/calls"
 if [ -f "$FAKE/api-fails" ] && [[ "$*" == *"/comments?"* ]]; then echo "HTTP 502: api failed" >&2; exit 1; fi
 if [ -f "$FAKE/kind-fails" ] && [[ "$*" == *"has(\"pull_request\")"* ]]; then echo "HTTP 502: api failed" >&2; exit 1; fi
+if [ -f "$FAKE/hold-read-fails" ] && [[ "$*" == "api --paginate repos/"*"/comments?"* ]]; then echo "HTTP 502: api failed" >&2; exit 1; fi
 if [ -f "$FAKE/pr-view-fails" ] && [[ "$*" == "pr view "* ]]; then echo "GraphQL: rate limited" >&2; exit 1; fi
 num() { local p=${1#*/issues/}; p=${p#*/pulls/}; echo "${p%%[/?]*}"; }
 case "$*" in
@@ -122,7 +138,7 @@ SH
 }
 
 reset() {
-	rm -f "$FAKE"/calls "$FAKE"/api-fails "$FAKE"/kind-fails "$FAKE"/pr-view-fails "$FAKE"/out "$FAKE"/err "$FAKE"/posts "$FAKE"/posted-body \
+	rm -f "$FAKE"/calls "$FAKE"/api-fails "$FAKE"/kind-fails "$FAKE"/pr-view-fails "$FAKE"/hold-read-fails "$FAKE"/out "$FAKE"/err "$FAKE"/posts "$FAKE"/posted-body \
 		"$FAKE"/comments-* "$FAKE"/hold-comments-* "$FAKE"/closing-* "$FAKE"/issue-only-*
 	: >"$FAKE/calls"
 }
