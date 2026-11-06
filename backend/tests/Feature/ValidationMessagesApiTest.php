@@ -5,6 +5,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 // 管理 API・公開の API の 422 のメッセージが日本語になる(#651。決めたことは docs/decisions/validation-messages.md)。
 // 旧での結果は未確認(旧システムを動かせる環境で確かめていない)。
+// 管理 API の欄の名前は、#692 で日本語(画面の欄の名前)にした(tests/Feature/Admin/ValidationAttributeNamesApiTest.php)。
 
 uses(RefreshDatabase::class)->group('db');
 
@@ -16,8 +17,8 @@ it('TC-651-03: 設定の画面で規則に合わない値を保存すると、er
     $this->putJson('/api/admin/settings', ['key' => 'amazon.partner_tag', 'value' => 'has space'])
         ->assertUnprocessable()
         ->assertExactJson([
-            'message' => 'valueの形が正しくありません。',
-            'errors' => ['value' => ['valueの形が正しくありません。']],
+            'message' => 'Amazon のパートナータグの形が正しくありません。',
+            'errors' => ['value' => ['Amazon のパートナータグの形が正しくありません。']],
         ]);
 });
 
@@ -25,10 +26,10 @@ it('TC-651-04: 誤りが 2 つ以上あると、message は 1 つめのメッセ
     $this->putJson('/api/admin/settings', [])
         ->assertUnprocessable()
         ->assertExactJson([
-            'message' => 'keyを入力してください。 (ほか 1 件)',
+            'message' => '項目を入力してください。 (ほか 1 件)',
             'errors' => [
-                'key' => ['keyを入力してください。'],
-                'value' => ['valueの欄を送ってください。'],
+                'key' => ['項目を入力してください。'],
+                'value' => ['値の欄を送ってください。'],
             ],
         ]);
 });

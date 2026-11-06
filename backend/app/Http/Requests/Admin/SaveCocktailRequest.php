@@ -106,6 +106,39 @@ class SaveCocktailRequest extends FormRequest
     }
 
     /**
+     * 検証のメッセージに出す欄の名前(#692。docs/decisions/validation-messages.md)。画面の欄の名前に合わせる。
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'base_category_id' => 'ベース',
+            'name' => '名前',
+            'name_eng' => '英名',
+            'method_id' => '技法',
+            'glass_dictionary_id' => 'グラス',
+            'ice_id' => '氷',
+            'rate' => '評価',
+            'sweet_degree' => '甘さ',
+            'is_major' => 'メジャー',
+            'is_draft' => '下書き',
+            'description' => '説明',
+            'note' => '補足',
+            ...$this->youtubeAttributes(),
+            ...$this->imageAttributes(),
+            // 材料の行の番号(:position)は 1 から数える
+            'ingredients' => '材料',
+            'ingredients.*.category_id' => '材料 :position 行目のノード',
+            'ingredients.*.brand_id' => '材料 :position 行目の銘柄',
+            'ingredients.*.amount' => '材料 :position 行目の量',
+            'ingredients.*.is_optional' => '材料 :position 行目の任意',
+            'aliases' => '別名',
+            'aliases.*' => '別名 :position つ目',
+        ];
+    }
+
+    /**
      * 保存する別名の名前。送った並びのまま返す。aliases を送っていなければ null(今の別名を残す)。
      *
      * @return list<string>|null

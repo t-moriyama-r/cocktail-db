@@ -10,7 +10,7 @@ use InvalidArgumentException;
  * 管理画面の編集の入力(銘柄 #314・カクテル #291・用語 #315・ノード #121 など)に共通する読み方。
  *
  * YouTube の欄の規則(動画と開始位置の規則はカクテルと同じ。YoutubeInput)と、空の欄を null で読む方法、
- * 画像つき(multipart)で文字列で届く真偽値の直しを持つ。
+ * 画像つき(multipart)で文字列で届く真偽値の直しを持つ。YouTube・画像の欄の、検証のメッセージに出す名前(#692)も持つ。
  */
 trait AdminFormInput
 {
@@ -56,6 +56,38 @@ trait AdminFormInput
             $prefix.'youtube_start_hour' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_HOUR],
             $prefix.'youtube_start_minute' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
             $prefix.'youtube_start_second' => ['nullable', 'integer', 'min:0', 'max:'.YoutubeInput::MAX_MINUTE_OR_SECOND],
+        ];
+    }
+
+    /**
+     * YouTube の欄の、検証のメッセージに出す名前(#692)。画面の欄の名前に合わせる。
+     *
+     * $prefix は youtubeRules() と同じ。$label は名前の前に付ける語(その場で作る銘柄の欄なら「有名な銘柄の」)。
+     *
+     * @return array<string, string>
+     */
+    protected function youtubeAttributes(string $prefix = '', string $label = ''): array
+    {
+        return [
+            $prefix.'youtube' => $label.'YouTube',
+            $prefix.'youtube_start_hour' => $label.'開始位置(時)',
+            $prefix.'youtube_start_minute' => $label.'開始位置(分)',
+            $prefix.'youtube_start_second' => $label.'開始位置(秒)',
+        ];
+    }
+
+    /**
+     * 画像と画像のリンクの欄(AdminImageStore::rules() と image_txt・image_url)の、検証のメッセージに出す名前(#692)。
+     *
+     * @return array<string, string>
+     */
+    protected function imageAttributes(): array
+    {
+        return [
+            'image' => '画像',
+            'remove_image' => '画像を消す',
+            'image_txt' => 'リンクテキスト',
+            'image_url' => 'リンク URL',
         ];
     }
 

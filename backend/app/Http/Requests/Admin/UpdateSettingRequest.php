@@ -28,4 +28,23 @@ class UpdateSettingRequest extends FormRequest
             'value' => ['present', 'nullable', 'string', ...($definition->rules ?? ['max:255'])],
         ];
     }
+
+    /**
+     * 検証のメッセージに出す欄の名前(#692。docs/decisions/validation-messages.md)。
+     *
+     * 設定の画面は、項目ごとに見出し(定義の label)の下に欄を置き、誤りをまとめて出すので、value の名前は項目の見出しにする。
+     * 定義に無いキーのときは「値」。
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        $key = $this->input('key');
+        $definition = is_string($key) ? app(SettingDefinitions::class)->find($key) : null;
+
+        return [
+            'key' => '項目',
+            'value' => $definition->label ?? '値',
+        ];
+    }
 }
