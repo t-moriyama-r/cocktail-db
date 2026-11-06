@@ -12,7 +12,8 @@ name: evidence-capture
 #   いちばん新しい手元に頼むコメントが kind=evidence のときだけ撮る(push・other の頼みでは撮らない。evidence-target.sh)
 # - workflow_dispatch(PR の番号を渡す)
 # どちらでも、開いていない PR・フォークからの PR・昇格の PR(staging・release 向け)では撮らない。
-# GITHUB_TOKEN で付けたラベルはワークフローを起こさないので、Actions の中から頼んだときは workflow_dispatch で起こす。
+# GITHUB_TOKEN で付けたラベルはワークフローを起こさないので、Actions の中から頼んだときは workflow_dispatch で起こす
+# (ai-review-loop.yml・ai-draft-sweep.yml は、Claude Code を動かさない後ろのジョブが evidence-kick.sh で起こす。#686)。
 #
 # pull_request_target でも PR のコードを動かすのは capture ジョブだけで、そのジョブには書き込みの権限も Secret も渡さない
 # (workflow_dispatch のときと同じ)。起こすきっかけを広げた分、撮る前に gate ジョブが untrusted-hold.sh で、PR と閉じる issue に

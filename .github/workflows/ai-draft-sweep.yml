@@ -6,9 +6,11 @@
 # - pick: .github/scripts/draft-candidates.sh で候補を絞る(条件はスクリプトの先頭)。理由はジョブのログに出す
 # - recover: 候補ごとに Claude Code が PR のブランチで仕上げる。仕上げたら ready にし、
 #   Actions では仕上げられないものは、何が足りないかをコメントし、判断が要るなら needs-human、修正前後の証跡が要る
-#   (この環境では撮れない)だけなら needs-local(見回り待ち。PC を開いたときに手元の見回りが撮る)、人が手を動かさないと進まない
-#   作業(Secret の設定など)だけなら needs-manual(手元の作業待ち)を付ける
-# - notify: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替える。ready になった PR は、
+#   (この環境では撮れない)だけなら needs-local(見回り待ち。evidence-capture.yml が撮り、撮れなかったものだけ PC を開いたときに
+#   手元の見回りが撮る)、人が手を動かさないと進まない作業(Secret の設定など)だけなら needs-manual(手元の作業待ち)を付ける
+# - notify: 新しく付いた needs-human・needs-manual を Slack に知らせ、状態のラベルを付け替える。新しく付いた needs-local で、
+#   いちばん新しい頼むコメントが kind=evidence なら、evidence-capture.yml を起こす(.github/scripts/evidence-kick.sh。GITHUB_TOKEN で
+#   付けたラベルでは evidence-capture.yml の labeled が起きないため。#686)。ready になった PR は、
 #   .github/scripts/request-review.sh でオーナーの PAT から CodeRabbit にレビューを頼む(ボットの依頼には CodeRabbit が応じない。#227)
 #
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)
@@ -188,8 +190,9 @@ jobs:
                並びと形は CLAUDE.md の「人に判断を頼むとき」に従う(1 行目に何を決めてほしいか、図、案の比較表、結果が画面に出るもの(並び・出す値・文言・色・レイアウト)が案で変わるなら案ごとの見え方(文字で再現した表など)と手元に撮ってほしいもの、答え方の順に置き、引き継いでしたことは最後に畳む)。
                図(Mermaid)のラベルは、ノードは全角 12 字・矢印のラベルは全角 6 字まで(半角は 0.5 字と数える。長くなるときは `<br>` で折り(折った 1 行は全角 7 字まで)、説明の文は図に入れず比較表に書く)。
             6. FE・BE のコードを変えていて、証跡(修正前後の比較画像。画面のコードを変えたなら動画も。画面の無い BE は応答の変化)がまだ貼られていない(この環境では撮れない)ときは、
-               ready にせず draft のまま、手元のエージェントに撮影を頼む。撮影は人の判断ではないので、5 に当たるものが無ければ `needs-human` ではなく
-               `needs-local` を付ける(PC を開いたときに手元の見回りが撮って貼り、ready にする)。PR にコメントを書いてから `needs-local` ラベルを付け、
+               ready にせず draft のまま、撮影を頼む。撮影は人の判断ではないので、5 に当たるものが無ければ `needs-human` ではなく
+               `needs-local` を付ける(後のジョブが evidence-capture.yml を起こして撮って貼り、撮れなかったものだけ PC を開いたときに手元の見回りが撮って貼る。
+               貼った後の draft は、次の回のこの見回りか手元の見回りが ready にする)。PR にコメントを書いてから `needs-local` ラベルを付け、
                `ai-in-actions` ラベルを外して終える。コメントの先頭に <!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence --> を付け、
                中身は、引き継いでしたことと、撮ってほしいもの(画面・幅・操作、画面の無い BE ならリクエスト)。修正前は手元の共有の develop の環境で撮るので、修正前の環境の作り方は書かない(develop 以外と比べるときだけ、比べるコミットを書く)。
                撮ってほしいものは、`docs/evidence-request.md` の形の ```evidence のブロック(YAML)にして、そのコメントに 1 つだけ置く(撮る側が機械で読む)。
@@ -237,7 +240,7 @@ jobs:
         if: always() && steps.live.outputs.run
         run: gh pr edit "$PR" -R "$REPO" --remove-label ai-in-actions || true
 
-  # Claude Code が GITHUB_TOKEN で付けたラベルは、Slack の通知のワークフローを起こさないので、ここから直接呼ぶ。
+  # Claude Code が GITHUB_TOKEN で付けたラベルは、Slack の通知・証跡の撮影のワークフローを起こさないので、ここから直接呼ぶ。
   # Claude Code は PR・issue のコメント(外部の人も書ける)を読むので、そのジョブにはワークフローを起動できる権限を渡さず、このジョブだけに渡す
   notify:
     needs: [pick, recover]
@@ -273,6 +276,23 @@ jobs:
             fi
           done
           gh workflow run pr-status.yml -R "$REPO" -f number="$PR"
+
+      # 候補は needs-local の付いていない PR なので、引き継いだ PR にいま needs-local が付いていれば、引き継いだ Claude Code が付けたもの。
+      # いちばん新しい頼むコメントが kind=evidence なら、evidence-capture.yml を起こす(決め方は evidence-kick.sh。#686)。
+      # 起こせなくても、撮影は手元の見回りが拾うので、本来の仕事(通知・レビューの依頼)を止めない
+      - name: 証跡を頼んだなら evidence-capture.yml を起こす
+        run: |
+          # 読めなかったときに「引き継いでいない」と取り違えないよう、代入を分けて警告にする(RC-01)
+          if ! comments=$(gh pr view "$PR" -R "$REPO" --json comments); then
+            echo "::warning::#$PR のコメントを読めなかったので、evidence-capture.yml を起こさない(手元の見回りが撮る)"
+            exit 0
+          fi
+          recovered=$(jq --arg mark "<!-- ai-dev:draft-sweep sha=$PICKED_HEAD -->" 'any(.comments[]; .body | contains($mark))' <<<"$comments")
+          if [ "$recovered" = true ]; then
+            bash .github/scripts/evidence-kick.sh "$REPO" "$PR" "" || echo "::warning::#$PR の evidence-capture.yml を起こせなかった(手元の見回りが撮る)"
+          else
+            echo "#$PR 引き継いでいない"
+          fi
 
       # recover で untrusted-hold.sh が止めた PR は、引き継いだ目印が無いので上では知らせない(決め方は untrusted-notify.sh。#494)
       - name: 信頼しない人が書いたもので止めたなら Slack に知らせる
