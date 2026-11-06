@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "before": "4ff54270d4fd8eeb49b2bd8cffe9f4f0904c328e",
+  "after": "7a966ac09bb7aca504d41782040178be511483a0",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-695-10"
+      ],
+      "note": "修正前は表が無い。修正後は列・索引・外部キーが docs/schema.md のとおり",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-695-01",
+        "TC-695-02",
+        "TC-695-03",
+        "TC-695-04",
+        "TC-695-05",
+        "TC-695-06",
+        "TC-695-07",
+        "TC-695-08",
+        "TC-695-09",
+        "TC-695-10"
+      ],
+      "note": "修正前は該当なし。修正後は 10 件が通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    },
+    {
+      "id": "03-command",
+      "kind": "command",
+      "cases": [
+        "TC-695-06"
+      ],
+      "note": "既存の --new のテスト(429 で次の回にまわす TC-248-14 を含む)が修正前後とも通る(回帰の確認)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "03-command-before.png",
+        "03-command-after.png",
+        "03-command-compare.png"
+      ]
+    }
+  ]
+}
