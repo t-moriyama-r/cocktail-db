@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "before": "5a2baa2a8bbef92d2095b6e4d1b63c5f9b59bec6",
+  "after": "f4b26dce903db3e8b82f95b8a711bfbf8796caa0",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-651-03",
+        "TC-692-01",
+        "TC-692-03",
+        "TC-692-04",
+        "TC-692-05",
+        "TC-692-06",
+        "TC-692-08"
+      ],
+      "note": "修正前は欄の名前が英語のキー、修正後は画面の欄の名前(日本語)になること。状態コードはどれも 422",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-692-01",
+        "TC-692-02",
+        "TC-692-03",
+        "TC-692-04",
+        "TC-692-05",
+        "TC-692-06",
+        "TC-692-07",
+        "TC-692-08",
+        "TC-692-09",
+        "TC-651-03",
+        "TC-651-04",
+        "TC-651-05",
+        "TC-651-06"
+      ],
+      "note": "修正後でテストが全部通ること(修正前は ValidationAttributeNamesApiTest.php が無いので、ValidationMessagesApiTest.php だけが流れる)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
