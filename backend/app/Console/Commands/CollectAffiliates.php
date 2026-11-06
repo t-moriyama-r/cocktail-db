@@ -12,6 +12,7 @@ use Illuminate\Console\Command;
  * アフィリエイトの商品を集める(旧の AffiliateController@main。旧は毎分動いていた)。
  *
  * --new: まだ商品の行が無いノード・銘柄を名前で探し、見つけた商品の ID と値を保存する(#248。中身は AffiliateCollector)。
+ *   API の失敗が続く件は、しばらく選ばずに後ろの件へ進む(#695)。
  * ID での取り直し(--refresh)と定期実行の登録は #249 で足す。
  */
 final class CollectAffiliates extends Command
@@ -90,7 +91,9 @@ final class CollectAffiliates extends Command
                 $outcome->rakutenItemCode ?? '見つからない',
             )),
             CollectOutcome::ALREADY_EXISTS => $this->line("{$target}: 探しているあいだに行ができていたので、書き換えない"),
-            CollectOutcome::FAILED => $this->warn("{$target}: 失敗したので飛ばす({$outcome->message})"),
+            CollectOutcome::FAILED => $this->warn($outcome->retryAfter !== null
+                ? "{$target}: 失敗したので飛ばす({$outcome->message})。{$outcome->retryAfter->toDateTimeString()} までは選ばない"
+                : "{$target}: 失敗したので飛ばす({$outcome->message})"),
             CollectOutcome::RETRY_LATER => $this->warn("{$target}: 上限か一時的な失敗のため、次の回にまわす({$outcome->message})"),
         };
     }

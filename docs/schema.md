@@ -19,6 +19,7 @@
 | `cocktail_ingredients` | カクテルの材料 | `t_recipies` | — | #22 |
 | `cocktail_aliases` | カクテルの別名 | 無し(新設) | — | #82 |
 | `affiliates` | アフィリエイトの商品 | `affiliates` | 振る(旧は複合キー) | #23 |
+| `affiliate_collect_failures` | 名前で商品を探して失敗したノード・銘柄 | 無し(新設) | — | #695 |
 | `methods` | 技法 | `m_method` | 旧 ID のまま | #23 |
 | `ices` | 氷 | `m_ice` | 旧 ID のまま | #23 |
 | `dictionaries` | 用語辞典(グラスもここ) | `t_dictionary` | 旧 ID のまま | #23 |
@@ -274,6 +275,24 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 - 変わる値(価格・画像の URL・商品名)を出してよい期限、価格の横に出す文言、取り直す間隔は #247(`docs/decisions/affiliate-freshness.md`)で決める。この表は、その判断に要る時刻の列だけを持つ
 - 楽天の API で取れる値は `docs/rakuten-api.md`(#246 で書く)、Amazon は [amazon-creators-api.md](amazon-creators-api.md)(#134)
 
+### `affiliate_collect_failures`(旧には無い。#695)
+
+`affiliates:collect --new`(#248)が名前で探して API の失敗になったノード・銘柄。失敗した件は `affiliates` の行を作らないので、そのままだと毎回同じ件が先頭に選ばれる。ここに残し、`retry_after` までは選ばない(決まりは [affiliate-freshness.md](decisions/affiliate-freshness.md) の 7)。ノード 1 つ、または銘柄 1 つにつき 1 行。
+
+| 列 | 型 | null | 中身 |
+|---|---|---|---|
+| `id` | `id()` | | |
+| `category_id` | `foreignId` → `categories` | | ノード。銘柄の行は銘柄の所属ノード(`affiliates` と同じ) |
+| `brand_id` | `foreignId` → `brands` | ○ | 銘柄。ノードの行は null |
+| `brand_key` | `unsignedBigInteger`(生成列) | | `IFNULL(brand_id, 0)` の `storedAs`。一意性の制約にだけ使う(`affiliates` と同じ) |
+| `name` | `string(255)` | | 失敗したときに探した名前。今の名前と違えば、`retry_after` を待たずにまた選ぶ |
+| `failure_count` | `unsignedInteger` | | 同じ名前で続けて失敗した回数 |
+| `last_message` | `text` | ○ | 最後の失敗の理由(API の失敗の文言) |
+| `retry_after` | `dateTime` | | この時刻まで選ばない |
+| `created_at`・`updated_at` | `timestamps()` | ○ | |
+
+インデックス: (`category_id`, `brand_key`) に unique・`retry_after`。保存できたら行を消す。
+
 ## 辞書・設定・ユーザー
 
 ### `methods`(旧 `m_method`。6 件)
@@ -402,6 +421,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `cocktail_ingredients.category_id` → `categories`・`brand_id` → `brands` | RESTRICT |
 | `affiliates.category_id` → `categories` | RESTRICT |
 | `affiliates.brand_id` → `brands` | CASCADE(銘柄のアフィリエイトは銘柄に付いたもの) |
+| `affiliate_collect_failures.category_id` → `categories`・`brand_id` → `brands` | CASCADE(ノード・銘柄を消すと、失敗の記録も要らない。カテゴリを消させない理由には入れない) |
 | `dictionaries.dictionary_category_id` → `dictionary_categories` | RESTRICT |
 | `methods.dictionary_id` → `dictionaries` | RESTRICT |
 | `settings.updated_by` → `users` | SET NULL |

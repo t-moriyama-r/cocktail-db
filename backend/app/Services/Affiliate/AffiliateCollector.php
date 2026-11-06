@@ -3,11 +3,13 @@
 namespace App\Services\Affiliate;
 
 use App\Models\Affiliate;
+use App\Models\AffiliateCollectFailure;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\CategoryClosure;
 use App\Services\CategoryTree;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 
@@ -32,7 +34,10 @@ use Illuminate\Support\Sleep;
  * - 認証情報の無い提供元には問い合わせない。両方とも無ければ何もしない。片方だけあれば、その提供元だけで探して保存する
  * - 429・5xx・つながらない(RetryLater)ときは、その件を保存せずに、この回を終える。上限に当たっているあいだに続けて
  *   呼んでも通らないため。保存しなかった件は行が無いままなので、次の回にまた選ばれる
- * - それ以外の API の失敗は、その件を保存せずに次の件へ進む(次の回にまた選ばれる)
+ * - それ以外の API の失敗は、その件を保存せずに次の件へ進む。失敗した件は affiliate_collect_failures に残し、
+ *   決めた時刻(retry_after)までは選ばない(#695。docs/decisions/affiliate-freshness.md の 7)。先頭の件が失敗し
+ *   続けても、後ろの件へ進めるようにするため。待つ時間は 1 時間から失敗のたびに倍にし、1 日で止める。名前が
+ *   変わったら待たずにまた選ぶ。保存できたら記録を消す
  * - どちらの失敗でも、片方の提供元が見つけた値も保存しない。保存すると行ができて次の回に選ばれず、失敗した提供元を
  *   名前で探し直す処理が無いため
  *
@@ -45,6 +50,12 @@ final class AffiliateCollector
 
     /** 件と件のあいだに空ける時間。Amazon・楽天とも 1 秒以上あける(同じく 5。旧も 1 件ごとに 1 秒待っていた) */
     public const INTERVAL_MILLISECONDS = 1000;
+
+    /** 1 回目の失敗の後に選ばない時間(分)。失敗が続くたびに倍にする(#695。docs/decisions/affiliate-freshness.md の 7) */
+    public const FAILURE_BACKOFF_FIRST_MINUTES = 60;
+
+    /** 失敗が続いても、選ばない時間はこれより長くしない(分。1 日) */
+    public const FAILURE_BACKOFF_MAX_MINUTES = 1440;
 
     public function __construct(
         private readonly AmazonClient $amazon,
@@ -87,7 +98,8 @@ final class AffiliateCollector
     }
 
     /**
-     * まだ行の無い銘柄 → ノードの順に、$limit 件まで選ぶ。
+     * まだ行の無い銘柄 → ノードの順に、$limit 件まで選ぶ。失敗して retry_after を待っている件は、失敗したときと名前が
+     * 同じなら選ばない(#695)。
      *
      * @return list<CollectTarget>
      */
@@ -97,11 +109,14 @@ final class AffiliateCollector
             return [];
         }
 
+        $now = now();
         $targets = [];
         $brands = Brand::query()
             ->whereNotExists(fn (QueryBuilder $query) => $query
                 ->from('affiliates')
                 ->whereColumn('affiliates.brand_id', 'brands.id'))
+            ->whereNotExists(fn (QueryBuilder $query) => $this->waitingFailures($query, $now, 'brands')
+                ->whereColumn('affiliate_collect_failures.brand_id', 'brands.id'))
             ->orderBy('id')
             ->limit($limit)
             ->get(['id', 'category_id', 'name']);
@@ -124,6 +139,9 @@ final class AffiliateCollector
                 ->from('affiliates')
                 ->whereColumn('affiliates.category_id', 'categories.id')
                 ->whereNull('affiliates.brand_id'))
+            ->whereNotExists(fn (QueryBuilder $query) => $this->waitingFailures($query, $now, 'categories')
+                ->whereColumn('affiliate_collect_failures.category_id', 'categories.id')
+                ->whereNull('affiliate_collect_failures.brand_id'))
             ->orderBy('id')
             ->limit($rest)
             ->get(['id', 'name']);
@@ -132,6 +150,25 @@ final class AffiliateCollector
         }
 
         return $targets;
+    }
+
+    /**
+     * 失敗の記録のうち、まだ retry_after を待っていて、名前が今の名前(brands.name か categories.name)と同じもの。
+     *
+     * 名前は文字どおりに比べる(utf8mb4_bin)。表の照合順序(utf8mb4_unicode_ci)のままだと、大文字・小文字や
+     * 「ハ」と「パ」を同じと見なし、名前を直しても待ったままになるため。
+     *
+     * @param  'brands'|'categories'  $table
+     */
+    private function waitingFailures(QueryBuilder $query, Carbon $now, string $table): QueryBuilder
+    {
+        return $query
+            ->from('affiliate_collect_failures')
+            ->where('affiliate_collect_failures.retry_after', '>', $now)
+            ->whereRaw(match ($table) {
+                'brands' => 'affiliate_collect_failures.name COLLATE utf8mb4_bin = brands.name',
+                'categories' => 'affiliate_collect_failures.name COLLATE utf8mb4_bin = categories.name',
+            });
     }
 
     private function collectOne(CollectTarget $target, bool $amazonConfigured, bool $rakutenConfigured): CollectOutcome
@@ -146,14 +183,16 @@ final class AffiliateCollector
         } catch (AmazonApiException|RakutenApiException $e) {
             Log::warning('affiliates:collect --new: API の失敗のため、この件を飛ばす', ['target' => $target->describe(), 'error' => $e->getMessage()]);
 
-            return new CollectOutcome($target, CollectOutcome::FAILED, message: $e->getMessage());
+            return new CollectOutcome(
+                $target,
+                CollectOutcome::FAILED,
+                message: $e->getMessage(),
+                retryAfter: $this->recordFailure($target, $e->getMessage()),
+            );
         }
 
         // 探しているあいだに管理画面でノード・銘柄が消されたら、外部キー違反で残りの件が止まらないよう、保存せずに飛ばす
-        $exists = $target->brandId !== null
-            ? Brand::query()->whereKey($target->brandId)->exists()
-            : Category::query()->whereKey($target->categoryId)->exists();
-        if (! $exists) {
+        if (! $this->targetExists($target)) {
             return new CollectOutcome($target, CollectOutcome::FAILED, message: '探しているあいだにノード・銘柄が消された');
         }
 
@@ -161,6 +200,8 @@ final class AffiliateCollector
             ['category_id' => $target->categoryId, 'brand_id' => $target->brandId],
             [...$amazon, ...$rakuten],
         );
+        // 行ができたので、もう選ばれない。前に失敗した記録は要らない
+        $this->failureOf($target)?->delete();
         if (! $affiliate->wasRecentlyCreated) {
             return new CollectOutcome($target, CollectOutcome::ALREADY_EXISTS);
         }
@@ -171,6 +212,55 @@ final class AffiliateCollector
             amazonAsin: $affiliate->amazon_asin,
             rakutenItemCode: $affiliate->rakuten_item_code,
         );
+    }
+
+    /**
+     * 失敗を記録し、この件を次に選んでよい時刻を返す。続けて失敗するたびに待つ時間を倍にする(上限 1 日)。
+     * 探しているあいだにノード・銘柄が消されていたら、外部キー違反にならないよう記録しない(null を返す)。
+     */
+    private function recordFailure(CollectTarget $target, string $message): ?Carbon
+    {
+        if (! $this->targetExists($target)) {
+            return null;
+        }
+
+        $failure = $this->failureOf($target) ?? new AffiliateCollectFailure(['failure_count' => 0]);
+        // 同じ名前で続けて失敗したときだけ倍にする。名前が変わった後の失敗は 1 回目として数える
+        $count = $failure->exists && $failure->name === $target->name ? $failure->failure_count + 1 : 1;
+        $minutes = min(self::FAILURE_BACKOFF_FIRST_MINUTES * 2 ** min($count - 1, 30), self::FAILURE_BACKOFF_MAX_MINUTES);
+        $retryAfter = now()->addMinutes($minutes);
+
+        $failure->fill([
+            'category_id' => $target->categoryId,
+            'brand_id' => $target->brandId,
+            'name' => $target->name,
+            'failure_count' => $count,
+            'last_message' => $message,
+            'retry_after' => $retryAfter,
+        ])->save();
+
+        return $retryAfter;
+    }
+
+    private function targetExists(CollectTarget $target): bool
+    {
+        return $target->brandId !== null
+            ? Brand::query()->whereKey($target->brandId)->exists()
+            : Category::query()->whereKey($target->categoryId)->exists();
+    }
+
+    /**
+     * この件の失敗の記録。銘柄は銘柄の ID で引く(所属ノードを移しても同じ記録を使う)。
+     */
+    private function failureOf(CollectTarget $target): ?AffiliateCollectFailure
+    {
+        return AffiliateCollectFailure::query()
+            ->when(
+                $target->brandId !== null,
+                fn ($query) => $query->where('brand_id', $target->brandId),
+                fn ($query) => $query->where('category_id', $target->categoryId)->whereNull('brand_id'),
+            )
+            ->first();
     }
 
     /**

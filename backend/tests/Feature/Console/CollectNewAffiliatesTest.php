@@ -2,11 +2,13 @@
 
 use App\Enums\CategoryRole;
 use App\Models\Affiliate;
+use App\Models\AffiliateCollectFailure;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Services\Affiliate\AffiliateCollector;
 use App\Services\CategoryTree;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -482,3 +484,195 @@ it('TC-248-18: --new が無い・--limit が 1 以上の整数でないときは
     '--limit=abc' => [['--new' => true, '--limit' => 'abc'], '--limit は 1 以上の整数で指定する'],
     '--limit=-1' => [['--new' => true, '--limit' => '-1'], '--limit は 1 以上の整数で指定する'],
 ]);
+
+// 失敗が続く件を、後の回で一時的に選ばない(#695)。待つ時間は 1 時間から失敗のたびに倍にし、1 日で止める。
+// 決まりは docs/decisions/affiliate-freshness.md の 7。旧には失敗の扱いが無い(旧に無い)。
+
+/**
+ * 名前が $failing の件だけ、Amazon が 403(時間を置いても通らない失敗)を返すようにする。
+ *
+ * @param  list<string>  $failing
+ */
+function collectFakeFailing(array $failing): void
+{
+    collectFake(amazon: fn (?string $keyword) => in_array($keyword, $failing, true)
+        ? Http::response(['type' => 'AccessDeniedException', 'message' => 'not eligible'], 403)
+        : Http::response(collectFixture('amazon-creators-api/search-items')));
+}
+
+/**
+ * Http::recorded() を空にして、この後に送った検索だけを collectSearches() で見られるようにする。
+ *
+ * @param  list<string>  $failing
+ */
+function collectRefake(array $failing = []): void
+{
+    Http::swap(new Factory);
+    Http::preventStrayRequests();
+    collectFakeFailing($failing);
+}
+
+it('TC-695-01: 先頭の件が失敗し続けても、次の回は失敗した件を選ばず、後ろの件を探して保存する', function () {
+    $nodes = [collectTree('A')['node'], collectTree('B')['node'], collectTree('C')['node']];
+    collectFakeFailing(['Aジン']);
+
+    collectCommand($this, ['--new' => true, '--limit' => '1'])
+        ->expectsOutputToContain('Aジン): 失敗したので飛ばす(Creators API の searchItems が 403 AccessDeniedException を返した)。2026-11-05 13:00:00 までは選ばない')
+        ->expectsOutputToContain('探した: 1 件(保存 0・行ができていた 0・失敗 1・次の回にまわした 0)')
+        ->assertSuccessful();
+    expect(Affiliate::query()->count())->toBe(0);
+
+    $this->travel(10)->minutes();
+    collectRefake(['Aジン']);
+    collectCommand($this, ['--new' => true, '--limit' => '1'])->assertSuccessful();
+
+    $this->travel(10)->minutes();
+    collectCommand($this, ['--new' => true, '--limit' => '1'])->assertSuccessful();
+
+    expect(array_column(collectSearches(), 1))->toBe(['Bジン', 'Bジン', 'Cジン', 'Cジン'])
+        ->and(Affiliate::query()->orderBy('id')->pluck('category_id')->all())->toBe([$nodes[1]->id, $nodes[2]->id]);
+});
+
+it('TC-695-02: 失敗した件は、1 時間たつまでは選ばず、1 時間たったらまた選ぶ', function () {
+    $node = collectTree()['node'];
+    collectFakeFailing(['ジン']);
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    $this->travelTo(Carbon::parse(COLLECT_NOW)->addMinutes(59));
+    collectRefake();
+    collectCommand($this, ['--new' => true])
+        ->expectsOutputToContain('探した: 0 件')
+        ->assertSuccessful();
+    expect(collectSearches())->toBe([]);
+
+    $this->travelTo(Carbon::parse(COLLECT_NOW)->addMinutes(60));
+    collectCommand($this, ['--new' => true])
+        ->expectsOutputToContain('探した: 1 件(保存 1')
+        ->assertSuccessful();
+
+    expect(array_column(collectSearches(), 1))->toBe(['ジン', 'ジン'])
+        ->and(Affiliate::query()->sole()->category_id)->toBe($node->id);
+});
+
+it('TC-695-03: 同じ名前で失敗が続くと、選ばない時間を 1・2・4・8・16 時間と倍にし、24 時間で止める', function () {
+    collectTree();
+    collectFakeFailing(['ジン']);
+    $at = Carbon::parse(COLLECT_NOW);
+    $waits = [];
+    foreach (range(1, 7) as $_) {
+        $this->travelTo($at);
+        collectCommand($this, ['--new' => true])->assertSuccessful();
+        $failure = AffiliateCollectFailure::query()->sole();
+        $waits[] = [$failure->failure_count, (int) $at->diffInMinutes($failure->retry_after)];
+        $at = $failure->retry_after->copy();
+    }
+
+    expect($waits)->toBe([[1, 60], [2, 120], [3, 240], [4, 480], [5, 960], [6, 1440], [7, 1440]])
+        ->and(AffiliateCollectFailure::query()->sole()->last_message)->toContain('403 AccessDeniedException');
+});
+
+it('TC-695-04: 名前が変わったら、待たずにまた選ぶ(照合順序では同じと見なす「ハ」→「パ」も)。名前が変わった後の失敗は 1 回目と数える', function () {
+    $node = collectTree()['node'];
+    $node->update(['name' => 'ハイボール']);
+    collectFakeFailing(['ハイボール', 'パイボール']);
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+    $this->travelTo(AffiliateCollectFailure::query()->sole()->retry_after);
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+    expect(AffiliateCollectFailure::query()->sole()->failure_count)->toBe(2);
+
+    $this->travel(10)->minutes();
+    $node->update(['name' => 'パイボール']);
+    collectRefake(['ハイボール', 'パイボール']);
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    $failure = AffiliateCollectFailure::query()->sole();
+    expect(array_column(collectSearches(), 1))->toBe(['パイボール'])
+        ->and($failure->name)->toBe('パイボール')
+        ->and($failure->failure_count)->toBe(1)
+        ->and($failure->retry_after->toDateTimeString())->toBe(now()->addHour()->toDateTimeString());
+});
+
+it('TC-695-05: 失敗した件を、待ちが明けて保存できたら、失敗の記録を消す', function () {
+    $node = collectTree()['node'];
+    collectFakeFailing(['ジン']);
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+    expect(AffiliateCollectFailure::query()->count())->toBe(1);
+
+    $this->travel(60)->minutes();
+    collectRefake();
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    expect(AffiliateCollectFailure::query()->count())->toBe(0)
+        ->and(Affiliate::query()->sole()->category_id)->toBe($node->id);
+});
+
+it('TC-695-06: 上限・一時的な失敗(429)は記録せず、次の回にまた選ぶ', function () {
+    collectTree();
+    collectFake(amazon: fn () => Http::response(['type' => 'ThrottleException', 'message' => 'Rate exceeded'], 429));
+
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+    expect(AffiliateCollectFailure::query()->count())->toBe(0);
+
+    $this->travel(10)->minutes();
+    collectRefake();
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    expect(array_column(collectSearches(), 1))->toBe(['ジン', 'ジン'])
+        ->and(Affiliate::query()->count())->toBe(1);
+});
+
+it('TC-695-07: 銘柄の失敗は、その銘柄だけを選ばない(同じノードの行・ほかの銘柄は選ぶ)', function () {
+    $node = collectTree()['node'];
+    $failing = Brand::factory()->for($node, 'category')->create(['name' => '失敗する銘柄']);
+    $other = Brand::factory()->for($node, 'category')->create(['name' => 'ほかの銘柄']);
+    collectFakeFailing(['失敗する銘柄']);
+    collectCommand($this, ['--new' => true, '--limit' => '1'])->assertSuccessful();
+
+    $this->travel(10)->minutes();
+    collectRefake(['失敗する銘柄']);
+    collectCommand($this, ['--new' => true, '--limit' => '2'])->assertSuccessful();
+
+    $failure = AffiliateCollectFailure::query()->sole();
+    expect(array_column(collectSearches(), 1))->toBe(['ほかの銘柄', 'ほかの銘柄', 'ジン', 'ジン'])
+        ->and([$failure->category_id, $failure->brand_id])->toBe([$node->id, $failing->id])
+        ->and(Affiliate::query()->orderBy('id')->get(['category_id', 'brand_id'])->toArray())->toBe([
+            ['category_id' => $node->id, 'brand_id' => $other->id],
+            ['category_id' => $node->id, 'brand_id' => null],
+        ]);
+});
+
+it('TC-695-08: 探しているあいだに消されたノードは、失敗の記録を残さずに次の件へ進む', function () {
+    $nodes = [collectTree('A')['node'], collectTree('B')['node']];
+    collectFake(amazon: function (?string $keyword) use ($nodes) {
+        if ($keyword === 'Aジン') {
+            $nodes[0]->delete();
+
+            return Http::response(['type' => 'AccessDeniedException', 'message' => 'not eligible'], 403);
+        }
+
+        return Http::response(collectFixture('amazon-creators-api/search-items'));
+    });
+
+    collectCommand($this, ['--new' => true])
+        ->expectsOutputToContain('探した: 2 件(保存 1・行ができていた 0・失敗 1')
+        ->assertSuccessful();
+
+    expect(AffiliateCollectFailure::query()->count())->toBe(0)
+        ->and(Affiliate::query()->pluck('category_id')->all())->toBe([$nodes[1]->id]);
+});
+
+it('TC-695-09: ノード・銘柄を消すと、その失敗の記録も消える', function () {
+    ['node' => $node, 'middle' => $middle] = collectTree('A');
+    $otherNode = collectTree('B')['node'];
+    $brand = Brand::factory()->for($otherNode, 'category')->create(['name' => '銘柄']);
+    collectFakeFailing(['Aジン', '銘柄']);
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+    expect(AffiliateCollectFailure::query()->count())->toBe(2);
+
+    $brand->delete();
+    $tree = app(CategoryTree::class);
+    $tree->deleteLeaf($middle);
+    $tree->deleteLeaf($node->refresh());
+
+    expect(AffiliateCollectFailure::query()->count())->toBe(0);
+});
