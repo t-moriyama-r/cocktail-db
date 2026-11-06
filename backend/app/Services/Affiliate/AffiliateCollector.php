@@ -85,7 +85,8 @@ final class AffiliateCollector
             return [];
         }
 
-        $targets = $this->newTargets($limit);
+        // 新規の対象が上限を使い切って(Amazon の 403 などで同じ対象が選ばれ続けて)も、探し直しが進むよう 1 件分を空ける
+        $targets = $this->newTargets($limit > 1 ? $limit - 1 : $limit);
         $targets = [...$targets, ...$this->researchTargets($limit - count($targets), $amazonConfigured, $rakutenConfigured)];
 
         $outcomes = [];
@@ -266,14 +267,14 @@ final class AffiliateCollector
             return new CollectOutcome($target, CollectOutcome::RETRY_LATER, message: $e->getMessage());
         }
 
-        $updated = 0;
-        if ($amazon !== []) {
-            $updated += Affiliate::query()->whereKey($target->affiliateId)->whereNull('amazon_asin')->update($amazon);
+        // 保存できた提供元だけを結果に反映する(探しているあいだに ID が入った提供元は、探さなかったものとして扱う)
+        if ($amazon !== [] && Affiliate::query()->whereKey($target->affiliateId)->whereNull('amazon_asin')->update($amazon) === 0) {
+            $amazon = [];
         }
-        if ($rakuten !== []) {
-            $updated += Affiliate::query()->whereKey($target->affiliateId)->whereNull('rakuten_item_code')->update($rakuten);
+        if ($rakuten !== [] && Affiliate::query()->whereKey($target->affiliateId)->whereNull('rakuten_item_code')->update($rakuten) === 0) {
+            $rakuten = [];
         }
-        if ($updated === 0) {
+        if ($amazon === [] && $rakuten === []) {
             return new CollectOutcome($target, CollectOutcome::CHANGED);
         }
 
