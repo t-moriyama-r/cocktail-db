@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Services\Search\CocktailSearchSort;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Translation\PotentiallyTranslatedString;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -90,11 +91,14 @@ class CocktailSearchRequest extends FormRequest
 
     /**
      * `integer` は PHP の整数フィルターなので、true や 1.0 も 1 として通る。JSON の整数と数字の文字だけを受ける。
+     * メッセージは `integer` と同じもの(lang の validation.integer。#651)。
+     *
+     * @param  Closure(string): PotentiallyTranslatedString  $fail
      */
     private static function notBoolOrFloat(string $attribute, mixed $value, Closure $fail): void
     {
         if (is_bool($value) || is_float($value)) {
-            $fail('The :attribute field must be an integer.');
+            $fail('validation.integer')->translate();
         }
     }
 
