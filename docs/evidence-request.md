@@ -23,7 +23,7 @@ flowchart LR
   C -->|撮れない| F[コメントして<br>手元に残す]
 ```
 
-- **起こし方**: PR に `needs-local` が付いたとき(`pull_request_target` の `labeled`)と、PR の番号での `workflow_dispatch`。`GITHUB_TOKEN` で付けたラベルではワークフローが起きないので、Actions の中から頼んだときは `workflow_dispatch` で起こす
+- **起こし方**: PR に `needs-local` が付いたとき(`pull_request_target` の `labeled`)と、PR の番号での `workflow_dispatch`。`GITHUB_TOKEN` で付けたラベルではワークフローが起きないので、Actions の中から頼んだときは `workflow_dispatch` で起こす。`ai-review-loop.yml`・`ai-draft-sweep.yml` では、Claude Code を動かさない後ろのジョブ(`actions: write` を持つのはこのジョブだけ。RC-02)が、この回に `needs-local` が付き、いちばん新しい頼むコメントが `kind=evidence` の PR で起こす(`evidence-kick.sh`。決め方はラベルで起きた回と同じ `evidence-target.sh --labeled`。#686)
 - **撮らない PR**(`evidence-target.sh`): 開いていない PR・フォークからの PR・昇格の PR(`staging`・`release` 向け)。ラベルで起きた回は、いまも `needs-local` が付いていて、信頼する人・bot のいちばん新しい手元に頼むコメント(`<!-- ai-dev:needs-local kind=… -->`)が `kind=evidence` のときだけ撮る(`push`・`other` の頼みでは撮らない)
 - **信頼しない人の書き込み**: 撮る前に `untrusted-hold.sh` で、PR と閉じる issue に、オーナー・コラボレーター・決まった bot 以外の人が書いたものが無いかを見る。あれば撮らず、URL を並べたコメントと `needs-human` を付ける(CLAUDE.md の手順 8。撮る側はブロックの `run` をシェルで流すため)。確かめるための読み取り(PR・閉じる issue・コメント)に失敗したとき(`untrusted-hold.sh` の終わりのコード 3)も撮らず、下の「撮れなかったとき」と同じく、`needs-local` を残して読めなかったことをコメントする(#688)
 - **撮るもの**: 信頼する人が書いたいちばん新しい頼むコメント(`evidence-pick.sh`)のブロック。修正前(PR の向き先のブランチの今の先頭か `before`)と修正後(PR の head か `after`)を `APP_DEBUG=false` で起こして撮る。画面は、撮る前に修正後の画面の HTTP の状態を見て、5xx なら撮らない
