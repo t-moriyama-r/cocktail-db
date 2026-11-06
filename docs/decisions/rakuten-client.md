@@ -1,6 +1,6 @@
 # 楽天の商品検索 API のクライアント(`RakutenClient`)の決定
 
-#72 で作る、楽天市場の商品検索 API(`docs/rakuten-api.md`)を呼ぶクライアント `App\Services\Affiliate\RakutenClient` で決めたこと。旧は `App\Classes\Factory\RakutenFactory::generateFromWord`(と、値を持つ `App\Classes\Rakuten`)。呼ぶ側は、名前で探して保存する `affiliates:collect --new`(#248。`App\Services\Affiliate\AffiliateCollector`)と、商品のコードで取り直す #249(まだ無い)。
+#72 で作る、楽天市場の商品検索 API(`docs/rakuten-api.md`)を呼ぶクライアント `App\Services\Affiliate\RakutenClient` で決めたこと。旧は `App\Classes\Factory\RakutenFactory::generateFromWord`(と、値を持つ `App\Classes\Rakuten`)。呼ぶ側は、名前で探して保存する `affiliates:collect --new`(#248。`App\Services\Affiliate\AffiliateCollector`)と、商品のコードで取り直す `affiliates:collect --refresh`(#249。`App\Services\Affiliate\AffiliateRefresher`)。
 
 ## 決まったこと
 
@@ -17,7 +17,7 @@
    - それ以外の 4xx(パラメーターの誤り・アプリ ID やアクセスキーの誤り): `RakutenApiException`(楽天の `error` を持つ)
    - つながらないときの例外の文には、元の例外の文(アプリ ID の入った URL を含みうる)を入れない
 5. アクセスキーは、URL(アクセスのログに残りうる)に載せず、ヘッダー `accessKey` で送る(どちらでもよいと公式にある。`docs/rakuten-api.md` の 2)
-6. 呼べるのはアプリ ID ごとに 1 秒に 1 回まで(`docs/rakuten-api.md` の 5)。同じクライアントからの呼び出しは、前の呼び出しから 1 秒たつまで待ってから送る。別のプロセスとのあいだは揃えない(収集は 1 つのコマンドから順に呼ぶ想定。#248・#249)
+6. 呼べるのはアプリ ID ごとに 1 秒に 1 回まで(`docs/rakuten-api.md` の 5)。同じクライアントからの呼び出しは、前の呼び出しから 1 秒たつまで待ってから送る。別のプロセスとのあいだは揃えない(収集は 1 つのコマンドから順に呼ぶ想定。#248・#249。定期実行は `affiliates:collect --refresh --new` の 1 つのコマンドで、取り直しと新しく探すのあいだに 1 秒空ける)
 
 ## 確かめていないこと
 
