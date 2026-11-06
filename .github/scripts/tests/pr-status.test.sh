@@ -101,12 +101,38 @@ main() {
 	check TC-460-11 '事実に向き先が無いときは develop 向けとみなす(従来どおりマージ待ち)' 'del(.baseRefName)' '状態:マージ待ち'
 	check TC-460-12 '向き先が空文字のときも develop 向けとみなす' '.baseRefName = ""' '状態:マージ待ち'
 
+	# 承認のルール(develop のルールセット。オーナー以外の PR は承認が要る。管理者は bypass できる)で BLOCKED になっているだけの PR(#660)
+	REVIEW_ONLY='.mergeStateStatus = "BLOCKED" | .reviewDecision = "REVIEW_REQUIRED" | .requiredChecksComplete = true'
+	check TC-660-01 'オーナーの PR で、必須のチェックが揃い、承認のルールだけで BLOCKED ならマージ待ち' "$REVIEW_ONLY | .byOwner = true" '状態:マージ待ち'
+	check TC-660-02 'オーナーの PR で needs-approval なら人のマージ待ち(#625 の形)' "$REVIEW_ONLY"' | .byOwner = true | .labels = ["needs-approval"]' '状態:人のマージ待ち'
+	check TC-660-03 'オーナー以外の PR は承認のレビュー待ち' "$REVIEW_ONLY | .byOwner = false" '状態:承認のレビュー待ち'
+	check TC-660-04 'オーナー以外の PR は、needs-approval でも承認のレビュー待ち' "$REVIEW_ONLY"' | .byOwner = false | .labels = ["needs-approval"]' '状態:承認のレビュー待ち'
+	check TC-660-05 '作者が事実に無い(byOwner が無い)ときはオーナー以外とみなす' "$REVIEW_ONLY" '状態:承認のレビュー待ち'
+	check TC-660-06 'オーナーの PR でも、必須のチェックが揃っていなければ CI未実行' "$REVIEW_ONLY | .byOwner = true | .requiredChecksComplete = false" '状態:CI未実行'
+	check TC-660-07 'オーナー以外の PR でも、必須のチェックが揃っていなければ CI未実行' "$REVIEW_ONLY | .byOwner = false | .requiredChecksComplete = false" '状態:CI未実行'
+	check TC-660-08 '必須のチェックが揃っていて、承認でない理由で BLOCKED ならマージ不可' '.mergeStateStatus = "BLOCKED" | .reviewDecision = "APPROVED" | .requiredChecksComplete = true | .byOwner = true' '状態:マージ不可'
+	check TC-660-09 'オーナーの PR でも、未解決のスレッドがあれば指摘の解決待ち' "$REVIEW_ONLY | .byOwner = true | .unresolvedThreads = 1" '状態:指摘の解決待ち'
+	check TC-660-10 'オーナーの PR でも、実行中の必須のチェックがあれば CI実行中' "$REVIEW_ONLY | .byOwner = true | .pendingChecks = 1" '状態:CI実行中'
+	check TC-660-11 'オーナー以外の PR でも、GitHub がマージを許す(CLEAN)ならマージ待ち' '.reviewDecision = "REVIEW_REQUIRED" | .byOwner = false | .requiredChecksComplete = true' '状態:マージ待ち'
+	check TC-660-19 'オーナーの積み上げの PR は、承認のルールだけで BLOCKED ならベースブランチ待ち' "$REVIEW_ONLY"' | .byOwner = true | .baseRefName = "issue-1-base"' '状態:ベースブランチ待ち'
+
 	# facts: gh をスタブにして、必須のチェックの終了コードごとに数えられるかを確かめる
 	check_checks TC-385-18 '必須のチェックが失敗(gh は終了コード 1 で、JSON を標準出力に出す)' 1 '[{"bucket":"fail"},{"bucket":"pass"}]' '' '1 0'
 	check_checks TC-385-19 '必須のチェックが実行中(終了コード 8)' 8 '[{"bucket":"pending"},{"bucket":"pass"}]' '' '0 1'
 	check_checks TC-385-20 '必須のチェックがすべて成功(終了コード 0)' 0 '[{"bucket":"pass"}]' '' '0 0'
 	check_checks TC-385-21 '必須のチェックが 1 つも付いていない(終了コード 1、標準出力は空)' 1 '' 'no required checks reported on the branch' '0 0'
 	check_checks TC-385-22 '必須のチェックを読めない(JSON でも未付与でもない)' 1 '' 'HTTP 500' 'error'
+
+	# facts: BLOCKED のとき、いまのコミットの必須のチェックが成功で揃っているか・作者がオーナーかを事実に入れる(#660)。
+	# スタブはブランチ・保護の API をすべて 403 で断る(Actions の GITHUB_TOKEN と同じく、保護を読めない)
+	ALL5='[{"name":"backend","bucket":"pass"},{"name":"backend-lint","bucket":"pass"},{"name":"frontend","bucket":"pass"},{"name":"actionlint","bucket":"pass"},{"name":"e2e","bucket":"pass"}]'
+	check_blocked TC-660-12 'オーナーの PR で、必須のチェックがすべて成功(保護を読めなくても決まる)' o "$ALL5" 'true true REVIEW_REQUIRED 状態:マージ待ち'
+	check_blocked TC-660-13 'draft のときに飛ばした回のチェック(すべて skipping)しか無い' o "$(jq -c 'map(.bucket = "skipping")' <<<"$ALL5")" 'false true REVIEW_REQUIRED 状態:CI未実行'
+	check_blocked TC-660-14 '必須のチェックが 1 つも付いていない' o '[]' 'false true REVIEW_REQUIRED 状態:CI未実行'
+	check_blocked TC-660-15 '成功と skipping が混じる(release 向けで E2E だけ飛ばした回など)' o "$(jq -c '.[4].bucket = "skipping"' <<<"$ALL5")" 'true true REVIEW_REQUIRED 状態:マージ待ち'
+	check_blocked TC-660-16 '必須のチェックが 1 つだけで成功(境界)' o '[{"name":"backend","bucket":"pass"}]' 'true true REVIEW_REQUIRED 状態:マージ待ち'
+	check_blocked TC-660-17 '取り消された必須のチェックがある' o "$(jq -c '.[4].bucket = "cancel"' <<<"$ALL5")" 'false true REVIEW_REQUIRED 状態:CI未実行'
+	check_blocked TC-660-18 'オーナー以外の PR で、必須のチェックがすべて成功' someone "$ALL5" 'true false REVIEW_REQUIRED 状態:承認のレビュー待ち'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -134,6 +160,59 @@ STUB
 	actual=$(PATH="$bin:$PATH" STUB_RC=$rc STUB_OUT=$out STUB_ERR=$err bash "$SCRIPT" o/r 1 --dry-run 2>/dev/null |
 		sed 's/^#1 //; s/ => .*//' | jq -r '"\(.failedChecks) \(.pendingChecks)"' 2>/dev/null) || actual=
 	[ -n "$actual" ] || actual=error
+	rm -rf "$bin"
+	if [ "$actual" = "$expected" ]; then
+		PASSED=$((PASSED + 1))
+		echo "ok   $id $title"
+	else
+		FAILED=$((FAILED + 1))
+		echo "FAIL $id $title: expected '$expected', got '$actual'"
+	fi
+}
+
+# BLOCKED の PR の事実を gh のスタブから集め、「requiredChecksComplete byOwner reviewDecision 状態」を比べる。
+# author は PR の作者(リポジトリ o/r の持ち主は o)、checks は必須のチェック
+check_blocked() {
+	local id=$1 title=$2 author=$3 checks=$4 expected=$5 actual out bin
+	bin=$(mktemp -d)
+	cat >"$bin/gh" <<'STUB'
+#!/usr/bin/env bash
+# いまのコミット(abc)は CodeRabbit がレビュー済み(head-reviewed.sh が読む)
+case "$*" in
+*"pulls/1/reviews"*)
+	echo '[[{"commit_id":"abc","user":{"login":"coderabbitai[bot]"},"body":"レビュー"}]]'
+	exit 0
+	;;
+*"/branches"* | *"/protection"* | *"/rulesets"*)
+	echo 'HTTP 403: Resource not accessible by integration' >&2
+	exit 1
+	;;
+esac
+case "$1 $2" in
+"pr checks")
+	if [ "$STUB_CHECKS" = '[]' ]; then
+		echo 'no required checks reported on the branch' >&2
+		exit 1
+	fi
+	printf '%s' "$STUB_CHECKS"
+	;;
+"pr view")
+	jq -nc --arg a "$STUB_AUTHOR" '{state: "OPEN", isDraft: false, labels: [], mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED",
+		baseRefName: "develop", author: {login: $a}, reviewDecision: "REVIEW_REQUIRED", headRefOid: "abc",
+		commits: [{committedDate: "2026-01-01T00:00:00Z"}]}'
+	;;
+"api graphql") echo 0 ;;
+*) echo '[]' ;;
+esac
+STUB
+	chmod +x "$bin/gh"
+	out=$(PATH="$bin:$PATH" STUB_AUTHOR=$author STUB_CHECKS=$checks \
+		bash "$SCRIPT" o/r 1 --dry-run 2>/dev/null) || out=
+	if [ -n "$out" ]; then
+		actual="$(sed 's/^#1 //; s/ => .*//' <<<"$out" | jq -r '"\(.requiredChecksComplete) \(.byOwner) \(.reviewDecision)"') ${out##* => }"
+	else
+		actual=error
+	fi
 	rm -rf "$bin"
 	if [ "$actual" = "$expected" ]; then
 		PASSED=$((PASSED + 1))

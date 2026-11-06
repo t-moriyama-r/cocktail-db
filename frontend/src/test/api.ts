@@ -90,7 +90,7 @@ export const fetchApi = async (request: Request): Promise<Response> => {
   return route.handler(request)
 }
 
-/** 登録した応答と、送られたリクエストの記録を消す(setup.ts がテストごとに呼ぶ) */
+/** 登録した応答と、送られたリクエストの記録を消す(setup.ts がテストごとに、描画を消して送りかけのリクエストが届いてから呼ぶ) */
 export const resetApiMocks = () => {
   routes.length = 0
   requests.length = 0

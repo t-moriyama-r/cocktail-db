@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from '../../App'
@@ -105,7 +105,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
     fireEvent.click(header().getByRole('link', { name: '宅飲みカクテルデータベース' }))
 
-    expect(location()).toHaveTextContent(/^\/$/)
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/$/))
   })
 
   describe('名前検索', () => {
@@ -221,7 +221,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
       fireEvent.click(await header().findByRole('button', { name: '1件ヒット' }))
 
-      expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン')}`)
+      await waitFor(() => expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン')}`))
       expect(await screen.findByRole('heading', { level: 1, name: '結果' })).toBeInTheDocument()
     })
 
@@ -241,7 +241,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
       fireEvent.submit(header().getByRole('search'))
 
-      expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン')}`)
+      await waitFor(() => expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン')}`))
     })
 
     test.each([
@@ -265,7 +265,7 @@ describe('ヘッダー(SiteHeader)', () => {
 
       // 移った先の名前検索の結果の画面(#52)も、同じ語で検索する
       expect(new Set(sentWords())).toEqual(new Set(['ジン トニック']))
-      expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン トニック')}`)
+      await waitFor(() => expect(location()).toHaveTextContent(`/result/FromNameResult/${encodeURIComponent('ジン トニック')}`))
     })
 
     test('TC-99-15: 前の語の応答が後から返っても、今の語の件数に使わない', async () => {
@@ -328,7 +328,7 @@ describe('ヘッダー(SiteHeader)', () => {
       fireEvent.click(screen.getByRole('link', { name: 'トップへ戻る' }))
       fireEvent.click(header().getByRole('link', { name: '宅飲みカクテルデータベース' }))
 
-      expect(location()).toHaveTextContent(/^\/$/)
+      await waitFor(() => expect(location()).toHaveTextContent(/^\/$/))
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
     test('TC-307-15・TC-102-19: モーダルの中に条件検索のフォームを出し、材料を選んで検索すると、条件を URL に入れて結果の画面へ移って閉じる', async () => {
@@ -342,7 +342,7 @@ describe('ヘッダー(SiteHeader)', () => {
       fireEvent.click(dialog.getByRole('button', { name: '検索' }))
 
       // 条件を URL のクエリに入れて移る(#102)。ジンは蒸留酒のただ 1 つの子なので、蒸留酒 1 つに畳む
-      expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1$/)
+      await waitFor(() => expect(location()).toHaveTextContent(/^\/result\/Cocktails\?n=1$/))
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
@@ -358,7 +358,7 @@ describe('ヘッダー(SiteHeader)', () => {
       expect(screen.getByRole('radio', { name: 'AND検索' })).toBeChecked()
 
       fireEvent.click(screen.getByRole('button', { name: 'ジン' }))
-      expect(location()).toHaveTextContent(/^\/category\/10$/)
+      await waitFor(() => expect(location()).toHaveTextContent(/^\/category\/10$/))
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
       fireEvent.click(header().getByRole('button', { name: '検索をはじめる' }))
@@ -410,8 +410,8 @@ describe('ヘッダー(SiteHeader)', () => {
 
       fireEvent.click(link)
 
-      expect(location()).toHaveTextContent('/detail/cocktail/7')
-      await vi.waitFor(() =>
+      await waitFor(() => expect(location()).toHaveTextContent('/detail/cocktail/7'))
+      await waitFor(() =>
         expect(header().getByRole('link', { name: '現在の登録数：1234' })).toHaveAttribute('href', '/detail/brand/9'),
       )
     })

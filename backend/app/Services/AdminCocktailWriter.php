@@ -12,10 +12,8 @@ use App\Models\CocktailIngredient;
 use App\Services\Recipe\StrengthCalculator;
 use App\Services\Recipe\StrengthNotCalculableException;
 use App\Support\AmountFormatter;
-use App\Support\DescriptionParser;
 use App\Support\NameNormalizer;
 use App\Support\YoutubeInput;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -41,6 +39,7 @@ class AdminCocktailWriter
         private readonly StrengthCalculator $strength,
         private readonly RecipeCounter $counter,
         private readonly RecipeSignature $signature,
+        private readonly DescriptionReferrers $referrers,
     ) {}
 
     /**
@@ -217,54 +216,17 @@ class AdminCocktailWriter
      */
     private function deleteBlockers(Cocktail $cocktail): array
     {
-        $id = $cocktail->id;
         $reasons = [];
         foreach (CocktailDeleteBlocker::cases() as $blocker) {
             [$table, $columns] = $blocker->source();
-            // LIKE は候補を絞るだけ(照合順序で大文字の @C も拾う)。参照かどうかは、画面に出すとき(DescriptionParser)と同じ読み方で決める
-            $rows = DB::table($table)
-                ->where(function (QueryBuilder $query) use ($columns, $id): void {
-                    foreach ($columns as $column) {
-                        $query->orWhere($column, 'like', "%@c{$id}@%");
-                    }
-                })
-                ->when($blocker === CocktailDeleteBlocker::Cocktail, fn (QueryBuilder $query) => $query->where('id', '<>', $id))
-                ->orderBy('id')
-                ->get(['id', 'name', ...$columns]);
-
-            $referrers = [];
-            foreach ($rows as $row) {
-                foreach ($columns as $column) {
-                    if (self::references($row->{$column}, $id)) {
-                        $referrers[] = ['id' => is_numeric($row->id) ? (int) $row->id : 0, 'name' => is_string($row->name) ? $row->name : ''];
-                        break;
-                    }
-                }
-            }
+            $exceptId = $blocker === CocktailDeleteBlocker::Cocktail ? $cocktail->id : null;
+            $referrers = $this->referrers->find($table, $columns, 'c', $cocktail->id, $exceptId);
             if ($referrers !== []) {
                 $reasons[] = ['blocker' => $blocker, 'referrers' => $referrers];
             }
         }
 
         return $reasons;
-    }
-
-    /**
-     * 説明文 $text に、カクテル $id を指す参照(`@c<ID>@`・`@C<ID>@`)があるか。
-     */
-    private static function references(mixed $text, int $id): bool
-    {
-        if (! is_string($text)) {
-            return false;
-        }
-        preg_match_all(DescriptionParser::REFERENCE_PATTERN, $text, $matches, PREG_SET_ORDER);
-        foreach ($matches as $m) {
-            if (strtolower($m[1]) === 'c' && (int) $m[2] === $id) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

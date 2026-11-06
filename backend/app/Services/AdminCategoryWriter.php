@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CategoryReferenceBlocker;
 use App\Http\Requests\Admin\SaveCategoryRequest;
 use App\Models\Brand;
 use App\Models\Category;
@@ -26,6 +27,7 @@ class AdminCategoryWriter
         private readonly DescriptionMarkup $markup,
         private readonly AdminImageStore $images,
         private readonly RecipeCounter $counter,
+        private readonly DescriptionReferrers $referrers,
     ) {}
 
     /**
@@ -70,8 +72,12 @@ class AdminCategoryWriter
                 'image_txt' => $request->nullableString('image_txt'),
                 'image_url' => $request->nullableString('image_url'),
             ];
-            // 有名な銘柄は、選んだときだけ書き換える。選ばず、その場でも作らないときは前の値のまま(旧と同じ)
-            if ($request->filled('famous_brand_id')) {
+            // 有名な銘柄は、選んだときだけ書き換える。選ばず、その場でも作らないときは前の値のまま(旧と同じ)。
+            // 根は有名な銘柄を持たない(docs/decisions/strength.md の「根のノード」)ので、根へ移す・根を保存するときは空にする。
+            // 前の値のままにすると、有名な銘柄を持つノードを根へ移したときに、移す前の値が根に残る(#647)
+            if ($parent === null) {
+                $attrs['famous_brand_id'] = null;
+            } elseif ($request->filled('famous_brand_id')) {
                 $attrs['famous_brand_id'] = $request->integer('famous_brand_id');
             }
 
@@ -127,18 +133,72 @@ class AdminCategoryWriter
     }
 
     /**
+     * 名前・英名が、$parent の下(null なら根どうし)の、$excludeId のノード(編集しているノード。新規なら null)のほかの
+     * ノードと同じなら、項目ごとに警告を返す。入れたそばの問い合わせ(GET /api/admin/categories/duplicates。#673)で使う。
+     *
+     * 比べ方は保存の API と同じ(名前は検索用の名前で比べ(保存では 422)、英名はそのまま比べる(保存では warnings))。
+     * 名前・英名が null か空なら、その項目は比べない。
+     *
+     * @return list<array{field: string, message: string}>
+     */
+    public function nameDuplicates(?Category $parent, ?string $name, ?string $nameEng, ?int $excludeId): array
+    {
+        $siblings = $this->siblings($parent, null)->when($excludeId !== null, fn (Builder $query) => $query->whereKeyNot($excludeId));
+        $warnings = [];
+        if ($name !== null && $name !== '' && (clone $siblings)->where('name_search', NameNormalizer::normalize($name))->exists()) {
+            $warnings[] = ['field' => 'name', 'message' => '同じ名前が存在しています'];
+        }
+        if ($nameEng !== null && $nameEng !== '' && (clone $siblings)->where('name_eng', $nameEng)->exists()) {
+            $warnings[] = ['field' => 'name_eng', 'message' => '同じ名前が存在しています'];
+        }
+
+        return $warnings;
+    }
+
+    /**
      * $node を消す。消せるのは葉で、銘柄・材料・ベース・アフィリエイトから指されていないものだけ。画像のファイルも消す。
+     *
+     * ほかのノード・カクテル・技法・銘柄・用語の説明文から `@n<ID>@` で参照されているときも消さない(#629。カクテルの #579 と同じ)。
+     * 消すと参照が残り、画面では黙って取り除かれ(#286)、data:verify(#285 の 8)が失敗するため。
      *
      * @throws CategoryNotDeletableException 消せない理由があるとき
      */
     public function delete(Category $node): void
     {
         DB::transaction(function () use ($node): void {
+            // 説明文の参照は外部キーではないので、調べた後に別の保存が参照を足すのは止められない(その参照は data:verify が見つける)
             $node = Category::query()->lockForUpdate()->findOrFail($node->id);
+            $notDeletable = $this->whyNotDeletable($node);
+            if ($notDeletable !== null) {
+                throw $notDeletable;
+            }
+            // 木の形・外部キーの理由は、deleteLeaf がロックを取ってから調べ直す
             $this->tree->deleteLeaf($node);
             // 消した行を数えないよう、行を消してから、ほかに指す行があるかを確かめる。ファイルはコミットの後に消える
             $this->images->deleteUnreferenced($node->image);
         });
+    }
+
+    /**
+     * $node を消せない理由をすべて載せた例外。消せるなら null。編集で開く値の delete_blockers も、これの reasons() で返す。
+     *
+     * 木の形・外部キーの理由は CategoryTree::deleteBlockers、説明文からの参照の理由は CategoryReferenceBlocker の定義の順。
+     * 参照している行は ID の順で、自分の説明からの参照は、一緒に消えるので数えない。
+     */
+    public function whyNotDeletable(Category $node): ?CategoryNotDeletableException
+    {
+        $references = [];
+        foreach (CategoryReferenceBlocker::cases() as $blocker) {
+            [$table, $columns] = $blocker->source();
+            $exceptId = $blocker === CategoryReferenceBlocker::Node ? $node->id : null;
+            $referrers = $this->referrers->find($table, $columns, 'n', $node->id, $exceptId);
+            if ($referrers !== []) {
+                $references[] = ['blocker' => $blocker, 'referrers' => $referrers];
+            }
+        }
+        $blockers = $this->tree->deleteBlockers($node);
+
+        return $blockers === [] && $references === [] ? null : new CategoryNotDeletableException($blockers, $references);
     }
 
     /**

@@ -1,4 +1,6 @@
+import { useEffect, useRef, type MouseEvent } from 'react'
 import { Link } from 'react-router'
+import { pinScrollTo } from './pinScrollTo'
 import styles from './Top.module.css'
 
 /** トップの条件検索のフォームの置き場所の id。メニューの「・カクテル検索」がここへ飛ぶ(旧と同じ id にし、旧のページ内リンクもそのまま効くようにする) */
@@ -16,6 +18,22 @@ const AUTHOR_URL = 'http://trc-vlackhistory.net'
  * 新は新着動画の有無によらず、新着動画の下にいつも出す。
  */
 export default function InformationMenu() {
+  const stopPin = useRef<(() => void) | null>(null)
+  // 画面を移ったら、飛んだ先に留めるのをやめる
+  useEffect(() => () => stopPin.current?.(), [])
+
+  // 読み込み中に押しても、後から上の欄が伸びた分を追って、フォームを画面の先頭に出す(#646)。
+  // ページ内リンクの動き(URL の #cocktailform_anchor・ブラウザのスクロール)はそのまま残す
+  const onSearchClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    // 新しいタブなどで開くときは、この画面を動かさない
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return
+    }
+    stopPin.current?.()
+    const target = document.getElementById(SEARCH_FORM_ANCHOR)
+    stopPin.current = target ? pinScrollTo(target) : null
+  }
+
   return (
     <div className={styles.menu}>
       <section className={styles.menuChild} aria-labelledby="top-menu-title">
@@ -24,7 +42,10 @@ export default function InformationMenu() {
         </h2>
         <div className={styles.menuBlock}>
           <div className={styles.menuLink}>
-            ・<a href={`#${SEARCH_FORM_ANCHOR}`}>カクテル検索</a>
+            ・
+            <a href={`#${SEARCH_FORM_ANCHOR}`} onClick={onSearchClick}>
+              カクテル検索
+            </a>
           </div>
           <div>
             具体的な条件を指定してカクテルが検索できます。

@@ -3,7 +3,9 @@
 #
 # 使い方: untrusted-hold.sh <owner/repo> <PR か issue の番号>
 #
-# 終わりのコード: 0 … 動かしてよい / 1 … 動かさない(信頼しないものがある・読めなかった)
+# 終わりのコード: 0 … 動かしてよい / 1 … 動かさない(信頼しないものがある)/ 2 … 引数の誤り /
+#   3 … 動かさない(PR・issue・コメントを読めなかった)
+# 呼ぶ側は 0 以外をすべて「動かさない」として扱う。読めなかったことを人に知らせたい呼ぶ側(evidence-capture.yml)だけが 3 を見分ける
 #
 # Claude Code は PR・issue のコメントを読み、書き込みのできる権限で動く。public のリポジトリでは誰でもコメントできるので、
 # 外部の人のコメントで指示を渡されないよう、信頼しないもの(決め方は untrusted-comments.sh)があれば動かさない。
@@ -11,12 +13,14 @@
 #
 # 信頼しないものがあれば、その URL を並べたコメントを 1 回だけ書き(同じ中身のコメントがもうあれば書かない)、needs-human を付ける。
 # needs-human の付いた PR・issue は、AI のワークフローが拾わず、ai-auto-merge.yml もマージしない。
-# 読めなかったときは、たまたまの失敗のこともあるので、コメントもラベルも付けずに止めるだけにする(次の回で確かめ直す)
+# 読めなかったときは、たまたまの失敗のこともあるので、このスクリプトはコメントもラベルも付けずに 3 で止める(次の回で確かめ直す)。
+# 次の回が来ない呼ぶ側(evidence-capture.yml は needs-local が付いたときだけ起きる)は、3 を見て読めなかったことを PR にコメントする(#688)
 set -euo pipefail
 
 USAGE="使い方: untrusted-hold.sh <owner/repo> <PR か issue の番号>"
 HERE=$(cd "$(dirname "$0")" && pwd)
 MARK='<!-- ai-dev:untrusted -->'
+READ_FAILED=3
 
 untrusted_hold() {
   local repo=${1:-} n=${2:-} numbers is_pr closing found body marked
@@ -28,19 +32,19 @@ untrusted_hold() {
   # PR かどうか・閉じる issue を読めなかったときに、閉じる issue を見ないまま「動かしてよい」にしない
   if ! is_pr=$(gh api "repos/$repo/issues/$n" --jq 'has("pull_request")'); then
     echo "#$n: PR か issue かを確かめられなかったので、Claude Code を動かさない(次の回で確かめ直す)"
-    return 1
+    return $READ_FAILED
   fi
   if [ "$is_pr" = true ]; then
     if ! closing=$(closing_issues "$repo" "$n"); then
       echo "#$n: 閉じる issue を確かめられなかったので、Claude Code を動かさない(次の回で確かめ直す)"
-      return 1
+      return $READ_FAILED
     fi
     numbers="$n $closing"
   fi
   # shellcheck disable=SC2086 # 番号を 1 つずつの引数にする
   if ! found=$(bash "$HERE/untrusted-comments.sh" "$repo" $numbers); then
     echo "#$n: 書いた人を確かめられなかったので、Claude Code を動かさない(次の回で確かめ直す)"
-    return 1
+    return $READ_FAILED
   fi
   [ -n "$found" ] || return 0
 
@@ -51,7 +55,11 @@ untrusted_hold() {
   # untrusted-comments.sh の出力は書いた順ではないので、どれか 1 件だけでは新しく書かれたものを見落とす
   # 頼むコメントは github-actions[bot] が書く。外の人が目印をまねたコメントは頼み済みに数えない(untrusted-notify.sh と同じ)
   # (パイプに直接つなぐと、grep -q が先に終わったときに gh が SIGPIPE で落ち、pipefail で「無い」と読まれるので、変数に受ける)
-  marked=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$MARK\"))) | .body")
+  if ! marked=$(gh api --paginate "repos/$repo/issues/$n/comments?per_page=100" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$MARK\"))) | .body"); then
+    # 頼み済みかを確かめられないまま書くと、回ごとに同じコメントが増える。書かずに止める(次の回で確かめ直す)
+    echo "#$n: 前に頼んだコメントを確かめられなかったので、Claude Code を動かさない(次の回で確かめ直す)"
+    return $READ_FAILED
+  fi
   if ! all_asked "$found" "$marked"; then
     gh api "repos/$repo/issues/$n/comments" -f body="$body" >/dev/null
   fi

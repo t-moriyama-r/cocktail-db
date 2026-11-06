@@ -47,6 +47,10 @@ version: 1
 	expect TC-600-04 '読めなかったら、無いと取り違えずに「読めなかった」と出して 1 で終わる' "$RC|$(grep -c '読めなかった' "$FAKE/err")" '1|1'
 	rm -f "$FAKE/api-fails"
 
+	comments "NONE|2026-10-01T00:00:00Z|${REQ/撮ってほしい/外の人の頼み}" "BOT|2026-10-02T00:00:00Z|${REQ/撮ってほしい/bot の頼み}"
+	run 7
+	expect TC-600-06 '決まった bot(github-actions[bot])が書いた頼むコメントも選ぶ(evidence-target.sh が通した頼みを撮れる)' "$(sed -n 2p "$FAKE/out")|$RC" 'bot の頼み|0'
+
 	RC=0
 	PATH="$FAKE/bin:$PATH" bash "$SCRIPT" o/r >"$FAKE/out" 2>"$FAKE/err" || RC=$?
 	expect TC-600-05 '番号が無ければ 2 で終わる' "$RC" 2
@@ -72,7 +76,7 @@ SH
 # 「author_association|created_at|本文」を並べて、--slurp の形(ページの配列)にする。2 ページに分けて、全ページを見るかも確かめる
 comments() {
 	jq -n -c '$ARGS.positional | map(capture("^(?<a>[A-Z]+)\\|(?<t>[^|]+)\\|(?<b>[\\s\\S]*)$")
-		| {author_association: .a, created_at: .t, body: .b, user: {login: "u"}})
+		| {author_association: (if .a == "BOT" then "NONE" else .a end), created_at: .t, body: .b, user: {login: (if .a == "BOT" then "github-actions[bot]" else "u" end)}})
 		| [.[0:1], .[1:]]' --args "$@" >"$FAKE/comments"
 }
 
