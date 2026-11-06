@@ -210,6 +210,18 @@ describe('新規', () => {
     expect(within(tree).getByRole('radio', { name: 'ドライジン' })).not.toBeChecked()
   })
 
+  test('TC-654-02: 新規の画面の木は、根だけを開き、根の子の枝は畳んだまま', async () => {
+    loggedIn()
+    mockTree()
+    renderAt('/admin/brands/new')
+
+    const tree = await screen.findByRole('list', { name: '所属' })
+    expect(within(tree).getByRole('button', { name: '蒸留酒を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(tree).getByRole('button', { name: 'その他を閉じる' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(tree).getByRole('button', { name: 'ジンを開く' })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(tree).queryByRole('radio', { name: 'ドライジン' })).not.toBeInTheDocument()
+  })
+
   test('TC-64-12: 度数の欄は数字と「.」だけを 4 文字まで、開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付ける', async () => {
     loggedIn()
     mockTree()
@@ -359,6 +371,18 @@ describe('編集', () => {
     expect(screen.getByLabelText('お気に入り')).not.toBeChecked()
     expect(screen.getByText('選んでいる所属: ジン / ドライジン')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: '銘柄の画像' })).toHaveAttribute('src', '/storage/beefeater.png')
+  })
+
+  test('TC-654-01: 深いノードを所属に持つ銘柄を開くと、そこまでの枝が開いていて、そのラジオがチェックされた状態で見えている', async () => {
+    loggedIn()
+    mockTree()
+    mockApi('get', '/admin/brands/{brand}', 200, { data: BRAND })
+    renderAt('/admin/brands/7')
+
+    const tree = await screen.findByRole('list', { name: '所属' })
+    expect(within(tree).getByRole('radio', { name: 'ドライジン' })).toBeChecked()
+    expect(within(tree).getByRole('button', { name: 'ジンを閉じる' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(tree).getByRole('radio', { name: 'ジン' })).not.toBeChecked()
   })
 
   test('TC-64-18: 所属を変えて送信すると、POST に _method=PUT を付けて /api/admin/brands/{id} に送り、保存できたら一覧へ戻る', async () => {
