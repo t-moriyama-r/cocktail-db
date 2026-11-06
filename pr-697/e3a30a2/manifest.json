@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "before": "4ff54270d4fd8eeb49b2bd8cffe9f4f0904c328e",
+  "after": "e3a30a2232b49a850872648277b1f62d95727143",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-249-19"
+      ],
+      "note": "修正前は --new と --limit だけ。修正後は --refresh が増え、--limit の説明に設定の件数が出る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-249-20",
+        "TC-249-21"
+      ],
+      "note": "修正前は予定が無い(No scheduled tasks)。修正後は */10 * * * * で affiliates:collect --refresh --new が出る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    },
+    {
+      "id": "03-command",
+      "kind": "command",
+      "cases": [
+        "TC-249-16",
+        "TC-249-19"
+      ],
+      "note": "修正前は「--new を指定する」で終了コード 2。修正後は認証情報が無いので「何もしない」と出て終わる",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "03-command-before.png",
+        "03-command-after.png",
+        "03-command-compare.png"
+      ]
+    },
+    {
+      "id": "04-command",
+      "kind": "command",
+      "cases": [
+        "TC-249-01",
+        "TC-249-02",
+        "TC-249-03",
+        "TC-249-04",
+        "TC-249-05",
+        "TC-249-06",
+        "TC-249-07",
+        "TC-249-08",
+        "TC-249-09",
+        "TC-249-10",
+        "TC-249-11",
+        "TC-249-12",
+        "TC-249-13",
+        "TC-249-14",
+        "TC-249-15",
+        "TC-249-16",
+        "TC-249-17",
+        "TC-249-18",
+        "TC-249-19",
+        "TC-249-20",
+        "TC-249-21"
+      ],
+      "note": "修正前はテストのファイルが無い。修正後は 34 件(21 ケース)通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "04-command-before.png",
+        "04-command-after.png",
+        "04-command-compare.png"
+      ]
+    }
+  ]
+}
