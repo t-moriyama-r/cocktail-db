@@ -39,6 +39,23 @@ class SaveDictionaryRequest extends FormRequest
     }
 
     /**
+     * 検証のメッセージに出す欄の名前(#692。docs/decisions/validation-messages.md)。画面の欄の名前に合わせる。
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'dictionary_category_id' => '分類',
+            'name' => '名前',
+            'name_eng' => '英名',
+            'description' => '説明',
+            ...$this->youtubeAttributes(),
+            ...$this->imageAttributes(),
+        ];
+    }
+
+    /**
      * YouTube の URL が読めるかを、ほかの項目の誤りと一緒に返す。
      *
      * @return list<callable(Validator): void>
