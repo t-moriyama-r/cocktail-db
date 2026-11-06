@@ -18,6 +18,6 @@ return [
     // 1 回に取り直す件数。Amazon・楽天それぞれの件数(Amazon は 10 件ごとに GetItems を 1 回、楽天は 1 件ずつ)
     'refresh_limit' => env('AFFILIATES_REFRESH_LIMIT', 10),
 
-    // 1 回に新しく探す件数(#248)
+    // 1 回に新しく探す件数(#248)。行の無いノード・銘柄を先に探し、残りの件数で ID の無い提供元を探し直す(#696)
     'new_limit' => env('AFFILIATES_NEW_LIMIT', 5),
 ];

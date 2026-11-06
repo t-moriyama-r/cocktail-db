@@ -176,6 +176,11 @@ it('TC-248-01: 銘柄を名前で探し、Amazon・楽天の先頭の商品の I
         'rakuten_search_url' => 'https://hb.afl.rakuten.co.jp/hgc/g00test0.example0.g00test0.example1/?pc='
             .rawurlencode('https://search.rakuten.co.jp/search/mall/').urlencode('サンプル ジン').rawurlencode('/510915/'),
         'rakuten_fetched_at' => COLLECT_NOW,
+        // 名前で探した時刻と、見つからなかった理由(#696)。どちらも見つかったので、理由は空
+        'amazon_searched_at' => COLLECT_NOW,
+        'amazon_not_found_reason' => null,
+        'rakuten_searched_at' => COLLECT_NOW,
+        'rakuten_not_found_reason' => null,
         'human_title' => null,
         'human_price' => null,
         'human_image_url' => null,
@@ -207,10 +212,12 @@ it('TC-248-03: 行のある銘柄・ノード、有名な銘柄のあるノー�
     ['node' => $famousNode] = collectTree('B');
     $famous = Brand::factory()->for($famousNode, 'category')->create(['name' => '有名な銘柄']);
     $famousNode->update(['famous_brand_id' => $famous->id]);
-    Affiliate::query()->create(['category_id' => $famousNode->id, 'brand_id' => $famous->id]);
+    // 行は、名前で探したばかり(7 日たっていない)の空の行にする。7 日たった空の行は探し直す(#696。TC-696-01)
+    $searched = ['amazon_searched_at' => now(), 'rakuten_searched_at' => now()];
+    Affiliate::query()->create(['category_id' => $famousNode->id, 'brand_id' => $famous->id, ...$searched]);
     $collected = Brand::factory()->for($middle, 'category')->create(['name' => '行のある銘柄']);
-    Affiliate::query()->create(['category_id' => $middle->id, 'brand_id' => $collected->id]);
-    Affiliate::query()->create(['category_id' => $node->id, 'brand_id' => null]);
+    Affiliate::query()->create(['category_id' => $middle->id, 'brand_id' => $collected->id, ...$searched]);
+    Affiliate::query()->create(['category_id' => $node->id, 'brand_id' => null, ...$searched]);
     collectFake();
 
     collectCommand($this, ['--new' => true, '--limit' => '10'])
@@ -270,9 +277,15 @@ it('TC-248-06: Amazon の先頭の商品に価格が無い・楽天が 0 件の�
         ->expectsOutputToContain('保存した(Amazon: 見つからない・楽天: 見つからない)')
         ->assertSuccessful();
 
+    // 商品の ID と値は空。名前で探した時刻と、見つからなかった理由(#696)だけが入る
     $affiliate = Affiliate::query()->sole();
     expect($affiliate->category_id)->toBe($node->id)
-        ->and(collect(collectValues($affiliate))->except(['category_id'])->filter(fn ($value) => $value !== null)->all())->toBe([]);
+        ->and(collect(collectValues($affiliate))->except(['category_id'])->filter(fn ($value) => $value !== null)->all())->toBe([
+            'amazon_searched_at' => COLLECT_NOW,
+            'amazon_not_found_reason' => 'no_price',
+            'rakuten_searched_at' => COLLECT_NOW,
+            'rakuten_not_found_reason' => 'no_results',
+        ]);
 });
 
 it('TC-248-07: Amazon が 1 件も見つけない(404)ときも、楽天で見つけた商品を保存する', function () {

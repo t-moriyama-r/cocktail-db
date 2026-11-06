@@ -253,6 +253,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `amazon_detail_url` | `text` | ○ | | `amazon_detail_url` |
 | `amazon_search_url` | `text` | ○ | | `amazon_search_url` |
 | `amazon_fetched_at` | `dateTime` | ○ | Amazon の値を取った時刻(#247) | `updated_at`(#32) |
+| `amazon_searched_at` | `dateTime` | ○ | Amazon を最後に名前で探した時刻。ID が無ければ、ここから 7 日で探し直す(#696)。null はまだ名前で探していない(移した行・取り直しで ID を消した行) | 無し |
+| `amazon_not_found_reason` | `string(32)` | ○ | Amazon で取れなかった理由(`App\Enums\AffiliateNotFoundReason`: `no_results`・`no_price`・`gone`・`api_error`)。取れたら null(#696) | 無し |
 | `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url`(アフィリエイトの転送の URL)の `pc=` に入った商品のページ `item.rakuten.co.jp/<店舗>/<管理番号>/` から `<店舗>:<管理番号>` を取る(#32。旧の 450 行すべてで取れた。API の `itemCode` と同じ値かは、取り直し(#249)で呼ぶまで確かめていない) |
 | `rakuten_title` | `text` | ○ | | `rakuten_title` |
 | `rakuten_price` | `unsignedInteger` | ○ | | `rakuten_price` |
@@ -260,6 +262,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `rakuten_detail_url` | `text` | ○ | | `rakuten_detail_url` |
 | `rakuten_search_url` | `text` | ○ | | `rakuten_search_url` |
 | `rakuten_fetched_at` | `dateTime` | ○ | 楽天の値を取った時刻(#247) | `updated_at`(#32) |
+| `rakuten_searched_at` | `dateTime` | ○ | 楽天を最後に名前で探した時刻(`amazon_searched_at` と同じ。#696) | 無し |
+| `rakuten_not_found_reason` | `string(32)` | ○ | 楽天で取れなかった理由(`no_results`・`gone`・`sold_out`・`api_error`)。取れたら null(#696) | 無し |
 | `human_title` | `string(256)` | ○ | 手で入れた値。期限なしで出す(#247) | `human_title` |
 | `human_price` | `unsignedInteger` | ○ | | `human_price` |
 | `human_image_url` | `text` | ○ | | `human_image_url` |

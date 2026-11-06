@@ -342,6 +342,11 @@ it('TC-249-02: 取れた値と取った時刻を保存し、検索結果のリ�
         'rakuten_search_url' => 'https://hb.afl.rakuten.co.jp/hgc/g00test0.example0.g00test0.example1/?pc='
             .rawurlencode('https://search.rakuten.co.jp/search/mall/').urlencode('サンプル ジン').rawurlencode('/510915/'),
         'rakuten_fetched_at' => REFRESH_NOW,
+        // 名前で探す列(#696)。取り直しでは、探した時刻は変えず、取れたので理由は空のまま
+        'amazon_searched_at' => null,
+        'amazon_not_found_reason' => null,
+        'rakuten_searched_at' => null,
+        'rakuten_not_found_reason' => null,
         'human_title' => '手で入れた題名',
         'human_price' => 3000,
         'human_image_url' => 'https://example.com/human.jpg',
@@ -694,3 +699,79 @@ it('TC-249-19: --refresh・--new のどちらも無い・件数が 1 以上の�
     '--limit=abc' => [['--refresh' => true, '--limit' => 'abc'], null, '--limit は 1 以上の整数で指定する'],
     '設定の件数が abc' => [['--refresh' => true], 'abc', '--limit は 1 以上の整数で指定する'],
 ]);
+
+it('TC-696-07: 取り直しで片方の ID だけが消えた行は、次の --new がその提供元を名前で探し直す。手で入れた値は変えない(:dataset)', function (bool $withHuman) {
+    $human = $withHuman ? ['human_title' => '手で入れた題名', 'human_price' => 3000] : [];
+    $affiliate = refreshRow([...refreshOldAmazon('B000GONE01'), ...refreshOldRakuten('example-shop:10000001'), ...$human]);
+    refreshFake([], ['example-shop:10000001' => refreshRakutenItem('example-shop:10000001', 2480)]);
+
+    refreshCommand($this, ['--refresh' => true])->assertSuccessful();
+    refreshCommand($this, ['--new' => true])
+        ->expectsOutputToContain('探し直した(Amazon: B000TEST01・楽天: 探していない)')
+        ->assertSuccessful();
+
+    $stored = $affiliate->fresh();
+    expect(array_values(array_filter(refreshRequests(), fn (array $request) => str_ends_with($request[0], '-search'))))->toBe([
+        ['amazon-search', 'ジン'],
+    ])
+        ->and($stored?->amazon_asin)->toBe('B000TEST01')
+        ->and($stored?->amazon_searched_at?->toDateTimeString())->toBe(REFRESH_NOW)
+        ->and($stored?->amazon_not_found_reason)->toBeNull()
+        ->and($stored?->rakuten_item_code)->toBe('example-shop:10000001')
+        ->and(collect($stored?->getAttributes())->only(array_keys($human))->all())->toBe($human);
+})->with([
+    '手で入れた値なし' => [false],
+    '手で入れた値あり' => [true],
+]);
+
+it('TC-696-11: 取り直しで ID で取れなかった提供元には、取れなかった理由を残し、名前で探した時刻を空にする(:dataset)', function (string $case, string $provider, string $reason) {
+    $affiliate = refreshRow([
+        ...refreshOldAmazon('B000TEST01'),
+        ...refreshOldRakuten('example-shop:10000001'),
+        'amazon_searched_at' => now()->subDays(2),
+        'rakuten_searched_at' => now()->subDays(2),
+    ]);
+    $rakutenFound = ['example-shop:10000001' => refreshRakutenItem('example-shop:10000001', 2480)];
+    match ($case) {
+        'amazon-gone' => refreshFake([], $rakutenFound),
+        'amazon-no-price' => refreshFake(['B000TEST01' => null], $rakutenFound),
+        'rakuten-gone' => refreshFake(['B000TEST01' => 1980], []),
+        'rakuten-sold-out' => refreshFake(['B000TEST01' => 1980], ['example-shop:10000001' => refreshRakutenItem('example-shop:10000001', 2480, availability: 0)]),
+        default => throw new InvalidArgumentException("知らない場合: {$case}"),
+    };
+
+    refreshCommand($this, ['--refresh' => true])->assertSuccessful();
+
+    // DB に残った値(キャストする前の文字列)で確かめる
+    $stored = $affiliate->fresh()?->getAttributes() ?? [];
+    $other = $provider === 'amazon' ? 'rakuten' : 'amazon';
+    expect($stored["{$provider}_not_found_reason"])->toBe($reason)
+        ->and($stored["{$provider}_searched_at"])->toBeNull()
+        ->and($stored["{$other}_not_found_reason"])->toBeNull()
+        ->and($stored["{$other}_searched_at"])->toBe(now()->subDays(2)->toDateTimeString());
+})->with([
+    'Amazon が商品を返さない' => ['amazon-gone', 'amazon', 'gone'],
+    'Amazon の商品に価格が無い' => ['amazon-no-price', 'amazon', 'no_price'],
+    '楽天が 0 件' => ['rakuten-gone', 'rakuten', 'gone'],
+    '楽天が売り切れ' => ['rakuten-sold-out', 'rakuten', 'sold_out'],
+]);
+
+it('TC-696-12: 取り直しで時間を置いても通らない失敗(楽天の 400)は、ID と値を残して失敗の理由だけを残す。前に失敗した行は、取れたら理由を空にする', function () {
+    $failed = refreshRow([...refreshOldRakuten('example-shop:10000001'), 'last_viewed_at' => now()], 'A');
+    $recovered = refreshRow([...refreshOldRakuten('example-shop:20000002'), 'rakuten_not_found_reason' => 'api_error'], 'B');
+    config()->set('settings', REFRESH_RAKUTEN_SETTINGS);
+    refreshFake([], [
+        'example-shop:10000001' => 400,
+        'example-shop:20000002' => refreshRakutenItem('example-shop:20000002', 2480),
+    ]);
+
+    refreshCommand($this, ['--refresh' => true])->assertSuccessful();
+
+    $stored = $failed->fresh();
+    expect($stored?->rakuten_item_code)->toBe('example-shop:10000001')
+        ->and($stored?->rakuten_price)->toBe(2000)
+        ->and($stored?->rakuten_not_found_reason?->value)->toBe('api_error');
+    $stored = $recovered->fresh();
+    expect($stored?->rakuten_price)->toBe(2480)
+        ->and($stored?->rakuten_not_found_reason)->toBeNull();
+});
