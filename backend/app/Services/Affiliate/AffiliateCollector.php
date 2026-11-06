@@ -10,6 +10,7 @@ use App\Models\CategoryClosure;
 use App\Services\CategoryTree;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 
@@ -220,26 +221,40 @@ final class AffiliateCollector
      */
     private function recordFailure(CollectTarget $target, string $message): ?Carbon
     {
-        if (! $this->targetExists($target)) {
-            return null;
-        }
+        // ノード・銘柄の行をロックして、同じ件の失敗が同時に記録されても、読み取りから保存までを 1 件ずつにする
+        // (失敗回数の増分が失われない・一意制約違反で止まらない)
+        return DB::transaction(function () use ($target, $message): ?Carbon {
+            if ($target->brandId !== null) {
+                $brand = Brand::query()->whereKey($target->brandId)->lockForUpdate()->first(['id', 'category_id']);
+                if ($brand === null) {
+                    return null;
+                }
+                // 探しているあいだに銘柄が移されていたら、今の所属ノードで記録する(移動元ノードを消しても記録が消えない)
+                $categoryId = $brand->category_id;
+            } else {
+                if (Category::query()->whereKey($target->categoryId)->lockForUpdate()->first(['id']) === null) {
+                    return null;
+                }
+                $categoryId = $target->categoryId;
+            }
 
-        $failure = $this->failureOf($target) ?? new AffiliateCollectFailure(['failure_count' => 0]);
-        // 同じ名前で続けて失敗したときだけ倍にする。名前が変わった後の失敗は 1 回目として数える
-        $count = $failure->exists && $failure->name === $target->name ? $failure->failure_count + 1 : 1;
-        $minutes = min(self::FAILURE_BACKOFF_FIRST_MINUTES * 2 ** min($count - 1, 30), self::FAILURE_BACKOFF_MAX_MINUTES);
-        $retryAfter = now()->addMinutes($minutes);
+            $failure = $this->failureOf($target) ?? new AffiliateCollectFailure(['failure_count' => 0]);
+            // 同じ名前で続けて失敗したときだけ倍にする。名前が変わった後の失敗は 1 回目として数える
+            $count = $failure->exists && $failure->name === $target->name ? $failure->failure_count + 1 : 1;
+            $minutes = min(self::FAILURE_BACKOFF_FIRST_MINUTES * 2 ** min($count - 1, 30), self::FAILURE_BACKOFF_MAX_MINUTES);
+            $retryAfter = now()->addMinutes($minutes);
 
-        $failure->fill([
-            'category_id' => $target->categoryId,
-            'brand_id' => $target->brandId,
-            'name' => $target->name,
-            'failure_count' => $count,
-            'last_message' => $message,
-            'retry_after' => $retryAfter,
-        ])->save();
+            $failure->fill([
+                'category_id' => $categoryId,
+                'brand_id' => $target->brandId,
+                'name' => $target->name,
+                'failure_count' => $count,
+                'last_message' => $message,
+                'retry_after' => $retryAfter,
+            ])->save();
 
-        return $retryAfter;
+            return $retryAfter;
+        });
     }
 
     private function targetExists(CollectTarget $target): bool
