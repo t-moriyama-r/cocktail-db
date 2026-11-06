@@ -17,6 +17,7 @@ use Illuminate\Support\Sleep;
  *
  * --refresh: 期限が近い・切れた行を、最近見られたものから商品の ID で取り直す(#249。中身は AffiliateRefresher)。
  * --new: まだ商品の行が無いノード・銘柄を名前で探し、見つけた商品の ID と値を保存する(#248。中身は AffiliateCollector)。
+ *   API の失敗が続く件は、しばらく選ばずに後ろの件へ進む(#695)。
  *        残りの件数で、行はあるが ID の無い提供元を、名前で探してから 7 日たったものから探し直す(#696)。
  *
  * 両方を指定すると、--refresh → --new の順に流す。楽天は 1 秒に 1 回までで、別のプロセスとのあいだは揃えない
@@ -183,7 +184,9 @@ final class CollectAffiliates extends Command
             )),
             CollectOutcome::ALREADY_EXISTS => $this->line("{$target}: 探しているあいだに行ができていたので、書き換えない"),
             CollectOutcome::CHANGED => $this->line("{$target}: 探し直しているあいだに行が変わった(ID が入った・行が消えた)ので、書き換えない"),
-            CollectOutcome::FAILED => $this->warn("{$target}: 失敗したので飛ばす({$outcome->message})"),
+            CollectOutcome::FAILED => $this->warn($outcome->retryAfter !== null
+                ? "{$target}: 失敗したので飛ばす({$outcome->message})。{$outcome->retryAfter->toDateTimeString()} までは選ばない"
+                : "{$target}: 失敗したので飛ばす({$outcome->message})"),
             CollectOutcome::RETRY_LATER => $this->warn("{$target}: 上限か一時的な失敗のため、次の回にまわす({$outcome->message})"),
         };
     }
