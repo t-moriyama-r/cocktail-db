@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "before": "62f7d3bd73d17e044b79b887f473172683ff44a1",
+  "after": "16cc4401544931a7ae06491327a98545cd495401",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-686-01",
+        "TC-686-02",
+        "TC-686-03",
+        "TC-686-04",
+        "TC-686-05",
+        "TC-686-06"
+      ],
+      "note": "修正後は 6 件が ok で、最後の行が passed 6, failed 0。修正前はファイルが無いエラー",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    }
+  ]
+}
