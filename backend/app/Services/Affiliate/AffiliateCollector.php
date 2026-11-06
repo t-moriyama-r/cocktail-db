@@ -85,8 +85,9 @@ final class AffiliateCollector
             return [];
         }
 
-        // 新規の対象が上限を使い切って(Amazon の 403 などで同じ対象が選ばれ続けて)も、探し直しが進むよう 1 件分を空ける
-        $targets = $this->newTargets($limit > 1 ? $limit - 1 : $limit);
+        // 探し直す提供元があるときだけ、1 件分を空ける(新規の対象が Amazon の 403 などで上限を使い切り続けても、探し直しが進むように)
+        $reserve = $limit > 1 && $this->researchTargets(1, $amazonConfigured, $rakutenConfigured) !== [] ? 1 : 0;
+        $targets = $this->newTargets($limit - $reserve);
         $targets = [...$targets, ...$this->researchTargets($limit - count($targets), $amazonConfigured, $rakutenConfigured)];
 
         $outcomes = [];

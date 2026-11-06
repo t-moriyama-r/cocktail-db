@@ -368,3 +368,19 @@ it('TC-696-13: 探し直しているあいだに、その提供元の ID が入�
         ->and($affiliate->rakuten_item_code)->toBe('admin-shop:1')
         ->and($affiliate->rakuten_searched_at)->toBeNull();
 });
+
+it('TC-696-21: 探し直す提供元があるときは、新規の対象が上限以上あっても、1 件分を探し直しに空ける', function () {
+    $tree = app(CategoryTree::class);
+    $root = $tree->addNode(null, Category::factory()->make(['name' => '根'])->getAttributes());
+    $node = $tree->addNode($root, Category::factory()->make(['name' => '行のあるノード'])->getAttributes());
+    Affiliate::factory()->create(['category_id' => $node->id, 'amazon_searched_at' => now(), 'rakuten_searched_at' => now()]);
+    Brand::factory()->for($node, 'category')->create(['name' => '銘柄A']);
+    Brand::factory()->for($node, 'category')->create(['name' => '銘柄B']);
+    researchRow(['last_viewed_at' => null], '探し直す行');
+    researchFake();
+
+    researchCommand($this, ['--new' => true, '--limit' => '2'])
+        ->expectsOutputToContain('探した: 1 件(保存 1')
+        ->expectsOutputToContain('探し直した: 1 件(保存 1')
+        ->assertSuccessful();
+});
