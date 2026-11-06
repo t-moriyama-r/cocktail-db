@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\AffiliateNotFoundReason;
 use App\Services\Affiliate\AffiliateCollector;
 use App\Services\Affiliate\AffiliateRefresher;
 use App\Services\Affiliate\AmazonClient;
@@ -16,6 +17,7 @@ use Illuminate\Support\Sleep;
  *
  * --refresh: 期限が近い・切れた行を、最近見られたものから商品の ID で取り直す(#249。中身は AffiliateRefresher)。
  * --new: まだ商品の行が無いノード・銘柄を名前で探し、見つけた商品の ID と値を保存する(#248。中身は AffiliateCollector)。
+ *        残りの件数で、行はあるが ID の無い提供元を、名前で探してから 7 日たったものから探し直す(#696)。
  *
  * 両方を指定すると、--refresh → --new の順に流す。楽天は 1 秒に 1 回までで、別のプロセスとのあいだは揃えない
  * (docs/decisions/rakuten-client.md の 6)ので、定期実行(routes/console.php)は両方を 1 つのコマンドで流し、
@@ -25,10 +27,10 @@ final class CollectAffiliates extends Command
 {
     protected $signature = 'affiliates:collect
         {--refresh : 期限が近い・切れた行を、最近見られたものから商品の ID で取り直す}
-        {--new : まだ商品の行が無いノード・銘柄を、名前で探して保存する}
+        {--new : まだ商品の行が無いノード・銘柄と、ID の無い提供元(探してから 7 日たったもの)を、名前で探して保存する}
         {--limit= : 1 回の件数。--refresh は Amazon・楽天それぞれの件数(既定は設定の affiliates.refresh_limit・affiliates.new_limit)}';
 
-    protected $description = 'アフィリエイトの商品を Amazon・楽天から集める(--refresh: ID で取り直す、--new: まだ行の無いノード・銘柄を名前で探す)';
+    protected $description = 'アフィリエイトの商品を Amazon・楽天から集める(--refresh: ID で取り直す、--new: まだ行の無いノード・銘柄と ID の無い提供元を名前で探す)';
 
     public function handle(AffiliateCollector $collector, AffiliateRefresher $refresher, AmazonClient $amazon, RakutenClient $rakuten): int
     {
@@ -100,14 +102,25 @@ final class CollectAffiliates extends Command
     {
         $outcomes = $collector->collectNew($limit, fn (CollectOutcome $outcome) => $this->reportNew($outcome));
 
-        $counts = array_count_values(array_map(fn (CollectOutcome $outcome) => $outcome->status, $outcomes));
+        // 行の無いノード・銘柄(#248)と、行のある行の探し直し(#696)を分けて数える
+        [$new, $research] = collect($outcomes)
+            ->partition(fn (CollectOutcome $outcome) => $outcome->target->affiliateId === null)
+            ->map(fn ($part) => array_count_values($part->map(fn (CollectOutcome $outcome) => $outcome->status)->all()))
+            ->all();
         $this->info(sprintf(
             '探した: %d 件(保存 %d・行ができていた %d・失敗 %d・次の回にまわした %d)',
-            count($outcomes),
-            $counts[CollectOutcome::SAVED] ?? 0,
-            $counts[CollectOutcome::ALREADY_EXISTS] ?? 0,
-            $counts[CollectOutcome::FAILED] ?? 0,
-            $counts[CollectOutcome::RETRY_LATER] ?? 0,
+            array_sum($new),
+            $new[CollectOutcome::SAVED] ?? 0,
+            $new[CollectOutcome::ALREADY_EXISTS] ?? 0,
+            $new[CollectOutcome::FAILED] ?? 0,
+            $new[CollectOutcome::RETRY_LATER] ?? 0,
+        ));
+        $this->info(sprintf(
+            '探し直した: %d 件(保存 %d・行が変わっていた %d・次の回にまわした %d)',
+            array_sum($research),
+            $research[CollectOutcome::RESEARCHED] ?? 0,
+            $research[CollectOutcome::CHANGED] ?? 0,
+            $research[CollectOutcome::RETRY_LATER] ?? 0,
         ));
     }
 
@@ -140,6 +153,18 @@ final class CollectAffiliates extends Command
         };
     }
 
+    /**
+     * 探し直した提供元 1 つの結果の書き方。見つけた ID か、見つからなかった理由。探していなければ「探していない」。
+     */
+    private static function researched(bool $searched, ?string $itemId, ?AffiliateNotFoundReason $reason): string
+    {
+        if (! $searched) {
+            return '探していない';
+        }
+
+        return $itemId ?? '見つからない('.($reason !== null ? $reason->value : '理由なし').')';
+    }
+
     private function reportNew(CollectOutcome $outcome): void
     {
         $target = $outcome->target->describe();
@@ -150,7 +175,14 @@ final class CollectAffiliates extends Command
                 $outcome->amazonAsin ?? '見つからない',
                 $outcome->rakutenItemCode ?? '見つからない',
             )),
+            CollectOutcome::RESEARCHED => $this->line(sprintf(
+                '%s: 探し直した(Amazon: %s・楽天: %s)',
+                $target,
+                self::researched($outcome->target->searchAmazon, $outcome->amazonAsin, $outcome->amazonReason),
+                self::researched($outcome->target->searchRakuten, $outcome->rakutenItemCode, $outcome->rakutenReason),
+            )),
             CollectOutcome::ALREADY_EXISTS => $this->line("{$target}: 探しているあいだに行ができていたので、書き換えない"),
+            CollectOutcome::CHANGED => $this->line("{$target}: 探し直しているあいだに行が変わった(ID が入った・行が消えた)ので、書き換えない"),
             CollectOutcome::FAILED => $this->warn("{$target}: 失敗したので飛ばす({$outcome->message})"),
             CollectOutcome::RETRY_LATER => $this->warn("{$target}: 上限か一時的な失敗のため、次の回にまわす({$outcome->message})"),
         };
