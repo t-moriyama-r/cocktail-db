@@ -2,6 +2,7 @@
 
 namespace App\Services\Affiliate;
 
+use App\Enums\AffiliateNotFoundReason;
 use App\Models\Affiliate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -24,13 +25,16 @@ use Illuminate\Support\Sleep;
  * ID で取れなかったとき(販売終了など。Amazon は価格の無い商品も、楽天は売り切れの商品も含む。どちらも --new が名前で
  * 探すときに見つからない扱いにするもの)は、その提供元の ID と値を消す(docs/decisions/affiliate-freshness.md の 2
  * 「Amazon に出なくなった値はすぐに消す」・1 の「取り直しで取れなかった itemCode は消す」)。ID も手で入れた値も
- * 残らなくなった行は消し、次の --new(AffiliateCollector)が名前から探し直す。
+ * 残らなくなった行は消し、次の --new(AffiliateCollector)が名前から探し直す。行が残るときは、その提供元の
+ * 取れなかった理由(*_not_found_reason)を残し、名前で探した時刻(*_searched_at)を空にして、次の --new が
+ * その提供元を名前で探し直すようにする(#696)。取れたときは、理由を空にする。
  *
  * 失敗の扱い:
  * - 認証情報の無い提供元には問い合わせない
  * - 429・5xx・つながらない(RetryLater)ときは、その提供元をこの回で終える(上限に当たっているあいだに続けて呼んでも
  *   通らないため)。もう一方の提供元は続ける。書き換えなかった行は期限が近いままなので、次の回にまた選ばれる
- * - それ以外の API の失敗は、その件(Amazon は GetItems 1 回分)を書き換えずに次へ進む
+ * - それ以外の API の失敗は、その件(Amazon は GetItems 1 回分)の値と ID を書き換えずに、取れなかった理由
+ *   (api_error)だけを残して次へ進む(#696。楽天の失敗が続いたかを後から見られるように)
  *
  * 手で入れた値(human_*)は書き換えない。取っているあいだに行の ID が変わった・行が消えたときは、その行を書き換えない。
  */
@@ -44,21 +48,6 @@ final class AffiliateRefresher
 
     /** Amazon の呼び出しのあいだに空ける時間(同じく 5)。楽天はクライアントが 1 秒空ける */
     public const INTERVAL_MILLISECONDS = 1000;
-
-    private const AMAZON_COLUMNS = [
-        'amazon_asin', 'amazon_title', 'amazon_price',
-        'amazon_image_large_url', 'amazon_image_medium_url', 'amazon_image_small_url',
-        'amazon_detail_url', 'amazon_search_url', 'amazon_fetched_at',
-    ];
-
-    private const RAKUTEN_COLUMNS = [
-        'rakuten_item_code', 'rakuten_title', 'rakuten_price',
-        'rakuten_image_url', 'rakuten_detail_url', 'rakuten_search_url', 'rakuten_fetched_at',
-    ];
-
-    private const HUMAN_COLUMNS = [
-        'human_title', 'human_price', 'human_image_url', 'human_amazon_detail_url', 'human_amazon_search_url',
-    ];
 
     public function __construct(
         private readonly AmazonClient $amazon,
@@ -153,6 +142,7 @@ final class AffiliateRefresher
             } catch (AmazonApiException $e) {
                 Log::warning('affiliates:collect --refresh: Amazon の API の失敗のため、この回の分を飛ばす', ['asins' => $asins, 'error' => $e->getMessage()]);
                 foreach ($chunkRows as $row) {
+                    self::markFailed($row, 'amazon_asin', (string) $row->amazon_asin, 'amazon_not_found_reason');
                     $record(self::outcome(RefreshOutcome::AMAZON, $row, (string) $row->amazon_asin, RefreshOutcome::FAILED, message: $e->getMessage()));
                 }
 
@@ -169,7 +159,11 @@ final class AffiliateRefresher
                 $item = $byAsin[$asin] ?? null;
                 // --new(AffiliateCollector::searchAmazon)と同じく、価格の無い商品は見つからない扱いにする
                 if ($item === null || $item->price === null) {
-                    $deleted = $this->clear($row, 'amazon_asin', $asin, self::AMAZON_COLUMNS);
+                    $reason = $item === null ? AffiliateNotFoundReason::Gone : AffiliateNotFoundReason::NoPrice;
+                    $deleted = $this->clear($row, 'amazon_asin', $asin, Affiliate::AMAZON_COLUMNS, [
+                        'amazon_searched_at' => null,
+                        'amazon_not_found_reason' => $reason->value,
+                    ]);
                     $record(self::outcome(RefreshOutcome::AMAZON, $row, $asin, RefreshOutcome::CLEARED, $deleted));
 
                     continue;
@@ -187,6 +181,7 @@ final class AffiliateRefresher
                         'amazon_detail_url' => $item->detailPageUrl,
                         'amazon_search_url' => $this->searchUrls->amazon(self::name($row)),
                         'amazon_fetched_at' => now(),
+                        'amazon_not_found_reason' => null,
                     ]);
                 $record(self::outcome(RefreshOutcome::AMAZON, $row, $asin, RefreshOutcome::REFRESHED));
             }
@@ -210,6 +205,7 @@ final class AffiliateRefresher
                 return;
             } catch (RakutenApiException $e) {
                 Log::warning('affiliates:collect --refresh: 楽天の API の失敗のため、この件を飛ばす', ['item_code' => $itemCode, 'error' => $e->getMessage()]);
+                self::markFailed($row, 'rakuten_item_code', $itemCode, 'rakuten_not_found_reason');
                 $record(self::outcome(RefreshOutcome::RAKUTEN, $row, $itemCode, RefreshOutcome::FAILED, message: $e->getMessage()));
 
                 continue;
@@ -217,7 +213,11 @@ final class AffiliateRefresher
 
             // --new は販売できる商品だけを探す(楽天の既定)ので、売り切れの商品も見つからない扱いにする
             if ($item === null || $item->available === false) {
-                $deleted = $this->clear($row, 'rakuten_item_code', $itemCode, self::RAKUTEN_COLUMNS);
+                $reason = $item === null ? AffiliateNotFoundReason::Gone : AffiliateNotFoundReason::SoldOut;
+                $deleted = $this->clear($row, 'rakuten_item_code', $itemCode, Affiliate::RAKUTEN_COLUMNS, [
+                    'rakuten_searched_at' => null,
+                    'rakuten_not_found_reason' => $reason->value,
+                ]);
                 $record(self::outcome(RefreshOutcome::RAKUTEN, $row, $itemCode, RefreshOutcome::CLEARED, $deleted));
 
                 continue;
@@ -233,6 +233,7 @@ final class AffiliateRefresher
                     'rakuten_detail_url' => $item->detailUrl,
                     'rakuten_search_url' => $this->searchUrls->rakuten(self::name($row)),
                     'rakuten_fetched_at' => now(),
+                    'rakuten_not_found_reason' => null,
                 ]);
             $record(self::outcome(RefreshOutcome::RAKUTEN, $row, $itemCode, RefreshOutcome::REFRESHED));
         }
@@ -240,17 +241,19 @@ final class AffiliateRefresher
 
     /**
      * その提供元の ID と値を消す。ID も手で入れた値も残らなくなった行は消す(次の --new が名前から探し直す)。
+     * 行が残るときのために、$state(名前で探した時刻を空にし、取れなかった理由を残す)も書く。
      *
      * @param  'amazon_asin'|'rakuten_item_code'  $idColumn
      * @param  list<string>  $columns
+     * @param  array<string, string|null>  $state
      * @return bool 行を消したか
      */
-    private function clear(Affiliate $row, string $idColumn, string $itemId, array $columns): bool
+    private function clear(Affiliate $row, string $idColumn, string $itemId, array $columns, array $state): bool
     {
         $cleared = Affiliate::query()
             ->whereKey($row->id)
             ->where($idColumn, $itemId)
-            ->update(array_fill_keys($columns, null));
+            ->update([...array_fill_keys($columns, null), ...$state]);
         if ($cleared === 0) {
             return false;
         }
@@ -259,11 +262,25 @@ final class AffiliateRefresher
             ->whereKey($row->id)
             ->whereNull('amazon_asin')
             ->whereNull('rakuten_item_code');
-        foreach (self::HUMAN_COLUMNS as $column) {
+        foreach (Affiliate::HUMAN_COLUMNS as $column) {
             $query->whereNull($column);
         }
 
         return $query->delete() > 0;
+    }
+
+    /**
+     * 時間を置いても通らない API の失敗のとき、ID と値はそのままにして、取れなかった理由だけを残す(#696)。
+     *
+     * @param  'amazon_asin'|'rakuten_item_code'  $idColumn
+     * @param  'amazon_not_found_reason'|'rakuten_not_found_reason'  $reasonColumn
+     */
+    private static function markFailed(Affiliate $row, string $idColumn, string $itemId, string $reasonColumn): void
+    {
+        Affiliate::query()
+            ->whereKey($row->id)
+            ->where($idColumn, $itemId)
+            ->update([$reasonColumn => AffiliateNotFoundReason::ApiError->value]);
     }
 
     /**
