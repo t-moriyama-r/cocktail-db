@@ -4,6 +4,7 @@ import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
 import AdminBrandEdit from './pages/AdminBrandEdit'
 import AdminBrands from './pages/AdminBrands'
+import AdminCategoryEdit from './pages/AdminCategoryEdit'
 import AdminCategoryTree from './pages/AdminCategoryTree'
 import AdminCocktails from './pages/AdminCocktails'
 import AdminDictionaries from './pages/AdminDictionaries'
@@ -58,6 +59,8 @@ export default function App() {
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminHome />} />
         <Route path="categories" element={<AdminCategoryTree />} />
+        <Route path="categories/new" element={<AdminCategoryEdit />} />
+        <Route path="categories/:id" element={<RequireNumericId element={<AdminCategoryEdit />} />} />
         <Route path="brands" element={<AdminBrands />} />
         <Route path="brands/new" element={<AdminBrandEdit />} />
         <Route path="brands/:id" element={<RequireNumericId element={<AdminBrandEdit />} />} />

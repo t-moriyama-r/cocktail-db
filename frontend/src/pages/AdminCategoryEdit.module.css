@@ -1,0 +1,34 @@
+/* 管理画面のノードの新規・編集の画面(#308) */
+.page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.title {
+  margin: 0;
+}
+
+/* 子のノード・直下の銘柄の一覧。旧と同じく、フォームとのあいだに線を引く */
+.list {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 800px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.listTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.items {
+  margin: 0;
+  padding-left: var(--space-4);
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}

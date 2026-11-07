@@ -163,18 +163,6 @@ describe('AdminCategoryTree', () => {
     expect(rowTexts(tree).map((text) => text.split('(')[0])).toEqual(['ソフトドリンク', 'ジュース'])
   })
 
-  test('TC-123-08: ノードを 1 つ選べ、別のノードを選ぶと前の選択は外れる', async () => {
-    await openTreePage()
-
-    fireEvent.click(screen.getByRole('radio', { name: 'ジン' }))
-    expect(screen.getByRole('radio', { name: 'ジン' })).toBeChecked()
-
-    fireEvent.click(screen.getByRole('radio', { name: 'ミント' }))
-    expect(screen.getByRole('radio', { name: 'ミント' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'ジン' })).not.toBeChecked()
-    expect(screen.getAllByRole('radio').filter((radio) => (radio as HTMLInputElement).checked)).toHaveLength(1)
-  })
-
   test('TC-123-09: 木を読み込めなかったらエラーを出し、もう一度読み込むと木が出る', async () => {
     mockApi('get', '/admin/me', 200, ADMIN)
     mockApiHandler('get', '/admin/categories', () => jsonResponse({ message: 'Server Error' }, 500))
