@@ -403,3 +403,132 @@ describe('新規', () => {
     expect(currentUrl()).toBe('/admin/categories/new')
   })
 })
+
+describe('根の作成と役割(#310)', () => {
+  const roleGroup = () => screen.queryByRole('group', { name: '役割' })
+  const rootCheck = () => screen.getByRole('checkbox', { name: '親なし(根のノードを作る)' })
+
+  test('TC-310-01: 新規の最初は「親なし」が外れていて、役割の欄を出さない', async () => {
+    await openNew()
+
+    expect(rootCheck()).not.toBeChecked()
+    expect(roleGroup()).not.toBeInTheDocument()
+  })
+
+  test('TC-310-02: 新規で「親なし」を入れると、親の木と選んでいる親を隠し、役割の欄を「なし」で出す', async () => {
+    await openNew()
+
+    fireEvent.click(rootCheck())
+
+    expect(screen.queryByRole('list', { name: '親' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/^選んでいる親:/)).not.toBeInTheDocument()
+    const roles = within(roleGroup()!).getAllByRole('radio')
+    expect(roles.map((radio) => radio.parentElement?.textContent)).toEqual(['なし', 'ソフトドリンク', 'その他'])
+    expect(within(roleGroup()!).getByRole('radio', { name: 'なし' })).toBeChecked()
+  })
+
+  test('TC-310-03: 「親なし」で役割にソフトドリンクを選んで送ると、親を空・役割を soft_drink で新規に送り、有名な銘柄は送らない', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...OTHER_ROOT, id: 11, name: '果汁', role: 'soft_drink' }), 201))
+
+    fireEvent.click(rootCheck())
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'ソフトドリンク' }))
+    fireEvent.change(screen.getByLabelText('名前'), { target: { value: '果汁' } })
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「果汁」を保存しました')
+    const entries = textEntries(sent()!)
+    expect([entries._method, entries.parent_id, entries.role, entries.famous_brand_id, entries.name]).toEqual([
+      undefined,
+      '',
+      'soft_drink',
+      undefined,
+      '果汁',
+    ])
+  })
+
+  test('TC-310-04: 「親なし」で役割が「なし」のまま送ると、親を空で送り、役割は送らない', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...OTHER_ROOT, id: 12, name: '果実酒', role: null }), 201))
+
+    fireEvent.click(rootCheck())
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries.parent_id, 'role' in entries]).toEqual(['', false])
+  })
+
+  test('TC-310-05: 「親なし」を外すと、木と前に選んだ親が戻り、役割の欄を消し、送信で役割を送らず選んだ親を送る', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...GIN, id: 10, name: 'レモン' }), 201))
+
+    fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name: 'ミント' }))
+    fireEvent.click(rootCheck())
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'その他' }))
+    fireEvent.click(rootCheck())
+
+    expect(roleGroup()).not.toBeInTheDocument()
+    expect(screen.getByText('選んでいる親: その他 / ミント')).toBeInTheDocument()
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries.parent_id, 'role' in entries]).toEqual(['6', false])
+  })
+
+  test('TC-310-06: 根の編集では役割の欄を今の値で出し、ソフトドリンクに変えて送ると role を soft_drink で送る', async () => {
+    await openEdit(OTHER_ROOT)
+    const sent = captureSave('put', () => jsonResponse(saved({ ...OTHER_ROOT, role: 'soft_drink' }), 200))
+
+    expect(within(roleGroup()!).getByRole('radio', { name: 'その他' })).toBeChecked()
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'ソフトドリンク' }))
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries._method, entries.parent_id, entries.role]).toEqual(['PUT', '', 'soft_drink'])
+  })
+
+  test('TC-310-07: 根の編集で役割を「なし」に変えて送ると、役割を送らない(API は役割を null にする)', async () => {
+    await openEdit(OTHER_ROOT)
+    const sent = captureSave('put', () => jsonResponse(saved({ ...OTHER_ROOT, role: null }), 200))
+
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'なし' }))
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries.parent_id, 'role' in entries]).toEqual(['', false])
+  })
+
+  test('TC-310-08: 根以外の編集では、役割の欄も「親なし」も出さず、役割を送らない', async () => {
+    await openEdit()
+    const sent = captureSave('put', () => jsonResponse(saved(GIN), 200))
+
+    expect(roleGroup()).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: '親なし(根のノードを作る)' })).not.toBeInTheDocument()
+    submit()
+
+    await screen.findByRole('status')
+    expect(sent()!.has('role')).toBe(false)
+  })
+
+  test('TC-310-09: 根の編集にも「親なし」は出さない(親は「(根のノード)」と出すだけ)', async () => {
+    await openEdit(OTHER_ROOT)
+
+    expect(screen.getByText('(根のノード)')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: '親なし(根のノードを作る)' })).not.toBeInTheDocument()
+  })
+
+  test('TC-310-10: 役割の 422 は、役割の欄の下に出し、送信の下には重ねない', async () => {
+    await openEdit(OTHER_ROOT)
+    captureSave('put', () => jsonResponse({ message: 'invalid', errors: { role: ['役割は根にだけ入れられます'] } }, 422))
+
+    submit()
+
+    const alert = await screen.findByRole('alert')
+    expect(roleGroup()).toHaveAccessibleDescription('役割は根にだけ入れられます')
+    expect(alert).not.toHaveTextContent('役割は根にだけ入れられます')
+  })
+})

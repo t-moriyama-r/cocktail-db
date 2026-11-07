@@ -8,20 +8,13 @@ import InlineApiView from '../components/ApiView/InlineApiView'
 import CategoryTree from '../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../components/CategoryTree/CategoryTree.types'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
+import { ROLE_LABEL } from '../features/admin-categories/categoryRole'
 import { readCategoryTreeNotice } from '../features/admin-categories/categoryTreeNotice'
 import styles from './AdminCategoryTree.module.css'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
-type CategoryRole = components['schemas']['CategoryRole']
 
 const fetchCategoryTree = () => api.GET('/admin/categories')
-
-/** 根の役割の出し方。役割の無い根(null)は旧の種別 1〜3(蒸留酒・醸造酒・混成酒) */
-const ROLE_LABEL: Record<CategoryRole | 'none', string> = {
-  none: 'なし',
-  soft_drink: 'ソフトドリンク',
-  other: 'その他',
-}
 
 /**
  * 管理画面のカテゴリ木(/admin/categories。#123)。木の部品(#297)の単一選択のモードで、木全体を出す。
@@ -31,6 +24,7 @@ const ROLE_LABEL: Record<CategoryRole | 'none', string> = {
  * - ノードの行には、名前・英名(名前の後ろに括弧で)・根なら役割・メジャーかを出す
  * - 開閉・名前での絞り込み(当たったノードの祖先も出す)は木の部品がする
  * - ノードを選ぶと、そのノードの編集フォーム(/admin/categories/:id。#308)を開く。新規は木の上の「新規」から開く
+ *   (新規のフォームで「親なし」を選ぶと根を作れる。#310)
  * - ノードを保存してこの画面へ戻ったときは、保存したこと(と保存の後の警告)を木の上に出す
  */
 export default function AdminCategoryTree() {
