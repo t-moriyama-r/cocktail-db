@@ -109,7 +109,9 @@ const IMAGE_PATH = '/detail/cocktail/3'
 test('TC-110-10: 画像のあるカクテルを開くと、画像を /storage/<ファイル名> から読み込み、その下に出典を出す', async ({ page }) => {
   await page.goto(IMAGE_PATH)
 
-  const image = page.getByRole('img', { name: 'モスコミュール' })
+  // 後から読み込まれる同じベースのカクテルの表にも、動画のアイコン(名前「モスコミュールの動画(YouTube)」の img)が出る。
+  // 名前の部分一致だと、表が出た後は 2 つに当たって落ちる(#710)ので、画像の欄の中で名前の完全一致で取る
+  const image = page.getByRole('figure').getByRole('img', { name: 'モスコミュール', exact: true })
   await expect(image).toHaveAttribute('src', '/storage/e2e-vodka.png')
   await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0)
   await expect(page.getByRole('figure').getByText('E2E の出典')).toBeVisible()
