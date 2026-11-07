@@ -64,6 +64,8 @@ npm ci && npx playwright install chromium   # 初回だけ
 npm test                              # php artisan serve を起こして Playwright を流す。起動済みならそれを使う
 ```
 
+- 手元では worker 1 本で流れる(`playwright.config.ts` の `workers`。相手が `php artisan serve` 1 本で、並べると要求が重なってタイムアウトするため。#708)。`--workers` を付けずにそのまま流す。CI は Playwright の既定の本数のまま
+
 - CI は `test.yml` の `e2e` ジョブ。MariaDB を立て、`php artisan migrate --seed --seeder=E2eSeeder` でデータを入れてから流す。E2E が前提にするデータは `E2eSeeder` に足す
 - 失敗したときは、スクリーンショットと trace が `e2e-report` のアーティファクトに残る(`npx playwright show-trace <zip>` で開く)
 - 画面の挙動を変える issue の受け入れ条件は、ここにテストを足して確かめる
