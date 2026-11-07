@@ -132,6 +132,7 @@ jobs:
         if: steps.live.outputs.run
         run: |
           cp -r .ai-dev/.github/scripts "$RUNNER_TEMP/ai-dev"
+          printf 'repo=%s\npr=%s\n' "$REPO" "$PR" > "$RUNNER_TEMP/ai-dev/agent-write.target"
           chmod -R a-w "$RUNNER_TEMP/ai-dev"
 
       # 判断表(docs/judgment-criteria.md)は、PR の head ではなく既定のブランチの版をプロンプトに入れる。
@@ -157,6 +158,9 @@ jobs:
         if: steps.live.outputs.run
         run: |
           bash "$RUNNER_TEMP/ai-dev/trusted-context.sh" "$REPO" "$PR" "$RUNNER_TEMP/ai-context.json"
+          chmod u+w "$RUNNER_TEMP/ai-dev/agent-write.target"
+          jq -r '.item.body // ""' "$RUNNER_TEMP/ai-context.json" | sha256sum | cut -d' ' -f1 | sed 's/^/body_sha=/' >> "$RUNNER_TEMP/ai-dev/agent-write.target"
+          chmod u-w "$RUNNER_TEMP/ai-dev/agent-write.target"
 
       # Edit・Write は作業ディレクトリの中(./**)だけにする(外の ~/.gitconfig などを書き換えさせない)。
       # git の diff・log・show も --output=<ファイル> で外に書けるので、オプションを固定した形だけを渡す(理由は ai-review-loop.yml の resume と同じ)。
@@ -171,7 +175,7 @@ jobs:
             workflows: write
           claude_args: |
             --max-turns 80
-            --allowedTools "Read,Edit(./**),Write(./**),Glob,Grep,Bash(git status:*),Bash(git diff),Bash(git diff --stat),Bash(git diff --name-only),Bash(git diff --check),Bash(git diff --cached),Bash(git diff --cached --stat),Bash(git diff --cached --name-only),Bash(git diff HEAD),Bash(git diff -- *),Bash(git diff --cached -- *),Bash(git diff HEAD -- *),Bash(git log --oneline -30),Bash(git log --oneline -30 -- *),Bash(git log -p -5 -- *),Bash(git show HEAD),Bash(git show --stat HEAD),Bash(git show HEAD -- *),Bash(git add:*),Bash(git commit:*),Bash(git push),Bash(git push origin HEAD),Bash(gh pr diff ${{ env.PR }}),Bash(gh pr diff ${{ env.PR }} --name-only),Bash(gh pr checks ${{ env.PR }}),Bash(gh pr ready ${{ env.PR }}),Bash(gh pr comment ${{ env.PR }} --body:*),Bash(gh pr edit ${{ env.PR }} --body-file:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh pr edit ${{ env.PR }} --add-label needs-manual),Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions),Bash(gh run view:*)"
+            --allowedTools "Read,Edit(./**),Write(./**),Glob,Grep,Bash(git status:*),Bash(git diff),Bash(git diff --stat),Bash(git diff --name-only),Bash(git diff --check),Bash(git diff --cached),Bash(git diff --cached --stat),Bash(git diff --cached --name-only),Bash(git diff HEAD),Bash(git diff -- *),Bash(git diff --cached -- *),Bash(git diff HEAD -- *),Bash(git log --oneline -30),Bash(git log --oneline -30 -- *),Bash(git log -p -5 -- *),Bash(git show HEAD),Bash(git show --stat HEAD),Bash(git show HEAD -- *),Bash(git add:*),Bash(git commit:*),Bash(git push),Bash(git push origin HEAD),Bash(gh pr diff ${{ env.PR }}),Bash(gh pr diff ${{ env.PR }} --name-only),Bash(gh pr checks ${{ env.PR }}),Bash(gh pr ready ${{ env.PR }}),Bash(gh pr comment ${{ env.PR }} --body:*),Bash(bash ${{ runner.temp }}/ai-dev/agent-write.sh:*),Bash(gh pr edit ${{ env.PR }} --add-label needs-human),Bash(gh pr edit ${{ env.PR }} --add-label needs-local),Bash(gh pr edit ${{ env.PR }} --add-label needs-manual),Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions),Bash(gh run view:*)"
           prompt: |
             リポジトリ ${{ github.repository }} の PR #${{ env.PR }} は draft のまま止まっている。実装したエージェントが、ready にする前に途中で落ちたとみられる。
             これを引き継いで仕上げ、ready にしてレビューに回してほしい。今回は ${{ env.ROUND }} 回目の引き継ぎ。
@@ -187,7 +191,7 @@ jobs:
                - PR の本文: 先頭の `Closes #N`、テストケースの表と結果、確かめたこと(コマンドと結果)、証跡(FE・BE のコードを変えたなら、修正前後の比較画像。画面のコードを変えたなら動画も。画面の無い BE は、同じリクエストに対する応答の変化。振る舞いを変えないリファクタなら refactor-evidence の印と静止画 1 枚。文書・テスト・CI の設定だけなら撮らない理由)
             3. 足りないものを埋める。いまのブランチ(PR のブランチ)で直してコミットし、push する(force push はしない)。
                コミットメッセージは `issue-<issue 番号>: 途中で止まった実装を引き継いで仕上げる(<何を>)` で、本文に `Refs #<issue 番号>` を書く。
-               この環境ではテスト(php・npm)を流せないので、テストは書いて CI で確かめる。PR の本文は `gh pr edit ${{ env.PR }} --body-file <ファイル>` で直し、
+               この環境ではテスト(php・npm)を流せないので、テストは書いて CI で確かめる。PR の本文は `bash ${{ runner.temp }}/ai-dev/agent-write.sh body <ファイル>` で直し、
                CI で確かめるものは結果の欄に「CI で確かめる」と書く。前のエージェントが書いたものは、間違っていなければ残す
             4. 仕上がったら `gh pr ready ${{ env.PR }}` で ready にし、
                「<!-- ai-dev:agent --> 途中で止まった draft を引き継いで仕上げた: <したことの要約 1〜3 行>」とコメントしてから、
@@ -237,7 +241,7 @@ jobs:
             使えるコマンドは絞ってある(git は status・diff・log・show・add・commit と、`git push`・`git push origin HEAD`。
             diff・log・show は次の形だけ(`<パス>` は 1 つ以上のパス): `git diff`(後ろに `--stat`・`--name-only`・`--check` のどれか 1 つを付けてよい)・`git diff --cached`(後ろに `--stat`・`--name-only` を付けてよい)・`git diff HEAD`・
             `git diff -- <パス>`・`git diff --cached -- <パス>`・`git diff HEAD -- <パス>`・`git log --oneline -30`・`git log --oneline -30 -- <パス>`・`git log -p -5 -- <パス>`・`git show HEAD`・`git show --stat HEAD`・`git show HEAD -- <パス>`。gh は `gh pr diff ${{ env.PR }}`(`--name-only` も)・`gh pr checks ${{ env.PR }}`・`gh pr ready ${{ env.PR }}` と、PR #${{ env.PR }} の
-            `comment --body`・`edit --body-file`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --add-label needs-manual`・`edit --remove-label ai-in-actions` と、`gh run view`)。この形のまま使う。
+            `comment --body`・`edit --add-label needs-human`・`edit --add-label needs-local`・`edit --add-label needs-manual`・`edit --remove-label ai-in-actions` と、`gh run view`)。この形のまま使う。本文の更新は `bash ${{ runner.temp }}/ai-dev/agent-write.sh body <ファイル>` を使う。
             ファイルを書き換えられるのは作業ディレクトリの中だけ。
             返信・コメントの先頭には <!-- ai-dev:agent --> を付ける。決まりは、リポジトリに CLAUDE.md があればそれに従う。マージはしない。
 
