@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminLoginLinkController;
 use App\Http\Controllers\DetailPageController;
+use App\Http\Controllers\LegacyCardUrlController;
 use App\Http\Controllers\LegacyCategoryUrlController;
 use App\Http\Controllers\SitemapController;
 use Illuminate\Routing\RedirectController;
@@ -32,6 +33,10 @@ Route::get('/Cocktail/admin/{any?}', RedirectController::class)
     ->where('any', '.*')
     ->defaults('destination', '/admin')
     ->defaults('status', 301);
+
+// 旧の SNS カードの URL(/card/{command}/{id})は、同じものの詳細ページへ 301 で移す。カテゴリ・ミドルは上と同じ付け替え(#113)。
+// 知らない command・無い ID・数字でない ID は 404 にするので、形で絞らない。GET だけを受け、クエリは持ち越さない
+Route::get('/card/{command}/{id}', LegacyCardUrlController::class);
 
 // 詳細ページは、SPA の HTML にページごとの title・description・canonical を入れ、無い ID・下書きは 404 で返す(#111)。
 // 数字でない ID は下の SPA へ渡すルートに任せ、画面が 404 の画面を出す
