@@ -277,3 +277,104 @@ expect(screen.getAllByRole('status')).toHaveLength(4)
 await waitFor(() => expect(screen.queryAllByRole('status')).toHaveLength(0))
 expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
 ```
+
+## RC-15: 通信の応答が返ったとき、画面が今もその対象かを確かめる
+
+追加: 2026-11-07 / 出た PR: [#636](https://github.com/t-moriyama-r/cocktail-db/pull/636)・[#638](https://github.com/t-moriyama-r/cocktail-db/pull/638)・[#645](https://github.com/t-moriyama-r/cocktail-db/pull/645)
+
+保存・削除・画像の読み込み・変換の通信は、応答が返るまでに時間がかかる。そのあいだに利用者が別の行を選ぶ・別の画面へ移る・別の画像を選ぶと、遅れて返った応答が、今の画面に古い結果を当てる。入力が消える・前の語の誤りが次の語の欄に出る・作業の途中で一覧へ飛ばされる・古い画像のプレビューが出る、といった壊れ方をする。ふだんは通信が速いので気づきにくい。
+
+- 通信中に押せては困る操作(別の行を選ぶ・もう一度送る)は、`pending` の間は押せなくする
+- 応答を受けて画面を更新する前に、送ったときの対象(選んだ語・ファイル・画面そのもの)が今も同じかを確かめる。違えば何も更新しない。画面が外れた後は `navigate` や `setState` を呼ばない
+- 画面の外にも状態を持つもの(`localStorage` への保存など)は、`await` をはさんで「見る → 書く」をしない。書く直前にもう一度見る
+
+```tsx
+// 悪い: 通信中も別の行を押せる。遅れて返った応答が、後から選んだ語の入力を消す(#638)
+<button type="button" onClick={() => edit(skipWord)}>{skipWord.name}</button>
+
+// 良い: 通信中は押せない(SkipWordSection)。ファイルの読み込みは、今も同じファイルかを確かめてから使う(BrandForm)
+<button type="button" disabled={pending} onClick={() => edit(skipWord)}>{skipWord.name}</button>
+reader.onload = () => {
+  if (selectedFile.current === file && typeof reader.result === 'string') setPreview(reader.result)
+}
+```
+
+## RC-16: 入力を直したら、その欄の前の誤りを消す
+
+追加: 2026-11-07 / 出た PR: [#615](https://github.com/t-moriyama-r/cocktail-db/pull/615)・[#638](https://github.com/t-moriyama-r/cocktail-db/pull/638)
+
+送信して誤りが返った欄(`aria-invalid` と誤りの文)を、利用者が直しても、次に送るまで消えない。直したのに「まだ誤り」と出続け、画面と支援技術が古い誤りを伝え続ける。
+
+- 欄の `onChange` で、その欄の誤りを外す。欄ごとに外すので、ほかの欄の誤りは残す
+- フォームに欄が増えたら、誤りを外す対象にも足す(変数の名前が増えるたびに、外し忘れが出る)
+
+```tsx
+// 悪い: 値を変えるだけで、誤りは次の送信まで残る(#638)
+onChange={(event) => setName(event.target.value)}
+
+// 良い: 欄を直したら、その欄の前の誤りは外す(ParaphraseSection)
+const clearError = (...keys: (keyof FieldErrors)[]) =>
+  setErrors((current) => {
+    const next = { ...current }
+    for (const key of keys) delete next[key]
+    return next
+  })
+```
+
+## RC-17: 401 は「時間をおいて再試行」ではなく、ログインの期限切れとして案内する
+
+追加: 2026-11-07 / 出た PR: [#615](https://github.com/t-moriyama-r/cocktail-db/pull/615)・[#638](https://github.com/t-moriyama-r/cocktail-db/pull/638)
+
+管理画面で、ログインの期限が切れた後の保存・削除は 401 を返す。これを他のエラーと同じ「時間をおいて、もう一度お試しください」で案内すると、何度やっても同じ 401 が返り、利用者はログインし直す必要があることに気づけない。ページを開き直せば管理画面の読み込みがログインの画面へ移すが、入力は消える。
+
+- 管理画面の保存・削除の失敗の文は、`http-error` の `status === 401` を分けて、ログインし直す手順を書く。入力を残す画面では、そのことも書く
+- 新しい管理画面の API 呼び出しを足したら、401 の分岐が文にあるかを確かめる
+
+```ts
+// 悪い: 401 も「時間をおいて」と案内する(#638 の初版)
+return `${action}できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
+
+// 良い: 401 を分ける(adminParaphraseApi.ts)
+if (failure.status === 401) {
+  return `ログインの期限が切れていて${action}できませんでした。ページを開き直して、ログインし直してください。`
+}
+```
+
+## RC-18: E2E が作ったデータは、途中で落ちても・リトライしても残らないようにする
+
+追加: 2026-11-07 / 出た PR: [#615](https://github.com/t-moriyama-r/cocktail-db/pull/615)・[#638](https://github.com/t-moriyama-r/cocktail-db/pull/638)
+
+E2E は、CI で失敗すると 1 回リトライされ、手元の DB にも残る。作ったデータを最後の手順で消す・名前を固定にする、という書き方だと、途中で落ちた回のデータが残り、次の実行が元の失敗とは別の理由(一意制約・同名の行が 2 つ)で落ちる。
+
+- 作るデータの名前は、試行ごとに変わる印(`Date.now()` など)を含める。一覧で探すときは名前の完全一致で選ぶ
+- 後始末は、テストの本文の最後の手順に置かず、`test.afterEach` など、失敗しても動く場所に置く
+- 一意制約のあるデータ(語・名前)を作るテストは、リトライで同じ値を作らないかを、頭の中で 1 回流して確かめる
+
+```ts
+// 悪い: 名前が固定で、保存の後の確認が落ちると削除まで進まない。リトライで 422 になる(#638)
+await save(page, '固定の語')
+await expect(row(page, '固定の語')).toBeVisible()   // ここで落ちると、下の削除に進まない
+await remove(page, '固定の語')
+
+// 良い: 試行ごとに変わる名前にし、後始末は失敗しても動く場所に置く(passkey-management.spec.ts の RUN)
+const RUN = Date.now()
+const name = `TC-313-21 の端末 ${RUN}`
+```
+
+## RC-19: テストは、要素の種類・呼び出しの回数ではなく、役割と見える文字で確かめる
+
+追加: 2026-11-07 / 出た PR: [#615](https://github.com/t-moriyama-r/cocktail-db/pull/615)・[#631](https://github.com/t-moriyama-r/cocktail-db/pull/631)・[#639](https://github.com/t-moriyama-r/cocktail-db/pull/639)
+
+要素の種類(`p`・`tr`)・通信の回数を決め打ちするテストは、見た目も振る舞いも変わらない作り直し(見出しを `span` に変える・通信を 1 回にまとめる)で落ちる。振る舞いを変えないリファクタのたびにテストを直すことになり、リファクタの担保にならない。決まりそのものは `CLAUDE.md` の「モックの範囲と確かめる対象」にある。ここでは、指摘が繰り返し出た書き方を挙げる。
+
+- 要素は `getByRole`(役割と名前)か、見える文字・`aria-label` で探す。`querySelector('p')`・`locator('tbody tr')` のように、タグ名で探さない
+- 通信は、回数の完全一致ではなく、送った先の URL・中身で確かめる(回数が仕様のときだけ回数を確かめる)
+- E2E で行を待つときも、役割(`getByRole('table', { name })` の中の `cell`)で待つ
+
+```ts
+// 悪い: 名前の要素が p でなくなると落ちる(#615)
+rows.map((row) => row.querySelector('p')?.textContent)
+
+// 良い: 見える名前(aria-label)か、役割で見つけた要素の文字を使う
+rows.map((row) => row.getAttribute('aria-label'))
+```
