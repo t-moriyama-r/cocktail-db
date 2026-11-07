@@ -161,9 +161,12 @@ function SaveMessage({ save }: { save: SaveState }) {
         </p>
       )
     case 'http-error':
+      // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
       return (
         <p className={styles.error} role="alert">
-          保存できませんでした(エラー {save.status})。時間をおいて、もう一度お試しください。
+          {save.status === 401
+            ? 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+            : `保存できませんでした(エラー ${save.status})。時間をおいて、もう一度お試しください。`}
         </p>
       )
     case 'network-error':

@@ -368,6 +368,10 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
     case 'http-error':
+      // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
+      if (failure.status === 401) {
+        return 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+      }
       return `保存できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'
