@@ -19,6 +19,7 @@
 | `cocktail_ingredients` | カクテルの材料 | `t_recipies` | — | #22 |
 | `cocktail_aliases` | カクテルの別名 | 無し(新設) | — | #82 |
 | `affiliates` | アフィリエイトの商品 | `affiliates` | 振る(旧は複合キー) | #23 |
+| `affiliate_collect_failures` | 名前で商品を探して失敗したノード・銘柄 | 無し(新設) | — | #695 |
 | `methods` | 技法 | `m_method` | 旧 ID のまま | #23 |
 | `ices` | 氷 | `m_ice` | 旧 ID のまま | #23 |
 | `dictionaries` | 用語辞典(グラスもここ) | `t_dictionary` | 旧 ID のまま | #23 |
@@ -109,7 +110,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `new_table` | `string(64)` | 新しい表の名前 |
 | `new_id` | `unsignedBigInteger` | 新 ID |
 
-- 主キーは (`legacy_table`, `legacy_id`)。インデックスは (`new_table`, `new_id`)(新から旧へ戻す検証 #35 と、旧 URL の転送に使う)
+- 主キーは (`legacy_table`, `legacy_id`)。インデックスは (`new_table`, `new_id`)(新から旧へ戻す検証 #35 に使う)
+- 旧のカテゴリ・ミドルの詳細・SNS カードの URL の転送(#78・#113。`docs/decisions/legacy-urls.md`)は、旧の表と旧 ID から引くので主キーを使う
 - 外部キーは張らない(指す先の表が行ごとに違うため)
 
 ## 銘柄・カクテル・材料
@@ -251,6 +253,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `amazon_detail_url` | `text` | ○ | | `amazon_detail_url` |
 | `amazon_search_url` | `text` | ○ | | `amazon_search_url` |
 | `amazon_fetched_at` | `dateTime` | ○ | Amazon の値を取った時刻(#247) | `updated_at`(#32) |
+| `amazon_searched_at` | `dateTime` | ○ | Amazon を最後に名前で探した時刻。ID が無ければ、ここから 7 日で探し直す(#696)。null はまだ名前で探していない(移した行・取り直しで ID を消した行) | 無し |
+| `amazon_not_found_reason` | `string(32)` | ○ | Amazon で取れなかった理由(`App\Enums\AffiliateNotFoundReason`: `no_results`・`no_price`・`gone`・`api_error`)。取れたら null(#696) | 無し |
 | `rakuten_item_code` | `string(255)` | ○ | 楽天の `itemCode`(#247) | `rakuten_detail_url`(アフィリエイトの転送の URL)の `pc=` に入った商品のページ `item.rakuten.co.jp/<店舗>/<管理番号>/` から `<店舗>:<管理番号>` を取る(#32。旧の 450 行すべてで取れた。API の `itemCode` と同じ値かは、取り直し(#249)で呼ぶまで確かめていない) |
 | `rakuten_title` | `text` | ○ | | `rakuten_title` |
 | `rakuten_price` | `unsignedInteger` | ○ | | `rakuten_price` |
@@ -258,6 +262,8 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `rakuten_detail_url` | `text` | ○ | | `rakuten_detail_url` |
 | `rakuten_search_url` | `text` | ○ | | `rakuten_search_url` |
 | `rakuten_fetched_at` | `dateTime` | ○ | 楽天の値を取った時刻(#247) | `updated_at`(#32) |
+| `rakuten_searched_at` | `dateTime` | ○ | 楽天を最後に名前で探した時刻(`amazon_searched_at` と同じ。#696) | 無し |
+| `rakuten_not_found_reason` | `string(32)` | ○ | 楽天で取れなかった理由(`no_results`・`gone`・`sold_out`・`api_error`)。取れたら null(#696) | 無し |
 | `human_title` | `string(256)` | ○ | 手で入れた値。期限なしで出す(#247) | `human_title` |
 | `human_price` | `unsignedInteger` | ○ | | `human_price` |
 | `human_image_url` | `text` | ○ | | `human_image_url` |
@@ -272,6 +278,24 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 - 旧の `name`(ノード・銘柄の名前の写し。646 行すべてで名前と一致した)は移さない。検索の言葉は、そのときのノード・銘柄の名前から作る(名前を変えたときに食い違わないように)
 - 変わる値(価格・画像の URL・商品名)を出してよい期限、価格の横に出す文言、取り直す間隔は #247(`docs/decisions/affiliate-freshness.md`)で決める。この表は、その判断に要る時刻の列だけを持つ
 - 楽天の API で取れる値は `docs/rakuten-api.md`(#246 で書く)、Amazon は [amazon-creators-api.md](amazon-creators-api.md)(#134)
+
+### `affiliate_collect_failures`(旧には無い。#695)
+
+`affiliates:collect --new`(#248)が名前で探して API の失敗になったノード・銘柄。失敗した件は `affiliates` の行を作らないので、そのままだと毎回同じ件が先頭に選ばれる。ここに残し、`retry_after` までは選ばない(決まりは [affiliate-freshness.md](decisions/affiliate-freshness.md) の 7)。ノード 1 つ、または銘柄 1 つにつき 1 行。
+
+| 列 | 型 | null | 中身 |
+|---|---|---|---|
+| `id` | `id()` | | |
+| `category_id` | `foreignId` → `categories` | | ノード。銘柄の行は銘柄の所属ノード(`affiliates` と同じ) |
+| `brand_id` | `foreignId` → `brands` | ○ | 銘柄。ノードの行は null |
+| `brand_key` | `unsignedBigInteger`(生成列) | | `IFNULL(brand_id, 0)` の `storedAs`。一意性の制約にだけ使う(`affiliates` と同じ) |
+| `name` | `string(255)` | | 失敗したときに探した名前。今の名前と違えば、`retry_after` を待たずにまた選ぶ |
+| `failure_count` | `unsignedInteger` | | 同じ名前で続けて失敗した回数 |
+| `last_message` | `text` | ○ | 最後の失敗の理由(API の失敗の文言) |
+| `retry_after` | `dateTime` | | この時刻まで選ばない |
+| `created_at`・`updated_at` | `timestamps()` | ○ | |
+
+インデックス: (`category_id`, `brand_key`) に unique・`retry_after`。保存できたら行を消す。
 
 ## 辞書・設定・ユーザー
 
@@ -401,6 +425,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `cocktail_ingredients.category_id` → `categories`・`brand_id` → `brands` | RESTRICT |
 | `affiliates.category_id` → `categories` | RESTRICT |
 | `affiliates.brand_id` → `brands` | CASCADE(銘柄のアフィリエイトは銘柄に付いたもの) |
+| `affiliate_collect_failures.category_id` → `categories`・`brand_id` → `brands` | CASCADE(ノード・銘柄を消すと、失敗の記録も要らない。カテゴリを消させない理由には入れない) |
 | `dictionaries.dictionary_category_id` → `dictionary_categories` | RESTRICT |
 | `methods.dictionary_id` → `dictionaries` | RESTRICT |
 | `settings.updated_by` → `users` | SET NULL |
@@ -415,6 +440,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 **子ノード・銘柄・材料・アフィリエイトのどれかがあれば消させない**(#19 のコメントで決めた)。`CategoryTree::deleteLeaf`(#91)が先に調べて、どれがあるかを理由として返す(管理画面に出す。#121)。消せるのは葉だけで、部分木をまとめて消す操作は作らない。
 
 - そのほかに、**カクテルのベース(`cocktails.base_category_id`)に使われているノード**も消させない。外部キーの RESTRICT でも消せないが、理由を画面に出せるよう `deleteLeaf` の調べる対象に足す(人に確認: 下の 2)
+- 管理画面の削除(`DELETE /api/admin/categories/{id}`)は、ほかのカクテル(説明・補足)・ノード・技法・銘柄・用語の説明文から `@n<ID>@` で参照されているノードも消させない(#629。カクテルの削除と同じ作り)。説明文の参照は外部キーではないので `deleteLeaf` は調べず、`AdminCategoryWriter` が調べて、参照している側の種類と行を理由として返す
 - 有名な銘柄(`famous_brand_id`)は、消すノード自身の部分木の銘柄を指す。銘柄があれば消させないので、有名な銘柄を指したままのノードが消えることは無い
 
 ## 検索
@@ -468,7 +494,7 @@ LIMIT 1;
 
 ## 材料とベースに使ってよいノード
 
-材料(`cocktail_ingredients.category_id`)とベース(`cocktails.base_category_id`)には、**根以外のどのノードでも使ってよい**。根は使わない。保存のときの検証で止め、`data:verify`(#157)でも確かめる(#153)。
+材料(`cocktail_ingredients.category_id`)とベース(`cocktails.base_category_id`)には、**根以外のどのノードでも使ってよい**。根は使わない。保存のときの検証で止め、`data:verify`(#157)でも確かめる(#153)。材料・ベースが指しているノードを、管理 API の親の付け替えで根へ移すのも 422 で止める(#122)。
 
 旧の材料とベースは `m_category`(2 段目)か `m_middle`(3 段目)を指し、種別を指すことはできなかった。移行では、根以外のノードだけを指すことになる(旧のベース 5,707 件はすべて `m_category` にある)。
 

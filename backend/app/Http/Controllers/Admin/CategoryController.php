@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\CategoryDeleteBlocker;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SaveCategoryRequest;
 use App\Http\Resources\Admin\CategoryResource;
@@ -12,6 +11,7 @@ use App\Services\AdminCategoryWriter;
 use App\Services\CategoryNotDeletableException;
 use App\Services\CategoryTree;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 
@@ -27,6 +27,39 @@ class CategoryController extends Controller
     public function index(CategoryTree $tree): AnonymousResourceCollection
     {
         return CategoryTreeItemResource::collection($tree->forest());
+    }
+
+    /**
+     * 名前・英名の重なりの問い合わせ(#673)。ノードの編集画面で、名前・英名を入れたそばに「同じ名前が存在しています」を出すため。
+     * 旧 DetailEditController@duplicate_check のカテゴリ・ミドルの分の置き換え。
+     *
+     * 比べる相手は parent_id の子(送らないか空なら根どうし)のうち、exclude_id のノード(編集しているノード)のほか。
+     * 比べ方は保存の API と同じ(名前は検索用の名前で、英名はそのまま)。名前・英名は、空なら比べない(どちらか 1 つは要る)。
+     * 保存では名前の重なりは 422・英名の重なりは warnings だが、ここではどちらも warnings で返す(保存は止めない問い合わせのため)。
+     *
+     * @return array{warnings: list<array{field: string, message: string}>}
+     */
+    public function duplicates(Request $request, AdminCategoryWriter $writer): array
+    {
+        $request->validate([
+            // 親のノードの ID。根どうしで比べるときは送らないか空にする
+            'parent_id' => ['bail', 'nullable', 'integer', 'min:1', 'exists:categories,id'],
+            // 名前。英名と、どちらか 1 つは要る
+            'name' => ['required_without:name_eng', 'nullable', 'string', 'max:255'],
+            // 英名。名前と、どちらか 1 つは要る
+            'name_eng' => ['required_without:name', 'nullable', 'string', 'max:255'],
+            // 編集しているノードの ID。新規なら送らない
+            'exclude_id' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $parent = $request->filled('parent_id') ? Category::query()->findOrFail($request->integer('parent_id')) : null;
+
+        return ['warnings' => $writer->nameDuplicates(
+            $parent,
+            $request->filled('name') ? $request->string('name')->toString() : null,
+            $request->filled('name_eng') ? $request->string('name_eng')->toString() : null,
+            $request->filled('exclude_id') ? $request->integer('exclude_id') : null,
+        )];
     }
 
     /**
@@ -51,7 +84,8 @@ class CategoryController extends Controller
     }
 
     /**
-     * ノードを書き換える。親を変えたときは部分木ごと移す。
+     * ノードを書き換える。親を変えたときは部分木ごと移す(#122)。自分・子孫の下へ移す、役割を持つ根をほかのノードの下へ移す、
+     * カクテルの材料・ベースが指すノードを根へ移す、祖先の有名な銘柄が部分木の外になる、のどれかなら 422 で理由を返す。
      * 英名が同じ親の下のほかのノードと同じなら、保存したうえで warnings に入れて返す。
      */
     public function update(SaveCategoryRequest $request, AdminCategoryWriter $writer, int $category): CategoryResource
@@ -63,6 +97,8 @@ class CategoryController extends Controller
 
     /**
      * ノードを消す。子・銘柄・材料・ベース・アフィリエイトのどれかがあれば消さず、409 で理由をすべて返す。
+     *
+     * ほかのノード・カクテル・技法・銘柄・用語の説明文から `@n<ID>@` で参照されているときも消さず、409 で理由と参照している行を返す(#629)。
      */
     public function destroy(AdminCategoryWriter $writer, int $category): Response|JsonResponse
     {
@@ -71,12 +107,10 @@ class CategoryController extends Controller
         } catch (CategoryNotDeletableException $e) {
             return response()->json([
                 'message' => 'このノードは消せません',
-                // 消せない理由。code は children(子のノード)・brands(銘柄)・ingredients(材料)・base_cocktails(ベース)・affiliates(アフィリエイト)
-                /** @var list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates', message: string}> */
-                'reasons' => array_map(
-                    fn (CategoryDeleteBlocker $blocker): array => ['code' => $blocker->value, 'message' => $blocker->message()],
-                    $e->blockers,
-                ),
+                // 消せない理由。code は children(子のノード)・brands(銘柄)・ingredients(材料)・base_cocktails(ベース)・affiliates(アフィリエイト)と、
+                // 説明文から参照している側の種類(referenced_by_cocktail・node・method・brand・dictionary)。referrers は説明文からの参照の理由にだけ付く、参照している行(ID の順)
+                /** @var list<array{code: 'children'|'brands'|'ingredients'|'base_cocktails'|'affiliates'|'referenced_by_cocktail'|'referenced_by_node'|'referenced_by_method'|'referenced_by_brand'|'referenced_by_dictionary', message: string, referrers?: list<array{id: int, name: string}>}> */
+                'reasons' => $e->reasons(),
             ], 409);
         }
 

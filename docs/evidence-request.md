@@ -2,14 +2,35 @@
 
 証跡(CLAUDE.md の「ブランチ・コミット・PR」の 5)を撮れない環境のエージェントが、撮影を頼むコメント(先頭が `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->`)に、何を撮るかを機械が読める形で書く決まり(#599)。
 
-撮る側(手元の見回りと、これから足す Actions の撮影。#487)が、コメントの文章を読み解かなくても、同じ画面・同じリクエストを同じデータで撮れるようにするため。
-
-Actions で撮るときは、`evidence-capture.yml` を PR の番号で `workflow_dispatch` する(#600)。信頼する人が書いたいちばん新しい頼むコメント(`evidence-pick.sh`)のブロックを読み、修正前(PR の向き先のブランチの今の先頭か `before`)と修正後(PR の head か `after`)を `APP_DEBUG=false` で起こして撮り、`evidence` ブランチの `pr-<番号>/<修正後の短い SHA>/` に置く(ファイルの名前は `<連番 2 桁>-<kind>[-<幅>]-<before|after|compare>.<png|mp4|gif>` と `manifest.json`)。撮った画面・応答・コマンドの結果にランナーのパス・ホスト名が出ていたら、置かずに落ちる(`evidence-leak-check.sh`)。PR 本文への貼り付けと `needs-local` の付け外しは、まだしない(#487 の別の issue)。
+撮る側(Actions の `evidence-capture.yml` と、撮れなかったものを拾う手元の見回り。#487)が、コメントの文章を読み解かなくても、同じ画面・同じリクエストを同じデータで撮れるようにするため。撮り方と置き方は下の「Actions で撮る」。
 
 - 頼むコメントには、` ```evidence ` のコードブロックを **1 つだけ** 置き、中身を YAML で書く。撮るものが複数あるときは、1 つのブロックの `items` に並べる
 - ブロックの外には、今までどおり人が読む説明(引き継いでしたこと・何を見てほしいか)を書く。ブロックには撮るものだけを書く
 - 書いたら、`bash .github/scripts/evidence-request.sh <本文のファイル>` で確かめてから投稿する。必須の項目が足りないと、足りないところを出して 1 で終わる。通れば、既定の値を埋めた中身を JSON で出す
 - `evidence-request.sh` は YAML を Ruby の標準の Psych で読むので、`ruby` が要る(GitHub のランナーには入っている)。テストは `.github/scripts/tests/evidence-request.test.sh` で、この文書の例も取り出して流す(例を変えたら、テストも通ることを確かめる)
+
+## Actions で撮る
+
+頼むコメントを書いて `needs-local` を付けると、`evidence-capture.yml` が撮って PR 本文に貼る(#600・#601)。
+
+```mermaid
+flowchart LR
+  A[頼むコメント<br>needs-local] --> B[gate<br>撮ってよいか]
+  B -->|よい| C[修正前後を<br>起こして撮る]
+  B -->|だめ| X[撮らない]
+  C -->|撮れた| D[evidence<br>ブランチに置く]
+  D --> E[本文に貼り<br>ラベルを外す]
+  C -->|撮れない| F[コメントして<br>手元に残す]
+```
+
+- **起こし方**: PR に `needs-local` が付いたとき(`pull_request_target` の `labeled`)と、PR の番号での `workflow_dispatch`。`GITHUB_TOKEN` で付けたラベルではワークフローが起きないので、Actions の中から頼んだときは `workflow_dispatch` で起こす。`ai-review-loop.yml`・`ai-draft-sweep.yml` では、Claude Code を動かさない後ろのジョブ(`actions: write` を持つのはこのジョブだけ。RC-02)が、この回に `needs-local` が付き、いちばん新しい頼むコメントが `kind=evidence` の PR で起こす(`evidence-kick.sh`。決め方はラベルで起きた回と同じ `evidence-target.sh --labeled`。#686)
+- **撮らない PR**(`evidence-target.sh`): 開いていない PR・フォークからの PR・昇格の PR(`staging`・`release` 向け)。ラベルで起きた回は、いまも `needs-local` が付いていて、信頼する人・bot のいちばん新しい手元に頼むコメント(`<!-- ai-dev:needs-local kind=… -->`)が `kind=evidence` のときだけ撮る(`push`・`other` の頼みでは撮らない)
+- **信頼しない人の書き込み**: 撮る前に `untrusted-hold.sh` で、PR と閉じる issue に、オーナー・コラボレーター・決まった bot 以外の人が書いたものが無いかを見る。あれば撮らず、URL を並べたコメントと `needs-human` を付ける(CLAUDE.md の手順 8。撮る側はブロックの `run` をシェルで流すため)。確かめるための読み取り(PR・閉じる issue・コメント)に失敗したとき(`untrusted-hold.sh` の終わりのコード 3)も撮らず、下の「撮れなかったとき」と同じく、`needs-local` を残して読めなかったことをコメントする(#688)
+- **撮るもの**: 信頼する人が書いたいちばん新しい頼むコメント(`evidence-pick.sh`)のブロック。修正前(PR の向き先のブランチの今の先頭か `before`)と修正後(PR の head か `after`)を `APP_DEBUG=false` で起こして撮る。画面は、撮る前に修正後の画面の HTTP の状態を見て、5xx なら撮らない
+- **置き場所**: 証跡だけの孤立したブランチ `evidence`(保護しない)の `pr-<番号>/<修正後の短い SHA>/`。ファイルの名前は `<連番 2 桁>-<kind>[-<幅>]-<before|after|compare>.<png|mp4|gif>` と `manifest.json`。同じ SHA で撮り直すと、そのディレクトリを入れ替える。撮った画面・応答・コマンドの結果にランナーのパス・ホスト名が出ていたら、置かずに落ちる(`evidence-leak-check.sh`・`evidence-publish.sh`)
+- **貼り方**(`evidence-report.sh`): 本文の「## 証跡」の見出しのすぐ下に、`<!-- ai-dev:evidence-capture start -->` 〜 `<!-- ai-dev:evidence-capture end -->` の塊を入れる(撮り直したら塊を入れ替える。見出しが無ければ末尾に足す)。塊には、項目ごとの比較画像(`raw.githubusercontent.com` の `evidence` ブランチの URL の `<img>`)・修正前後の静止画・mp4 へのリンク・GIF・撮った幅(`<数字>px`)を書く(`evidence-gate.sh` が数える形)。貼ったら `needs-local` を外し、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:local-done kind=evidence -->` のコメントに、撮った回と `evidence-gate.sh` の結果を書く
+- **撮れなかったとき**(信頼の確認で読めなかった・指定が無い・形の誤り・アプリの起動やデータの投入の失敗・修正後の画面がエラー・置けなかった): `needs-local` を残し(外されていれば付け直し)、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` のコメントに、どこで止まったかと撮った回の URL を書く。手元の見回りがそれを拾って撮る
+- 見た目の案を人に選んでもらう PR の撮影(案ごとに手元で一時的に書き換えて撮るもの)は、今までどおり手元で撮る(#487 の対象外)
 
 ## 形
 

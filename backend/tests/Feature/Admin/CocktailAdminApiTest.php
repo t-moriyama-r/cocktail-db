@@ -512,6 +512,17 @@ it('TC-291-15: 選択肢は、技法・グラス(分類「グラス」の用語�
         ]);
 });
 
+it('TC-667-01: 選択肢の id は、技法・グラス・氷のどれも整数で返す(文字の数字ではない)', function () {
+    $f = cocktailAdminFixture();
+
+    $response = $this->getJson('/api/admin/cocktail-form-options')->assertOk();
+
+    // toBe は型まで比べる(=== )ので、"1" のような文字の id では落ちる
+    expect($response->json('methods.*.id'))->toBe([$f['methods'][0]->id, $f['methods'][1]->id])
+        ->and($response->json('glasses.*.id'))->toBe([$f['glasses'][0]->id, $f['glasses'][1]->id])
+        ->and($response->json('ices.*.id'))->toBe([$f['ices'][0]->id, $f['ices'][1]->id]);
+});
+
 it('TC-292-01: 材料は 2 件から 20 件まで。0 件・1 件・21 件は 422 で保存しない', function (int $count, bool $ok) {
     $f = cocktailAdminFixture();
     $rows = array_map(fn (int $i): array => cocktailAdminIngredient($f['nodes']['ジン'], (string) ($i + 1)), range(0, max($count - 1, 0)));

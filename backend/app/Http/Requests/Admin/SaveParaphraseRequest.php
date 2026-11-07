@@ -37,6 +37,22 @@ class SaveParaphraseRequest extends FormRequest
     }
 
     /**
+     * 検証のメッセージに出す欄の名前(#692。docs/decisions/validation-messages.md)。画面の欄の名前に合わせる(command・note は画面の欄の名前もこのまま)。
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'name' => '変換前',
+            'converted' => '変換後',
+            'middle' => 'ミドル',
+            'command' => 'command',
+            'note' => 'note',
+        ];
+    }
+
+    /**
      * @return list<callable(Validator): void>
      */
     public function after(ParaphraseTargets $targets): array

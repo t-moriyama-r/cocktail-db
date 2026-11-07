@@ -86,3 +86,60 @@ test('TC-112-14: 詳細ページの HTML(JS を動かす前)に OGP・Twitter �
   expect(imageResponse.status()).toBe(200)
   expect(imageResponse.headers()['content-type']).toBe('image/png')
 })
+
+// 旧のカテゴリ・ミドルの詳細の URL(#78): サーバーが legacy_id_maps で引いた新しいノードの詳細へ 301 で移す。
+// E2eSeeder の対応は、旧のカテゴリ 9001 → ジン、旧のミドル 9101 → ドライジン。ノードの ID には頼らず、名前で確かめる
+for (const { path, heading } of [
+  { path: '/detail/category/9001', heading: 'ジン(ジン)' },
+  { path: '/detail/middle/9101', heading: 'ドライジン(ドライジン)' },
+]) {
+  test(`TC-78-10: 旧の ${path} を開くと、/category/<新しい ID> の「${heading}」の画面に移る`, async ({ page, request }) => {
+    const response = await request.get(path, { maxRedirects: 0 })
+    expect(response.status()).toBe(301)
+
+    await page.goto(path)
+    await expect(page).toHaveURL(/\/category\/[0-9]+$/)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading)
+  })
+}
+
+test('TC-78-11: 対応表に無い旧のカテゴリの URL は、移らずに 404 の状態で 404 の画面が出る', async ({ page }) => {
+  const response = await page.goto('/detail/category/999999')
+  expect(response?.status()).toBe(404)
+  await expect(page).toHaveURL(/\/detail\/category\/999999$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
+})
+
+// 旧の SNS カードの URL(#113): サーバーが同じものの詳細ページへ 301 で移す。カテゴリ・ミドルは #78 と同じ付け替え。
+// E2eSeeder のジントニック(カクテル 1)・ビーフィーター 40度(銘柄 1)・旧のミドル 9101 → ドライジン を使う
+for (const { path, url, heading } of [
+  { path: '/card/cocktail/1', url: /\/detail\/cocktail\/1$/, heading: 'ジントニック(Gin and Tonic)' },
+  { path: '/card/Brand/1', url: /\/detail\/brand\/1$/, heading: 'ビーフィーター 40度(Beefeater 40)' },
+  { path: '/card/middle/9101', url: /\/category\/[0-9]+$/, heading: 'ドライジン(ドライジン)' },
+]) {
+  test(`TC-113-13: 旧の ${path} を開くと、詳細の「${heading}」の画面に移る`, async ({ page, request }) => {
+    const response = await request.get(path, { maxRedirects: 0 })
+    expect(response.status()).toBe(301)
+
+    await page.goto(path)
+    await expect(page).toHaveURL(url)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading)
+  })
+}
+
+test('TC-113-14: 下書きのカクテルの旧 SNS カードの URL は、移らずに 404 の状態で 404 の画面が出る', async ({ page }) => {
+  const response = await page.goto('/card/cocktail/2')
+  expect(response?.status()).toBe(404)
+  await expect(page).toHaveURL(/\/card\/cocktail\/2$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ページが見つかりません')
+})
+
+// SNS のクローラーは 301 をたどって、移った先の HTML(JS を動かす前)の OGP を読む
+test('TC-113-15: 旧の SNS カードの URL をたどると、移った先の HTML に OGP が入っている', async ({ request }) => {
+  const response = await request.get('/card/Cocktail/1')
+  expect(response.status()).toBe(200)
+  expect(new URL(response.url()).pathname).toBe('/detail/cocktail/1')
+  const html = await response.text()
+  expect(html).toContain('<meta property="og:title" content="ジントニック | 宅飲みカクテルデータベース">')
+  expect(html).toMatch(/<meta property="og:url" content="[^"]*\/detail\/cocktail\/1">/)
+})

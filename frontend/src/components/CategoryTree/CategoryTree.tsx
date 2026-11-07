@@ -15,6 +15,11 @@ type Props = {
   label: string
   /** ノードごとの見え方(見出しにする・クラスを足す・注記を添える)。省くとすべて既定 */
   appearance?: CategoryTreeAppearance
+  /**
+   * 最初から見えるようにしておくノードの ID。根に加えてその祖先を開いた状態で出す(例: 編集で開いたときの今の所属。#654)。
+   * 省くか null なら、根だけを開く
+   */
+  revealId?: number | null
 }
 
 /**
@@ -24,12 +29,23 @@ type Props = {
  * 木は 600 ノードほどあるので、畳んだノードの子は描かない。絞り込んでいる間は、
  * 当たったノードが見えるよう祖先を開き直す(開閉はそのあとも手で変えられる)。
  */
-export default function CategoryTree({ nodes, selection, onNameClick, label, appearance = NO_APPEARANCE }: Props) {
-  const rootIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes])
+export default function CategoryTree({
+  nodes,
+  selection,
+  onNameClick,
+  label,
+  appearance = NO_APPEARANCE,
+  revealId = null,
+}: Props) {
+  const defaultOpenIds = useMemo(() => {
+    const ids = new Set(nodes.map((node) => node.id))
+    for (const id of revealId === null ? [] : (ancestorIdsOf(nodes, revealId) ?? [])) ids.add(id)
+    return ids
+  }, [nodes, revealId])
   const [query, setQuery] = useState('')
-  // null は「まだ開閉を変えていない」。既定の開き方を根から導くので、nodes を後から受け取っても根が開く
+  // null は「まだ開閉を変えていない」。既定の開き方を根(と revealId の祖先)から導くので、nodes を後から受け取っても開く
   const [changedOpenIds, setOpenIds] = useState<ReadonlySet<number> | null>(null)
-  const openIds = changedOpenIds ?? rootIds
+  const openIds = changedOpenIds ?? defaultOpenIds
   const filter = useMemo(() => filterCategoryTree(nodes, query), [nodes, query])
   const radioName = useId()
 
@@ -39,7 +55,7 @@ export default function CategoryTree({ nodes, selection, onNameClick, label, app
   }
   const toggleOpen = (id: number) => {
     setOpenIds((current) => {
-      const next = new Set(current ?? rootIds)
+      const next = new Set(current ?? defaultOpenIds)
       if (!next.delete(id)) next.add(id)
       return next
     })
@@ -89,3 +105,13 @@ export default function CategoryTree({ nodes, selection, onNameClick, label, app
 }
 
 const NO_APPEARANCE: CategoryTreeAppearance = {}
+
+/** id のノードの祖先の ID(根から順。ノード自身は含めない)。木に無ければ null */
+function ancestorIdsOf(nodes: readonly CategoryTreeNode[], id: number): number[] | null {
+  for (const node of nodes) {
+    if (node.id === id) return []
+    const found = ancestorIdsOf(node.children, id)
+    if (found !== null) return [node.id, ...found]
+  }
+  return null
+}

@@ -137,6 +137,9 @@ it('TC-23-10: affiliates の列の型・null 可が設計どおり(#247 の時�
         'amazon_detail_url' => ['text', true, 'NULL'],
         'amazon_search_url' => ['text', true, 'NULL'],
         'amazon_fetched_at' => ['datetime', true, 'NULL'],
+        // 名前で探した時刻と、見つからなかった理由(#696)
+        'amazon_searched_at' => ['datetime', true, 'NULL'],
+        'amazon_not_found_reason' => ['varchar(32)', true, 'NULL'],
         'rakuten_item_code' => ['varchar(255)', true, 'NULL'],
         'rakuten_title' => ['text', true, 'NULL'],
         'rakuten_price' => ['int(10) unsigned', true, 'NULL'],
@@ -144,6 +147,8 @@ it('TC-23-10: affiliates の列の型・null 可が設計どおり(#247 の時�
         'rakuten_detail_url' => ['text', true, 'NULL'],
         'rakuten_search_url' => ['text', true, 'NULL'],
         'rakuten_fetched_at' => ['datetime', true, 'NULL'],
+        'rakuten_searched_at' => ['datetime', true, 'NULL'],
+        'rakuten_not_found_reason' => ['varchar(32)', true, 'NULL'],
         'human_title' => ['varchar(256)', true, 'NULL'],
         'human_price' => ['int(10) unsigned', true, 'NULL'],
         'human_image_url' => ['text', true, 'NULL'],

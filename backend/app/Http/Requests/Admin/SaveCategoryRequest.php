@@ -6,6 +6,8 @@ use App\Enums\CategoryRole;
 use App\Http\Requests\Admin\Concerns\AdminFormInput;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Cocktail;
+use App\Models\CocktailIngredient;
 use App\Services\AdminImageStore;
 use App\Services\CategoryTree;
 use Illuminate\Foundation\Http\FormRequest;
@@ -91,6 +93,38 @@ class SaveCategoryRequest extends FormRequest
             'brand_image_txt' => ['nullable', 'string', 'max:255'],
             'brand_image_url' => ['nullable', 'url:http,https', 'max:2048'],
             'brand_image' => AdminImageStore::fileRules(),
+        ];
+    }
+
+    /**
+     * 検証のメッセージに出す欄の名前(#692。docs/decisions/validation-messages.md)。画面の欄の名前に合わせる。
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'parent_id' => '親',
+            'role' => '役割',
+            'name' => '名前',
+            'name_eng' => '英名',
+            'description' => '説明',
+            'is_major' => 'メジャー',
+            'is_like' => 'お気に入り',
+            'is_powder' => '粉末',
+            ...$this->youtubeAttributes(),
+            ...$this->imageAttributes(),
+            'famous_brand_id' => '有名な銘柄',
+            'brand_name' => '有名な銘柄の名前',
+            'brand_name_eng' => '有名な銘柄の英名',
+            'brand_strength' => '有名な銘柄の度数',
+            'brand_description' => '有名な銘柄の説明',
+            'brand_is_major' => '有名な銘柄のメジャー',
+            'brand_is_like' => '有名な銘柄のお気に入り',
+            ...$this->youtubeAttributes('brand_', '有名な銘柄の'),
+            'brand_image_txt' => '有名な銘柄のリンクテキスト',
+            'brand_image_url' => '有名な銘柄のリンク URL',
+            'brand_image' => '有名な銘柄の画像',
         ];
     }
 
@@ -181,6 +215,17 @@ class SaveCategoryRequest extends FormRequest
                 $validator->errors()->add('parent_id', '自分自身と、自分より下のノードは親にできません');
             } elseif ($node->role !== null) {
                 $validator->errors()->add('parent_id', '役割を持つ根は、ほかのノードの下へ移せません');
+            }
+        }
+
+        // 根へ移すノードを、カクテルの材料・ベースが直接指しているなら止める(根は材料・ベースに使えない。
+        // docs/decisions/category-root-role.md の決まったこと 4。#122)。子孫は根にならないので見ない
+        if ($node !== null && $parent === null && ! $tree->isRoot($node)) {
+            if (CocktailIngredient::query()->where('category_id', $node->id)->exists()) {
+                $validator->errors()->add('parent_id', 'カクテルの材料に使われているノードは、根にできません');
+            }
+            if (Cocktail::query()->where('base_category_id', $node->id)->exists()) {
+                $validator->errors()->add('parent_id', 'カクテルのベースに使われているノードは、根にできません');
             }
         }
 

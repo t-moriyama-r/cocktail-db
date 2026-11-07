@@ -169,6 +169,14 @@ final class AffiliateImporter implements LegacyImporter
                 DB::table(self::NEW_TABLE)->where('id', $id)->update($attrs);
                 $keptIds[] = $id;
             }
+
+            // 行ができたので、もう選ばれない。前に失敗した記録は要らない(残すと、行が消えた後も retry_after まで探されない)
+            $failures = DB::table('affiliate_collect_failures');
+            if ($attrs['brand_id'] !== null) {
+                $failures->where('brand_id', $attrs['brand_id'])->delete();
+            } else {
+                $failures->where('category_id', $attrs['category_id'])->whereNull('brand_id')->delete();
+            }
         }
 
         DB::table(self::NEW_TABLE)->whereNotIn('id', $keptIds)->delete();

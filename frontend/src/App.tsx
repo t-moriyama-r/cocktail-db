@@ -4,10 +4,18 @@ import AdminLayout from './components/AdminLayout/AdminLayout'
 import SiteLayout from './components/SiteLayout/SiteLayout'
 import AdminBrandEdit from './pages/AdminBrandEdit'
 import AdminBrands from './pages/AdminBrands'
+import AdminCategoryEdit from './pages/AdminCategoryEdit'
+import AdminCategoryTree from './pages/AdminCategoryTree'
 import AdminCocktailEdit from './pages/AdminCocktailEdit'
 import AdminCocktails from './pages/AdminCocktails'
+import AdminDictionaries from './pages/AdminDictionaries'
+import AdminDictionaryEdit from './pages/AdminDictionaryEdit'
+import AdminDictionaryNew from './pages/AdminDictionaryNew'
 import AdminHome from './pages/AdminHome'
 import AdminLogin from './pages/AdminLogin'
+import AdminParaphrases from './pages/AdminParaphrases'
+import AdminPasskeys from './pages/AdminPasskeys'
+import AdminSettings from './pages/AdminSettings'
 import BrandDetail from './pages/BrandDetail'
 import CategoryDetail from './pages/CategoryDetail'
 import CocktailDetail from './pages/CocktailDetail'
@@ -51,12 +59,21 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminHome />} />
+        <Route path="categories" element={<AdminCategoryTree />} />
+        <Route path="categories/new" element={<AdminCategoryEdit />} />
+        <Route path="categories/:id" element={<RequireNumericId element={<AdminCategoryEdit />} />} />
         <Route path="brands" element={<AdminBrands />} />
         <Route path="brands/new" element={<AdminBrandEdit />} />
         <Route path="brands/:id" element={<RequireNumericId element={<AdminBrandEdit />} />} />
+        <Route path="dictionaries" element={<AdminDictionaries />} />
+        <Route path="dictionaries/new" element={<AdminDictionaryNew />} />
+        <Route path="dictionaries/:id" element={<RequireNumericId element={<AdminDictionaryEdit />} />} />
         <Route path="cocktails" element={<AdminCocktails />} />
         <Route path="cocktails/new" element={<AdminCocktailEdit />} />
         <Route path="cocktails/:id" element={<RequireNumericId element={<AdminCocktailEdit />} />} />
+        <Route path="paraphrases" element={<AdminParaphrases />} />
+        <Route path="settings" element={<AdminSettings />} />
+        <Route path="passkeys" element={<AdminPasskeys />} />
         {/* まだ無い管理画面の URL も、ログインを確かめてから(未ログインならログインへ移してから)404 の画面を出す */}
         <Route path="*" element={<NotFound />} />
       </Route>

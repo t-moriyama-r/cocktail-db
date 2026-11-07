@@ -21,6 +21,8 @@ class FormOptionResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            // $resource が 3 つのモデルのどれかなので、Scramble はモデルを決められず、型を書かないと id を文字と読む(#667)
+            /** @var int */
             'id' => $this->resource->id,
             'name' => $this->resource->name,
         ];

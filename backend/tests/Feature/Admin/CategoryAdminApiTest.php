@@ -13,6 +13,7 @@ use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
 // 管理 API のカテゴリ木のノードの一覧・取得・新規・更新・削除(#121)。旧の DetailEditController@category・middle と
@@ -723,3 +724,242 @@ it('TC-121-25: その場で作る銘柄の度数は 0〜100 の数、名前・�
     '名前 256 文字' => ['brand_name', str_repeat('あ', 256), false],
     '英名 256 文字' => ['brand_name_eng', str_repeat('a', 256), false],
 ]);
+
+// ここから、ノードの親の付け替え(#122)。付け替えは更新(PUT)の parent_id で行う(#121)
+
+/**
+ * $node の下にノードを足す(テストの木を深くするため)。
+ */
+function categoryAdminAddChild(Category $parent, string $name): Category
+{
+    return app(CategoryTree::class)->addNode($parent, Category::factory()->make([
+        'name' => $name,
+        'name_search' => NameNormalizer::normalize($name),
+        'name_eng' => $name.'-eng',
+    ])->getAttributes());
+}
+
+/**
+ * 閉包表の全行(祖先・子孫・段数)。付け替えを止めたときに、何も変わっていないことを比べる。
+ *
+ * @return list<string>
+ */
+function categoryAdminClosureRows(): array
+{
+    return array_values(CategoryClosure::query()
+        ->orderBy('ancestor_id')->orderBy('descendant_id')
+        ->get()
+        ->map(fn (CategoryClosure $row): string => "{$row->ancestor_id}-{$row->descendant_id}-{$row->depth}")
+        ->all());
+}
+
+it('TC-122-01: 自分・子・孫の下へ移すと 422 で、閉包表は変わらず、tree:verify が通る', function (string $target) {
+    ['nodes' => $n] = categoryAdminTree();
+    $n['プレミアム'] = categoryAdminAddChild($n['ホワイトラム'], 'プレミアム');
+    $before = categoryAdminClosureRows();
+
+    $this->putJson("/api/admin/categories/{$n['ラム']->id}", categoryAdminCurrentInput($n['ラム'], ['parent_id' => $n[$target]->id]))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.parent_id', ['自分自身と、自分より下のノードは親にできません']);
+
+    expect(categoryAdminClosureRows())->toBe($before);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+})->with([
+    '自分' => ['ラム'],
+    '子' => ['ホワイトラム'],
+    '孫' => ['プレミアム'],
+]);
+
+it('TC-122-02: 葉・中間ノードを別の親・深い位置・根の直下・根へ移すと、パンくずが変わり、移すたびに tree:verify が通る', function () {
+    ['nodes' => $n, 'bacardi' => $bacardi, 'gordons' => $gordons] = categoryAdminTree();
+    $n['プレミアム'] = categoryAdminAddChild($n['ホワイトラム'], 'プレミアム');
+    $n['ロンドンドライ'] = categoryAdminAddChild($n['ジン'], 'ロンドンドライ');
+
+    // 葉を、別の系統の深い位置へ(ダークラム → ジンの下のロンドンドライの下)
+    $this->putJson("/api/admin/categories/{$n['ダークラム']->id}", categoryAdminCurrentInput($n['ダークラム'], ['parent_id' => $n['ロンドンドライ']->id, ...categoryAdminBrandInput()]))
+        ->assertOk();
+    expect(categoryAdminPathNames($n['ダークラム']))->toBe(['洋酒', 'ジン', 'ロンドンドライ', 'ダークラム']);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+
+    // 中間ノードを、部分木ごと別の中間ノードの下へ(ラム → ジンの下。ホワイトラム・プレミアムも付いてくる)
+    $this->putJson("/api/admin/categories/{$n['ラム']->id}", categoryAdminCurrentInput($n['ラム'], ['parent_id' => $n['ジン']->id, 'famous_brand_id' => $bacardi->id]))
+        ->assertOk();
+    expect(categoryAdminPathNames($n['プレミアム']))->toBe(['洋酒', 'ジン', 'ラム', 'ホワイトラム', 'プレミアム']);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+
+    // 深い中間ノードを、根の直下へ(ホワイトラム → 洋酒の下)。ラムの有名な銘柄(バカルディ)が外に出るので、先にラムの有名な銘柄を変える
+    $n['ラム']->update(['famous_brand_id' => $gordons->id]);
+    $this->putJson("/api/admin/categories/{$n['ホワイトラム']->id}", categoryAdminCurrentInput($n['ホワイトラム'], ['parent_id' => $n['洋酒']->id]))
+        ->assertOk();
+    expect(categoryAdminPathNames($n['プレミアム']))->toBe(['洋酒', 'ホワイトラム', 'プレミアム']);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+
+    // 中間ノードを、根へ(ホワイトラム → 根)。根には有名な銘柄を入れないので、空で送る
+    $this->putJson("/api/admin/categories/{$n['ホワイトラム']->id}", categoryAdminCurrentInput($n['ホワイトラム'], ['parent_id' => null, 'famous_brand_id' => null]))
+        ->assertOk()
+        ->assertJsonPath('data.parent_id', null);
+    expect(categoryAdminPathNames($n['プレミアム']))->toBe(['ホワイトラム', 'プレミアム'])
+        ->and(app(CategoryTree::class)->isRoot($n['ホワイトラム']->refresh()))->toBeTrue();
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});
+
+it('TC-122-03: 「その他」の根の下へ移すと、その部分木を材料に使うカクテルの材料の数が減り、関係のないカクテルは変わらない', function () {
+    ['nodes' => $n, 'gordons' => $gordons] = categoryAdminTree();
+    $usesGin = categoryAdminCocktail($n['ジン'], [$n['ジン'], $n['ラム']]);
+    $unrelated = categoryAdminCocktail($n['ラム'], [$n['ラム'], $n['ホワイトラム']]);
+    expect($usesGin->recipe_count)->toBe(2)->and($unrelated->recipe_count)->toBe(2);
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['その他']->id, 'famous_brand_id' => $gordons->id]))
+        ->assertOk();
+
+    expect($usesGin->refresh()->recipe_count)->toBe(1)
+        ->and($unrelated->refresh()->recipe_count)->toBe(2);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});
+
+it('TC-122-04: 「その他」の根から洋酒の下へ移すと、その部分木を材料に使うカクテルの材料の数が増え、関係のないカクテルは変わらない', function () {
+    ['nodes' => $n] = categoryAdminTree();
+    $usesSugar = categoryAdminCocktail($n['ジン'], [$n['ジン'], $n['砂糖']]);
+    $unrelated = categoryAdminCocktail($n['ラム'], [$n['ラム']]);
+    expect($usesSugar->recipe_count)->toBe(1)->and($unrelated->recipe_count)->toBe(1);
+
+    // 洋酒の部分木では有名な銘柄が要るので、その場で作る
+    $this->putJson("/api/admin/categories/{$n['砂糖']->id}", categoryAdminCurrentInput($n['砂糖'], ['parent_id' => $n['ラム']->id, ...categoryAdminBrandInput()]))
+        ->assertOk();
+
+    expect($usesSugar->refresh()->recipe_count)->toBe(2)
+        ->and($unrelated->refresh()->recipe_count)->toBe(1);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});
+
+it('TC-122-05: 2 段上の祖先の有名な銘柄が移す部分木の中の銘柄なら 422 で、そのノードの名前を返し、何も変えない', function () {
+    ['nodes' => $n] = categoryAdminTree();
+    $n['プレミアム'] = categoryAdminAddChild($n['ホワイトラム'], 'プレミアム');
+    $premium = Brand::factory()->create(['category_id' => $n['プレミアム']->id]);
+    // ラム(プレミアムの 2 段上)の有名な銘柄を、プレミアムの銘柄にする。ホワイトラム(1 段上)はバカルディのまま
+    $n['ラム']->update(['famous_brand_id' => $premium->id]);
+    $n['プレミアム']->update(['famous_brand_id' => $premium->id]);
+    $cocktail = categoryAdminCocktail($n['ラム'], [$n['プレミアム'], $n['ジン']]);
+    $before = categoryAdminClosureRows();
+
+    $this->putJson("/api/admin/categories/{$n['プレミアム']->id}", categoryAdminCurrentInput($n['プレミアム'], ['parent_id' => $n['ジン']->id]))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.parent_id', ['このノードの下の銘柄が「ラム」の有名な銘柄なので、そのノードの外へは移せません']);
+
+    expect(categoryAdminClosureRows())->toBe($before)
+        ->and(categoryAdminPathNames($n['プレミアム']))->toBe(['洋酒', 'ラム', 'ホワイトラム', 'プレミアム'])
+        ->and($n['ラム']->refresh()->famous_brand_id)->toBe($premium->id)
+        ->and($cocktail->refresh()->recipe_count)->toBe(2);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});
+
+it('TC-122-06: 移していない兄弟のノード・元の親を使う材料と、元の親・兄弟の銘柄のノードは変わらない', function () {
+    ['nodes' => $n, 'bacardi' => $bacardi] = categoryAdminTree();
+    $rumBrand = Brand::factory()->create(['category_id' => $n['ラム']->id]);
+    $cocktail = categoryAdminCocktail($n['ラム'], [$n['ラム'], $n['ホワイトラム'], $n['ダークラム']]);
+    $ingredientNodes = fn (): array => CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->orderBy('position')->pluck('category_id')->all();
+
+    // ダークラムをジンの下へ移す(旧はここで、元の親のラムを指す材料と銘柄をすべてジンに書き換えていた)
+    $this->putJson("/api/admin/categories/{$n['ダークラム']->id}", categoryAdminCurrentInput($n['ダークラム'], ['parent_id' => $n['ジン']->id, ...categoryAdminBrandInput()]))
+        ->assertOk();
+
+    expect($ingredientNodes())->toBe([$n['ラム']->id, $n['ホワイトラム']->id, $n['ダークラム']->id])
+        ->and($rumBrand->refresh()->category_id)->toBe($n['ラム']->id)
+        ->and($bacardi->refresh()->category_id)->toBe($n['ホワイトラム']->id)
+        ->and($cocktail->refresh()->base_category_id)->toBe($n['ラム']->id)
+        ->and(categoryAdminPathNames($n['ホワイトラム']))->toBe(['洋酒', 'ラム', 'ホワイトラム']);
+});
+
+it('TC-122-07: カクテルの材料・ベースが直接指すノードは根へ移せず 422 で、何も変えない', function (bool $ingredient, bool $base, array $errors) {
+    ['nodes' => $n] = categoryAdminTree();
+    $cocktail = Cocktail::factory()->create(['base_category_id' => $base ? $n['ダークラム']->id : $n['ジン']->id]);
+    if ($ingredient) {
+        CocktailIngredient::factory()->create(['cocktail_id' => $cocktail->id, 'category_id' => $n['ダークラム']->id, 'position' => 1]);
+    }
+    $before = categoryAdminClosureRows();
+
+    $this->putJson("/api/admin/categories/{$n['ダークラム']->id}", categoryAdminCurrentInput($n['ダークラム'], ['parent_id' => null]))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.parent_id', $errors);
+
+    expect(categoryAdminClosureRows())->toBe($before)
+        ->and(categoryAdminPathNames($n['ダークラム']))->toBe(['洋酒', 'ラム', 'ダークラム']);
+})->with([
+    '材料' => [true, false, ['カクテルの材料に使われているノードは、根にできません']],
+    'ベース' => [false, true, ['カクテルのベースに使われているノードは、根にできません']],
+    '材料とベース' => [true, true, ['カクテルの材料に使われているノードは、根にできません', 'カクテルのベースに使われているノードは、根にできません']],
+]);
+
+it('TC-122-08: 子孫だけが材料・ベースに使われているノードは根へ移せ、根のまま保存し直せる', function () {
+    ['nodes' => $n] = categoryAdminTree();
+    $n['ダークラムの子'] = categoryAdminAddChild($n['ダークラム'], 'ダークラムの子');
+    $cocktail = categoryAdminCocktail($n['ダークラムの子'], [$n['ダークラムの子']]);
+
+    $this->putJson("/api/admin/categories/{$n['ダークラム']->id}", categoryAdminCurrentInput($n['ダークラム'], ['parent_id' => null]))
+        ->assertOk()
+        ->assertJsonPath('data.parent_id', null);
+    expect(categoryAdminPathNames($n['ダークラムの子']))->toBe(['ダークラム', 'ダークラムの子'])
+        ->and($cocktail->refresh()->recipe_count)->toBe(1);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+
+    // 根になった後は、材料が指していても根のままの更新は止めない(根へ「移す」ときだけ確かめる)
+    CocktailIngredient::factory()->create(['cocktail_id' => $cocktail->id, 'category_id' => $n['ダークラム']->id, 'position' => 2]);
+    $this->putJson("/api/admin/categories/{$n['ダークラム']->id}", categoryAdminCurrentInput($n['ダークラム'], ['name_eng' => 'Dark Rum']))
+        ->assertOk();
+});
+
+it('TC-647-01: 有名な銘柄を持つノードを根へ移すと、有名な銘柄の欄を送らなくても空で送っても、根の有名な銘柄は空になる', function (array $famousBrandInput) {
+    ['nodes' => $n] = categoryAdminTree();
+    $input = [...categoryAdminCurrentInput($n['ジン'], ['parent_id' => null]), ...$famousBrandInput];
+    if ($famousBrandInput === []) {
+        unset($input['famous_brand_id']);
+    }
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", $input)
+        ->assertOk()
+        ->assertJsonPath('data.parent_id', null)
+        ->assertJsonPath('data.famous_brand_id', null);
+
+    expect($n['ジン']->refresh()->famous_brand_id)->toBeNull()
+        ->and(app(CategoryTree::class)->isRoot($n['ジン']))->toBeTrue();
+    // 根を開き直しても有名な銘柄は空で、根のまま保存し直せる(有名な銘柄の欄を送らない)
+    $this->getJson("/api/admin/categories/{$n['ジン']->id}")
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', null);
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['name_eng' => 'Gin']))
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', null);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+})->with([
+    '欄を送らない' => [[]],
+    'null で送る' => [['famous_brand_id' => null]],
+    '空の文字列で送る' => [['famous_brand_id' => '']],
+]);
+
+it('TC-647-02: 根でない親の下へ移すときは、有名な銘柄を空にしない', function () {
+    ['nodes' => $n, 'gordons' => $gordons] = categoryAdminTree();
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['ラム']->id]))
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', $gordons->id);
+
+    expect($n['ジン']->refresh()->famous_brand_id)->toBe($gordons->id)
+        ->and(categoryAdminPathNames($n['ジン']))->toBe(['洋酒', 'ラム', 'ジン']);
+});
+
+it('TC-647-03: 根へ移して空になったノードを洋酒の下へ戻すときは、有名な銘柄を選び直さないと 422 で、選び直せば戻せる', function () {
+    ['nodes' => $n, 'gordons' => $gordons] = categoryAdminTree();
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => null, 'famous_brand_id' => null]))
+        ->assertOk();
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['洋酒']->id]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['brand_name']);
+    expect(app(CategoryTree::class)->isRoot($n['ジン']->refresh()))->toBeTrue();
+
+    $this->putJson("/api/admin/categories/{$n['ジン']->id}", categoryAdminCurrentInput($n['ジン'], ['parent_id' => $n['洋酒']->id, 'famous_brand_id' => $gordons->id]))
+        ->assertOk()
+        ->assertJsonPath('data.famous_brand_id', $gordons->id);
+    expect(categoryAdminPathNames($n['ジン']))->toBe(['洋酒', 'ジン']);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});

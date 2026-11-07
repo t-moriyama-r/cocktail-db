@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Services\Affiliate\AffiliateSearchUrls;
 use App\Services\Affiliate\AmazonClient;
+use App\Services\Affiliate\RakutenClient;
 
 /**
  * 管理画面から変えられる設定の一覧(#132。決めたことは docs/decisions/settings.md)。
@@ -52,9 +53,23 @@ final class SettingDefinitions
                 self::LINK_ID_RULES,
             ),
             new SettingDefinition(
+                RakutenClient::SETTING_APPLICATION_ID,
+                '楽天のアプリ ID',
+                '楽天の商品を取る API(商品検索 API)のアプリ ID(applicationId)。アクセスキーとそろったときだけ API を呼ぶ',
+                true,
+                self::SECRET_RULES,
+            ),
+            new SettingDefinition(
+                RakutenClient::SETTING_ACCESS_KEY,
+                '楽天のアクセスキー',
+                '楽天の商品を取る API(商品検索 API)のアクセスキー(accessKey)',
+                true,
+                self::SECRET_RULES,
+            ),
+            new SettingDefinition(
                 AffiliateSearchUrls::SETTING_RAKUTEN_AFFILIATE_ID,
                 '楽天のアフィリエイト ID',
-                '楽天市場へのリンクに付ける ID。空にすると、アフィリエイトのリンクにせず検索結果へ直接リンクする',
+                '楽天市場へのリンクと API の呼び出しに付ける ID。空にすると、アフィリエイトのリンクにせず検索結果・商品のページへ直接リンクする',
                 false,
                 self::LINK_ID_RULES,
             ),
