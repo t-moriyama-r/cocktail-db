@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 // カクテルの詳細(#108)の基本情報と材料。E2eSeeder のジントニック(ID 1)を使う:
 // ベースはジン、技法はビルド(用語のビルドに結び付く)、グラスはタンブラー・氷はキューブアイス、甘さ 0・評価 3・度数 12.5、補足あり。
@@ -6,7 +6,9 @@ import { expect, test, type Page } from '@playwright/test'
 // E2E のノードは英名に日本語の名前を入れているので、Material の列も日本語になる
 const PATH = '/detail/cocktail/1'
 
-const ingredientRows = (page: Page) => page.getByRole('table', { name: '材料' }).locator('tbody tr')
+/** 表の体の行(列の見出しの行を除く)。見出しの行はセルを持たないので、セルを持つ行だけを取る */
+const bodyRows = (table: Locator) => table.getByRole('row').filter({ has: table.page().getByRole('cell') })
+const ingredientRows = (page: Page) => bodyRows(page.getByRole('table', { name: '材料' }))
 
 test('TC-108-22: シーダーのカクテルを開くと、見出し・欄・グラス・材料・Note を出す', async ({ page }) => {
   await page.goto(PATH)
@@ -20,10 +22,10 @@ test('TC-108-22: シーダーのカクテルを開くと、見出し・欄・グ
 
   const rows = ingredientRows(page)
   await expect(rows).toHaveCount(2)
-  await expect(rows.nth(0).locator('td').nth(0)).toHaveText('ジン / ビーフィーター (ビーフィーター 40度)')
-  await expect(rows.nth(0).locator('td').nth(2)).toHaveText('45ml')
-  await expect(rows.nth(1).locator('td').nth(0)).toHaveText('ミント(任意)')
-  await expect(rows.nth(1).locator('td').nth(2)).toHaveText('適量')
+  await expect(rows.nth(0).getByRole('cell').nth(0)).toHaveText('ジン / ビーフィーター (ビーフィーター 40度)')
+  await expect(rows.nth(0).getByRole('cell').nth(2)).toHaveText('45ml')
+  await expect(rows.nth(1).getByRole('cell').nth(0)).toHaveText('ミント(任意)')
+  await expect(rows.nth(1).getByRole('cell').nth(2)).toHaveText('適量')
 
   await expect(page.getByRole('region', { name: 'Note' })).toContainText('ライムを添える。')
 })
@@ -80,7 +82,7 @@ test('TC-109-12: シーダーのカクテルを開くと、別名を出し、0 �
   await page.goto(PATH)
 
   await expect(page.getByRole('region', { name: '別名' })).toHaveText('別名: G&T')
-  await expect(page.getByRole('table', { name: '材料が似たカクテル' }).locator('tbody tr')).toHaveCount(0)
+  await expect(bodyRows(page.getByRole('table', { name: '材料が似たカクテル' }))).toHaveCount(0)
   await expect(page.getByRole('heading', { level: 2, name: '材料が似たカクテル' })).toBeVisible()
   const sameBase = page.getByRole('table', { name: '同じベースのカクテル' })
   await expect(sameBase.getByRole('link', { name: 'ジントニック' }).first()).toHaveAttribute('href', '/detail/cocktail/1')
@@ -92,7 +94,7 @@ for (const width of [375, 768, 1024, 1440]) {
   test(`TC-109-13: 幅 ${width}px で、別名・材料が似た・同じベースの欄を出しても横スクロールが出ない`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
     await page.goto(PATH)
-    await expect(page.getByRole('table', { name: '同じベースのカクテル' }).locator('tbody tr')).toHaveCount(1)
+    await expect(bodyRows(page.getByRole('table', { name: '同じベースのカクテル' }))).toHaveCount(1)
     await expect(page.getByRole('region', { name: '別名' })).toBeVisible()
 
     const { scrollWidth, clientWidth } = await page.evaluate(() => ({

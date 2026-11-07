@@ -7,8 +7,8 @@ const DRAFT = '下書きのカクテル'
 const LISTS = ['★最近更新されたカクテル', '★おすすめカクテル', '★気まぐれセレクト']
 
 const list = (page: Page, title: string) => page.getByRole('region', { name: title })
-/** 表の体の行(列の見出しの行を除く) */
-const bodyRows = (region: Locator) => region.getByRole('table').locator('tbody > tr')
+/** 表の体の行(列の見出しの行を除く)。見出しの行はセルを持たないので、セルを持つ行だけを取る */
+const bodyRows = (region: Locator) => region.getByRole('table').getByRole('row').filter({ has: region.page().getByRole('cell') })
 
 test('TC-50-13: トップを開くと、新着動画・メニュー・3 つの一覧がどれも出て、一覧はそれぞれ 7 件で下書きを出さない', async ({
   page,
