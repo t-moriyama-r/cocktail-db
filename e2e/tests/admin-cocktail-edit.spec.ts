@@ -144,12 +144,10 @@ test('TC-127-31: 新規で名前を入れると、同じ名前のカクテルを
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('カクテルの編集')
   await expect(page.getByLabel('名前', { exact: true })).toHaveValue('カミカゼ')
   // 編集では自分を除くので、ほかに同じ名前のカクテルが無ければ同じ名前の一覧を出さない(開いた後の問い合わせが返ってから見る)。
-  // E2eSeeder の下書き「E2E の下書き」はカミカゼと同じ材料なので、同じレシピの一覧には出る
+  // 左の欄そのものは見ない。下書き「E2E の下書き」はカミカゼと同じ材料で、両方を API で保存した後(TC-127-29・30)は、
+  // 材料の組(recipe_signature。保存のときに作る)がそろって同じレシピの一覧に出るため、流す順で欄の有る無しが変わる
   await reloaded
   await expect(sameName).toHaveCount(0)
-  await expect(
-    duplicates.getByRole('region', { name: '同じレシピのカクテル' }).getByRole('link', { name: 'E2E の下書き' }),
-  ).toBeVisible()
 })
 
 test('TC-127-32: md の幅のいちばん狭いところ(960px)でも、左の同じ名前の欄を、材料の名前が読める幅で出し、横にはみ出さない', async ({
