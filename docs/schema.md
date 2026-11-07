@@ -111,7 +111,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `new_id` | `unsignedBigInteger` | 新 ID |
 
 - 主キーは (`legacy_table`, `legacy_id`)。インデックスは (`new_table`, `new_id`)(新から旧へ戻す検証 #35 に使う)
-- 旧のカテゴリ・ミドルの詳細の URL の転送(#78。`docs/decisions/legacy-urls.md`)は、旧の表と旧 ID から引くので主キーを使う
+- 旧のカテゴリ・ミドルの詳細・SNS カードの URL の転送(#78・#113。`docs/decisions/legacy-urls.md`)は、旧の表と旧 ID から引くので主キーを使う
 - 外部キーは張らない(指す先の表が行ごとに違うため)
 
 ## 銘柄・カクテル・材料
