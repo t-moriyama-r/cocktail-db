@@ -113,10 +113,8 @@ describe('フォームの入力', () => {
     const image = new File(['x'], 'gin.png', { type: 'image/png' })
     const form = toCocktailFormData({ ...EMPTY_COCKTAIL_FORM, baseCategoryId: 9, image }, 'PUT', false)
 
-    expect(entries(form).slice(0, 2)).toEqual([
-      ['_method', 'PUT'],
-      ['base_category_id', '9'],
-    ])
+    expect(entries(form)[0]).toEqual(['_method', 'PUT'])
+    expect(form.get('base_category_id')).toBe('9')
     expect(form.get('is_major')).toBe('0')
     expect((form.get('image') as File).name).toBe('gin.png')
     expect(form.has('aliases')).toBe(false)

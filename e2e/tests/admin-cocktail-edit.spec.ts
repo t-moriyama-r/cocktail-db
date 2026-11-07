@@ -80,9 +80,19 @@ test('TC-127-28: 新規で必須の欄を空のまま保存すると、ベース
   await expect(page.getByRole('group', { name: 'ベース' })).not.toHaveAccessibleDescription('')
   await expect(page.getByRole('region', { name: '材料' }).getByRole('listitem')).not.toHaveCount(0)
 
+  // 直前の「必須」のメッセージのままでは通らないよう、256 文字の応答で説明の文が変わる(長さのメッセージになる)ことを見る
+  const requiredMessage = await name.evaluate((el) => {
+    const ids = el.getAttribute('aria-describedby') ?? ''
+    return ids
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ')
+  })
+  expect(requiredMessage).not.toBe('')
   await name.fill('あ'.repeat(256))
   await saveDraftAndWait(page)
   await expect(name).toHaveAttribute('aria-invalid', 'true')
+  await expect(name).not.toHaveAccessibleDescription(requiredMessage)
   await expect(name).toHaveValue('あ'.repeat(256))
 
   // ほかの欄(ベース・材料など)の誤りは残るが、名前は 255 文字なら誤りにならない
