@@ -247,7 +247,7 @@ describe('条件検索の結果の画面: 件数とページ(#103)', () => {
     renderAt('/result/Cocktails?n=10')
 
     expect(await screen.findByRole('heading', { level: 1, name: '結果' })).toBeInTheDocument()
-    expect(document.title).toMatch(/^カクテル検索結果 ｜ /)
+    await waitFor(() => expect(document.title).toMatch(/^カクテル検索結果 ｜ /))
   })
 
   test.each([

@@ -148,7 +148,7 @@ describe('カテゴリ木からの行き来', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'ノードの編集' })).toBeInTheDocument()
     expect(currentUrl()).toBe('/admin/categories/2')
     expect(screen.getByLabelText('名前')).toHaveValue('ジン')
-    expect(document.title).toBe('ノードの編集 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('ノードの編集 ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-308-02: カテゴリ木の画面の「新規」から、空のフォームの新規の画面が開く', async () => {

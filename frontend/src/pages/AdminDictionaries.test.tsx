@@ -94,7 +94,7 @@ describe('一覧', () => {
     const method = screen.getByRole('region', { name: '製法(Method)' })
     expect(within(method).getAllByRole('link').map((link) => link.textContent)).toEqual(['シェイク(Shake)', 'ビルド(Build)'])
     expect(screen.queryByText('スタイル(Style)')).not.toBeInTheDocument()
-    expect(document.title).toBe('用語辞典 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('用語辞典 ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-66-02: 用語のリンクは用語の編集の画面へ、「新規」は新規の画面へ', async () => {
