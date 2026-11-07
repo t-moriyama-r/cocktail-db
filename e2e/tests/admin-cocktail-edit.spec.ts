@@ -175,3 +175,19 @@ test('TC-127-32: md の幅のいちばん狭いところ(960px)でも、左の�
   }))
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
 })
+
+test('TC-127-33: xs の幅(375px)で、製法・評価・甘さの行が折り返しても、メジャーのチェックがほかの欄に隠れず、押して入れられる', async ({
+  page,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await login(page, baseURL!)
+  await page.goto('/admin/cocktails/new')
+  const major = page.getByRole('checkbox', { name: 'メジャー' })
+  await expect(major).not.toBeChecked()
+
+  // click は、押す位置でほかの要素(下の説明の欄)が受け取るなら押せずに待つので、隠れていると落ちる
+  await major.click({ timeout: 5000 })
+
+  await expect(major).toBeChecked()
+})

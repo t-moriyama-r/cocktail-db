@@ -171,13 +171,15 @@
   list-style: none;
 }
 
-/* メジャーのチェックは、選択の欄の入力の高さにそろえる */
+/*
+ * メジャーのチェックは、選択の欄の入力の高さにそろえる。高さは横に並ぶ行の高さに伸びる(flex の既定)ので、それに任せる。
+ * 行の高さ(min-height: 100%)にすると、狭い幅で行が折り返したときに行全体の高さになって下にはみ出し、下の説明の欄に隠れる
+ */
 .checkField {
   display: grid;
   flex: 0 0 auto;
   align-content: end;
   gap: var(--space-1);
-  min-height: 100%;
 }
 
 .check {
