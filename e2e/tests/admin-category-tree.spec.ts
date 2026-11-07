@@ -37,15 +37,14 @@ test('TC-123-11: メニューからカテゴリ木を開くと、根が開いた
   await expect(tree.getByText('(蒸留酒)・役割: なし・メジャー', { exact: true })).toBeVisible()
 })
 
-test('TC-123-12: 深いノードまで開いて選べ、閉じると子が隠れる', async ({ page, baseURL }) => {
+// 深いノードを選ぶと編集フォームが開くことは、admin-category-edit.spec.ts の TC-308-21 で見る(#308 で、選ぶと編集フォームへ移るようにした)
+test('TC-123-12: 深いノードまで開け、閉じると子が隠れる', async ({ page, baseURL }) => {
   await openCategoryTree(page, baseURL!)
 
   await page.getByRole('button', { name: 'ジンを開く', exact: true }).click()
   await page.getByRole('button', { name: 'ドライジンを開く', exact: true }).click()
   await page.getByRole('button', { name: 'ロンドンドライジンを開く', exact: true }).click()
-  const beefeater = page.getByRole('radio', { name: 'ビーフィーター', exact: true })
-  await beefeater.check()
-  await expect(beefeater).toBeChecked()
+  await expect(page.getByRole('radio', { name: 'ビーフィーター', exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'ジンを閉じる', exact: true }).click()
   await expect(page.getByRole('radio', { name: 'ドライジン', exact: true })).toHaveCount(0)

@@ -4,6 +4,12 @@ export const ADMIN_HOME_PATH = '/admin'
 /** 管理画面のカテゴリ木(#123)の URL */
 export const ADMIN_CATEGORIES_PATH = '/admin/categories'
 
+/** 管理画面のノードの新規の画面(#308)の URL。カテゴリ木の画面の「新規」から開く */
+export const ADMIN_NEW_CATEGORY_PATH = `${ADMIN_CATEGORIES_PATH}/new`
+
+/** 管理画面のノードの編集画面(#308)の URL。カテゴリ木の画面でノードを選ぶと開く */
+export const adminCategoryEditPath = (id: number): string => `${ADMIN_CATEGORIES_PATH}/${id}`
+
 /** 管理画面の銘柄の一覧(#64)の URL */
 export const ADMIN_BRANDS_PATH = '/admin/brands'
 

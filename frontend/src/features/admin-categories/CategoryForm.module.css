@@ -1,0 +1,140 @@
+/* ノードの編集フォーム(#308)。旧(CategoryEdit.vue・MiddleEdit.vue)と同じく 800px までの幅に収め、欄を上から並べる。作りは銘柄のフォームと同じ */
+.form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 800px;
+}
+
+.parent {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.legend {
+  padding: 0 var(--space-1);
+  font-weight: bold;
+}
+
+.selected {
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+/* 横に並べる欄(名前・英名、YouTube と開始位置など)。入りきらなければ折り返す */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  flex: 1 1 14em;
+  gap: var(--space-1);
+  min-width: 0;
+  align-content: start;
+}
+
+/* 開始位置のように数文字しか入れない欄 */
+.narrow {
+  flex: 0 0 5em;
+}
+
+.label {
+  font-weight: bold;
+}
+
+/* 狭い幅でもはみ出さないよう、欄の幅は親に合わせて縮める */
+.input,
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.input[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+/* 画像。旧と同じく、画像は中央に 350px の高さまでで出す */
+.image {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.preview {
+  justify-self: center;
+  max-width: 100%;
+  max-height: 350px;
+}
+
+.file {
+  max-width: 100%;
+  font: inherit;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.check {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.errors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.submit {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.submitButton {
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 応答を待つあいだは押せない */
+.submitButton:disabled {
+  border-color: var(--color-disabled-bg);
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  cursor: wait;
+}
+
+.failure {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-danger);
+}
+
+.failureMessage {
+  margin: 0;
+}
