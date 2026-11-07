@@ -1,6 +1,6 @@
 import type { Middleware } from 'openapi-fetch'
 import { api } from '../../api/client'
-import type { components } from '../../api/schema'
+import type { components, paths } from '../../api/schema'
 import { toCategoryFormData, type CategoryFormValues, type CategoryKeptValues } from './categoryFormValues'
 
 type SaveCategoryRequest = components['schemas']['SaveCategoryRequest']
@@ -36,6 +36,34 @@ const sendAsPost: Middleware = {
   onRequest({ request }) {
     return new Request(request, { method: 'POST' })
   },
+}
+
+/** 重なりを問い合わせる欄(API の項目名。重なりの問い合わせの応答の warnings の field) */
+export type DuplicateField =
+  paths['/admin/categories/duplicates']['get']['responses'][200]['content']['application/json']['warnings'][number]['field']
+
+/**
+ * 名前か英名が、同じ親の下のほかのノードと重なるかを問い合わせる(GET /api/admin/categories/duplicates。#673)。
+ * parentId が null なら根どうしで比べ、nodeId(編集しているノード)は数えない。
+ * 重なれば API の文(「同じ名前が存在しています」)を、重ならなければ null を返す。
+ * 問い合わせに失敗したときも null を返し、重ならないときと区別しない(旧も失敗したときは何も出さなかった)
+ */
+export async function findCategoryDuplicate(
+  field: DuplicateField,
+  value: string,
+  parentId: number | null,
+  nodeId: number | null,
+): Promise<string | null> {
+  // openapi-fetch は null の項目をクエリに入れないので、根どうし(親が null)・新規(nodeId が null)は項目ごと送らない
+  const scope = { parent_id: parentId, exclude_id: nodeId }
+  try {
+    const { data } = await api.GET('/admin/categories/duplicates', {
+      params: { query: field === 'name' ? { ...scope, name: value } : { ...scope, name_eng: value } },
+    })
+    return data?.warnings.find((warning) => warning.field === field)?.message ?? null
+  } catch {
+    return null
+  }
 }
 
 /** ノードを保存する。nodeId が null なら新規(POST /api/admin/categories)、あれば更新(PUT /api/admin/categories/{id}) */

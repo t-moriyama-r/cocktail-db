@@ -6,6 +6,7 @@ import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
 import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
+import { useCategoryDuplicateWarning } from './useCategoryDuplicateWarning'
 import styles from './CategoryForm.module.css'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
@@ -68,11 +69,16 @@ const FIELDS_ON_FORM = new Set([
  * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定)
  *
  * 有名な銘柄の選択・その場での作成は #309、根の役割は #310 で足す。それまでは今の値のまま送り直す(CategoryKeptValues)。
- * 名前・英名の重なりを入れたそばに出す(旧の duplicate_check)のは、問い合わせる API(#673)ができてから #674 で足す。
+ * 名前・英名は、値を変えて欄を離れたら同じ親の下の重なりを問い合わせ(#673 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
+ * (旧の duplicate_check。#674)。知らせるだけで送信は止めず、名前の重なりで保存を止めるのは保存の API の 422 に任せる。
  */
 export default function CategoryForm({ nodeId, initialValues, kept, currentImage, parent, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
+  // 重なりは、保存する親の下で比べる(根なら根どうし)。新規で親をまだ選んでいなければ、比べる相手が決まらないので比べない
+  const duplicateScope = kept.isRoot ? { parentId: null } : values.parentId !== null ? { parentId: values.parentId } : null
+  const nameDuplicate = useCategoryDuplicateWarning('name', nodeId, duplicateScope, initialValues.name)
+  const nameEngDuplicate = useCategoryDuplicateWarning('name_eng', nodeId, duplicateScope, initialValues.nameEng)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [picked, setPicked] = useState<{ file: File; url: string | null } | null>(null)
   // 「画像を消す」を入れたときに、選んでいたファイルを欄からも外すため、ファイルの欄を作り直す
@@ -159,13 +165,26 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
       )}
 
       <div className={styles.row}>
-        <TextField label="名前" errors={errors.name} value={values.name} onChange={(value) => set('name', value)} />
+        <TextField
+          label="名前"
+          errors={errors.name}
+          warning={nameDuplicate.warning}
+          value={values.name}
+          onChange={(value) => set('name', value)}
+          onBlur={() => nameDuplicate.check(values.name)}
+        />
         <TextField
           label="英名"
           errors={errors.name_eng}
+          warning={nameEngDuplicate.warning}
           value={values.nameEng}
           onChange={(value) => set('nameEng', value)}
-          onBlur={() => set('nameEng', toHalfWidthAlphanumeric(values.nameEng))}
+          onBlur={() => {
+            // 保存するのは半角にした値なので、重なりも半角にした値で問い合わせる
+            const nameEng = toHalfWidthAlphanumeric(values.nameEng)
+            set('nameEng', nameEng)
+            nameEngDuplicate.check(nameEng)
+          }}
         />
       </div>
 
@@ -305,28 +324,36 @@ function ParentSelect({
 
 type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
 
-/** ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする */
+/**
+ * ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする。
+ * warning は検証の誤りではない知らせなので、欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
+ */
 function Field({
   label,
   errors,
+  warning = null,
   narrow = false,
   children,
 }: {
   label: string
   errors: readonly string[] | undefined
+  warning?: string | null
   narrow?: boolean
   children: (props: ControlProps) => ReactNode
 }) {
   const id = useId()
   const errorId = useId()
+  const warningId = useId()
   const hasErrors = errors !== undefined && errors.length > 0
+  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
   return (
     <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
       <label className={styles.label} htmlFor={id}>
         {label}
       </label>
-      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': hasErrors ? errorId : undefined })}
+      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': describedBy === '' ? undefined : describedBy })}
       <FieldErrors id={errorId} messages={errors} />
+      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
     </div>
   )
 }
@@ -334,6 +361,7 @@ function Field({
 function TextField({
   label,
   errors,
+  warning,
   value,
   onChange,
   onBlur,
@@ -342,6 +370,7 @@ function TextField({
 }: {
   label: string
   errors: readonly string[] | undefined
+  warning?: string | null
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
@@ -349,7 +378,7 @@ function TextField({
   narrow?: boolean
 }) {
   return (
-    <Field label={label} errors={errors} narrow={narrow}>
+    <Field label={label} errors={errors} warning={warning} narrow={narrow}>
       {(props) => (
         <input
           {...props}
