@@ -286,6 +286,7 @@ expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
 
 - 通信中に押せては困る操作(別の行を選ぶ・もう一度送る)は、`pending` の間は押せなくする
 - 応答を受けて画面を更新する前に、送ったときの対象(選んだ語・ファイル・画面そのもの)が今も同じかを確かめる。違えば何も更新しない。画面が外れた後は `navigate` や `setState` を呼ばない
+- 通信中に入力欄を直せる画面では、成功した応答で入力を空にする前に、送ったときの入力と今の入力が同じかを確かめる(違えば、直した入力を残す)。入力欄も `pending` の間は無効にする作りでもよい
 - 画面の外にも状態を持つもの(`localStorage` への保存など)は、`await` をはさんで「見る → 書く」をしない。書く直前にもう一度見る
 
 ```tsx
@@ -297,6 +298,8 @@ expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
 reader.onload = () => {
   if (selectedFile.current === file && typeof reader.result === 'string') setPreview(reader.result)
 }
+// 画面が外れたら、読み込み中でも結果を使わない(外れた後は setPreview を呼ばない)
+useEffect(() => () => { selectedFile.current = null }, [])
 ```
 
 ## RC-16: 入力を直したら、その欄の前の誤りを消す
@@ -319,6 +322,8 @@ const clearError = (...keys: (keyof FieldErrors)[]) =>
     for (const key of keys) delete next[key]
     return next
   })
+// 欄の onChange で、値を更新したあとにその欄の誤りを外す
+<TextField label="変換前" value={values.name} onChange={(name) => { set({ name }); clearError('name') }} errors={errors.name} />
 ```
 
 ## RC-17: 401 は「時間をおいて再試行」ではなく、ログインの期限切れとして案内する
@@ -334,9 +339,10 @@ const clearError = (...keys: (keyof FieldErrors)[]) =>
 // 悪い: 401 も「時間をおいて」と案内する(#638 の初版)
 return `${action}できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
 
-// 良い: 401 を分ける(adminParaphraseApi.ts)
+// 良い: 401 を分ける(adminParaphraseApi.ts)。開き直すと入力が消えるので、先に控えるよう書く
+// (引用元の文は入力を控える案内までは書いていない。入力を残す画面では足す)
 if (failure.status === 401) {
-  return `ログインの期限が切れていて${action}できませんでした。ページを開き直して、ログインし直してください。`
+  return `ログインの期限が切れていて${action}できませんでした。入力を控えてから、ページを開き直してログインし直してください。`
 }
 ```
 
@@ -356,9 +362,12 @@ await save(page, '固定の語')
 await expect(row(page, '固定の語')).toBeVisible()   // ここで落ちると、下の削除に進まない
 await remove(page, '固定の語')
 
-// 良い: 試行ごとに変わる名前にし、後始末は失敗しても動く場所に置く(passkey-management.spec.ts の RUN)
+// 良い: 試行ごとに変わる名前にし(passkey-management.spec.ts の RUN)、後始末は失敗しても動く場所に置く
 const RUN = Date.now()
 const name = `TC-313-21 の端末 ${RUN}`
+test.afterEach(async ({ page }) => {
+  await removeIfExists(page, name)   // 作っていなければ何もしない。成功した回も失敗した回も動く
+})
 ```
 
 ## RC-19: テストは、要素の種類・呼び出しの回数ではなく、役割と見える文字で確かめる
@@ -368,13 +377,13 @@ const name = `TC-313-21 の端末 ${RUN}`
 要素の種類(`p`・`tr`)・通信の回数を決め打ちするテストは、見た目も振る舞いも変わらない作り直し(見出しを `span` に変える・通信を 1 回にまとめる)で落ちる。振る舞いを変えないリファクタのたびにテストを直すことになり、リファクタの担保にならない。決まりそのものは `CLAUDE.md` の「モックの範囲と確かめる対象」にある。ここでは、指摘が繰り返し出た書き方を挙げる。
 
 - 要素は `getByRole`(役割と名前)か、見える文字・`aria-label` で探す。`querySelector('p')`・`locator('tbody tr')` のように、タグ名で探さない
-- 通信は、回数の完全一致ではなく、送った先の URL・中身で確かめる(回数が仕様のときだけ回数を確かめる)
+- 通信の確かめ方は `CLAUDE.md` のとおり(ここには繰り返さない)
 - E2E で行を待つときも、役割(`getByRole('table', { name })` の中の `cell`)で待つ
 
 ```ts
 // 悪い: 名前の要素が p でなくなると落ちる(#615)
 rows.map((row) => row.querySelector('p')?.textContent)
 
-// 良い: 見える名前(aria-label)か、役割で見つけた要素の文字を使う
-rows.map((row) => row.getAttribute('aria-label'))
+// 良い: 行に見える文字を、役割で見つけた要素から読む。aria-label は「アクセシブルな名前」を確かめるときだけ使う
+rows.map((row) => within(row).getByRole('cell', { name: /端末/ }).textContent)
 ```
