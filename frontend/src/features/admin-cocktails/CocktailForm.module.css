@@ -8,9 +8,13 @@
   gap: var(--space-4);
 }
 
+/*
+ * 左の一覧は、フォームの残りの幅だけにすると md の狭いほう(960px 付近)で 100px ほどまで縮み、材料の行の名前が
+ * 1 文字ずつ折り返して量と重なる。名前の列 2 つと量の列(5em)が並ぶ幅を下限にし、足りない分はフォームを縮める
+ */
 @media (min-width: 960px) {
   .withDuplicates {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 800px);
+    grid-template-columns: minmax(16em, 1fr) minmax(0, 800px);
     align-items: start;
   }
 }

@@ -147,3 +147,27 @@ test('TC-127-31: 新規で名前を入れると、同じ名前のカクテルを
   await reloaded
   await expect(duplicates).toHaveCount(0)
 })
+
+test('TC-127-32: md の幅のいちばん狭いところ(960px)でも、左の同じ名前の欄を、材料の名前が読める幅で出し、横にはみ出さない', async ({
+  page,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 960, height: 900 })
+  await login(page, baseURL!)
+  await page.goto('/admin/cocktails/new')
+  await expect(page.getByRole('button', { name: '公開する' })).toBeVisible()
+
+  await page.getByLabel('名前', { exact: true }).fill('カミカゼ')
+
+  const duplicates = page.getByRole('complementary', { name: '同じ名前・同じレシピのカクテル' })
+  await expect(duplicates.getByRole('link', { name: 'カミカゼ' })).toBeVisible()
+  // 欄が 100px ほどまで縮むと、材料の行の名前(ウォッカ)が 1 文字ずつ折り返して量(45ml)と重なる。
+  // 名前の列 2 つと量の列(5em)が並ぶ幅を下回らないこと
+  const box = await duplicates.boundingBox()
+  expect(box!.width).toBeGreaterThanOrEqual(200)
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }))
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+})
