@@ -134,6 +134,59 @@ test('TC-308-23: 開始位置の秒に 60 を入れて送ると、秒の欄の�
   expect(page.url()).toBe(editUrl)
 })
 
+// 名前・英名の重なりの知らせ(#674)。相手は本物の重なりの問い合わせ(#673)と保存の API
+
+const DUPLICATE = '同じ名前が存在しています'
+
+test('TC-674-14: 新規で親を選び、その親の下に既にある名前・英名を入れて欄を離れると、それぞれの欄の下に「同じ名前が存在しています」が出て、直すと消える', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/categories/new')
+  await page.getByRole('list', { name: '親' }).getByRole('radio', { name: '蒸留酒', exact: true }).check()
+
+  // E2eSeeder の蒸留酒の子の「ウォッカ」「ジン」(英名も同じ文字)。保存はしないので、ほかの E2E のデータは変わらない
+  const name = page.getByLabel('名前', { exact: true })
+  const nameEng = page.getByLabel('英名')
+  await name.fill('ウォッカ')
+  await name.blur()
+  await nameEng.fill('ジン')
+  await nameEng.blur()
+
+  await expect(name).toHaveAccessibleDescription(DUPLICATE)
+  await expect(nameEng).toHaveAccessibleDescription(DUPLICATE)
+  await expect(name).toHaveAttribute('aria-invalid', 'false')
+
+  await name.fill('E2E の重ならないノード')
+  await name.blur()
+  await expect(name).not.toHaveAccessibleDescription(DUPLICATE)
+  await expect(nameEng).toHaveAccessibleDescription(DUPLICATE)
+})
+
+test('TC-674-15: 同じ親の下に既にある英名を入れて知らせが出ても保存でき、カテゴリ木の知らせに英名の警告が出る', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  // ミントの下に、英名の重なる相手を先に作る
+  const nameEng = `E2E Node dup ${Date.now()}`
+  await createNode(page, 'dup-first', async (page) => {
+    await page.getByLabel('英名').fill(nameEng)
+  })
+
+  await page.goto('/admin/categories/new')
+  await page.getByRole('list', { name: '親' }).getByRole('radio', { name: 'ミント', exact: true }).check()
+  const name = `E2E のノード dup-second ${Date.now()}`
+  await page.getByLabel('名前', { exact: true }).fill(name)
+  const eng = page.getByLabel('英名')
+  await eng.fill(nameEng)
+  await eng.blur()
+  await expect(eng).toHaveAccessibleDescription(DUPLICATE)
+  await page.getByLabel('説明').fill('E2E で作ったノード')
+  await page.getByRole('button', { name: '送信' }).click()
+
+  await expect(page).toHaveURL(/\/admin\/categories$/)
+  await expect(page.getByRole('status').filter({ hasText: '保存しました' })).toHaveText(`「${name}」を保存しました。英名: ${DUPLICATE}`)
+})
+
 test('TC-308-24: 画像を上げて、差し替えて、消せる', async ({ page, baseURL }) => {
   await login(page, baseURL!)
   const name = await createNode(page, 'image', async (page) => {
