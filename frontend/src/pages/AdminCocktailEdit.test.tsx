@@ -32,14 +32,14 @@ const TREE: SearchFormNode[] = [
 
 const mockTree = () => mockApi('get', '/search-form', 200, { categories: TREE, methods: [] } satisfies SearchForm)
 
-/** 選択肢。製法 2 つ・グラス 1 つ・氷 1 つ(型は API の定義に合わせ、ID は文字にしている) */
+/** 選択肢。製法 2 つ・グラス 1 つ・氷 1 つ(型は API の定義に合わせる) */
 const OPTIONS: FormOptions = {
   methods: [
-    { id: '1', name: 'ビルド' },
-    { id: '2', name: 'シェイク' },
+    { id: 1, name: 'ビルド' },
+    { id: 2, name: 'シェイク' },
   ],
-  glasses: [{ id: '10', name: 'タンブラー' }],
-  ices: [{ id: '20', name: 'キューブアイス' }],
+  glasses: [{ id: 10, name: 'タンブラー' }],
+  ices: [{ id: 20, name: 'キューブアイス' }],
 }
 
 const mockOptions = () => mockApi('get', '/admin/cocktail-form-options', 200, OPTIONS)
