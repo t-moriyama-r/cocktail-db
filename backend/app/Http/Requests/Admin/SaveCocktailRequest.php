@@ -20,6 +20,7 @@ use Illuminate\Validation\Validator;
  *
  * 旧の EditCocktailValidate の規則に、長さの上限・ベースの規則と、材料の件数の上限・ノードと銘柄の規則を足したもの。
  * 別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
+ * 材料(ingredients)は、新規では必須で、更新では送ったときだけ、送った並びに置き換える(下の ingredients()。#720)。
  * 画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
  */
 class SaveCocktailRequest extends FormRequest
@@ -87,8 +88,12 @@ class SaveCocktailRequest extends FormRequest
             'image_txt' => ['nullable', 'string', 'max:255'],
             'image_url' => ['nullable', 'url:http,https', 'max:2048'],
             ...AdminImageStore::rules(),
-            // 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る
-            'ingredients' => ['required', 'array', 'list', 'min:'.self::MIN_INGREDIENTS, 'max:'.self::MAX_INGREDIENTS],
+            // 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る。新規では必須。更新では送らなければ
+            // 今の材料を残す(#720)が、キーを送ったなら空(null・空の配列。multipart の空の値は null で届く)は受けない
+            'ingredients' => [
+                ...($this->isUpdate() ? ['sometimes'] : []),
+                'required', 'array', 'list', 'min:'.self::MIN_INGREDIENTS, 'max:'.self::MAX_INGREDIENTS,
+            ],
             // 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153)
             'ingredients.*.category_id' => ['required', 'integer', 'exists:categories,id', app(NotRootCategory::class)],
             // 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19)
@@ -153,6 +158,23 @@ class SaveCocktailRequest extends FormRequest
         $aliases = $this->input('aliases');
 
         return array_values($aliases ?? []);
+    }
+
+    /**
+     * 保存する材料の行。送った並びのまま返す。更新で ingredients を送っていなければ null(今の材料を残す。#720)。
+     *
+     * @return list<array{category_id: int|string, brand_id?: int|string|null, amount: string, is_optional?: bool|int|string}>|null
+     */
+    public function ingredients(): ?array
+    {
+        if (! $this->has('ingredients')) {
+            return null;
+        }
+
+        /** @var list<array{category_id: int|string, brand_id?: int|string|null, amount: string, is_optional?: bool|int|string}> $rows */
+        $rows = $this->validated('ingredients');
+
+        return $rows;
     }
 
     /**
@@ -225,7 +247,7 @@ class SaveCocktailRequest extends FormRequest
 
             if ($aliases === null) {
                 $id = $this->route('cocktail');
-                $sameAsName = $id !== null && CocktailAlias::query()
+                $sameAsName = $this->isUpdate() && CocktailAlias::query()
                     ->where('cocktail_id', $id)
                     ->where('name_search', $nameSearch)
                     ->exists();
@@ -249,6 +271,14 @@ class SaveCocktailRequest extends FormRequest
                 $seen[$foldedSearch] = true;
             }
         };
+    }
+
+    /**
+     * 更新(PUT /api/admin/cocktails/{id})か。新規(POST /api/admin/cocktails)なら偽。
+     */
+    private function isUpdate(): bool
+    {
+        return $this->route('cocktail') !== null;
     }
 
     /**

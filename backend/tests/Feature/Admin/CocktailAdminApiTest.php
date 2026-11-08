@@ -993,3 +993,139 @@ it('TC-293-12: 保存した別名で、名前の横断検索がカクテルを�
         ->assertJsonPath('cocktails.0.id', $response->json('data.id'))
         ->assertJsonPath('cocktails.0.matched_alias', 'ピーチ・ウーロン');
 });
+
+/**
+ * 材料を送らない更新(#720)の前の状態のカクテル。ジン B 30ml・ソーダ 60ml(任意)・ライム 1 個の 3 行を持ち、材料の数・
+ * 材料の組のハッシュは材料から作る。度数は材料から計算した値(15.7)と違う 12.5 にしておく(送らない更新が度数を
+ * 計算し直していないことを見分けるため)。
+ *
+ * @param  array{nodes: array<string, Category>, brands: array<string, Brand>, methods: list<Method>}  $f
+ */
+function cocktailKeepingIngredients(array $f): Cocktail
+{
+    $n = $f['nodes'];
+    $cocktail = Cocktail::factory()->create([
+        'base_category_id' => $n['ラム']->id,
+        'method_id' => $f['methods'][0]->id,
+        'volume' => '12.5',
+    ]);
+    $rows = [
+        [$n['ジン'], $f['brands']['ジン B'], '30ml', false],
+        [$n['ソーダ'], null, '60ml', true],
+        [$n['ライム'], null, '1個', false],
+    ];
+    foreach ($rows as $index => [$node, $brand, $amount, $isOptional]) {
+        CocktailIngredient::factory()->create([
+            'cocktail_id' => $cocktail->id, 'category_id' => $node->id, 'brand_id' => $brand?->id, 'amount' => $amount,
+            'position' => $index + 1, 'is_optional' => $isOptional,
+        ]);
+    }
+    app(RecipeCounter::class)->recount([$cocktail->id]);
+    app(RecipeSignature::class)->rewrite([$cocktail->id]);
+
+    return $cocktail->refresh();
+}
+
+/**
+ * カクテルの材料の行を、レシピの順に返す。
+ *
+ * @return array<array-key, mixed>
+ */
+function storedIngredientRows(Cocktail $cocktail): array
+{
+    return CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->orderBy('position')
+        ->get(['position', 'category_id', 'brand_id', 'amount', 'is_optional'])->toArray();
+}
+
+/**
+ * 材料を送らない更新で、変わるもの(名前・補足)と変わらないもの(材料から作る値)の列を、DB から読み直して返す。
+ *
+ * @return array<string, mixed>
+ */
+function storedKeptColumns(Cocktail $cocktail): array
+{
+    return Cocktail::query()->findOrFail($cocktail->id)->only(['name', 'note', 'volume', 'recipe_count', 'recipe_signature']);
+}
+
+it('TC-720-01: 材料を送らない更新は 200 で基本情報を書き換え、材料の行と度数・材料の数・材料の組のハッシュは今のまま残す', function (bool $multipart) {
+    $f = cocktailAdminFixture();
+    $n = $f['nodes'];
+    $cocktail = cocktailKeepingIngredients($f);
+    $before = storedKeptColumns($cocktail);
+    $rowsBefore = storedIngredientRows($cocktail);
+    $uri = "/api/admin/cocktails/{$cocktail->id}";
+    $input = cocktailAdminInput($f, ['name' => '新しい名前', 'note' => '新しい補足', 'ingredients' => null]);
+
+    $response = $multipart
+        ? $this->post($uri, [...$input, 'is_major' => 'true', 'is_draft' => 'false', '_method' => 'PUT'], ['Accept' => 'application/json'])
+        : $this->putJson($uri, $input);
+
+    $response->assertOk()
+        ->assertJsonPath('data.name', '新しい名前')
+        ->assertJsonPath('data.strength', 12.5)
+        ->assertJsonCount(3, 'data.ingredients')
+        ->assertJsonPath('data.ingredients.0.brand_id', $f['brands']['ジン B']->id)
+        ->assertJsonPath('data.ingredients.1.is_optional', true);
+
+    expect($rowsBefore)->toBe([
+        ['position' => 1, 'category_id' => $n['ジン']->id, 'brand_id' => $f['brands']['ジン B']->id, 'amount' => '30ml', 'is_optional' => false],
+        ['position' => 2, 'category_id' => $n['ソーダ']->id, 'brand_id' => null, 'amount' => '60ml', 'is_optional' => true],
+        ['position' => 3, 'category_id' => $n['ライム']->id, 'brand_id' => null, 'amount' => '1個', 'is_optional' => false],
+    ])
+        ->and(storedIngredientRows($cocktail))->toBe($rowsBefore)
+        ->and(storedKeptColumns($cocktail))
+        ->toBe([...$before, 'name' => '新しい名前', 'note' => '新しい補足'])
+        ->and($before['recipe_count'])->toBe(1)
+        ->and($before['recipe_signature'])->toBeString();
+})->with(['JSON' => [false], 'multipart' => [true]]);
+
+it('TC-720-02: 更新で材料を空(JSON の null・空の配列、multipart の空の値)か 1 件で送ると 422 で、カクテルも材料も書き換えない', function (string $how) {
+    $f = cocktailAdminFixture();
+    $cocktail = cocktailKeepingIngredients($f);
+    $before = storedKeptColumns($cocktail);
+    $rowsBefore = storedIngredientRows($cocktail);
+    $uri = "/api/admin/cocktails/{$cocktail->id}";
+    $input = cocktailAdminInput($f, ['name' => '書き換えない名前', 'ingredients' => null]);
+
+    $response = match ($how) {
+        'null' => $this->putJson($uri, [...$input, 'ingredients' => null]),
+        '[]' => $this->putJson($uri, [...$input, 'ingredients' => []]),
+        'multipart' => $this->post($uri, [...$input, 'is_major' => 'true', 'is_draft' => 'false', '_method' => 'PUT', 'ingredients' => ''], ['Accept' => 'application/json']),
+        '1 件' => $this->putJson($uri, [...$input, 'ingredients' => [cocktailAdminIngredient($f['nodes']['ジン'], '45')]]),
+        default => throw new InvalidArgumentException($how),
+    };
+
+    $response->assertUnprocessable()->assertJsonValidationErrors('ingredients');
+    expect(storedKeptColumns($cocktail))->toBe($before)
+        ->and(storedIngredientRows($cocktail))->toBe($rowsBefore);
+})->with(['JSON の null' => ['null'], 'JSON の空の配列' => ['[]'], 'multipart の空の値' => ['multipart'], '1 件' => ['1 件']]);
+
+it('TC-720-03: 今の材料の組で度数を計算できなくても、材料を送らない更新は 422 にせず、度数を今のまま残す', function () {
+    $f = cocktailAdminFixture();
+    $n = $f['nodes'];
+    $cocktail = Cocktail::factory()->create([
+        'base_category_id' => $n['ラム']->id,
+        'method_id' => $f['methods'][0]->id,
+        'volume' => '12.5',
+    ]);
+    // 旧から移した行など、今の規則では度数を計算できない組(tsp・dash だけ)。行は直接入れる
+    foreach (['1tsp', '2dash'] as $position => $amount) {
+        CocktailIngredient::factory()->create([
+            'cocktail_id' => $cocktail->id, 'category_id' => $n['ジン']->id, 'brand_id' => null, 'amount' => $amount,
+            'position' => $position + 1, 'is_optional' => false,
+        ]);
+    }
+    $uri = "/api/admin/cocktails/{$cocktail->id}";
+
+    // 同じ組を送れば、今までどおり計算できない材料の誤り
+    $this->putJson($uri, cocktailAdminInput($f, ['ingredients' => [
+        cocktailAdminIngredient($n['ジン'], '1t'),
+        cocktailAdminIngredient($n['ジン'], '2da'),
+    ]]))->assertUnprocessable()->assertJsonValidationErrors('ingredients');
+
+    $this->putJson($uri, cocktailAdminInput($f, ['name' => '新しい名前', 'ingredients' => null]))
+        ->assertOk()
+        ->assertJsonPath('data.name', '新しい名前')
+        ->assertJsonPath('data.strength', 12.5);
+    expect(CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->orderBy('position')->pluck('amount')->all())->toBe(['1tsp', '2dash']);
+});

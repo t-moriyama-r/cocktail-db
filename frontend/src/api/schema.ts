@@ -236,7 +236,8 @@ export interface paths {
         /** 編集で開くカクテル。下書きも返す。 */
         get: operations["cocktail.show"];
         /**
-         * カクテルの基本情報と材料・別名を書き換える。材料から作る値(度数・材料の数・材料の組のハッシュ)も作り直す。
+         * カクテルの基本情報と材料・別名を書き換える。材料を送ったときは、送った材料に置き換え、材料から作る値(度数・材料の数・
+         *     材料の組のハッシュ)も作り直す。材料を送らなければ、今の材料と材料から作る値を残す(#720)。別名も、送らなければ今の別名を残す。
          *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
          */
         put: operations["cocktail.update"];
@@ -1776,6 +1777,7 @@ export interface components {
          *
          *     旧の EditCocktailValidate の規則に、長さの上限・ベースの規則と、材料の件数の上限・ノードと銘柄の規則を足したもの。
          *     別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
+         *     材料(ingredients)は、新規では必須で、更新では送ったときだけ、送った並びに置き換える(下の ingredients()。#720)。
          *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
          */
         SaveCocktailRequest: {
@@ -1814,7 +1816,10 @@ export interface components {
              */
             image?: string | null;
             remove_image?: boolean;
-            /** @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る */
+            /**
+             * @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る。新規では必須。更新では送らなければ
+             *     今の材料を残す(#720)が、キーを送ったなら空(null・空の配列。multipart の空の値は null で届く)は受けない
+             */
             ingredients: {
                 /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
                 category_id: number;
