@@ -11,8 +11,25 @@ const FIELD_LABEL: Readonly<Record<string, string>> = { name: '名前', name_eng
  * 例: 「「ジン」を保存しました。英名: 同じ名前が存在しています」
  */
 export function savedNotice(name: string, warnings: readonly CategorySaveWarning[]): CategoryTreeNotice {
+  return withWarnings(`「${name}」を保存しました`, warnings)
+}
+
+/**
+ * 親を付け替えたときの知らせ(#125)。移した先の根から親までの名前を出す。付け替えも保存なので、保存の後の警告があれば続ける。
+ * 例: 「「ドライジン」を「その他 / ミント」の下へ移しました」
+ */
+export function movedNotice(name: string, parentPath: readonly string[], warnings: readonly CategorySaveWarning[]): CategoryTreeNotice {
+  return withWarnings(`「${name}」を「${parentPath.join(' / ')}」の下へ移しました`, warnings)
+}
+
+/** 消したときの知らせ(#125)。例: 「「ドライジン」を消しました」 */
+export function deletedNotice(name: string): CategoryTreeNotice {
+  return { notice: `「${name}」を消しました` }
+}
+
+function withWarnings(lead: string, warnings: readonly CategorySaveWarning[]): CategoryTreeNotice {
   const details = warnings.map((warning) => `${FIELD_LABEL[warning.field] ?? warning.field}: ${warning.message}`)
-  return { notice: [`「${name}」を保存しました`, ...details].join('。') }
+  return { notice: [lead, ...details].join('。') }
 }
 
 /**

@@ -114,7 +114,7 @@ describe('一覧', () => {
     expect(titles).toEqual(['Amazon のパートナータグ', 'Amazon Creators API の Credential Secret', '画面に書いていない項目', '画面から変えられない設定'])
     expect(within(itemSection('画面に書いていない項目')).getByText('足した項目の説明')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Amazon Creators API の Credential ID' })).not.toBeInTheDocument()
-    expect(document.title).toBe('設定 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('設定 ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-133-02: 秘密の項目は「設定済み(末尾 4 文字)」/「設定済み」/「未設定」を出し、値の欄はパスワードの欄で空にする', async () => {

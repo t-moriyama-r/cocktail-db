@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, test } from 'vitest'
 import App from '../../App'
@@ -83,7 +83,7 @@ describe('共通の枠(SiteLayout)', () => {
     renderAt(path)
 
     await screen.findByRole('heading', { level: 1 })
-    expect(document.title).toBe(title)
+    await waitFor(() => expect(document.title).toBe(title))
   })
 
   test.each([['/detail/cocktail/1']])(
@@ -93,7 +93,7 @@ describe('共通の枠(SiteLayout)', () => {
       renderAt(path)
 
       await screen.findByRole('heading', { level: 1 })
-      expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
+      await waitFor(() => expect(document.title).toBe('宅飲みカクテルデータベース(RC)'))
     },
   )
 
@@ -104,11 +104,11 @@ describe('共通の枠(SiteLayout)', () => {
     mockApi('get', '/random-walk', 200, { type: 'cocktail', id: 1 })
     renderAt('/')
     await screen.findByRole('heading', { level: 1, name: '宅飲みカクテルデータベース' })
-    expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)'))
 
     fireEvent.click(await within(screen.getByRole('banner')).findByRole('link', { name: '現在の登録数：1' }))
 
     await screen.findByRole('heading', { level: 1, name: 'マティーニ(Martini)' })
-    expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('宅飲みカクテルデータベース(RC)'))
   })
 })

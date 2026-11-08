@@ -1,0 +1,60 @@
+/* ノードの親の付け替え・削除(#125)。編集画面の一覧と同じく、上とのあいだに線を引き、800px までの幅に収める */
+.section {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 800px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 根の役割が変わるときの注意 */
+.caution {
+  margin: 0;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+.reasons {
+  margin: 0;
+  padding-left: var(--space-4);
+  overflow-wrap: anywhere;
+}
+
+.failure {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.button {
+  padding: var(--space-2) var(--space-5);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.danger {
+  background: var(--color-danger);
+}
+
+/* 選んでいない・消せない・応答を待つあいだは押せない */
+.button:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}

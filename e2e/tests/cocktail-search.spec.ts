@@ -75,7 +75,8 @@ test('TC-103-08: 結果の「次へ」・ページの番号で、同じ条件の
   await dialog.getByRole('checkbox', { name: 'ウォッカ' }).check()
   await dialog.getByRole('button', { name: '検索' }).click()
 
-  const rows = results(page).getByRole('table').locator('tbody > tr')
+  // 表の体の行(列の見出しの行を除く)。見出しの行はセルを持たないので、セルを持つ行だけを取る
+  const rows = results(page).getByRole('table').getByRole('row').filter({ has: page.getByRole('cell') })
   const pager = page.getByRole('navigation', { name: 'カクテル検索結果のページ' })
   await expect(page).toHaveURL(/\/result\/Cocktails\?n=\d+$/)
   const firstUrl = page.url()

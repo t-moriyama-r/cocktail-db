@@ -12,7 +12,7 @@ export type CategoryFormValues = {
   parentId: number | null
   /**
    * 根のノードか。新規なら「親なし」を選ぶと true(根を作る。#310)。編集では開いたノードが根なら true で、変えない
-   * (編集での親の付け替えは #675)
+   * (フォームの親の欄で選び直すのは #675)
    */
   isRoot: boolean
   /** 根の役割(なし = null・ソフトドリンク・その他。#310)。根のときだけ送る */

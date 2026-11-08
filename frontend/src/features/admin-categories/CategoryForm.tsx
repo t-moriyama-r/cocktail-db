@@ -1,20 +1,20 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
-import type { CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
+import { pathTo, ROLE_OPTIONS, roleLabel, toCategoryTreeNode } from './adminCategoryTree'
 import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
 import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
-import { ROLE_LABEL, ROLE_OPTIONS } from './categoryRole'
 import styles from './CategoryForm.module.css'
+import { useMounted } from './useMounted'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
 type CategoryRole = components['schemas']['CategoryRole']
 
 /**
  * 親の欄。新規は木から選ぶか「親なし」(根を作る。#310)を選び、編集は今の親(根から親までの名前)を出すだけにする
- * (編集での親の付け替えは #675 で足す)
+ * (フォームの親の欄で選び直すのは #675 で足す。移すのは編集画面の下の「親の付け替え」の欄。#125)
  */
 export type ParentField =
   | { kind: 'select'; tree: readonly AdminTreeItem[] }
@@ -88,13 +88,7 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
   const set = <K extends keyof CategoryFormValues>(key: K, value: CategoryFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
 
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-    }
-  }, [])
+  const mounted = useMounted()
 
   const pickImage = (file: File | null) => {
     setValues((current) => ({ ...current, image: file, removeImage: false }))
@@ -348,7 +342,7 @@ function RoleSelect({
         {ROLE_OPTIONS.map((option) => (
           <label key={option ?? 'none'} className={styles.check}>
             <input type="radio" name={name} checked={role === option} onChange={() => onChange(option)} />
-            {ROLE_LABEL[option ?? 'none']}
+            {roleLabel(option)}
           </label>
         ))}
       </div>
@@ -442,19 +436,4 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'
   }
-}
-
-/** 管理 API の木のノードを、木の部品のノードにする */
-function toCategoryTreeNode(item: AdminTreeItem): CategoryTreeNode {
-  return { id: item.id, name: item.name, name_eng: item.name_eng, is_major: item.is_major, children: item.children.map(toCategoryTreeNode) }
-}
-
-/** 根から id のノードまでのノード(根を含む)。木に無ければ null */
-function pathTo(nodes: readonly AdminTreeItem[], id: number): AdminTreeItem[] | null {
-  for (const node of nodes) {
-    if (node.id === id) return [node]
-    const found = pathTo(node.children, id)
-    if (found !== null) return [node, ...found]
-  }
-  return null
 }

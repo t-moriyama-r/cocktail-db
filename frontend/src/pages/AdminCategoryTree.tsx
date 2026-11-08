@@ -1,20 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import type { components } from '../api/schema'
-import { api } from '../api/client'
 import { useApi } from '../api/useApi'
 import { ADMIN_NEW_CATEGORY_PATH, adminCategoryEditPath } from '../components/AdminLayout/adminPaths'
 import InlineApiView from '../components/ApiView/InlineApiView'
 import CategoryTree from '../components/CategoryTree/CategoryTree'
-import type { CategoryTreeAppearance, CategoryTreeNode } from '../components/CategoryTree/CategoryTree.types'
+import type { CategoryTreeAppearance } from '../components/CategoryTree/CategoryTree.types'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
-import { ROLE_LABEL } from '../features/admin-categories/categoryRole'
+import { fetchAdminCategoryTree } from '../features/admin-categories/categoryApi'
+import { roleLabel, toCategoryTreeNode } from '../features/admin-categories/adminCategoryTree'
 import { readCategoryTreeNotice } from '../features/admin-categories/categoryTreeNotice'
 import styles from './AdminCategoryTree.module.css'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
-
-const fetchCategoryTree = () => api.GET('/admin/categories')
 
 /**
  * 管理画面のカテゴリ木(/admin/categories。#123)。木の部品(#297)の単一選択のモードで、木全体を出す。
@@ -29,7 +27,7 @@ const fetchCategoryTree = () => api.GET('/admin/categories')
  */
 export default function AdminCategoryTree() {
   usePageTitle('カテゴリ木')
-  const { state, retry } = useApi(fetchCategoryTree)
+  const { state, retry } = useApi(fetchAdminCategoryTree)
   const location = useLocation()
   const navigate = useNavigate()
   // 知らせは画面の state に持ち、履歴の state は消す(「戻る」で戻ったとき、古い知らせを出さないため)
@@ -78,17 +76,6 @@ function Tree({ items, onSelect }: TreeProps) {
   )
 }
 
-/** 管理 API のノードを、木の部品が受け取る形にする */
-function toCategoryTreeNode(item: AdminTreeItem): CategoryTreeNode {
-  return {
-    id: item.id,
-    name: item.name,
-    name_eng: item.name_eng,
-    is_major: item.is_major,
-    children: item.children.map(toCategoryTreeNode),
-  }
-}
-
 /** 名前の後ろに添える注記: 「(英名)」・根なら「役割: …」・「メジャー」か「メジャーでない」 */
 function buildAppearance(roots: readonly AdminTreeItem[]): CategoryTreeAppearance {
   // 根の ID → 根の役割。根だけが入るので、入っているかで根かどうかも分かる
@@ -97,7 +84,7 @@ function buildAppearance(roots: readonly AdminTreeItem[]): CategoryTreeAppearanc
     noteOf: (node) => {
       const parts = [`(${node.name_eng ?? ''})`]
       if (roleOf.has(node.id)) {
-        parts.push(`役割: ${ROLE_LABEL[roleOf.get(node.id) ?? 'none']}`)
+        parts.push(`役割: ${roleLabel(roleOf.get(node.id) ?? null)}`)
       }
       parts.push(node.is_major ? 'メジャー' : 'メジャーでない')
       return parts.join('・')
