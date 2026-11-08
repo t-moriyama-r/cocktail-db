@@ -24,7 +24,8 @@ use InvalidArgumentException;
  *
  * 材料は、そのカクテルの材料の行を消してから、送られた配列の順に position を 1 から振って入れる(旧と同じ)。量は
  * AmountFormatter(#159)で整え、材料から作る値(度数 volume・材料の数 recipe_count・材料の組のハッシュ
- * recipe_signature)を同じトランザクションで作り直す。
+ * recipe_signature)を同じトランザクションで作り直す。更新で材料を送らなければ、材料の行も材料から作る値も
+ * 今のまま残す(#720)。
  *
  * 別名(#293)は、送ったときだけ、送った並びに置き換える。
  *
@@ -45,7 +46,10 @@ class AdminCocktailWriter
     /**
      * $cocktail(新規なら null)に入力を書いて保存する。
      *
-     * @throws ValidationException 説明・補足の記法が読めないとき・整えた量が列に入らないとき・材料から度数を計算できないとき
+     * 材料を送らない更新(SaveCocktailRequest::ingredients() が null)では、材料の行と、材料から作る値(度数・材料の数・
+     * 材料の組のハッシュ)を書き換えない(#720)。
+     *
+     * @throws ValidationException 説明・補足の記法が読めないとき・整えた量が列に入らないとき・送った材料から度数を計算できないとき
      */
     public function save(?Cocktail $cocktail, SaveCocktailRequest $request): Cocktail
     {
@@ -56,7 +60,8 @@ class AdminCocktailWriter
             }
             $cocktail ??= new Cocktail;
 
-            $ingredients = $this->ingredients($request);
+            $rows = $request->ingredients();
+            $ingredients = $rows === null ? null : $this->ingredients($rows);
 
             $name = $request->string('name')->toString();
             $videoId = YoutubeInput::videoId($request->youtubeInput());
@@ -84,8 +89,11 @@ class AdminCocktailWriter
                 ),
                 'image_txt' => $request->nullableString('image_txt'),
                 'image_url' => $request->nullableString('image_url'),
-                'volume' => $this->strengthOf($ingredients),
             ]);
+            // 材料を送らない更新では、今の度数を残す(空の材料から計算しない。#720)
+            if ($ingredients !== null) {
+                $cocktail->volume = $this->strengthOf($ingredients);
+            }
 
             // 動画を新しく入れたか変えたときは今の時刻、消したときは null(旧の FactoryHelper と同じ。新着の動画の並びに使う)
             if ($videoId === null) {
@@ -101,11 +109,14 @@ class AdminCocktailWriter
 
             $cocktail->save();
 
-            // 材料は、いまの行を消してから送られた順に入れ直す(旧の RecipeFactory::saveRecipe と同じ)
-            CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->delete();
-            foreach ($ingredients as $ingredient) {
-                $ingredient->cocktail_id = $cocktail->id;
-                $ingredient->save();
+            // 材料は、いまの行を消してから送られた順に入れ直す(旧の RecipeFactory::saveRecipe と同じ)。
+            // 送らない更新では、今の行を position も含めてそのまま残す(#720)
+            if ($ingredients !== null) {
+                CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->delete();
+                foreach ($ingredients as $ingredient) {
+                    $ingredient->cocktail_id = $cocktail->id;
+                    $ingredient->save();
+                }
             }
 
             $aliases = $request->aliases();
@@ -113,9 +124,12 @@ class AdminCocktailWriter
                 $this->replaceAliases($cocktail, $aliases);
             }
 
-            // 数え直しは列だけを書き換えるので、返すモデルも読み直す
-            $this->counter->recount([$cocktail->id]);
-            $this->signature->rewrite([$cocktail->id]);
+            // 数え直しは列だけを書き換えるので、返すモデルも読み直す。材料を送らない更新では行が変わらないので、
+            // 今の材料の数・材料の組のハッシュを残す(#720)
+            if ($ingredients !== null) {
+                $this->counter->recount([$cocktail->id]);
+                $this->signature->rewrite([$cocktail->id]);
+            }
             $cocktail->refresh();
 
             return $cocktail;
@@ -123,17 +137,16 @@ class AdminCocktailWriter
     }
 
     /**
-     * 送られた材料の行を、保存する前の CocktailIngredient にする。position は配列の順に 1 から振り、量は整える。
-     * 度数の計算に使うノード(有名な銘柄つき)と銘柄を読み込んでおく。
+     * 送られた材料の行(SaveCocktailRequest::ingredients())を、保存する前の CocktailIngredient にする。position は配列の順に
+     * 1 から振り、量は整える。度数の計算に使うノード(有名な銘柄つき)と銘柄を読み込んでおく。
      *
+     * @param  list<array{category_id: int|string, brand_id?: int|string|null, amount: string, is_optional?: bool|int|string}>  $rows
      * @return list<CocktailIngredient>
      *
      * @throws ValidationException 整えた量が列(20 文字)に入らないとき
      */
-    private function ingredients(SaveCocktailRequest $request): array
+    private function ingredients(array $rows): array
     {
-        /** @var list<array{category_id: int|string, brand_id?: int|string|null, amount: string, is_optional?: bool|int|string}> $rows */
-        $rows = $request->validated('ingredients');
         $nodes = Category::query()->with('famousBrand')->findMany(array_column($rows, 'category_id'))->keyBy('id');
         $brandIds = array_filter(array_map(fn (array $row): mixed => $row['brand_id'] ?? null, $rows), fn (mixed $id): bool => $id !== null);
         $brands = Brand::query()->findMany(array_values($brandIds))->keyBy('id');

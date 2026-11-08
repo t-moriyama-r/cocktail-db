@@ -39,7 +39,8 @@ class CocktailController extends Controller
     }
 
     /**
-     * カクテルの基本情報と材料・別名を書き換える。材料から作る値(度数・材料の数・材料の組のハッシュ)も作り直す。
+     * カクテルの基本情報と材料・別名を書き換える。材料を送ったときは、送った材料に置き換え、材料から作る値(度数・材料の数・
+     * 材料の組のハッシュ)も作り直す。材料を送らなければ、今の材料と材料から作る値を残す(#720)。別名も、送らなければ今の別名を残す。
      * 別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
      */
     public function update(SaveCocktailRequest $request, AdminCocktailWriter $writer, int $cocktail): CocktailResource
