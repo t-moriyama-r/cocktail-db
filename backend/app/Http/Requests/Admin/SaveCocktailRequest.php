@@ -22,6 +22,7 @@ use Illuminate\Validation\Validator;
  * 別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
  * 材料(ingredients)は、新規では必須で、更新では送ったときだけ、送った並びに置き換える(下の ingredients()。#720)。
  * 画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+ * 更新はこのクラスを継いだ UpdateCocktailRequest で受ける(OpenAPI で更新の材料を任意にするため。#721)。
  */
 class SaveCocktailRequest extends FormRequest
 {
@@ -274,11 +275,12 @@ class SaveCocktailRequest extends FormRequest
     }
 
     /**
-     * 更新(PUT /api/admin/cocktails/{id})か。新規(POST /api/admin/cocktails)なら偽。
+     * 更新(PUT /api/admin/cocktails/{id})か。新規(POST /api/admin/cocktails)なら偽。更新は UpdateCocktailRequest が
+     * 真を返す(ルートの無いところで規則を読む Scramble にも、更新の形を出すため。#721)。
      */
-    private function isUpdate(): bool
+    protected function isUpdate(): bool
     {
-        return $this->route('cocktail') !== null;
+        return false;
     }
 
     /**
