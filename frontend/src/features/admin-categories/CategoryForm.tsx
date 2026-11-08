@@ -1,12 +1,13 @@
-import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useMemo, useState, type FormEvent } from 'react'
 import type { components } from '../../api/schema'
+import { Field, FieldErrors, TextAreaField, TextField } from '../../components/AdminForm/AdminField'
+import { useDuplicateWarning } from '../../components/AdminForm/useDuplicateWarning'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import { pathTo, ROLE_OPTIONS, roleLabel, toCategoryTreeNode } from './adminCategoryTree'
-import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
+import { findCategoryDuplicate, saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
 import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
-import { useCategoryDuplicateWarning } from './useCategoryDuplicateWarning'
 import styles from './CategoryForm.module.css'
 import { useMounted } from './useMounted'
 
@@ -84,9 +85,17 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
   // 重なりは、保存する親の下で比べる(根なら根どうし)。新規で「親なし」を選んだら、前に選んでいた親ではなく根どうしで比べる。
   // 新規で親をまだ選んでいなければ、比べる相手が決まらないので比べない
-  const duplicateScope = values.isRoot ? { parentId: null } : values.parentId !== null ? { parentId: values.parentId } : null
-  const nameDuplicate = useCategoryDuplicateWarning('name', nodeId, duplicateScope, initialValues.name)
-  const nameEngDuplicate = useCategoryDuplicateWarning('name_eng', nodeId, duplicateScope, initialValues.nameEng)
+  const duplicateScope = values.isRoot ? { key: null } : values.parentId !== null ? { key: values.parentId } : null
+  const nameDuplicate = useDuplicateWarning<number | null>(
+    (name, parentId) => findCategoryDuplicate('name', name, parentId, nodeId),
+    duplicateScope,
+    initialValues.name,
+  )
+  const nameEngDuplicate = useDuplicateWarning<number | null>(
+    (nameEng, parentId) => findCategoryDuplicate('name_eng', nameEng, parentId, nodeId),
+    duplicateScope,
+    initialValues.nameEng,
+  )
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [picked, setPicked] = useState<{ file: File; url: string | null } | null>(null)
   // 「画像を消す」を入れたときに、選んでいたファイルを欄からも外すため、ファイルの欄を作り直す
@@ -161,8 +170,8 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
           onRootChange={(isRoot) => set('isRoot', isRoot)}
         />
       ) : (
-        <div className={styles.field}>
-          <span className={styles.label}>親</span>
+        <div className={styles.fixedParent}>
+          <span className={styles.fixedParentLabel}>親</span>
           <p className={styles.selected}>{parent.path.length === 0 ? '(根のノード)' : parent.path.join(' / ')}</p>
           <FieldErrors messages={errors.parent_id} />
         </div>
@@ -210,17 +219,13 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
       </div>
       <FieldErrors messages={[...(errors.is_major ?? []), ...(errors.is_like ?? []), ...(errors.is_powder ?? [])]} />
 
-      <Field label="説明" errors={errors.description}>
-        {(props) => (
-          <textarea
-            {...props}
-            className={styles.textarea}
-            rows={8}
-            value={values.description}
-            onChange={(event) => set('description', event.target.value)}
-          />
-        )}
-      </Field>
+      <TextAreaField
+        label="説明"
+        errors={errors.description}
+        rows={8}
+        value={values.description}
+        onChange={(value) => set('description', value)}
+      />
 
       <div className={styles.row}>
         <TextField label="YouTube" errors={errors.youtube} value={values.youtube} onChange={(value) => set('youtube', value)} />
@@ -368,92 +373,6 @@ function RoleSelect({
       </div>
       <FieldErrors id={errorId} messages={errors} />
     </fieldset>
-  )
-}
-
-type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
-
-/**
- * ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする。
- * warning は検証の誤りではない知らせなので、欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
- */
-function Field({
-  label,
-  errors,
-  warning = null,
-  narrow = false,
-  children,
-}: {
-  label: string
-  errors: readonly string[] | undefined
-  warning?: string | null
-  narrow?: boolean
-  children: (props: ControlProps) => ReactNode
-}) {
-  const id = useId()
-  const errorId = useId()
-  const warningId = useId()
-  const hasErrors = errors !== undefined && errors.length > 0
-  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
-  return (
-    <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
-      <label className={styles.label} htmlFor={id}>
-        {label}
-      </label>
-      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': describedBy === '' ? undefined : describedBy })}
-      <FieldErrors id={errorId} messages={errors} />
-      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
-    </div>
-  )
-}
-
-function TextField({
-  label,
-  errors,
-  warning,
-  value,
-  onChange,
-  onBlur,
-  inputMode,
-  narrow,
-}: {
-  label: string
-  errors: readonly string[] | undefined
-  warning?: string | null
-  value: string
-  onChange: (value: string) => void
-  onBlur?: () => void
-  inputMode?: 'numeric'
-  narrow?: boolean
-}) {
-  return (
-    <Field label={label} errors={errors} warning={warning} narrow={narrow}>
-      {(props) => (
-        <input
-          {...props}
-          className={styles.input}
-          type="text"
-          inputMode={inputMode}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur}
-        />
-      )}
-    </Field>
-  )
-}
-
-function FieldErrors({ id, messages }: { id?: string; messages: readonly string[] | undefined }) {
-  if (messages === undefined || messages.length === 0) {
-    return null
-  }
-  return (
-    <ul id={id} className={styles.errors}>
-      {messages.map((message, index) => (
-        // 同じ文が 2 度来ることがある(メジャー・お気に入りの両方が必須で落ちたときなど)ので、並びの位置で区別する
-        <li key={index}>{message}</li>
-      ))}
-    </ul>
   )
 }
 

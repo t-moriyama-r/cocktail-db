@@ -1,9 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { components } from '../../api/schema'
+import { Field, FieldErrors, TextAreaField, TextField } from '../../components/AdminForm/AdminField'
+import { useDuplicateWarning } from '../../components/AdminForm/useDuplicateWarning'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
-import { findBrandDuplicate, saveBrand, type BrandFieldErrors, type DuplicateField, type SaveBrandResult } from './brandApi'
+import { findBrandDuplicate, saveBrand, type BrandFieldErrors, type SaveBrandResult } from './brandApi'
 import { sanitizeDigits, sanitizeStrength, toHalfWidthAlphanumeric, type BrandFormValues } from './brandFormValues'
 import styles from './BrandForm.module.css'
 
@@ -28,6 +30,9 @@ type SaveState = { kind: 'idle' } | { kind: 'saving' } | Exclude<SaveBrandResult
 const HOUR_DIGITS = 1
 const MINUTE_OR_SECOND_DIGITS = 2
 
+/** 銘柄の名前・英名の重なりは、所属によらず銘柄全体で比べる(比べる範囲は変わらない) */
+const ALL_BRANDS = { key: 'all' } as const
+
 /**
  * 管理画面の銘柄の編集フォーム(旧 `Detail/BrandEdit.vue`・`component/NamesAndDescription.vue`。#64)。
  *
@@ -47,8 +52,12 @@ const MINUTE_OR_SECOND_DIGITS = 2
 export default function BrandForm({ brandId, initialValues, currentImage, categories, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<BrandFieldErrors>({})
-  const nameDuplicate = useDuplicateWarning('name', brandId, initialValues.name)
-  const nameEngDuplicate = useDuplicateWarning('name_eng', brandId, initialValues.nameEng)
+  const nameDuplicate = useDuplicateWarning((name) => findBrandDuplicate('name', name, brandId), ALL_BRANDS, initialValues.name)
+  const nameEngDuplicate = useDuplicateWarning(
+    (nameEng) => findBrandDuplicate('name_eng', nameEng, brandId),
+    ALL_BRANDS,
+    initialValues.nameEng,
+  )
   const categoryErrorId = useId()
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [preview, setPreview] = useState<string | null>(currentImage === null ? null : storageImageUrl(currentImage))
@@ -178,17 +187,13 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
       </div>
       <FieldErrors messages={[...(errors.is_major ?? []), ...(errors.is_like ?? [])]} />
 
-      <Field label="説明" errors={errors.description}>
-        {(props) => (
-          <textarea
-            {...props}
-            className={styles.textarea}
-            rows={8}
-            value={values.description}
-            onChange={(event) => set('description', event.target.value)}
-          />
-        )}
-      </Field>
+      <TextAreaField
+        label="説明"
+        errors={errors.description}
+        rows={8}
+        value={values.description}
+        onChange={(value) => set('description', value)}
+      />
 
       <div className={styles.row}>
         <TextField label="YouTube" errors={errors.youtube} value={values.youtube} onChange={(value) => set('youtube', value)} />
@@ -249,117 +254,6 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
         )}
       </div>
     </form>
-  )
-}
-
-/**
- * 名前・英名の重なりの知らせ。値を変えて欄を離れたら(旧の `@change`)check に今の値を渡すと、問い合わせて warning を更新する。
- * - 前に問い合わせた値(最初は開いたときの値)から変わっていなければ問い合わせない
- * - 空なら問い合わせず、出ていた知らせを消す(空の名前は重ならない)
- * - 続けて問い合わせたときは、最後に問い合わせた値の結果だけを出す(先の応答が後から返っても上書きしない)
- */
-function useDuplicateWarning(field: DuplicateField, brandId: number | null, initialValue: string) {
-  const [warning, setWarning] = useState<string | null>(null)
-  const checkedValue = useRef(initialValue)
-  const latest = useRef(0)
-  const check = (value: string) => {
-    if (value === checkedValue.current) return
-    checkedValue.current = value
-    const request = ++latest.current
-    if (value === '') {
-      setWarning(null)
-      return
-    }
-    void findBrandDuplicate(field, value, brandId).then((message) => {
-      if (request === latest.current) setWarning(message)
-    })
-  }
-  return { warning, check }
-}
-
-type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
-
-/**
- * ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする。
- * warning(名前・英名の重なり)は、保存を止めないので欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
- */
-function Field({
-  label,
-  errors,
-  warning = null,
-  narrow = false,
-  children,
-}: {
-  label: string
-  errors: readonly string[] | undefined
-  warning?: string | null
-  narrow?: boolean
-  children: (props: ControlProps) => ReactNode
-}) {
-  const id = useId()
-  const errorId = useId()
-  const warningId = useId()
-  const hasErrors = errors !== undefined && errors.length > 0
-  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
-  return (
-    <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
-      <label className={styles.label} htmlFor={id}>
-        {label}
-      </label>
-      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': describedBy === '' ? undefined : describedBy })}
-      <FieldErrors id={errorId} messages={errors} />
-      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
-    </div>
-  )
-}
-
-function TextField({
-  label,
-  errors,
-  warning,
-  value,
-  onChange,
-  onBlur,
-  inputMode,
-  narrow,
-}: {
-  label: string
-  errors: readonly string[] | undefined
-  warning?: string | null
-  value: string
-  onChange: (value: string) => void
-  onBlur?: () => void
-  inputMode?: 'decimal' | 'numeric'
-  narrow?: boolean
-}) {
-  return (
-    <Field label={label} errors={errors} warning={warning} narrow={narrow}>
-      {(props) => (
-        <input
-          {...props}
-          className={styles.input}
-          type="text"
-          inputMode={inputMode}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur}
-        />
-      )}
-    </Field>
-  )
-}
-
-function FieldErrors({ id, messages }: { id?: string; messages: readonly string[] | undefined }) {
-  if (messages === undefined || messages.length === 0) {
-    return null
-  }
-  return (
-    <ul id={id} className={styles.errors}>
-      {messages.map((message, index) => (
-        // 同じ文が 2 度来ることがある(メジャー・お気に入りの両方が必須で落ちたときなど)ので、並びの位置で区別する
-        <li key={index}>{message}</li>
-      ))}
-    </ul>
   )
 }
 
