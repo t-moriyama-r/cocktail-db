@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import App from '../App'
@@ -117,7 +117,7 @@ describe('公開済み・下書きの切り替え', () => {
     expect(await screen.findByRole('link', { name: 'ジントニック(Gin and Tonic)' })).toBeInTheDocument()
     expect(rowTexts()).toEqual(['ジントニック(Gin and Tonic)', 'モヒート(Mojito)'])
     expect(currentSwitch()).toEqual(['公開済み'])
-    expect(document.title).toBe('カクテル ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('カクテル ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-126-03: 「下書き」を押すと、URL が ?status=draft になり、下書きのカクテルだけを出す', async () => {

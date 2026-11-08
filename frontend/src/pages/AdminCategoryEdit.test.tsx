@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import App from '../App'
 import type { components, paths } from '../api/schema'
 import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
@@ -21,11 +21,18 @@ const item = (id: number, name: string, nameEng: string, children: TreeItem[] = 
   children,
 })
 
+/** 根の役割(root_role)を、根の下のノードすべてに入れる(API と同じく、部分木のノードは根の役割を持つ) */
+const withRootRole = (node: TreeItem, rootRole: TreeItem['root_role']): TreeItem => ({
+  ...node,
+  root_role: rootRole,
+  children: node.children.map((child) => withRootRole(child, rootRole)),
+})
+
 /** 管理 API の木: 蒸留酒(根) > ジン > ドライジン、その他(根。役割: その他) > ミント */
 const TREE: TreeItem[] = [
   item(1, '蒸留酒', 'Spirits', [item(2, 'ジン', 'Gin', [item(3, 'ドライジン', 'Dry Gin')])]),
   item(5, 'その他', 'Other', [item(6, 'ミント', 'Mint')], 'other'),
-]
+].map((root) => withRootRole(root, root.role))
 
 const mockTree = () => mockApi('get', '/admin/categories', 200, { data: TREE })
 
@@ -148,7 +155,7 @@ describe('カテゴリ木からの行き来', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'ノードの編集' })).toBeInTheDocument()
     expect(currentUrl()).toBe('/admin/categories/2')
     expect(screen.getByLabelText('名前')).toHaveValue('ジン')
-    expect(document.title).toBe('ノードの編集 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('ノードの編集 ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-308-02: カテゴリ木の画面の「新規」から、空のフォームの新規の画面が開く', async () => {
@@ -669,6 +676,41 @@ describe('名前・英名の重なり(#674)', () => {
     expect(screen.getByLabelText('名前')).toHaveAccessibleDescription(DUPLICATE)
     expect(screen.getByLabelText('名前')).toHaveValue('ジン')
   })
+
+  test('TC-674-17: 新規で「親なし」を入れたり外したりすると、前の比べる相手で出した知らせを消し、欄を離れ直すと根どうし・前に選んだ親で問い合わせる', async () => {
+    await openNew()
+    mockDuplicates()
+    const rootCheck = () => screen.getByRole('checkbox', { name: '親なし(根のノードを作る)' })
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    // 「親なし」を入れると、前に選んでいた親(蒸留酒)の下で出した知らせを消す
+    fireEvent.click(rootCheck())
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+
+    // 離れ直すと、前に選んでいた親を送らずに根どうしで問い合わせる。根に「ジン」は無いので、応答が返った後も出ない
+    touch('名前')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+    expect(duplicateQueries()[1]).toEqual({ name: 'ジン' })
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+
+    // 根どうしで重なる名前なら出る
+    enter('名前', 'その他')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    // 「親なし」を外すと、根どうしで出した知らせを消す。離れ直すと、前に選んでいた親(蒸留酒)で問い合わせ、重ならないので出ない
+    fireEvent.click(rootCheck())
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    touch('名前')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(4))
+    expect(duplicateQueries()[3]).toEqual({ parent_id: '1', name: 'その他' })
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+  })
 })
 
 describe('新規', () => {
@@ -698,5 +740,370 @@ describe('新規', () => {
     expect(await within(parent).findByText('The parent id field must be present.')).toBeInTheDocument()
     expect(sent()!.has('parent_id')).toBe(false)
     expect(currentUrl()).toBe('/admin/categories/new')
+  })
+})
+
+describe('根の作成と役割(#310)', () => {
+  const roleGroup = () => screen.queryByRole('group', { name: '役割' })
+  const rootCheck = () => screen.getByRole('checkbox', { name: '親なし(根のノードを作る)' })
+
+  test('TC-310-01: 新規の最初は「親なし」が外れていて、役割の欄を出さない', async () => {
+    await openNew()
+
+    expect(rootCheck()).not.toBeChecked()
+    expect(roleGroup()).not.toBeInTheDocument()
+  })
+
+  test('TC-310-02: 新規で「親なし」を入れると、親の木と選んでいる親を隠し、役割の欄を「なし」で出す', async () => {
+    await openNew()
+
+    fireEvent.click(rootCheck())
+
+    expect(screen.queryByRole('list', { name: '親' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/^選んでいる親:/)).not.toBeInTheDocument()
+    const roles = within(roleGroup()!).getAllByRole('radio')
+    expect(roles.map((radio) => radio.parentElement?.textContent)).toEqual(['なし', 'ソフトドリンク', 'その他'])
+    expect(within(roleGroup()!).getByRole('radio', { name: 'なし' })).toBeChecked()
+  })
+
+  test('TC-310-03: 「親なし」で役割にソフトドリンクを選んで送ると、親を空・役割を soft_drink で新規に送り、有名な銘柄は送らない', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...OTHER_ROOT, id: 11, name: '果汁', role: 'soft_drink' }), 201))
+
+    fireEvent.click(rootCheck())
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'ソフトドリンク' }))
+    fireEvent.change(screen.getByLabelText('名前'), { target: { value: '果汁' } })
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「果汁」を保存しました')
+    const entries = textEntries(sent()!)
+    expect([entries._method, entries.parent_id, entries.role, entries.famous_brand_id, entries.name]).toEqual([
+      undefined,
+      '',
+      'soft_drink',
+      undefined,
+      '果汁',
+    ])
+  })
+
+  test('TC-310-04: 「親なし」で役割が「なし」のまま送ると、親を空で送り、役割は送らない', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...OTHER_ROOT, id: 12, name: '果実酒', role: null }), 201))
+
+    fireEvent.click(rootCheck())
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries.parent_id, 'role' in entries]).toEqual(['', false])
+  })
+
+  test('TC-310-05: 「親なし」を外すと、木と前に選んだ親が戻り、役割の欄を消し、送信で役割を送らず選んだ親を送る', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...GIN, id: 10, name: 'レモン' }), 201))
+
+    fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name: 'ミント' }))
+    fireEvent.click(rootCheck())
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'その他' }))
+    fireEvent.click(rootCheck())
+
+    expect(roleGroup()).not.toBeInTheDocument()
+    expect(screen.getByText('選んでいる親: その他 / ミント')).toBeInTheDocument()
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries.parent_id, 'role' in entries]).toEqual(['6', false])
+  })
+
+  test('TC-310-06: 根の編集では役割の欄を今の値で出し、ソフトドリンクに変えて送ると role を soft_drink で送る', async () => {
+    await openEdit(OTHER_ROOT)
+    const sent = captureSave('put', () => jsonResponse(saved({ ...OTHER_ROOT, role: 'soft_drink' }), 200))
+
+    expect(within(roleGroup()!).getByRole('radio', { name: 'その他' })).toBeChecked()
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'ソフトドリンク' }))
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries._method, entries.parent_id, entries.role]).toEqual(['PUT', '', 'soft_drink'])
+  })
+
+  test('TC-310-07: 根の編集で役割を「なし」に変えて送ると、役割を送らない(API は役割を null にする)', async () => {
+    await openEdit(OTHER_ROOT)
+    const sent = captureSave('put', () => jsonResponse(saved({ ...OTHER_ROOT, role: null }), 200))
+
+    fireEvent.click(within(roleGroup()!).getByRole('radio', { name: 'なし' }))
+    submit()
+
+    await screen.findByRole('status')
+    const entries = textEntries(sent()!)
+    expect([entries.parent_id, 'role' in entries]).toEqual(['', false])
+  })
+
+  test('TC-310-08: 根以外の編集では、役割の欄も「親なし」も出さず、役割を送らない', async () => {
+    await openEdit()
+    const sent = captureSave('put', () => jsonResponse(saved(GIN), 200))
+
+    expect(roleGroup()).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: '親なし(根のノードを作る)' })).not.toBeInTheDocument()
+    submit()
+
+    await screen.findByRole('status')
+    expect(sent()!.has('role')).toBe(false)
+  })
+
+  test('TC-310-09: 根の編集にも「親なし」は出さない(親は「(根のノード)」と出すだけ)', async () => {
+    await openEdit(OTHER_ROOT)
+
+    expect(screen.getByText('(根のノード)')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: '親なし(根のノードを作る)' })).not.toBeInTheDocument()
+  })
+
+  test('TC-310-10: 役割の 422 は、役割の欄の下に出し、送信の下には重ねない', async () => {
+    await openEdit(OTHER_ROOT)
+    captureSave('put', () => jsonResponse({ message: 'invalid', errors: { role: ['役割は根にだけ入れられます'] } }, 422))
+
+    submit()
+
+    const alert = await screen.findByRole('alert')
+    expect(roleGroup()).toHaveAccessibleDescription('役割は根にだけ入れられます')
+    expect(alert).not.toHaveTextContent('役割は根にだけ入れられます')
+  })
+})
+
+/** 編集で開くノード: 蒸留酒 > ジン > ドライジン(子も銘柄も無い葉) */
+const DRY_GIN: CategoryResource = {
+  ...GIN,
+  id: 3,
+  parent_id: 2,
+  path: [
+    { id: 1, name: '蒸留酒' },
+    { id: 2, name: 'ジン' },
+  ],
+  name: 'ドライジン',
+  name_eng: 'Dry Gin',
+  description: '辛口のジン',
+  famous_brand_id: null,
+  famous_brand_candidates: [],
+  children: [],
+  brands: [],
+  image: null,
+}
+
+/** 送ったリクエストのうち、メソッドとパスが合うもの */
+const sentTo = (method: string, path: string) =>
+  apiRequests().filter((request) => request.method === method && new URL(request.url).pathname === `/api${path}`)
+
+const moveSection = () => screen.getByRole('region', { name: '親の付け替え' })
+const deleteSection = () => screen.getByRole('region', { name: 'ノードの削除' })
+
+/** 親の付け替えの欄で「移す先を選ぶ」を押し、移す先の木が出るまで待つ */
+const openMoveTree = async () => {
+  fireEvent.click(within(moveSection()).getByRole('button', { name: '移す先を選ぶ' }))
+  return within(await within(moveSection()).findByRole('list', { name: '移す先' }))
+}
+
+const pickTarget = async (name: string) => {
+  const tree = await openMoveTree()
+  fireEvent.click(tree.getByRole('radio', { name }))
+}
+
+const moveButton = () => within(moveSection()).getByRole('button', { name: '移す' })
+const deleteButton = () => within(deleteSection()).getByRole('button', { name: 'このノードを消す' })
+
+describe('親の付け替え(#125)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('TC-125-01: 移す先の木では、自分・自分の下のノード・今の親は選べず、選ぶまでは「移す」を押せない', async () => {
+    await openEdit(GIN)
+
+    expect(within(moveSection()).getByText('今の親: 蒸留酒')).toBeInTheDocument()
+    const tree = await openMoveTree()
+
+    expect(tree.getByRole('radio', { name: 'ジン' })).toBeDisabled()
+    expect(tree.getByRole('radio', { name: '蒸留酒' })).toBeDisabled()
+    expect(tree.getByRole('radio', { name: 'その他' })).toBeEnabled()
+    // 自分の下のノードは、開いても選べない
+    fireEvent.click(tree.getByRole('button', { name: 'ジンを開く' }))
+    expect(tree.getByRole('radio', { name: 'ドライジン' })).toBeDisabled()
+    expect(within(moveSection()).getByText('移す先: (未選択)')).toBeInTheDocument()
+    expect(moveButton()).toBeDisabled()
+  })
+
+  test('TC-125-02: 同じ根の中で移すと、役割の注意を出さずに確かめ、開いたときの値に新しい親を入れて送り、カテゴリ木へ戻って移したことを出す', async () => {
+    await openEdit(DRY_GIN)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const sent = captureSave('put', () => jsonResponse(saved({ ...DRY_GIN, parent_id: 1 }), 200))
+
+    await pickTarget('蒸留酒')
+    expect(within(moveSection()).getByText('移す先: 蒸留酒')).toBeInTheDocument()
+    expect(within(moveSection()).queryByText(/役割が/)).not.toBeInTheDocument()
+    fireEvent.click(moveButton())
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ドライジン」を「蒸留酒」の下へ移しました')
+    expect(confirm).toHaveBeenCalledWith('「ドライジン」を「蒸留酒」の下へ移します。よろしいですか?')
+    expect(currentUrl()).toBe('/admin/categories')
+    expect(textEntries(sent()!)).toEqual({
+      _method: 'PUT',
+      parent_id: '1',
+      name: 'ドライジン',
+      name_eng: 'Dry Gin',
+      description: '辛口のジン',
+      youtube: 'abcdefghijk',
+      youtube_start_hour: '1',
+      youtube_start_minute: '2',
+      youtube_start_second: '3',
+      image_txt: '公式',
+      image_url: 'https://example.com/',
+      is_major: '1',
+      is_like: '0',
+      is_powder: '0',
+    })
+  })
+
+  test('TC-125-03: 根をまたいで移すときは、選んだところと確かめに「役割が〈なし〉から〈その他〉に変わります」と出す', async () => {
+    await openEdit(GIN)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const sent = captureSave('put', () => jsonResponse(saved({ ...GIN, parent_id: 6, root_role: 'other' }), 200))
+
+    await pickTarget('ミント')
+    expect(within(moveSection()).getByText('移す先: その他 / ミント')).toBeInTheDocument()
+    expect(within(moveSection()).getByText('役割が〈なし〉から〈その他〉に変わります')).toBeInTheDocument()
+    fireEvent.click(moveButton())
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ジン」を「その他 / ミント」の下へ移しました')
+    expect(confirm).toHaveBeenCalledWith(
+      '「ジン」を「その他 / ミント」の下へ移します。役割が〈なし〉から〈その他〉に変わります。よろしいですか?',
+    )
+    expect(textEntries(sent()!)).toMatchObject({ parent_id: '6', famous_brand_id: '8' })
+  })
+
+  test('TC-125-04: 確かめでやめると送らず、画面に残る', async () => {
+    await openEdit(DRY_GIN)
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    await pickTarget('蒸留酒')
+    fireEvent.click(moveButton())
+
+    expect(sentTo('POST', '/admin/categories/3')).toHaveLength(0)
+    expect(currentUrl()).toBe('/admin/categories/3')
+  })
+
+  test('TC-125-05: 移せない(422)ときは、API が返す理由をそのまま出し、画面に残る', async () => {
+    await openEdit(GIN)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const reason = 'このノードの下の銘柄が「ゴードン」の有名な銘柄なので、そのノードの外へは移せません'
+    captureSave('put', () => jsonResponse({ message: reason, errors: { parent_id: [reason] } }, 422))
+
+    await pickTarget('その他')
+    fireEvent.click(moveButton())
+
+    const alert = await within(moveSection()).findByRole('alert')
+    expect(alert).toHaveTextContent('移せませんでした。')
+    expect(within(alert).getAllByRole('listitem').map((item) => item.textContent)).toEqual([reason])
+    expect(currentUrl()).toBe('/admin/categories/2')
+  })
+
+  test('TC-125-06: 422 以外の失敗(500)は、エラーの番号を出して画面に残る', async () => {
+    await openEdit(GIN)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    captureSave('put', () => jsonResponse({ message: 'Server Error' }, 500))
+
+    await pickTarget('その他')
+    fireEvent.click(moveButton())
+
+    expect(await within(moveSection()).findByRole('alert')).toHaveTextContent(
+      '移せませんでした(エラー 500)。時間をおいて、もう一度お試しください。',
+    )
+    expect(currentUrl()).toBe('/admin/categories/2')
+  })
+
+  test('TC-125-07: 根のノードには親の付け替えの欄を出さない(削除の欄は出す)', async () => {
+    await openEdit(OTHER_ROOT)
+
+    expect(screen.queryByRole('region', { name: '親の付け替え' })).not.toBeInTheDocument()
+    expect(deleteSection()).toBeInTheDocument()
+  })
+})
+
+describe('削除(#125)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('TC-125-08: 消せるノードは、確かめてから DELETE を送り、カテゴリ木へ戻って消したことを出す', async () => {
+    await openEdit(DRY_GIN)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockApiHandler('delete', '/admin/categories/{category}', () => new Response(null, { status: 204 }))
+
+    expect(within(deleteSection()).getByText('消すと元に戻せません。')).toBeInTheDocument()
+    fireEvent.click(deleteButton())
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ドライジン」を消しました')
+    expect(confirm).toHaveBeenCalledWith('「ドライジン」を消します。よろしいですか?')
+    expect(currentUrl()).toBe('/admin/categories')
+    expect(sentTo('DELETE', '/admin/categories/3')).toHaveLength(1)
+  })
+
+  test('TC-125-09: 消せないノードは、開いたときの理由をすべて出し、消すボタンを押せない', async () => {
+    await openEdit({
+      ...GIN,
+      delete_blockers: [
+        { code: 'children', message: '子のノードがあります' },
+        { code: 'brands', message: 'このノードの銘柄があります' },
+        { code: 'base_cocktails', message: 'カクテルのベースに使われています' },
+      ],
+    })
+
+    expect(within(deleteSection()).getByText('このノードは消せません')).toBeInTheDocument()
+    expect(within(deleteSection()).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '子のノードがあります',
+      'このノードの銘柄があります',
+      'カクテルのベースに使われています',
+    ])
+    expect(deleteButton()).toBeDisabled()
+  })
+
+  test('TC-125-10: 開いた後に消せなくなっていた(409)ときは、API が返す理由をそのまま出し、画面に残る', async () => {
+    await openEdit(DRY_GIN)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockApi('delete', '/admin/categories/{category}', 409, {
+      message: 'このノードは消せません',
+      reasons: [{ code: 'ingredients', message: 'カクテルの材料に使われています' }],
+    })
+
+    fireEvent.click(deleteButton())
+
+    const alert = await within(deleteSection()).findByRole('alert')
+    expect(alert).toHaveTextContent('このノードは消せません')
+    expect(within(alert).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['カクテルの材料に使われています'])
+    expect(deleteButton()).toBeDisabled()
+    expect(currentUrl()).toBe('/admin/categories/3')
+  })
+
+  test('TC-125-11: 確かめでやめると DELETE を送らない', async () => {
+    await openEdit(DRY_GIN)
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    fireEvent.click(deleteButton())
+
+    expect(sentTo('DELETE', '/admin/categories/3')).toHaveLength(0)
+    expect(currentUrl()).toBe('/admin/categories/3')
+  })
+
+  test('TC-125-12: 409 以外の失敗(404)は、エラーの番号を出して画面に残る', async () => {
+    await openEdit(DRY_GIN)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockApiHandler('delete', '/admin/categories/{category}', () => jsonResponse({ message: 'Not Found' }, 404))
+
+    fireEvent.click(deleteButton())
+
+    expect(await within(deleteSection()).findByRole('alert')).toHaveTextContent(
+      '消せませんでした(エラー 404)。時間をおいて、もう一度お試しください。',
+    )
+    expect(currentUrl()).toBe('/admin/categories/3')
   })
 })

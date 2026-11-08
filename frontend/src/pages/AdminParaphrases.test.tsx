@@ -141,7 +141,7 @@ describe('画面を開く', () => {
     fireEvent.click(within(menu).getByRole('link', { name: '言い換え・スキップ語' }))
 
     expect(await screen.findByRole('heading', { level: 1, name: '言い換え・スキップ語' })).toBeInTheDocument()
-    expect(document.title).toBe('言い換え・スキップ語 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('言い換え・スキップ語 ｜ 宅飲みカクテルデータベース(RC)'))
     expect(screen.getByRole('heading', { level: 2, name: '言い換え辞書' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'スキップ語' })).toBeInTheDocument()
   })

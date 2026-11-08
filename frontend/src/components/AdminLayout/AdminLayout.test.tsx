@@ -72,7 +72,7 @@ describe('未ログインのとき', () => {
       screen.getByText('パスキーでログインできないときは、サーバーで発行した非常用のログイン URL を開いてください。'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: '管理画面のメニュー' })).not.toBeInTheDocument()
-    expect(document.title).toBe('ログイン ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('ログイン ｜ 宅飲みカクテルデータベース(RC)'))
   })
 })
 
@@ -85,7 +85,7 @@ describe('ログインしているとき', () => {
     expect(screen.getByRole('link', { name: '管理画面' })).toHaveAttribute('href', '/admin')
     expect(screen.getByText('管理者の太郎 でログイン中')).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: '管理画面のメニュー' })).toBeInTheDocument()
-    expect(document.title).toBe('管理画面 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('管理画面 ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-119-05: メニューは、まだ画面の無い項目と引き継がない項目(オートインプット)を出さず、画面のある項目(カテゴリ木。#123・銘柄。#64・用語辞典。#66・カクテル。#126・言い換え・スキップ語。#67・設定。#133・パスキー。#313)とログアウトを出す', async () => {

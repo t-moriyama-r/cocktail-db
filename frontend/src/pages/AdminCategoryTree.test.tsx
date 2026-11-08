@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import App from '../App'
@@ -100,7 +100,7 @@ describe('AdminCategoryTree', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'カテゴリ木' })).toBeInTheDocument()
     expect(await screen.findByRole('list', { name: 'カテゴリ木' })).toBeInTheDocument()
-    expect(document.title).toBe('カテゴリ木 ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('カテゴリ木 ｜ 宅飲みカクテルデータベース(RC)'))
   })
 
   test('TC-123-02: 開いたときは根だけが開き、行に名前(英名)・根なら役割・メジャーかを出す', async () => {

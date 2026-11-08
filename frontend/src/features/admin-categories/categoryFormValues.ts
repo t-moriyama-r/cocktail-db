@@ -8,8 +8,15 @@ type CategoryRole = components['schemas']['CategoryRole']
  * 開始位置も文字のまま持つ。空の欄を 0 にせず、空のまま送って API の検証に任せるため(銘柄のフォームと同じ)。
  */
 export type CategoryFormValues = {
-  /** 親。新規でまだ選んでいなければ null。根の編集でも null(根のまま保存する) */
+  /** 親。新規でまだ選んでいなければ null。根(isRoot)なら使わない */
   parentId: number | null
+  /**
+   * 根のノードか。新規なら「親なし」を選ぶと true(根を作る。#310)。編集では開いたノードが根なら true で、変えない
+   * (フォームの親の欄で選び直すのは #675)
+   */
+  isRoot: boolean
+  /** 根の役割(なし = null・ソフトドリンク・その他。#310)。根のときだけ送る */
+  role: CategoryRole | null
   name: string
   nameEng: string
   description: string
@@ -33,20 +40,18 @@ export type CategoryFormValues = {
 /**
  * このフォームでは変えないが、保存のときに今の値のまま送り直すもの。
  *
- * - 根の役割(#310 で変えられるようにする)。根の保存で送らないと、API は役割を消す
  * - 有名な銘柄(#309 で選べるようにする)。送らなければ API は今の値のまま残すが、有名な銘柄が必須の部分木では、
  *   送らないと 422 になるので送り直す
  */
 export type CategoryKeptValues = {
-  /** 根の編集か。根は親を空(null)で送る */
-  isRoot: boolean
-  role: CategoryRole | null
   famousBrandId: number | null
 }
 
 /** 新規の画面の最初の入力。旧(CategoryEdit.vue・MiddleEdit.vue の detailEditObj)と同じく、すべて空でチェックは外す */
 export const EMPTY_CATEGORY_FORM: CategoryFormValues = {
   parentId: null,
+  isRoot: false,
+  role: null,
   name: '',
   nameEng: '',
   description: '',
@@ -63,8 +68,8 @@ export const EMPTY_CATEGORY_FORM: CategoryFormValues = {
   removeImage: false,
 }
 
-/** 新規のノードは根でなく(根を作るのは #310)、役割も有名な銘柄も持たない */
-export const NEW_CATEGORY_KEPT: CategoryKeptValues = { isRoot: false, role: null, famousBrandId: null }
+/** 新規のノードは、有名な銘柄を持たない */
+export const NEW_CATEGORY_KEPT: CategoryKeptValues = { famousBrandId: null }
 
 const text = (value: string | number | null): string => (value === null ? '' : String(value))
 
@@ -72,6 +77,8 @@ const text = (value: string | number | null): string => (value === null ? '' : S
 export function categoryFormValuesOf(node: CategoryResource): CategoryFormValues {
   return {
     parentId: node.parent_id,
+    isRoot: node.parent_id === null,
+    role: node.role,
     name: node.name,
     nameEng: node.name_eng,
     description: node.description ?? '',
@@ -91,7 +98,7 @@ export function categoryFormValuesOf(node: CategoryResource): CategoryFormValues
 
 /** 編集で開いたノードから、このフォームでは変えずに送り直す値を取り出す */
 export function categoryKeptValuesOf(node: CategoryResource): CategoryKeptValues {
-  return { isRoot: node.parent_id === null, role: node.role, famousBrandId: node.famous_brand_id }
+  return { famousBrandId: node.famous_brand_id }
 }
 
 /**
@@ -99,7 +106,9 @@ export function categoryKeptValuesOf(node: CategoryResource): CategoryKeptValues
  *
  * 画像を上げられるよう、画像を選んでいないときも multipart で送る(旧も FormData で送っていた)。
  * 空の欄は空の文字のまま送る(Laravel が null に読み、必須の欄なら 422 になる)。
- * 親は、根の編集なら空(根のまま)、新規でまだ選んでいなければ送らない(API が「親が要る」の 422 を返す)。
+ * 親は、根(新規で「親なし」を選んだ・根の編集)なら空にして役割を添え、新規でまだ選んでいなければ送らない
+ * (API が「親が要る」の 422 を返す)。役割は「なし」なら送らない(API は送られない役割を null にする)。
+ * 根以外では役割を送らない(役割を持てるのは根だけ。#153)。
  * 真偽値は API が読める "1"・"0" にする。更新は PHP が PUT の multipart を読まないので、POST に `_method=PUT` を付けて送る。
  */
 export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKeptValues, method: 'POST' | 'PUT'): FormData {
@@ -107,15 +116,15 @@ export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKep
   if (method === 'PUT') {
     form.append('_method', 'PUT')
   }
-  if (kept.isRoot) {
+  if (values.isRoot) {
     form.append('parent_id', '')
-    if (kept.role !== null) {
-      form.append('role', kept.role)
+    if (values.role !== null) {
+      form.append('role', values.role)
     }
   } else if (values.parentId !== null) {
     form.append('parent_id', String(values.parentId))
   }
-  if (!kept.isRoot && kept.famousBrandId !== null) {
+  if (!values.isRoot && kept.famousBrandId !== null) {
     form.append('famous_brand_id', String(kept.famousBrandId))
   }
   form.append('name', values.name)

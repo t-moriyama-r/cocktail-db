@@ -132,7 +132,7 @@ describe('一覧', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'パスキー' })).toBeInTheDocument()
     expect(within(menu).getByRole('link', { name: 'パスキー' })).toHaveAttribute('aria-current', 'page')
-    expect(document.title).toBe('パスキー ｜ 宅飲みカクテルデータベース(RC)')
+    await waitFor(() => expect(document.title).toBe('パスキー ｜ 宅飲みカクテルデータベース(RC)'))
   })
 })
 

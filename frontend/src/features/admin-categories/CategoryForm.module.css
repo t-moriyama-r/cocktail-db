@@ -138,3 +138,8 @@
 .failureMessage {
   margin: 0;
 }
+
+/* 親の欄の「親なし(根のノードを作る)」。下の選んでいる親・木と間を空ける */
+.rootCheck {
+  margin-bottom: var(--space-2);
+}
