@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "before": "b044a259014d6932c6888ae0675c39183850088d",
+  "after": "907d8643eabdbfcf668c71c800370a35bfb9b3c5",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-720-01"
+      ],
+      "note": "修正前は 422(材料を入力してください)、修正後は 200 で材料の行と度数・材料の数・材料の組のハッシュが before と after で同じこと",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    }
+  ]
+}
