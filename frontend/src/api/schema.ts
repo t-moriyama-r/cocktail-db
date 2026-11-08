@@ -1836,7 +1836,7 @@ export interface components {
             }[];
             /**
              * @description 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
-             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
+             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る。件数の上限は MAX_ALIASES(#731)
              */
             aliases?: string[] | null;
         };
@@ -1999,7 +1999,7 @@ export interface components {
             }[];
             /**
              * @description 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
-             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
+             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る。件数の上限は MAX_ALIASES(#731)
              */
             aliases?: string[] | null;
         };
