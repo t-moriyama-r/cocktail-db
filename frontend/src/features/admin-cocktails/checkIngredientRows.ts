@@ -1,10 +1,8 @@
 import type { CocktailIngredientRow } from './cocktailFormValues'
 
-/** 木の 1 ノードのうち、親子をたどるのに使うところ(GET /api/search-form の categories) */
-type TreeNode = { id: number; children: readonly TreeNode[] }
-
 /**
  * 材料の行を保存の前に確かめ、保存を止める理由の文(旧 CocktailEdit.vue の send と同じ文言)を返す。止めなくてよければ空。
+ * nodePaths は、ノードの ID から根からの道のり(根が先頭で、そのノードが末尾)を引く表。
  *
  * 同じ材料を 2 行に入れる・ベースを材料に入れ忘れる、は入れ間違いだが、API はどちらも確かめない(API が見るのは件数と、
  * 行ごとのノード・銘柄・量)。旧は送る前に画面で止めていたので、新も送る前に止める(#128)。
@@ -18,7 +16,7 @@ type TreeNode = { id: number; children: readonly TreeNode[] }
 export function checkIngredientRows(
   rows: readonly CocktailIngredientRow[],
   baseCategoryId: number | null,
-  tree: readonly TreeNode[],
+  nodePaths: ReadonlyMap<number, readonly { id: number }[]>,
 ): string[] {
   const chosen = rows.filter((row): row is CocktailIngredientRow & { categoryId: number } => row.categoryId !== null)
   const messages: string[] = []
@@ -26,8 +24,8 @@ export function checkIngredientRows(
     messages.push(DUPLICATE_MESSAGE)
   }
   if (baseCategoryId !== null && chosen.length > 0) {
-    const parents = parentsOf(tree)
-    if (!chosen.some((row) => isSelfOrDescendant(row.categoryId, baseCategoryId, parents))) {
+    const containsBase = chosen.some((row) => nodePaths.get(row.categoryId)?.some((node) => node.id === baseCategoryId) ?? false)
+    if (!containsBase) {
       messages.push(BASE_NOT_FOUND_MESSAGE)
     }
   }
@@ -43,26 +41,6 @@ function hasDuplicate(rows: readonly { categoryId: number; brandId: number | nul
     const id = `${row.categoryId}:${row.brandId ?? ''}`
     if (seen.has(id)) return true
     seen.add(id)
-  }
-  return false
-}
-
-/** ノードの ID から親の ID を引く表(根は載せない) */
-function parentsOf(tree: readonly TreeNode[]): ReadonlyMap<number, number> {
-  const parents = new Map<number, number>()
-  const walk = (node: TreeNode) => {
-    for (const child of node.children) {
-      parents.set(child.id, node.id)
-      walk(child)
-    }
-  }
-  tree.forEach(walk)
-  return parents
-}
-
-function isSelfOrDescendant(id: number, ancestorId: number, parents: ReadonlyMap<number, number>): boolean {
-  for (let current: number | undefined = id; current !== undefined; current = parents.get(current)) {
-    if (current === ancestorId) return true
   }
   return false
 }

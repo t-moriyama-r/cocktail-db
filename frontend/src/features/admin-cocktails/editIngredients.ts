@@ -41,9 +41,9 @@ export function editIngredients(values: CocktailFormValues, edit: IngredientEdit
     case 'optional':
       return updateRow(values, edit.key, { isOptional: edit.isOptional })
     case 'add':
-      return values.ingredients.length >= MAX_INGREDIENT_ROWS
-        ? values
-        : { ...values, ingredients: [...values.ingredients, emptyIngredientRow(nextKey(values.ingredients))] }
+      return canAddIngredientRow(values.ingredients)
+        ? { ...values, ingredients: [...values.ingredients, emptyIngredientRow(nextKey(values.ingredients))] }
+        : values
     case 'remove':
       return { ...values, ingredients: values.ingredients.filter((row) => row.key !== edit.key) }
     case 'move':
@@ -87,4 +87,9 @@ function moveRow(rows: readonly CocktailIngredientRow[], key: number, offset: -1
   const moved = [...rows]
   ;[moved[from], moved[to]] = [moved[to], moved[from]]
   return moved
+}
+
+/** 行をもう 1 つ足せるか(行の上限に届いていないか) */
+export function canAddIngredientRow(rows: readonly CocktailIngredientRow[]): boolean {
+  return rows.length < MAX_INGREDIENT_ROWS
 }

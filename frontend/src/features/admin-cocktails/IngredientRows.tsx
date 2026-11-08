@@ -4,20 +4,20 @@ import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/
 import { FieldErrors, TextField } from './CocktailFormFields'
 import IngredientBrandSelect from './IngredientBrandSelect'
 import { MAX_INGREDIENT_ROWS, type CocktailIngredientRow } from './cocktailFormValues'
-import type { IngredientEdit } from './editIngredients'
+import { canAddIngredientRow, type IngredientEdit } from './editIngredients'
 import type { IngredientErrors, IngredientRowErrors } from './ingredientErrors.types'
 import formStyles from './CocktailForm.module.css'
 import styles from './IngredientRows.module.css'
 
 type Props = {
   rows: readonly CocktailIngredientRow[]
-  /** ノードを選ぶ木(根も含めた木全体) */
+  /** ノードを選ぶ木 */
   nodes: CategoryTreeNode[]
-  /** 木の見え方(根を見出しにする。ベースの木と同じ) */
+  /** 木のノードごとの見え方 */
   appearance: CategoryTreeAppearance
-  /** 選べるノード(根は選べない。#153) */
+  /** 選べるノードかを返す */
   isSelectable: (node: CategoryTreeNode) => boolean
-  /** ノードの、根を除いたパンくずの文字。木に無ければ null */
+  /** 選んでいるノードとして出す文字。出せなければ null */
   pathOf: (categoryId: number) => string | null
   errors: IngredientErrors
   onEdit: (edit: IngredientEdit) => void
@@ -36,8 +36,8 @@ export default function IngredientRows({ rows, nodes, appearance, isSelectable, 
   const [pickingKey, setPickingKey] = useState<number | null>(null)
 
   return (
-    <section className={formStyles.ingredients} aria-labelledby={headingId}>
-      <h2 id={headingId} className={formStyles.ingredientsHeading}>
+    <section className={styles.ingredients} aria-labelledby={headingId}>
+      <h2 id={headingId} className={styles.heading}>
         材料
       </h2>
       <FieldErrors messages={errors.section} />
@@ -68,7 +68,7 @@ export default function IngredientRows({ rows, nodes, appearance, isSelectable, 
         <button
           className={styles.button}
           type="button"
-          disabled={rows.length >= MAX_INGREDIENT_ROWS}
+          disabled={!canAddIngredientRow(rows)}
           onClick={() => onEdit({ kind: 'add' })}
         >
           行を足す
@@ -117,8 +117,8 @@ function IngredientRowFields({
   const hasOptionalErrors = (errors.is_optional?.length ?? 0) > 0
 
   return (
-    <fieldset className={styles.row}>
-      <legend className={styles.legend}>{name}</legend>
+    <fieldset className={styles.ingredientRow}>
+      <legend className={formStyles.legend}>{name}</legend>
       <div className={styles.node}>
         <p className={styles.nodePath}>ノード: {path ?? '(未選択)'}</p>
         <button

@@ -846,6 +846,23 @@ describe('材料の行', () => {
     expect(within(row(1)).getByLabelText('量')).toHaveAccessibleDescription('')
   })
 
+  test('TC-128-30: 1 行目のノードの 422 は、ベースを空から選んで 1 行目にノードが入ったときにも消える', async () => {
+    await openNew()
+    captureSave('post', () =>
+      jsonResponse({ message: 'invalid', errors: { 'ingredients.0.category_id': ['材料 1 行目のノードを入力してください。'] } }, 422),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+
+    const nodeButton = () => within(row(1)).getByRole('button', { name: '1 行目のノードを選ぶ' })
+    await waitFor(() => expect(nodeButton()).toHaveAccessibleDescription('材料 1 行目のノードを入力してください。'))
+
+    pickBase('ウォッカ')
+
+    expect(within(row(1)).getByText('ノード: ウォッカ')).toBeInTheDocument()
+    expect(nodeButton()).toHaveAccessibleDescription('')
+  })
+
   test('TC-128-20: 新規で材料を 2 行入れて保存すると、行の並びのまま ingredients[行][項目] でノード・銘柄・量・任意を送る', async () => {
     await openNew()
     mockDuplicates()

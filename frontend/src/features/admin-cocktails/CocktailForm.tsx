@@ -23,8 +23,9 @@ import {
 } from './cocktailFormValues'
 import { editIngredients, type IngredientEdit } from './editIngredients'
 import IngredientRows from './IngredientRows'
+import { indexNodePaths } from '../admin-paraphrases/paraphraseTarget'
 import { clearIngredientErrors } from './clearIngredientErrors'
-import { NO_INGREDIENT_ERRORS, type IngredientErrors } from './ingredientErrors.types'
+import type { IngredientErrors } from './ingredientErrors.types'
 import { splitIngredientErrors } from './splitIngredientErrors'
 import { useCocktailDuplicates } from './useCocktailDuplicates'
 import styles from './CocktailForm.module.css'
@@ -88,6 +89,8 @@ const numberOptions = (values: readonly number[]): SelectOption[] => values.map(
 const RATE_SELECT = numberOptions(RATE_OPTIONS)
 const SWEET_DEGREE_SELECT = numberOptions(SWEET_DEGREE_OPTIONS)
 
+const NO_INGREDIENT_ERRORS: IngredientErrors = { section: [], rows: new Map() }
+
 /**
  * 管理画面のカクテルの基本情報のフォーム(旧 `Admin/Super/Detail/CocktailEdit.vue`・`component/NamesAndDescription.vue`。#127)。
  *
@@ -113,17 +116,28 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
   const nodes = useMemo(() => categories.map(toCategoryTreeNode), [categories])
   const rootIds = useMemo(() => new Set(categories.map((root) => root.id)), [categories])
   const appearance = useMemo<CategoryTreeAppearance>(() => ({ isHeading: (node) => rootIds.has(node.id) }), [rootIds])
+  // ベース・材料のノードとも、根(旧の種別)は選べない(#153)
   const isSelectable = useCallback((node: CategoryTreeNode) => !rootIds.has(node.id), [rootIds])
-  const pathNames = useMemo(() => pathNamesOf(categories), [categories])
-  const pathOf = useCallback((categoryId: number) => pathNames.get(categoryId) ?? null, [pathNames])
+  const nodePaths = useMemo(() => indexNodePaths(categories), [categories])
+  // 選んでいるノードは、根を除いたパンくずで出す
+  const pathOf = useCallback(
+    (categoryId: number) =>
+      nodePaths
+        .get(categoryId)
+        ?.slice(1)
+        .map((node) => node.name)
+        .join(' / ') ?? null,
+    [nodePaths],
+  )
   const methodNames = useMemo(() => new Map(options.methods.map((method) => [String(method.id), method.name])), [options.methods])
 
   const set = <K extends keyof CocktailFormValues>(key: K, value: CocktailFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
 
   const editIngredient = (edit: IngredientEdit) => {
-    setValues((current) => editIngredients(current, edit))
-    setIngredientErrors((current) => clearIngredientErrors(current, edit))
+    const next = editIngredients(values, edit)
+    setValues(next)
+    setIngredientErrors((current) => clearIngredientErrors(current, values.ingredients, next.ingredients))
   }
 
   // 押したボタン。Enter で送ったときは、先頭のボタン(下書きとして保存)を押したことになる
@@ -159,7 +173,7 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
     // 欄を離れずに Enter で送ったときも、英名を半角にして送る
     const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
     setValues(normalized)
-    const blockers = checkIngredientRows(normalized.ingredients, normalized.baseCategoryId, categories)
+    const blockers = checkIngredientRows(normalized.ingredients, normalized.baseCategoryId, nodePaths)
     if (blockers.length > 0) {
       setErrors({})
       setIngredientErrors({ section: blockers, rows: new Map() })
@@ -475,19 +489,3 @@ function toCategoryTreeNode(node: SearchFormNode): CategoryTreeNode {
   return { id: node.id, name: node.name, name_eng: null, is_major: node.is_major, children: node.children.map(toCategoryTreeNode) }
 }
 
-/**
- * 根でないノードの ID から、根を除いたパンくずの文字(「ジン / ドライジン」)を引く表。
- * ベースと材料の行ごとに選んでいるノードを出すのに、出すたびに木をたどらないよう、木から一度に作る
- */
-function pathNamesOf(roots: readonly SearchFormNode[]): ReadonlyMap<number, string> {
-  const names = new Map<number, string>()
-  const walk = (node: SearchFormNode, ancestors: readonly string[]) => {
-    const path = [...ancestors, node.name]
-    names.set(node.id, path.join(' / '))
-    for (const child of node.children) walk(child, path)
-  }
-  for (const root of roots) {
-    for (const child of root.children) walk(child, [])
-  }
-  return names
-}

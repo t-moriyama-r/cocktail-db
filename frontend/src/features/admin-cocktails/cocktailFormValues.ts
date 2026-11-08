@@ -1,4 +1,5 @@
 import type { components } from '../../api/schema'
+import type { IngredientField } from './ingredientErrors.types'
 
 type CocktailResource = components['schemas']['CocktailResource']
 
@@ -48,10 +49,16 @@ export type CocktailFormValues = {
   ingredients: readonly CocktailIngredientRow[]
 }
 
-/** 材料の行の上限(docs/decisions/admin-screens.md の決まったこと 5。API の上限と同じ) */
+/**
+ * 材料の行の上限(docs/decisions/admin-screens.md の決まったこと 5)。BE の SaveCocktailRequest::MAX_INGREDIENTS
+ * (openapi.json の ingredients の maxItems)と同じ値。生成した型には件数が出ないので、ここに持つ
+ */
 export const MAX_INGREDIENT_ROWS = 20
 
-/** 新規の画面で最初に出す材料の行の数(保存に要る件数。docs/decisions/admin-cocktails.md の決まったこと 10) */
+/**
+ * 新規の画面で最初に出す材料の行の数(docs/decisions/admin-cocktails.md の決まったこと 10)。保存に要る最低の件数
+ * (BE の SaveCocktailRequest::MIN_INGREDIENTS。openapi.json の minItems)と同じ値
+ */
 const INITIAL_INGREDIENT_ROWS = 2
 
 /** 何も入れていない材料の行 */
@@ -166,7 +173,7 @@ export function toCocktailFormData(values: CocktailFormValues, method: 'POST' | 
     form.append('ingredients', '')
   }
   values.ingredients.forEach((row, index) => {
-    const key = (field: string) => `ingredients[${index}][${field}]`
+    const key = (field: IngredientField) => `ingredients[${index}][${field}]`
     form.append(key('category_id'), row.categoryId === null ? '' : String(row.categoryId))
     if (row.brandId !== null) {
       form.append(key('brand_id'), String(row.brandId))
