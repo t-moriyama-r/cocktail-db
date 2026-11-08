@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import App from '../App'
@@ -378,6 +378,338 @@ describe('編集', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした(エラー 500)')
     expect(currentUrl()).toBe('/admin/categories/2')
+  })
+})
+
+describe('名前・英名の重なり(#674)', () => {
+  type Duplicates = paths['/admin/categories/duplicates']['get']['responses'][200]['content']['application/json']
+  const DUPLICATE = '同じ名前が存在しています'
+
+  /** 木(TREE)の中の id のノード。無ければ null */
+  const findNode = (nodes: readonly TreeItem[], id: number): TreeItem | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node
+      const found = findNode(node.children, id)
+      if (found !== null) return found
+    }
+    return null
+  }
+
+  /**
+   * 重なりの問い合わせに、TREE の parent_id の子(無ければ根どうし)のうち exclude_id のほかのノードと、名前・英名をそのまま比べて答える
+   * (名前をそろえて比べるなどの細かいところは BE の #673 のテスト)
+   */
+  const mockDuplicates = () =>
+    mockApiHandler('get', '/admin/categories/duplicates', (request) => {
+      const query = new URL(request.url).searchParams
+      const parentId = query.get('parent_id')
+      const siblings = (parentId === null ? TREE : (findNode(TREE, Number(parentId))?.children ?? [])).filter(
+        (node) => String(node.id) !== query.get('exclude_id'),
+      )
+      const warnings: Duplicates['warnings'] = []
+      if (siblings.some((node) => node.name === query.get('name'))) warnings.push({ field: 'name', message: DUPLICATE })
+      if (siblings.some((node) => node.name_eng === query.get('name_eng'))) warnings.push({ field: 'name_eng', message: DUPLICATE })
+      return jsonResponse({ warnings } satisfies Duplicates, 200)
+    })
+
+  /** 送った重なりの問い合わせのクエリ(送った順) */
+  const duplicateQueries = () =>
+    apiRequests()
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === '/api/admin/categories/duplicates')
+      .map((url) => Object.fromEntries(url.searchParams))
+
+  /** 欄に値を入れて離れる(旧の @change と同じく、値を変えて離れたときに問い合わせる) */
+  const enter = (label: string, value: string) => {
+    const field = screen.getByLabelText(label)
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value } })
+    fireEvent.blur(field)
+  }
+
+  /** 欄の値を変えずに、入って離れる */
+  const touch = (label: string) => {
+    fireEvent.focus(screen.getByLabelText(label))
+    fireEvent.blur(screen.getByLabelText(label))
+  }
+
+  const pickParent = (name: string) => fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name }))
+
+  /**
+   * 送りかけの問い合わせと、返った応答を画面に出すまでを待つ。openapi-fetch は middleware を待ってから fetch を呼ぶので、
+   * 「問い合わせない」「知らせが出ない」は、すぐに確かめると、問い合わせや応答が届く前に通ってしまう
+   */
+  const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)))
+
+  test('TC-674-01: 新規で親を選び、その親の下に既にある名前を入れて欄を離れると、名前の欄の下に「同じ名前が存在しています」が出て、欄の説明にもなる', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).toHaveAccessibleDescription(DUPLICATE)
+    // 入れたそばの知らせで、保存の検証の誤りではないので、誤りの印は付けない
+    expect(screen.getByLabelText('名前')).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByLabelText('英名')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([{ parent_id: '1', name: 'ジン' }])
+  })
+
+  test('TC-674-02: 重ならない名前に直して欄を離れると、出ていた知らせが消える', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    enter('名前', 'ラム')
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument())
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([
+      { parent_id: '1', name: 'ジン' },
+      { parent_id: '1', name: 'ラム' },
+    ])
+  })
+
+  test('TC-674-03: 英名は、全角の英数字を半角にした値で問い合わせ、重なれば英名の欄の下に出る。直すと消える', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('英名', 'Ｇｉｎ')
+
+    await waitFor(() => expect(screen.getByLabelText('英名')).toHaveAccessibleDescription(DUPLICATE))
+    expect(screen.getByLabelText('英名')).toHaveValue('Gin')
+    expect(screen.getByLabelText('英名')).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([{ parent_id: '1', name_eng: 'Gin' }])
+
+    enter('英名', 'Rum')
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument())
+  })
+
+  test('TC-674-04: 編集では、今の親を parent_id、編集しているノードを exclude_id で送る(自身とは比べない)', async () => {
+    await openEdit()
+    mockDuplicates()
+
+    enter('名前', 'ジン(改)')
+    enter('英名', 'Gin2')
+
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+    expect(duplicateQueries()).toEqual([
+      { parent_id: '1', exclude_id: '2', name: 'ジン(改)' },
+      { parent_id: '1', exclude_id: '2', name_eng: 'Gin2' },
+    ])
+  })
+
+  test('TC-674-05: 根の編集では、parent_id を送らずに根どうしで比べ、ほかの根と重なれば出る', async () => {
+    await openEdit(OTHER_ROOT)
+    mockDuplicates()
+
+    enter('名前', '蒸留酒')
+
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toEqual([{ exclude_id: '5', name: '蒸留酒' }])
+  })
+
+  test('TC-674-06: 新規で親を選ぶ前は問い合わせず、親を選んでから欄を離れ直すと、同じ値のまま選んだ親で問い合わせる', async () => {
+    await openNew()
+    mockDuplicates()
+
+    enter('名前', 'ジン')
+    enter('英名', 'Gin')
+    await settle()
+    expect(duplicateQueries()).toEqual([])
+
+    // 親を選んだだけでは問い合わせない(旧と同じく、欄を離れたときに問い合わせる)
+    pickParent('蒸留酒')
+    await settle()
+    expect(duplicateQueries()).toEqual([])
+
+    touch('名前')
+    touch('英名')
+    await waitFor(() => expect(screen.getAllByText(DUPLICATE)).toHaveLength(2))
+    expect(duplicateQueries()).toEqual([
+      { parent_id: '1', name: 'ジン' },
+      { parent_id: '1', name_eng: 'Gin' },
+    ])
+  })
+
+  test('TC-674-07: 新規で親を選び直すと、前の親で出した知らせを消し、欄を離れ直すと新しい親で問い合わせる', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    pickParent('その他')
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+
+    touch('名前')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+    expect(duplicateQueries()[1]).toEqual({ parent_id: '5', name: 'ジン' })
+    // その他の下(ミント)とは重ならないので、応答が返った後も出ない
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+  })
+
+  test('TC-674-08: 値を変えずに欄を離れたときは、問い合わせない', async () => {
+    await openEdit()
+    mockDuplicates()
+
+    // 開いたときの値のまま
+    touch('名前')
+    touch('英名')
+    // 入れている途中で一度変えても、元の値に戻してから離れる
+    const name = screen.getByLabelText('名前')
+    fireEvent.focus(name)
+    fireEvent.change(name, { target: { value: 'ジン(改)' } })
+    fireEvent.change(name, { target: { value: 'ジン' } })
+    fireEvent.blur(name)
+
+    await settle()
+    expect(duplicateQueries()).toEqual([])
+  })
+
+  test('TC-674-09: 空にして欄を離れると、問い合わせずに、出ていた知らせを消す', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    enter('名前', '')
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(duplicateQueries()).toEqual([{ parent_id: '1', name: 'ジン' }])
+  })
+
+  test('TC-674-10: 英名が重なっていても送信でき、保存できたらカテゴリ木へ戻って、保存の後の警告を出す', async () => {
+    await openNew()
+    mockDuplicates()
+    const sent = captureSave('post', () =>
+      jsonResponse(saved({ ...GIN, id: 10, name: 'ラム', name_eng: 'Gin' }, [{ field: 'name_eng', message: DUPLICATE }]), 201),
+    )
+
+    pickParent('蒸留酒')
+    enter('名前', 'ラム')
+    enter('英名', 'Gin')
+    await waitFor(() => expect(screen.getByLabelText('英名')).toHaveAccessibleDescription(DUPLICATE))
+
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ラム」を保存しました。英名: 同じ名前が存在しています')
+    expect(currentUrl()).toBe('/admin/categories')
+    expect([sent()!.get('parent_id'), sent()!.get('name'), sent()!.get('name_eng')]).toEqual(['1', 'ラム', 'Gin'])
+  })
+
+  test('TC-674-11: 名前が重なっていても画面は送信を止めず、保存の 422 を名前の欄に誤りとして出す', async () => {
+    await openNew()
+    mockDuplicates()
+    const sent = captureSave('post', () =>
+      jsonResponse({ message: 'invalid', errors: { name: ['同じ親の下に、同じ名前のノードがあります'] } }, 422),
+    )
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    submit()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした。入力を確かめてください。')
+    expect(sent()!.get('name')).toBe('ジン')
+    const name = screen.getByLabelText('名前')
+    expect(name).toHaveAttribute('aria-invalid', 'true')
+    expect(name).toHaveAccessibleDescription(`同じ親の下に、同じ名前のノードがあります ${DUPLICATE}`)
+    expect(currentUrl()).toBe('/admin/categories/new')
+  })
+
+  test('TC-674-12: 問い合わせがエラーや通信の失敗になったら、知らせを出さず、送信も止めない', async () => {
+    await openNew()
+    mockApiHandler('get', '/admin/categories/duplicates', () => jsonResponse({ message: 'Server Error' }, 500))
+    captureSave('post', () => jsonResponse(saved({ ...GIN, id: 10, name: 'ジン' }), 201))
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(1))
+    mockApiHandler('get', '/admin/categories/duplicates', () => Promise.reject(new TypeError('Failed to fetch')))
+    enter('英名', 'Gin')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    submit()
+    expect(await screen.findByRole('status')).toHaveTextContent('「ジン」を保存しました')
+  })
+
+  test('TC-674-13: 続けて問い合わせ、先の応答が後から返っても、最後に入れた値の結果を出す', async () => {
+    await openNew()
+    // 1 つめ(重ならない値)の応答は、2 つめ(重なる値)の応答より後に返す
+    let releaseFirst: () => void = () => {}
+    const firstReleased = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    mockApiHandler('get', '/admin/categories/duplicates', async (request) => {
+      if (new URL(request.url).searchParams.get('name') === 'ラム') {
+        await firstReleased
+        return jsonResponse({ warnings: [] } satisfies Duplicates, 200)
+      }
+      return jsonResponse({ warnings: [{ field: 'name', message: DUPLICATE }] } satisfies Duplicates, 200)
+    })
+
+    pickParent('蒸留酒')
+    enter('名前', 'ラム')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    releaseFirst()
+    await settle()
+
+    // 遅れて返った 1 つめ(重ならない)の応答で、最後に入れた値の知らせを消さない
+    expect(screen.getByLabelText('名前')).toHaveAccessibleDescription(DUPLICATE)
+    expect(screen.getByLabelText('名前')).toHaveValue('ジン')
+  })
+
+  test('TC-674-17: 新規で「親なし」を入れたり外したりすると、前の比べる相手で出した知らせを消し、欄を離れ直すと根どうし・前に選んだ親で問い合わせる', async () => {
+    await openNew()
+    mockDuplicates()
+    const rootCheck = () => screen.getByRole('checkbox', { name: '親なし(根のノードを作る)' })
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    // 「親なし」を入れると、前に選んでいた親(蒸留酒)の下で出した知らせを消す
+    fireEvent.click(rootCheck())
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+
+    // 離れ直すと、前に選んでいた親を送らずに根どうしで問い合わせる。根に「ジン」は無いので、応答が返った後も出ない
+    touch('名前')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(2))
+    expect(duplicateQueries()[1]).toEqual({ name: 'ジン' })
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+
+    // 根どうしで重なる名前なら出る
+    enter('名前', 'その他')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    // 「親なし」を外すと、根どうしで出した知らせを消す。離れ直すと、前に選んでいた親(蒸留酒)で問い合わせ、重ならないので出ない
+    fireEvent.click(rootCheck())
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    touch('名前')
+    await waitFor(() => expect(duplicateQueries()).toHaveLength(4))
+    expect(duplicateQueries()[3]).toEqual({ parent_id: '1', name: 'その他' })
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
   })
 })
 
