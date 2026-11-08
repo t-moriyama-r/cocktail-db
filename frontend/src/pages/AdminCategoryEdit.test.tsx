@@ -403,3 +403,191 @@ describe('新規', () => {
     expect(currentUrl()).toBe('/admin/categories/new')
   })
 })
+
+describe('有名な銘柄', () => {
+  /** 候補が 5 件のジン(ID の順。名前はカタカナ・英字の大文字・小文字を混ぜる)。今の有名な銘柄はビーフィーター */
+  const GIN_WITH_CANDIDATES: CategoryResource = {
+    ...GIN,
+    famous_brand_candidates: [
+      { id: 8, name: 'ビーフィーター', name_eng: 'Beefeater' },
+      { id: 9, name: 'ゴードン', name_eng: "Gordon's" },
+      { id: 11, name: 'たんかれー', name_eng: 'Tanqueray' },
+      { id: 12, name: 'Bombay', name_eng: 'Bombay Sapphire' },
+      { id: 13, name: 'aviation', name_eng: 'Aviation' },
+    ],
+  }
+
+  const famousSelect = () => screen.getByRole('combobox', { name: '有名な銘柄' })
+  const brandField = (name: string) => screen.getByRole('textbox', { name: `有名な銘柄の${name}` })
+  const brandEntries = (body: FormData) =>
+    Object.fromEntries(Object.entries(textEntries(body)).filter(([key]) => key === 'famous_brand_id' || key.startsWith('brand_')))
+
+  test('TC-309-01: 候補があれば選択の欄を出し、先頭に「(新しく作成する)」、続けて「名前(英名)」を名前の順に並べ、今の有名な銘柄を選んでおく', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+
+    const options = within(famousSelect()).getAllByRole('option').map((option) => option.textContent)
+    // 英字は小文字に、カタカナはひらがなにそろえて比べる(aviation < Bombay < ゴードン < たんかれー < ビーフィーター)
+    expect(options).toEqual([
+      '(新しく作成する)',
+      'aviation(Aviation)',
+      'Bombay(Bombay Sapphire)',
+      "ゴードン(Gordon's)",
+      'たんかれー(Tanqueray)',
+      'ビーフィーター(Beefeater)',
+    ])
+    expect(famousSelect()).toHaveDisplayValue('ビーフィーター(Beefeater)')
+    expect(screen.queryByText('-有名な銘柄を入力して下さい-')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '有名な銘柄の名前' })).not.toBeInTheDocument()
+  })
+
+  test('TC-309-02: 候補が 0 件(新規)なら選択の欄を出さず「-有名な銘柄を入力して下さい-」と、その場で作る銘柄の欄を出す', async () => {
+    await openNew()
+
+    const group = screen.getByRole('group', { name: '有名な銘柄' })
+    expect(within(group).getByText('-有名な銘柄を入力して下さい-')).toBeInTheDocument()
+    expect(within(group).queryByRole('combobox')).not.toBeInTheDocument()
+    for (const name of ['名前', '英名', '度数(%)', '説明', 'YouTube', '開始位置(時)', '開始位置(分)', '開始位置(秒)', 'リンクテキスト', 'リンクURL']) {
+      expect(within(group).getByRole('textbox', { name: `有名な銘柄の${name}` })).toHaveValue('')
+    }
+    expect(within(group).getByRole('checkbox', { name: '有名な銘柄のメジャー' })).not.toBeChecked()
+    expect(within(group).getByRole('checkbox', { name: '有名な銘柄のお気に入り' })).not.toBeChecked()
+    expect(within(group).getByLabelText('有名な銘柄の画像')).toHaveAttribute('type', 'file')
+  })
+
+  test('TC-309-03: 「(新しく作成する)」を選ぶと銘柄の欄が出て、候補を選び直すと隠れ、戻すと入れた文字が残っている', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+    fireEvent.change(brandField('名前'), { target: { value: 'E2E の銘柄' } })
+    fireEvent.change(famousSelect(), { target: { value: '9' } })
+    expect(screen.queryByRole('textbox', { name: '有名な銘柄の名前' })).not.toBeInTheDocument()
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+
+    expect(brandField('名前')).toHaveValue('E2E の銘柄')
+  })
+
+  test('TC-309-04: 候補を選んで送ると、famous_brand_id にその ID を送り、その場で作る銘柄の欄は送らない', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+    const sent = captureSave('put', () => jsonResponse(saved(GIN), 200))
+
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+    fireEvent.change(brandField('名前'), { target: { value: '書きかけ' } })
+    fireEvent.change(famousSelect(), { target: { value: '9' } })
+    submit()
+
+    await screen.findByRole('status')
+    expect(brandEntries(sent()!)).toEqual({ famous_brand_id: '9' })
+  })
+
+  test('TC-309-05: 「新しく作成する」で全欄を入れて送ると、famous_brand_id を送らず、銘柄の欄の値(YouTube・リンクも銘柄の値)を brand_* で送る', async () => {
+    await openNew()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...GIN, id: 10 }), 201))
+
+    fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name: 'ジン' }))
+    // ノードの YouTube・リンクは、銘柄とは別の値にする
+    fireEvent.change(screen.getByLabelText('YouTube'), { target: { value: 'nodevideo01' } })
+    fireEvent.change(screen.getByLabelText('リンクテキスト'), { target: { value: 'ノードのリンク' } })
+    const values: Record<string, string> = {
+      名前: 'タンカレー',
+      英名: 'Tanqueray',
+      '度数(%)': '47.3',
+      説明: 'ロンドンドライジン',
+      YouTube: 'brandvideo1',
+      '開始位置(時)': '1',
+      '開始位置(分)': '2',
+      '開始位置(秒)': '3',
+      リンクテキスト: '銘柄のリンク',
+      リンクURL: 'https://example.com/brand',
+    }
+    for (const [name, value] of Object.entries(values)) {
+      fireEvent.change(brandField(name), { target: { value } })
+    }
+    fireEvent.click(screen.getByRole('checkbox', { name: '有名な銘柄のメジャー' }))
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'brand.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('有名な銘柄の画像'), { target: { files: [file] } })
+    await waitFor(() => expect(screen.getByRole('img', { name: '有名な銘柄の画像' }).getAttribute('src')).toMatch(/^data:image\/png;base64,/))
+    submit()
+
+    await screen.findByRole('status')
+    expect(brandEntries(sent()!)).toEqual({
+      brand_name: 'タンカレー',
+      brand_name_eng: 'Tanqueray',
+      brand_strength: '47.3',
+      brand_description: 'ロンドンドライジン',
+      brand_youtube: 'brandvideo1',
+      brand_youtube_start_hour: '1',
+      brand_youtube_start_minute: '2',
+      brand_youtube_start_second: '3',
+      brand_image_txt: '銘柄のリンク',
+      brand_image_url: 'https://example.com/brand',
+      brand_is_major: '1',
+      brand_is_like: '0',
+    })
+    const image = sent()!.get('brand_image') as File
+    expect([image.type, image.size]).toEqual(['image/png', 4])
+    expect([sent()!.get('youtube'), sent()!.get('image_txt')]).toEqual(['nodevideo01', 'ノードのリンク'])
+  })
+
+  test('TC-309-06: 銘柄の度数は数字と「.」だけを 4 文字まで、開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付け、英名は欄を離れると半角になる', async () => {
+    await openNew()
+
+    fireEvent.change(brandField('度数(%)'), { target: { value: '４0.5%' } })
+    fireEvent.change(brandField('開始位置(時)'), { target: { value: '１2' } })
+    fireEvent.change(brandField('開始位置(分)'), { target: { value: '5a9' } })
+    fireEvent.change(brandField('開始位置(秒)'), { target: { value: '605' } })
+    fireEvent.change(brandField('英名'), { target: { value: 'Ｔａｎｑｕｅｒａｙ' } })
+    fireEvent.blur(brandField('英名'))
+
+    expect(
+      ['度数(%)', '開始位置(時)', '開始位置(分)', '開始位置(秒)', '英名'].map((name) => (brandField(name) as HTMLInputElement).value),
+    ).toEqual(['40.5', '1', '59', '60', 'Tanqueray'])
+  })
+
+  test('TC-309-07: 422 のうち、その場で作る銘柄の項目は銘柄の欄の下に出し、送信の下にまとめない', async () => {
+    await openNew()
+    const message = '有名な銘柄が無いときは、有名な銘柄の名前を入力してください。'
+    captureSave('post', () => jsonResponse({ message: 'invalid', errors: { brand_name: [message] } }, 422))
+
+    submit()
+
+    const alert = await screen.findByRole('alert')
+    expect(brandField('名前')).toHaveAttribute('aria-invalid', 'true')
+    expect(brandField('名前')).toHaveAccessibleDescription(message)
+    expect(alert).not.toHaveTextContent(message)
+  })
+
+  test('TC-309-08: 有名な銘柄の項目の 422 は、選択の欄の下に出す', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+    const message = '有名な銘柄は、このノードとその下のノードの銘柄から選んでください'
+    captureSave('put', () => jsonResponse({ message: 'invalid', errors: { famous_brand_id: [message] } }, 422))
+
+    submit()
+
+    const alert = await screen.findByRole('alert')
+    expect(famousSelect()).toHaveAttribute('aria-invalid', 'true')
+    expect(famousSelect()).toHaveAccessibleDescription(message)
+    expect(alert).not.toHaveTextContent(message)
+  })
+
+  test('TC-309-09: 根では有名な銘柄の欄を出さない', async () => {
+    await openEdit(OTHER_ROOT)
+
+    expect(screen.queryByRole('group', { name: '有名な銘柄' })).not.toBeInTheDocument()
+  })
+
+  test('TC-309-10: 銘柄の画像を選んでから候補を選び直すと、銘柄の画像を送らない', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+    const sent = captureSave('put', () => jsonResponse(saved(GIN), 200))
+
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'brand.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('有名な銘柄の画像'), { target: { files: [file] } })
+    fireEvent.change(famousSelect(), { target: { value: '8' } })
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+    expect(screen.queryByRole('img', { name: '有名な銘柄の画像' })).not.toBeInTheDocument()
+    submit()
+
+    await screen.findByRole('status')
+    expect(sent()!.get('brand_image')).toBeNull()
+  })
+})
