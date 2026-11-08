@@ -2,6 +2,7 @@ import type { Middleware } from 'openapi-fetch'
 import { api } from '../../api/client'
 import type { components } from '../../api/schema'
 import { toCategoryFormData, type CategoryFormValues, type CategoryKeptValues } from './categoryFormValues'
+import { appendFamousBrand, type FamousBrandValues } from './famousBrandValues'
 
 type SaveCategoryRequest = components['schemas']['SaveCategoryRequest']
 
@@ -38,19 +39,30 @@ const sendAsPost: Middleware = {
   },
 }
 
-/** ノードを保存する。nodeId が null なら新規(POST /api/admin/categories)、あれば更新(PUT /api/admin/categories/{id}) */
+/**
+ * ノードを保存する。nodeId が null なら新規(POST /api/admin/categories)、あれば更新(PUT /api/admin/categories/{id})。
+ * famousBrand は有名な銘柄の欄の入力で、根(欄を出さない)なら null にして送らない(API は根に有名な銘柄を入れさせない)
+ */
 export async function saveCategory(
   nodeId: number | null,
   values: CategoryFormValues,
   kept: CategoryKeptValues,
+  famousBrand: FamousBrandValues | null,
 ): Promise<SaveCategoryResult> {
+  const body = (method: 'POST' | 'PUT') => {
+    const form = toCategoryFormData(values, kept, method)
+    if (famousBrand !== null) {
+      appendFamousBrand(form, famousBrand)
+    }
+    return multipartBody(form)
+  }
   try {
     const { data, response, error } =
       nodeId === null
-        ? await api.POST('/admin/categories', { body: multipartBody(toCategoryFormData(values, kept, 'POST')) })
+        ? await api.POST('/admin/categories', { body: body('POST') })
         : await api.PUT('/admin/categories/{category}', {
             params: { path: { category: nodeId } },
-            body: multipartBody(toCategoryFormData(values, kept, 'PUT')),
+            body: body('PUT'),
             middleware: [sendAsPost],
           })
     if (data !== undefined) {

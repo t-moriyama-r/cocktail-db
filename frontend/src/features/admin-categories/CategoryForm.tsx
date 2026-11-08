@@ -6,6 +6,8 @@ import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
 import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
+import FamousBrandField from './FamousBrandField'
+import { famousBrandFieldsOnForm, famousBrandValuesOf, type FamousBrandSetting } from './famousBrandValues'
 import styles from './CategoryForm.module.css'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
@@ -20,8 +22,10 @@ type Props = {
   nodeId: number | null
   /** 最初の入力(新規は空、編集は開いたノードの値) */
   initialValues: CategoryFormValues
-  /** このフォームでは変えずに送り直す値(根の役割・有名な銘柄) */
+  /** このフォームでは変えずに送り直す値(根の役割) */
   kept: CategoryKeptValues
+  /** 有名な銘柄の欄の候補と今の値(#309)。根では欄を出さない(null) */
+  famousBrand: FamousBrandSetting | null
   /** 今の画像(API の image の値。public ディスクのファイル名か外部の URL)。無ければ null */
   currentImage: string | null
   parent: ParentField
@@ -35,7 +39,10 @@ type SaveState = { kind: 'idle' } | { kind: 'saving' } | Exclude<SaveCategoryRes
 const HOUR_DIGITS = 1
 const MINUTE_OR_SECOND_DIGITS = 2
 
-/** 欄の下に出す検証のメッセージの項目。ここに無い項目(有名な銘柄・根の役割など)のメッセージは、送信の下にまとめて出す */
+/**
+ * 欄の下に出す検証のメッセージの項目。ここに無い項目(根の役割など)のメッセージは、送信の下にまとめて出す。
+ * 有名な銘柄の項目は、有名な銘柄の欄が出しているものだけを欄の下に出す(famousBrandFieldsOnForm)
+ */
 const FIELDS_ON_FORM = new Set([
   'parent_id',
   'name',
@@ -58,8 +65,8 @@ const FIELDS_ON_FORM = new Set([
  * 管理画面のノードの編集フォームの基本の項目(旧 `Detail/CategoryEdit.vue`・`MiddleEdit.vue`・`component/NamesAndDescription.vue`。#308)。
  * 旧のカテゴリとミドルは同じ項目なので、任意の深さのノードを 1 つのフォームで編集する。
  *
- * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / 送信
- * (docs/decisions/admin-category-form.md)。
+ * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL /
+ * 有名な銘柄 / 送信(docs/decisions/admin-category-form.md)。
  * - 親は、新規なら木(#123 と同じ管理 API の木)から 1 つ選ぶ。根も選べる。根を作る(親を選ばない)のは #310
  * - 説明は、API が返す編集の形(記法に指す先の名前を添えたもの。#287)のまま編集し、そのまま送る
  * - 開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付ける(旧と同じ)。英名は欄を離れたときに全角の英数字を半角にする(旧と同じ)
@@ -67,11 +74,14 @@ const FIELDS_ON_FORM = new Set([
  * - 画像は選ぶとその場で出し、差し替えられる。今の画像があれば「画像を消す」で画像だけを消せる(#288)
  * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定)
  *
- * 有名な銘柄の選択・その場での作成は #309、根の役割は #310 で足す。それまでは今の値のまま送り直す(CategoryKeptValues)。
+ * - 有名な銘柄は、部分木の銘柄から選ぶか、その場で作る(FamousBrandField。#309)。根では欄を出さない
+ *
+ * 根の役割は #310 で足す。それまでは今の値のまま送り直す(CategoryKeptValues)。
  * 名前・英名の重なりを入れたそばに出す(旧の duplicate_check)のは、問い合わせる API(#673)ができてから #674 で足す。
  */
-export default function CategoryForm({ nodeId, initialValues, kept, currentImage, parent, onSaved }: Props) {
+export default function CategoryForm({ nodeId, initialValues, kept, famousBrand, currentImage, parent, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
+  const [famous, setFamous] = useState(() => (famousBrand === null ? null : famousBrandValuesOf(famousBrand)))
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [picked, setPicked] = useState<{ file: File; url: string | null } | null>(null)
@@ -125,7 +135,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
     // 欄を離れずに Enter で送ったときも、英名を半角にして送る
     const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
     setValues(normalized)
-    const result = await saveCategory(nodeId, normalized, kept)
+    const normalizedFamous =
+      famous === null ? null : { ...famous, newBrand: { ...famous.newBrand, nameEng: toHalfWidthAlphanumeric(famous.newBrand.nameEng) } }
+    setFamous(normalizedFamous)
+    const result = await saveCategory(nodeId, normalized, kept, normalizedFamous)
     // 保存を待つ間に別の画面へ移っていたら、カテゴリ木へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -137,8 +150,9 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
   }
 
   const saving = save.kind === 'saving'
+  const famousFields = new Set(famous === null ? [] : famousBrandFieldsOnForm(famous))
   const otherErrors = Object.entries(errors)
-    .filter(([field]) => !FIELDS_ON_FORM.has(field))
+    .filter(([field]) => !FIELDS_ON_FORM.has(field) && !famousFields.has(field))
     .flatMap(([, messages]) => messages)
 
   return (
@@ -255,6 +269,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
         <TextField label="リンクテキスト" errors={errors.image_txt} value={values.imageTxt} onChange={(value) => set('imageTxt', value)} />
         <TextField label="リンクURL" errors={errors.image_url} value={values.imageUrl} onChange={(value) => set('imageUrl', value)} />
       </div>
+
+      {famousBrand !== null && famous !== null && (
+        <FamousBrandField candidates={famousBrand.candidates} values={famous} errors={errors} onChange={setFamous} />
+      )}
 
       <div className={styles.submit}>
         <button className={styles.submitButton} type="submit" disabled={saving}>

@@ -16,6 +16,7 @@ import {
   NEW_CATEGORY_KEPT,
 } from '../features/admin-categories/categoryFormValues'
 import { savedNotice } from '../features/admin-categories/categoryTreeNotice'
+import { famousBrandSettingOf, NEW_NODE_FAMOUS_BRAND } from '../features/admin-categories/famousBrandValues'
 import styles from './AdminCategoryEdit.module.css'
 
 type CategoryResource = components['schemas']['CategoryResource']
@@ -56,6 +57,7 @@ function NewCategory() {
             nodeId={null}
             initialValues={EMPTY_CATEGORY_FORM}
             kept={NEW_CATEGORY_KEPT}
+            famousBrand={NEW_NODE_FAMOUS_BRAND}
             currentImage={null}
             parent={{ kind: 'select', tree: data }}
             onSaved={backToTree}
@@ -83,6 +85,7 @@ function EditCategory({ id }: { id: number }) {
             nodeId={node.id}
             initialValues={categoryFormValuesOf(node)}
             kept={categoryKeptValuesOf(node)}
+            famousBrand={famousBrandSettingOf(node)}
             currentImage={node.image}
             parent={{ kind: 'fixed', path: node.path.map((step) => step.name) }}
             onSaved={backToTree}

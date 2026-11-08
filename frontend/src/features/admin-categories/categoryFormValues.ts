@@ -34,14 +34,13 @@ export type CategoryFormValues = {
  * このフォームでは変えないが、保存のときに今の値のまま送り直すもの。
  *
  * - 根の役割(#310 で変えられるようにする)。根の保存で送らないと、API は役割を消す
- * - 有名な銘柄(#309 で選べるようにする)。送らなければ API は今の値のまま残すが、有名な銘柄が必須の部分木では、
- *   送らないと 422 になるので送り直す
+ *
+ * 有名な銘柄は、有名な銘柄の欄(FamousBrandField。#309)の入力で送る(famousBrandValues.ts)
  */
 export type CategoryKeptValues = {
   /** 根の編集か。根は親を空(null)で送る */
   isRoot: boolean
   role: CategoryRole | null
-  famousBrandId: number | null
 }
 
 /** 新規の画面の最初の入力。旧(CategoryEdit.vue・MiddleEdit.vue の detailEditObj)と同じく、すべて空でチェックは外す */
@@ -63,8 +62,8 @@ export const EMPTY_CATEGORY_FORM: CategoryFormValues = {
   removeImage: false,
 }
 
-/** 新規のノードは根でなく(根を作るのは #310)、役割も有名な銘柄も持たない */
-export const NEW_CATEGORY_KEPT: CategoryKeptValues = { isRoot: false, role: null, famousBrandId: null }
+/** 新規のノードは根でなく(根を作るのは #310)、役割を持たない */
+export const NEW_CATEGORY_KEPT: CategoryKeptValues = { isRoot: false, role: null }
 
 const text = (value: string | number | null): string => (value === null ? '' : String(value))
 
@@ -91,7 +90,7 @@ export function categoryFormValuesOf(node: CategoryResource): CategoryFormValues
 
 /** 編集で開いたノードから、このフォームでは変えずに送り直す値を取り出す */
 export function categoryKeptValuesOf(node: CategoryResource): CategoryKeptValues {
-  return { isRoot: node.parent_id === null, role: node.role, famousBrandId: node.famous_brand_id }
+  return { isRoot: node.parent_id === null, role: node.role }
 }
 
 /**
@@ -101,6 +100,7 @@ export function categoryKeptValuesOf(node: CategoryResource): CategoryKeptValues
  * 空の欄は空の文字のまま送る(Laravel が null に読み、必須の欄なら 422 になる)。
  * 親は、根の編集なら空(根のまま)、新規でまだ選んでいなければ送らない(API が「親が要る」の 422 を返す)。
  * 真偽値は API が読める "1"・"0" にする。更新は PHP が PUT の multipart を読まないので、POST に `_method=PUT` を付けて送る。
+ * 有名な銘柄の欄は、appendFamousBrand(famousBrandValues.ts)が足す。
  */
 export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKeptValues, method: 'POST' | 'PUT'): FormData {
   const form = new FormData()
@@ -114,9 +114,6 @@ export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKep
     }
   } else if (values.parentId !== null) {
     form.append('parent_id', String(values.parentId))
-  }
-  if (!kept.isRoot && kept.famousBrandId !== null) {
-    form.append('famous_brand_id', String(kept.famousBrandId))
   }
   form.append('name', values.name)
   form.append('name_eng', values.nameEng)
