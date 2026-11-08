@@ -101,12 +101,29 @@ export function categoryKeptValuesOf(node: CategoryResource): CategoryKeptValues
   return { famousBrandId: node.famous_brand_id }
 }
 
+/** 保存する親。parentId の子として保存する(null なら根) */
+export type SavedParent = { parentId: number | null }
+
+/**
+ * このノードを保存する親(#705)。保存で送る親(toCategoryFormData)と、名前・英名の重なりを比べる親(CategoryForm。#674)は、
+ * ずれないようここだけで決める。
+ *
+ * 根(新規で「親なし」を選んだ・根の編集)なら根どうし(`{ parentId: null }`)。前に選んでいた親があっても使わない。
+ * それ以外は、今の親か選んでいる親。新規でまだ親を選んでいなければ、決まらないので null。
+ */
+export function savedParentOf(values: Pick<CategoryFormValues, 'isRoot' | 'parentId'>): SavedParent | null {
+  if (values.isRoot) {
+    return { parentId: null }
+  }
+  return values.parentId === null ? null : { parentId: values.parentId }
+}
+
 /**
  * フォームの入力を、ノードの新規・更新の API に送る multipart の本文にする。
  *
  * 画像を上げられるよう、画像を選んでいないときも multipart で送る(旧も FormData で送っていた)。
  * 空の欄は空の文字のまま送る(Laravel が null に読み、必須の欄なら 422 になる)。
- * 親は、根(新規で「親なし」を選んだ・根の編集)なら空にして役割を添え、新規でまだ選んでいなければ送らない
+ * 親は savedParentOf で決め、根なら空にして役割を添え、決まらない(新規でまだ選んでいない)なら送らない
  * (API が「親が要る」の 422 を返す)。役割は「なし」なら送らない(API は送られない役割を null にする)。
  * 根以外では役割を送らない(役割を持てるのは根だけ。#153)。
  * 真偽値は API が読める "1"・"0" にする。更新は PHP が PUT の multipart を読まないので、POST に `_method=PUT` を付けて送る。
@@ -116,13 +133,12 @@ export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKep
   if (method === 'PUT') {
     form.append('_method', 'PUT')
   }
-  if (values.isRoot) {
-    form.append('parent_id', '')
-    if (values.role !== null) {
-      form.append('role', values.role)
-    }
-  } else if (values.parentId !== null) {
-    form.append('parent_id', String(values.parentId))
+  const parent = savedParentOf(values)
+  if (parent !== null) {
+    form.append('parent_id', parent.parentId === null ? '' : String(parent.parentId))
+  }
+  if (values.isRoot && values.role !== null) {
+    form.append('role', values.role)
   }
   if (!values.isRoot && kept.famousBrandId !== null) {
     form.append('famous_brand_id', String(kept.famousBrandId))
