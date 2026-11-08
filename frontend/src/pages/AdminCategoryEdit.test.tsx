@@ -528,8 +528,16 @@ describe('有名な銘柄', () => {
     expect([sent()!.get('youtube'), sent()!.get('image_txt')]).toEqual(['nodevideo01', 'ノードのリンク'])
   })
 
-  test('TC-309-06: 銘柄の度数は数字と「.」だけを 4 文字まで、開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付け、英名は欄を離れると半角になる', async () => {
+  test('TC-309-06: 銘柄の度数は数字と「.」だけを 4 文字まで、開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付け、英名は欄を離れると半角になり、メジャー・お気に入りは押すたびに入れ・外しができる', async () => {
     await openNew()
+
+    for (const name of ['有名な銘柄のメジャー', '有名な銘柄のお気に入り']) {
+      const checkbox = screen.getByRole('checkbox', { name })
+      fireEvent.click(checkbox)
+      expect(checkbox).toBeChecked()
+      fireEvent.click(checkbox)
+      expect(checkbox).not.toBeChecked()
+    }
 
     fireEvent.change(brandField('度数(%)'), { target: { value: '４0.5%' } })
     fireEvent.change(brandField('開始位置(時)'), { target: { value: '１2' } })
