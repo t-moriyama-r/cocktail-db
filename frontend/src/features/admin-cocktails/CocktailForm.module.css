@@ -1,0 +1,285 @@
+/*
+ * カクテルの編集画面。旧(CocktailEdit.vue)と同じく、フォームは 800px までの幅に収める。
+ * 同じ名前・同じレシピのカクテルがあれば、md(960px)以上の幅では左に並べ、フォームを右に寄せる(旧は左半分に固定で出した)。
+ * それより狭い幅では、一覧をフォームの上に出し、高さを抑えて中だけを縦に送る
+ */
+.layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/*
+ * 左の一覧は、フォームの残りの幅だけにすると md の狭いほう(960px 付近)で 100px ほどまで縮み、材料の行の名前が
+ * 1 文字ずつ折り返して量と重なる。名前の列 2 つと量の列(5em)が並ぶ幅を下限にし、足りない分はフォームを縮める
+ */
+@media (min-width: 960px) {
+  .withDuplicates {
+    grid-template-columns: minmax(16em, 1fr) minmax(0, 800px);
+    align-items: start;
+  }
+}
+
+.duplicates {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  max-height: 50vh;
+  padding: var(--space-3);
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+@media (min-width: 960px) {
+  .duplicates {
+    position: sticky;
+    top: var(--space-3);
+    max-height: calc(100vh - 2 * var(--space-3));
+  }
+}
+
+.duplicatesHeading {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.duplicateList {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.duplicate {
+  overflow-wrap: anywhere;
+}
+
+.duplicateName {
+  margin: 0 0 var(--space-1);
+}
+
+.duplicateMethod {
+  margin-right: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+/* 材料の行。旧と同じく、列の幅を決めて長い名前は折り返す */
+.duplicateIngredients {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.duplicateIngredients td {
+  padding: var(--space-1) 0 var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.duplicateAmount {
+  width: 5em;
+}
+
+.duplicateText {
+  margin: var(--space-1) 0 0;
+  white-space: pre-wrap;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: 800px;
+}
+
+.notice {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.base {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.legend {
+  padding: 0 var(--space-1);
+  font-weight: bold;
+}
+
+.selected {
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+/* 横に並べる欄(氷・グラス、名前・英名、YouTube と開始位置など)。入りきらなければ折り返す */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  flex: 1 1 10em;
+  gap: var(--space-1);
+  min-width: 0;
+  align-content: start;
+}
+
+/* 開始位置のように数文字しか入れない欄 */
+.narrow {
+  flex: 0 0 5em;
+}
+
+.label {
+  font-weight: bold;
+}
+
+/* 狭い幅でもはみ出さないよう、欄の幅は親に合わせて縮める */
+.input,
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.input[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+/* 外の検索サイトへのリンク。旧と同じく 2 つを横に並べる */
+.searchLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * メジャーのチェックは、選択の欄の入力の高さにそろえる。高さは横に並ぶ行の高さに伸びる(flex の既定)ので、それに任せる。
+ * 行の高さ(min-height: 100%)にすると、狭い幅で行が折り返したときに行全体の高さになって下にはみ出し、下の説明の欄に隠れる
+ */
+.checkField {
+  display: grid;
+  flex: 0 0 auto;
+  align-content: end;
+  gap: var(--space-1);
+}
+
+.check {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding: var(--space-2) 0;
+}
+
+/* 画像。旧と同じく、画像は中央に 350px の高さまでで出す */
+.image {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.preview {
+  justify-self: center;
+  max-width: 100%;
+  max-height: 350px;
+}
+
+.file {
+  max-width: 100%;
+  font: inherit;
+}
+
+.ingredients {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.ingredientsHeading {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.ingredientsNote {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.errors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+/* 保存のボタンを左に、削除を右に置く(旧と同じ) */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: start;
+}
+
+.saveButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.primaryButton,
+.deleteButton {
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.deleteButton {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}
+
+/* 応答を待つあいだは押せない */
+.primaryButton:disabled,
+.deleteButton:disabled {
+  border-color: var(--color-disabled-bg);
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  cursor: wait;
+}
+
+.failure {
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.failure p {
+  margin: 0;
+}
+
+.conflictReasons {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}

@@ -33,6 +33,8 @@ it('TC-626-02: 旧の新規の URL(ID なし)を GET すると、新の新規の
     '銘柄(末尾のスラッシュ付き。旧のリンクの形)' => ['/admin/edit/Brand/', '/admin/brands/new'],
     '用語辞典' => ['/admin/edit/Dictionary', '/admin/dictionaries/new'],
     '用語辞典(末尾のスラッシュ付き。旧のリンクの形)' => ['/admin/edit/Dictionary/', '/admin/dictionaries/new'],
+    'カクテル' => ['/admin/edit/Cocktail', '/admin/cocktails/new'],
+    'カクテル(末尾のスラッシュ付き。旧のリンクの形)' => ['/admin/edit/Cocktail/', '/admin/cocktails/new'],
 ]);
 
 it('TC-626-03: 旧の編集の URL を GET すると、同じ ID の新の編集画面へ 302 で移る', function (string $path, string $destination) {
@@ -43,6 +45,7 @@ it('TC-626-03: 旧の編集の URL を GET すると、同じ ID の新の編集
 })->with([
     '銘柄' => ['/admin/edit/Brand/12', '/admin/brands/12'],
     '用語辞典' => ['/admin/edit/Dictionary/34', '/admin/dictionaries/34'],
+    'カクテル' => ['/admin/edit/Cocktail/56', '/admin/cocktails/56'],
 ]);
 
 it('TC-626-04: 旧の URL に付いてきたクエリは、移った先の URL に持ち越さない', function (string $path, string $destination) {
@@ -61,8 +64,6 @@ it('TC-626-05: 新の画面がまだ無い・移さないと決めた旧の URL 
         ->assertOk()
         ->assertSee('<div id="root"></div>', false);
 })->with([
-    'カクテルの編集' => '/admin/edit/Cocktail/1',
-    'カクテルの新規' => '/admin/edit/Cocktail/',
     'カテゴリの編集' => '/admin/edit/Category/1',
     'カテゴリの新規' => '/admin/edit/Category/',
     'ミドルの編集' => '/admin/edit/Middle/1',

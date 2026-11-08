@@ -18,6 +18,8 @@
    | `/admin/edit/Brand/{ID}` | `/admin/brands/{ID}`(銘柄は旧の ID のまま移した。`docs/schema.md`) |
    | `/admin/edit/Dictionary/`(新規) | `/admin/dictionaries/new` |
    | `/admin/edit/Dictionary/{ID}` | `/admin/dictionaries/{ID}`(用語辞典も旧の ID のまま) |
+   | `/admin/edit/Cocktail/`(新規) | `/admin/cocktails/new`(#127) |
+   | `/admin/edit/Cocktail/{ID}` | `/admin/cocktails/{ID}`(カクテルも旧の ID のまま。#127) |
 
 2. 移すだけで、ほかのことはしない。ログインの確かめは移った先の画面がする(未ログインなら、移った先の URL を持たせてログインの画面へ移る。`docs/decisions/admin-layout.md` の 5)。付いてきたクエリは移った先に持ち越さない(下書きの一覧の `?status=draft` は行き先の一部なので付ける)
 3. 受けるのは GET だけ。ほかのメソッドは 405。状態コードは #117 と同じく 302(301 はブラウザが覚えてしまい、後で行き先を変えられなくなるため)
@@ -26,7 +28,6 @@
 
    | 旧の URL | 移す issue | メモ |
    |---|---|---|
-   | `/admin/edit/Cocktail/{ID}`・`/admin/edit/Cocktail/`(新規) | #127(カクテルの基本情報のフォーム) | カクテルは旧の ID のまま。新の編集画面は `/admin/cocktails/{ID}` に置く(#127 の追記) |
    | `/admin/edit/Category/{ID}`・`/admin/edit/Middle/{ID}`・`/admin/edit/Category/`・`/admin/edit/Middle/`(新規) | #308(ノードの編集フォーム) | ノードは ID を振り直したので、旧 ID から新 ID を `legacy_id_maps`(`m_category`・`m_middle` → `categories`)で引く。#78 の旧の詳細の URL の転送と同じ引き方 |
    | `/admin/autoinput/paraphrase` | #67(言い換え・スキップ語の画面) | |
 

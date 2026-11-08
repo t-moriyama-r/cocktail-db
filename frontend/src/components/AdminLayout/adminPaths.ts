@@ -31,6 +31,12 @@ export const adminDictionaryEditPath = (id: number): string => `${ADMIN_DICTIONA
 /** 管理画面のカクテルの一覧(公開済み・下書き。#126)の URL */
 export const ADMIN_COCKTAILS_PATH = '/admin/cocktails'
 
+/** 管理画面のカクテルの下書きの一覧(#126)の URL。公開済みの一覧はクエリの無い ADMIN_COCKTAILS_PATH */
+export const ADMIN_DRAFT_COCKTAILS_PATH = `${ADMIN_COCKTAILS_PATH}?status=draft`
+
+/** 管理画面のカクテルの新規の画面(#127)の URL。一覧の「新規」から開く */
+export const ADMIN_NEW_COCKTAIL_PATH = `${ADMIN_COCKTAILS_PATH}/new`
+
 /** 管理画面のカクテルの編集画面(#127)の URL。一覧の 1 行から開く */
 export const adminCocktailEditPath = (id: number): string => `${ADMIN_COCKTAILS_PATH}/${id}`
 

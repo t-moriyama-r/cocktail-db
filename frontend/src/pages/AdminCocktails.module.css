@@ -1,3 +1,8 @@
+/* 一覧の上の「新規」のリンク(銘柄の一覧と同じ) */
+.actions {
+  margin: 0 0 var(--space-3);
+}
+
 /* 公開済み・下書きの切り替え。タブのように横に並べ、下に線を引く */
 .switcher {
   margin-bottom: var(--space-4);
