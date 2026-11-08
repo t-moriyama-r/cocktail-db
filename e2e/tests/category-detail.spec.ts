@@ -70,17 +70,21 @@ for (const { width, sideBySide } of [
     // 2 つの欄の位置は、1 回の evaluate の中で続けて測る。ジンは画像が無く、960px 以上では画像の場所に商品の欄を出すが、
     // 商品の欄は本文より後に読み込まれ、出ると上の段が伸びて 2 つの欄が下にずれる。boundingBox を 2 回呼ぶと、
     // そのあいだにずれて、片方だけずれた後の位置で比べてしまう(#713。1 回目に落ちてリトライで通っていた)。
-    // evaluateAll は HTML の中の順に渡すので、有名な銘柄 → 子のノードの順になる
+    // 欄は DOM の順ではなく、見出しの文字(aria-labelledby の先)で見分ける
     const boxes = await famous(page)
       .or(children(page))
       .evaluateAll((sections) =>
         sections.map((section) => {
+          const labelId = section.getAttribute('aria-labelledby')
+          const name = (labelId ? document.getElementById(labelId)?.textContent : '')?.trim() ?? ''
           const { x, y, width, height } = section.getBoundingClientRect()
-          return { x, y, width, height }
+          return { name, x, y, width, height }
         }),
       )
     expect(boxes).toHaveLength(2)
-    const [famousBox, childrenBox] = boxes
+    const famousBox = boxes.find((box) => box.name === '有名な銘柄')
+    const childrenBox = boxes.find((box) => box.name === '子のノード')
+    if (!famousBox || !childrenBox) throw new Error(`欄を見分けられない: ${boxes.map((box) => box.name).join(', ')}`)
     if (sideBySide) {
       expect(famousBox.x + famousBox.width).toBeLessThanOrEqual(childrenBox.x)
       expect(Math.abs(famousBox.y - childrenBox.y)).toBeLessThan(famousBox.height)
