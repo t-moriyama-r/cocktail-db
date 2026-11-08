@@ -462,6 +462,21 @@ describe('保存', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(currentUrl()).toBe('/admin/cocktails/new')
   })
+
+  test('TC-732-01: 保存が 401(ログインの期限切れ)なら、ログインし直す手順と入力を控える案内を出し、「時間をおいて」は出さず、画面と入力が残る', async () => {
+    await openEdit()
+    captureSave('put', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+
+    fireEvent.change(screen.getByLabelText('補足'), { target: { value: 'レモンでもよい。' } })
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
+    expect(screen.getByLabelText('補足')).toHaveValue('レモンでもよい。')
+    expect(currentUrl()).toBe('/admin/cocktails/7')
+    expect(screen.getByRole('button', { name: '公開する' })).toBeEnabled()
+  })
 })
 
 describe('同じ名前・同じレシピのカクテル', () => {
@@ -555,6 +570,20 @@ describe('削除', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('削除できませんでした。')
     expect(alert).toHaveTextContent('ほかのカクテルの説明文から参照されています: ギムレット、マティーニ')
+    expect(currentUrl()).toBe('/admin/cocktails/7')
+  })
+
+  test('TC-732-02: 削除が 401(ログインの期限切れ)なら、ログインし直す手順を出し、「時間をおいて」は出さず、画面と欄の値が残る', async () => {
+    await openEdit()
+    mockApiHandler('delete', '/admin/cocktails/{cocktail}', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '削除' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて削除できませんでした。ページを開き直して、ログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
+    expect(screen.getByLabelText('名前')).toHaveValue('ジントニック')
     expect(currentUrl()).toBe('/admin/cocktails/7')
   })
 })
