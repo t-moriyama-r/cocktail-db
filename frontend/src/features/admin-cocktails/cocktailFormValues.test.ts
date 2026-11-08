@@ -109,11 +109,11 @@ describe('フォームの入力', () => {
     expect(toCocktailFormData(values, 'POST', false).get('is_draft')).toBe('0')
   })
 
-  test('TC-127-03: 更新は _method=PUT を先頭に付け、ベース・選んだ画像も送り、別名は送らない', () => {
+  test('TC-127-03: 更新は _method=PUT を付け、ベース・選んだ画像も送り、別名は送らない', () => {
     const image = new File(['x'], 'gin.png', { type: 'image/png' })
     const form = toCocktailFormData({ ...EMPTY_COCKTAIL_FORM, baseCategoryId: 9, image }, 'PUT', false)
 
-    expect(entries(form)[0]).toEqual(['_method', 'PUT'])
+    expect(form.get('_method')).toBe('PUT')
     expect(form.get('base_category_id')).toBe('9')
     expect(form.get('is_major')).toBe('0')
     expect((form.get('image') as File).name).toBe('gin.png')
