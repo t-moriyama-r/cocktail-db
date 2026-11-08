@@ -22,6 +22,7 @@ type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
  * - ノードの行には、名前・英名(名前の後ろに括弧で)・根なら役割・メジャーかを出す
  * - 開閉・名前での絞り込み(当たったノードの祖先も出す)は木の部品がする
  * - ノードを選ぶと、そのノードの編集フォーム(/admin/categories/:id。#308)を開く。新規は木の上の「新規」から開く
+ *   (新規のフォームで「親なし」を選ぶと根を作れる。#310)
  * - ノードを保存してこの画面へ戻ったときは、保存したこと(と保存の後の警告)を木の上に出す
  */
 export default function AdminCategoryTree() {

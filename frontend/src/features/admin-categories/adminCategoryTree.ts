@@ -14,6 +14,9 @@ const ROLE_LABEL: Readonly<Record<CategoryRole | 'none', string>> = {
 /** 根の役割の名前。役割の無い根(とその部分木)は「なし」 */
 export const roleLabel = (role: CategoryRole | null): string => ROLE_LABEL[role ?? 'none']
 
+/** 根が持てる役割の並び(なし・ソフトドリンク・その他。docs/decisions/category-root-role.md の決まったこと 6) */
+export const ROLE_OPTIONS: readonly (CategoryRole | null)[] = [null, 'soft_drink', 'other']
+
 /** 管理 API の木(GET /api/admin/categories)のノードを、木の部品が受け取る形にする */
 export function toCategoryTreeNode(item: AdminTreeItem): CategoryTreeNode {
   return {
