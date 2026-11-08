@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from 'react-router'
+import { useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import type { paths } from '../api/schema'
 import AdminList, { type AdminListQuery } from '../components/AdminList/AdminList'
@@ -10,6 +11,7 @@ import {
   adminCocktailEditPath,
 } from '../components/AdminLayout/adminPaths'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
+import { readCocktailSaveNotice } from '../features/admin-cocktails/cocktailSaveNotice'
 import styles from './AdminCocktails.module.css'
 
 /** 一覧に出すカクテルの種類。管理 API(#289)の status と同じ値 */
@@ -56,15 +58,33 @@ const renderItem = (cocktail: CocktailItem) => (
  * 一覧そのもの(絞り込み・並び・ページ送り)は共通の部品(AdminList。#120)。1 行は旧と同じ「名前(英名)」で、編集画面(#127)へのリンク。
  * 種類を切り替えたら、絞り込みの語とページは消して 1 ページ目から出す(旧も別の画面へ移るので、語は残らなかった)。
  * 新規は、銘柄の一覧(#64)と同じく一覧の上の「新規」のリンクから開く(旧はメニューの「カクテル新規」。docs/decisions/admin-cocktails.md)。
+ * 編集画面で保存した別名が、ほかのカクテルの名前・別名と同じだったときは、一覧の上にそれを出す(#83。履歴の state で受け取る)。
  */
 export default function AdminCocktails() {
   usePageTitle('カクテル')
   const [searchParams] = useSearchParams()
   const current = toStatus(searchParams.get(STATUS_PARAM))
+  const location = useLocation()
+  // 開いたときの知らせだけを出す(種類を切り替えても、出したままにする。カテゴリ木の画面と同じ)
+  const [notice] = useState(() => readCocktailSaveNotice(location.state))
 
   return (
     <main>
       <h1>カクテル</h1>
+      {notice !== null && (
+        <div className={styles.notice} role="status">
+          <p>「{notice.name}」を保存しました。次の別名は、ほかのカクテルの名前・別名と同じです。</p>
+          <ul className={styles.noticeList}>
+            {notice.warnings.map((warning, index) => (
+              // 同じ別名がいくつかのカクテルと重なることがあるので、並びの位置で区別する
+              <li key={index}>
+                別名「{warning.alias}」: {warning.message}{' '}
+                <Link to={adminCocktailEditPath(warning.cocktailId)}>「{warning.cocktailName}」を開く</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className={styles.actions}>
         <Link to={ADMIN_NEW_COCKTAIL_PATH}>新規</Link>
       </p>

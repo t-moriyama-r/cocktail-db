@@ -1,3 +1,22 @@
+/* 保存の後の別名の警告(#83)。カテゴリ木の画面の知らせと同じ見た目 */
+.notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-row-alt);
+  overflow-wrap: anywhere;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.noticeList {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+
 /* 一覧の上の「新規」のリンク(銘柄の一覧と同じ) */
 .actions {
   margin: 0 0 var(--space-3);

@@ -6,6 +6,11 @@ type CocktailResource = components['schemas']['CocktailResource']
 export type CocktailIngredientInput = CocktailResource['ingredients'][number]
 
 /**
+ * 別名の欄の 1 行(#83)。key は行を消したり足したりしても、残った行の欄を取り違えないための印で、送らない
+ */
+export type CocktailAliasRow = { key: number; name: string }
+
+/**
  * カクテルの基本情報のフォームの入力(#127)。欄に出す文字のまま持ち、送るときに multipart の値にする(toCocktailFormData)。
  * 選択の欄(技法・グラス・氷・評価・甘さ)も、選択肢の value の文字のまま持つ。空の選択肢は空の文字。
  * 数の欄(開始位置)も文字のまま持つ。空の欄を 0 にせず、空のまま送って API の検証に任せるため。
@@ -40,6 +45,8 @@ export type CocktailFormValues = {
    * 新規では空で、API が材料の件数(2 件以上)で 422 を返す
    */
   ingredients: readonly CocktailIngredientInput[]
+  /** 別名(#83)。並びは欄の順で、保存のときにこの並びに置き換える */
+  aliases: readonly CocktailAliasRow[]
 }
 
 /** 新規の画面の最初の入力。旧(CocktailEdit.vue の detailEditObj)と同じく、すべて空でメジャーは外す */
@@ -63,6 +70,7 @@ export const EMPTY_COCKTAIL_FORM: CocktailFormValues = {
   imageUrl: '',
   image: null,
   ingredients: [],
+  aliases: [],
 }
 
 const text = (value: string | number | null): string => (value === null ? '' : String(value))
@@ -89,6 +97,7 @@ export function cocktailFormValuesOf(cocktail: CocktailResource): CocktailFormVa
     imageUrl: cocktail.image_url ?? '',
     image: null,
     ingredients: cocktail.ingredients,
+    aliases: cocktail.aliases.map((name, index) => ({ key: index, name })),
   }
 }
 
@@ -100,7 +109,8 @@ export function cocktailFormValuesOf(cocktail: CocktailResource): CocktailFormVa
  * 下書きか公開かは押したボタンで決め、isDraft で受ける(docs/decisions/admin-screens.md の 1)。
  * 真偽値は API が読める "1"・"0" にする。材料は `ingredients[<行>][<項目>]` の形で、銘柄の無い行は銘柄を送らない。
  * 更新は PHP が PUT の multipart を読まないので、POST に `_method=PUT` を付けて送る(SaveCocktailRequest の説明のとおり)。
- * 別名(aliases。#293)は送らない(送らなければ今の別名が残る)。
+ * 別名(aliases。#293)は、欄の並びのまま `aliases[<番号>]` で送る(#83)。欄の文字は整えずに送り、空の欄は API の 422 に任せる。
+ * 別名が 1 つも無いときは、全部消すために空の値の `aliases` を送る(API は空の値を空の配列と読む。送らないと今の別名が残る)。
  */
 export function toCocktailFormData(values: CocktailFormValues, method: 'POST' | 'PUT', isDraft: boolean): FormData {
   const form = new FormData()
@@ -138,6 +148,12 @@ export function toCocktailFormData(values: CocktailFormValues, method: 'POST' | 
     }
     form.append(key('amount'), ingredient.amount)
     form.append(key('is_optional'), ingredient.is_optional ? '1' : '0')
+  })
+  if (values.aliases.length === 0) {
+    form.append('aliases', '')
+  }
+  values.aliases.forEach((alias, index) => {
+    form.append(`aliases[${index}]`, alias.name)
   })
   return form
 }

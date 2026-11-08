@@ -15,9 +15,19 @@ type Failure =
   /** 応答が返らなかった */
   | { kind: 'network-error' }
 
+/** 保存の応答の warnings の 1 件(別名がほかのカクテルの名前・別名と同じ。#293) */
+type SaveWarning = paths['/admin/cocktails']['post']['responses'][201]['content']['application/json']['warnings'][number]
+
+/**
+ * 保存の後の警告を、画面に出す形にしたもの(#83)。保存は済んでいる(警告は保存を止めない)。
+ * alias は警告の別名の名前(応答の field の `aliases.<番号>` を、保存した別名の並びで引いたもの)
+ */
+export type CocktailAliasWarning = { alias: string; message: string; cocktailId: number; cocktailName: string }
+
 /** 保存の結果。画面は、成功なら一覧へ戻り、それ以外は画面に残ってメッセージを出す */
 export type SaveCocktailResult =
-  | { kind: 'saved' }
+  /** name は保存したカクテルの名前。warnings は別名の警告(無ければ空) */
+  | { kind: 'saved'; name: string; warnings: readonly CocktailAliasWarning[] }
   /** 422。項目ごとのメッセージ */
   | { kind: 'invalid'; errors: CocktailFieldErrors }
   | Failure
@@ -60,7 +70,7 @@ export async function saveCocktail(
   isDraft: boolean,
 ): Promise<SaveCocktailResult> {
   try {
-    const { response, error } =
+    const { data, response, error } =
       cocktailId === null
         ? await api.POST('/admin/cocktails', { body: multipartBody(toCocktailFormData(values, 'POST', isDraft)) })
         : await api.PUT('/admin/cocktails/{cocktail}', {
@@ -69,7 +79,11 @@ export async function saveCocktail(
             middleware: [sendAsPost],
           })
     if (response.ok) {
-      return { kind: 'saved' }
+      return {
+        kind: 'saved',
+        name: data?.data.name ?? values.name,
+        warnings: (data?.warnings ?? []).map((warning) => aliasWarningOf(warning, data?.data.aliases ?? [])),
+      }
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
       return { kind: 'invalid', errors: error.errors }
@@ -78,6 +92,13 @@ export async function saveCocktail(
   } catch {
     return { kind: 'network-error' }
   }
+}
+
+/** 応答の警告の field(`aliases.<番号>`)を、保存した別名の名前にする。読めなければ field をそのまま出す */
+function aliasWarningOf(warning: SaveWarning, aliases: readonly string[]): CocktailAliasWarning {
+  const index = /^aliases\.(\d+)$/.exec(warning.field)?.[1]
+  const alias = index === undefined ? undefined : aliases[Number(index)]
+  return { alias: alias ?? warning.field, message: warning.message, cocktailId: warning.cocktail_id, cocktailName: warning.cocktail_name }
 }
 
 /** カクテルを消す(DELETE /api/admin/cocktails/{id}。#130) */

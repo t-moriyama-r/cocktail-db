@@ -204,7 +204,7 @@ describe('入口', () => {
 })
 
 describe('欄', () => {
-  test('TC-127-07: 欄は ベース / 氷・グラス / 名前・英名 / 検索のリンク / 製法・評価・甘さ・メジャー / 説明 / 補足 / YouTube と開始位置 / 画像 / リンク / 材料 / 保存の順', async () => {
+  test('TC-127-07: 欄は ベース / 氷・グラス / 名前・英名 / 検索のリンク / 別名 / 製法・評価・甘さ・メジャー / 説明 / 補足 / YouTube と開始位置 / 画像 / リンク / 材料 / 保存の順', async () => {
     await openNew()
 
     // ベースの木の中(ノードのラベル・開閉のボタン)は除き、欄の名前・リンク・見出し・ボタンを上から並べる
@@ -219,6 +219,8 @@ describe('欄', () => {
       '英名',
       '意味検索',
       'カクテル言葉検索',
+      '別名',
+      '別名を足す',
       '製法',
       '評価',
       '甘さ',
@@ -432,16 +434,13 @@ describe('保存', () => {
     expect(screen.getByRole('button', { name: '公開する' })).toBeEnabled()
   })
 
-  test('TC-127-15: 422 で欄の無い項目(別名など)のメッセージは、保存のボタンの下にまとめて出す', async () => {
+  test('TC-127-15: 422 で欄の無い項目(下書きなど)のメッセージは、保存のボタンの下にまとめて出す', async () => {
     await openNew()
-    captureSave('post', () =>
-      jsonResponse({ message: 'invalid', errors: { 'aliases.0': ['別名と同じ名前です'], is_draft: ['is_draft は必須です。'] } }, 422),
-    )
+    captureSave('post', () => jsonResponse({ message: 'invalid', errors: { is_draft: ['is_draft は必須です。'] } }, 422))
 
     fireEvent.click(screen.getByRole('button', { name: '公開する' }))
 
-    expect(await screen.findByText('別名と同じ名前です')).toBeInTheDocument()
-    expect(screen.getByText('is_draft は必須です。')).toBeInTheDocument()
+    expect(await screen.findByText('is_draft は必須です。')).toBeInTheDocument()
   })
 
   test.each([
@@ -461,6 +460,209 @@ describe('保存', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(currentUrl()).toBe('/admin/cocktails/new')
+  })
+})
+
+describe('別名', () => {
+  const aliasSection = () => screen.getByRole('region', { name: '別名' })
+  /** 別名の欄の値を、上から並べる */
+  const aliasValues = () =>
+    within(aliasSection())
+      .queryAllByRole('textbox')
+      .map((input) => (input as HTMLInputElement).value)
+  /** 送った本文の別名(aliases で始まる項目)を、送った順に並べる */
+  const sentAliases = (body: FormData) => {
+    const pairs: [string, string][] = []
+    body.forEach((value, key) => {
+      if (key.startsWith('aliases')) pairs.push([key, String(value)])
+    })
+    return pairs
+  }
+
+  const openEditWithAliases = async (aliases: string[]) => {
+    loggedIn()
+    mockTree()
+    mockOptions()
+    mockApi('get', '/admin/cocktails/{cocktail}', 200, { data: { ...COCKTAIL, aliases } })
+    mockDuplicates()
+    renderAt(`/admin/cocktails/${COCKTAIL.id}`)
+    await screen.findByRole('button', { name: '公開する' })
+  }
+
+  test('TC-83-04: 編集で開くと、今の別名を登録した順に「別名 1」「別名 2」の欄に出し、別名が無ければ無いことを出す', async () => {
+    await openEditWithAliases(['G&T', 'ジン・トニック'])
+
+    expect(within(aliasSection()).getByLabelText('別名 1')).toHaveValue('G&T')
+    expect(within(aliasSection()).getByLabelText('別名 2')).toHaveValue('ジン・トニック')
+    expect(within(aliasSection()).getByRole('button', { name: '別名 1 を削除' })).toBeEnabled()
+    expect(within(aliasSection()).queryByText('別名はありません。')).not.toBeInTheDocument()
+  })
+
+  test('TC-83-05: 新規の画面では、別名の欄は「別名はありません。」と「別名を足す」だけを出す', async () => {
+    await openNew()
+
+    expect(within(aliasSection()).getByText('別名はありません。')).toBeInTheDocument()
+    expect(aliasValues()).toEqual([])
+    expect(within(aliasSection()).getByRole('button', { name: '別名を足す' })).toBeEnabled()
+  })
+
+  test('TC-83-06: 「別名を足す」で空の欄を足し、入れた別名を今の別名の後ろに並べて保存で送る(追加)', async () => {
+    await openEditWithAliases(['G&T'])
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    const sent = captureSave('put', () => jsonResponse({ data: { ...COCKTAIL, aliases: ['G&T', 'ジン・トニック'] }, warnings: [] }, 200))
+
+    fireEvent.click(within(aliasSection()).getByRole('button', { name: '別名を足す' }))
+    expect(within(aliasSection()).getByLabelText('別名 2')).toHaveValue('')
+    fireEvent.change(within(aliasSection()).getByLabelText('別名 2'), { target: { value: 'ジン・トニック' } })
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(sentAliases(sent()!)).toEqual([
+      ['aliases[0]', 'G&T'],
+      ['aliases[1]', 'ジン・トニック'],
+    ])
+  })
+
+  test('TC-83-07: 「別名 n を削除」でその行だけを消し、残りを並びのまま送る。全部消すと空の値の aliases を送る(削除)', async () => {
+    await openEditWithAliases(['G&T', 'ジン・トニック', 'ジントニ'])
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    const sent = captureSave('put', () => jsonResponse({ data: COCKTAIL, warnings: [] }, 200))
+
+    fireEvent.click(within(aliasSection()).getByRole('button', { name: '別名 2 を削除' }))
+    expect(aliasValues()).toEqual(['G&T', 'ジントニ'])
+    fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails?status=draft'))
+    expect(sentAliases(sent()!)).toEqual([
+      ['aliases[0]', 'G&T'],
+      ['aliases[1]', 'ジントニ'],
+    ])
+  })
+
+  test('TC-83-08: 別名を全部消して保存すると、空の値の aliases だけを送る', async () => {
+    await openEditWithAliases(['G&T', 'ジン・トニック'])
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    const sent = captureSave('put', () => jsonResponse({ data: COCKTAIL, warnings: [] }, 200))
+
+    fireEvent.click(within(aliasSection()).getByRole('button', { name: '別名 1 を削除' }))
+    fireEvent.click(within(aliasSection()).getByRole('button', { name: '別名 1 を削除' }))
+    expect(within(aliasSection()).getByText('別名はありません。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(sentAliases(sent()!)).toEqual([['aliases', '']])
+  })
+
+  test('TC-83-09: 422 の別名の行のメッセージ(検索用の名前が同じ・名前と同じ)はその行の欄の下に出し、行に当たらないものは別名の欄の下に出して、画面に残る', async () => {
+    await openEditWithAliases(['ジントニック', 'G&T', 'G&T'])
+    captureSave('put', () =>
+      jsonResponse(
+        {
+          message: 'invalid',
+          errors: {
+            'aliases.0': ['カクテルの名前と同じ別名です'],
+            'aliases.2': ['同じ別名がほかにあります'],
+            'aliases.5': ['別名 6 つ目は必須です。'],
+            aliases: ['別名は配列にしてください。'],
+          },
+        },
+        422,
+      ),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    const first = await within(aliasSection()).findByLabelText('別名 1')
+    expect(first).toHaveAttribute('aria-invalid', 'true')
+    expect(first).toHaveAccessibleDescription('カクテルの名前と同じ別名です')
+    expect(within(aliasSection()).getByLabelText('別名 2')).toHaveAttribute('aria-invalid', 'false')
+    expect(within(aliasSection()).getByLabelText('別名 3')).toHaveAccessibleDescription('同じ別名がほかにあります')
+    expect(within(aliasSection()).getByText('別名 6 つ目は必須です。')).toBeInTheDocument()
+    expect(within(aliasSection()).getByText('別名は配列にしてください。')).toBeInTheDocument()
+    // 保存のボタンの下(欄の無い項目のメッセージ)には出さない
+    expect(screen.getAllByText('同じ別名がほかにあります')).toHaveLength(1)
+    expect(aliasValues()).toEqual(['ジントニック', 'G&T', 'G&T'])
+    expect(currentUrl()).toBe(`/admin/cocktails/${COCKTAIL.id}`)
+  })
+
+  test('TC-83-10: 別名の欄を直すとその行のメッセージだけを外し、行を足す・消すと別名のメッセージをすべて外す', async () => {
+    await openEditWithAliases(['G&T', 'G&T', 'ジントニック'])
+    captureSave('put', () =>
+      jsonResponse(
+        { message: 'invalid', errors: { 'aliases.1': ['同じ別名がほかにあります'], 'aliases.2': ['カクテルの名前と同じ別名です'] } },
+        422,
+      ),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+    expect(await within(aliasSection()).findByText('同じ別名がほかにあります')).toBeInTheDocument()
+
+    fireEvent.change(within(aliasSection()).getByLabelText('別名 2'), { target: { value: 'ジン・トニック' } })
+    expect(within(aliasSection()).getByLabelText('別名 2')).toHaveAttribute('aria-invalid', 'false')
+    expect(within(aliasSection()).queryByText('同じ別名がほかにあります')).not.toBeInTheDocument()
+    expect(within(aliasSection()).getByLabelText('別名 3')).toHaveAttribute('aria-invalid', 'true')
+
+    // 1 行目を消すと番号がずれるので、3 行目(今は 2 行目)のメッセージも外す
+    fireEvent.click(within(aliasSection()).getByRole('button', { name: '別名 1 を削除' }))
+    expect(within(aliasSection()).queryByText('カクテルの名前と同じ別名です')).not.toBeInTheDocument()
+    expect(aliasValues()).toEqual(['ジン・トニック', 'ジントニック'])
+  })
+
+  test('TC-83-11: 保存の応答を待つあいだは、別名の行を足す・消すのボタンを押せない', async () => {
+    await openEditWithAliases(['G&T'])
+    mockApiHandler('put', '/admin/cocktails/{cocktail}', () => new Promise<Response>(() => {}))
+
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    await waitFor(() => expect(within(aliasSection()).getByRole('button', { name: '別名を足す' })).toBeDisabled())
+    expect(within(aliasSection()).getByRole('button', { name: '別名 1 を削除' })).toBeDisabled()
+  })
+
+  test('TC-83-12: 別名がほかのカクテルの名前・別名と同じ(warnings)でも保存して一覧へ戻り、どの別名がどのカクテルと同じかと、そのカクテルへのリンクを出す', async () => {
+    await openEditWithAliases([])
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    captureSave('put', () =>
+      jsonResponse(
+        {
+          data: { ...COCKTAIL, aliases: ['ジン・トニック', 'G&T'] },
+          warnings: [
+            { field: 'aliases.1', message: '「ジンバック」の名前と同じです', cocktail_id: 11, cocktail_name: 'ジンバック' },
+            { field: 'aliases.1', message: '「ジンリッキー」の別名と同じです', cocktail_id: 12, cocktail_name: 'ジンリッキー' },
+          ],
+        } satisfies Saved,
+        200,
+      ),
+    )
+
+    fireEvent.click(within(aliasSection()).getByRole('button', { name: '別名を足す' }))
+    fireEvent.change(within(aliasSection()).getByLabelText('別名 1'), { target: { value: 'ジン・トニック' } })
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    // 一覧の読み込みの表示(status)と取り違えないよう、知らせの文を持つものを選ぶ
+    const notice = await waitFor(() => {
+      const found = screen.getAllByRole('status').find((element) => element.textContent?.includes('を保存しました'))
+      expect(found).toBeDefined()
+      return found!
+    })
+    expect(notice).toHaveTextContent('「ジントニック」を保存しました。次の別名は、ほかのカクテルの名前・別名と同じです。')
+    const items = within(notice).getAllByRole('listitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      '別名「G&T」: 「ジンバック」の名前と同じです 「ジンバック」を開く',
+      '別名「G&T」: 「ジンリッキー」の別名と同じです 「ジンリッキー」を開く',
+    ])
+    expect(within(notice).getByRole('link', { name: '「ジンバック」を開く' })).toHaveAttribute('href', '/admin/cocktails/11')
+    expect(within(notice).getByRole('link', { name: '「ジンリッキー」を開く' })).toHaveAttribute('href', '/admin/cocktails/12')
+  })
+
+  test('TC-83-13: 保存の応答の warnings が空なら、戻った一覧に知らせを出さない', async () => {
+    await openEditWithAliases(['ジン・トニック'])
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    captureSave('put', () => jsonResponse({ data: COCKTAIL, warnings: [] } satisfies Saved, 200))
+
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(await screen.findByRole('heading', { level: 1, name: 'カクテル' })).toBeInTheDocument()
+    expect(screen.queryByText(/を保存しました/)).not.toBeInTheDocument()
   })
 })
 
