@@ -157,11 +157,18 @@ test('TC-674-14: 新規で親を選び、その親の下に既にある名前・
   await expect(name).toHaveAccessibleDescription(DUPLICATE)
   await expect(nameEng).toHaveAccessibleDescription(DUPLICATE)
   await expect(name).toHaveAttribute('aria-invalid', 'false')
+  // 説明の文が CSS で隠れていないこと(欄の説明だけでは見えているかが分からない)
+  const notices = page.getByText(DUPLICATE, { exact: true })
+  await expect(notices).toHaveCount(2)
+  await expect(notices.nth(0)).toBeVisible()
+  await expect(notices.nth(1)).toBeVisible()
 
   await name.fill('E2E の重ならないノード')
   await name.blur()
   await expect(name).not.toHaveAccessibleDescription(DUPLICATE)
   await expect(nameEng).toHaveAccessibleDescription(DUPLICATE)
+  await expect(notices).toHaveCount(1)
+  await expect(notices.first()).toBeVisible()
 })
 
 test('TC-674-15: 同じ親の下に既にある英名を入れて知らせが出ても保存でき、カテゴリ木の知らせに英名の警告が出る', async ({ page, baseURL }) => {
