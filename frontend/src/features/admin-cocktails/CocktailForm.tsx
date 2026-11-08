@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { components, paths } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
@@ -12,6 +12,7 @@ import {
   type DeleteCocktailResult,
   type SaveCocktailResult,
 } from './cocktailApi'
+import { checkIngredientRows } from './checkIngredientRows'
 import { Field, FieldErrors, SelectField, TextField, type SelectOption } from './CocktailFormFields'
 import {
   cocktailWordSearchUrl,
@@ -20,6 +21,11 @@ import {
   SWEET_DEGREE_OPTIONS,
   type CocktailFormValues,
 } from './cocktailFormValues'
+import { editIngredients, type IngredientEdit } from './editIngredients'
+import IngredientRows from './IngredientRows'
+import { clearIngredientErrors } from './clearIngredientErrors'
+import { NO_INGREDIENT_ERRORS, type IngredientErrors } from './ingredientErrors.types'
+import { splitIngredientErrors } from './splitIngredientErrors'
 import { useCocktailDuplicates } from './useCocktailDuplicates'
 import styles from './CocktailForm.module.css'
 
@@ -74,9 +80,6 @@ const FIELD_KEYS = new Set([
   'image_url',
 ])
 
-/** 材料の行のメッセージの項目(`ingredients`・`ingredients.0.amount` など)。材料の欄に出す */
-const isIngredientKey = (key: string) => key === 'ingredients' || key.startsWith('ingredients.')
-
 const toOptions = (items: readonly { id: string | number; name: string }[]): SelectOption[] =>
   items.map((item) => ({ value: String(item.id), label: item.name }))
 
@@ -92,31 +95,36 @@ const SWEET_DEGREE_SELECT = numberOptions(SWEET_DEGREE_OPTIONS)
  * 製法・評価・甘さ・メジャー / 説明 / 補足 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / 材料 / 保存・削除。
  * - ベースは木の部品(#297)の単一選択で、根の下のどの深さのノードでも選べる。根は見出しにして選べなくする(#153)
  * - 保存のボタンは「下書きとして保存」「公開する」の 2 つ(docs/decisions/admin-screens.md の 1)
- * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定)
+ * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定)。
+ *   材料の行の 2 つの確かめ(レシピの重複・ベースが材料に無い)だけは API に無いので、旧と同じく送る前に画面で確かめる
  * - 削除は確かめてから消す(同じく既定)。ほかの説明文から参照されていて消せなければ(409)、理由と参照している行を出す
- * - 材料の行の編集は #128 で足す。それまでは、開いたカクテルの材料をそのまま送り返す
+ * - 材料の行は、足す・消す・並べ替えるができる(#128)
  */
 export default function CocktailForm({ cocktailId, initialValues, currentImage, categories, options, onSaved, onDeleted }: Props) {
   const [values, setValues] = useState(initialValues)
   const [errors, setErrors] = useState<CocktailFieldErrors>({})
+  const [ingredientErrors, setIngredientErrors] = useState<IngredientErrors>(NO_INGREDIENT_ERRORS)
   const [busy, setBusy] = useState<Busy>({ kind: 'idle' })
   const [failure, setFailure] = useState<Failure>({ kind: 'none' })
   const [preview, setPreview] = useState<string | null>(currentImage === null ? null : storageImageUrl(currentImage))
   const baseErrorId = useId()
-  const ingredientsHeadingId = useId()
   const duplicates = useCocktailDuplicates(values.name, values.nameEng, cocktailId)
 
   const nodes = useMemo(() => categories.map(toCategoryTreeNode), [categories])
   const rootIds = useMemo(() => new Set(categories.map((root) => root.id)), [categories])
   const appearance = useMemo<CategoryTreeAppearance>(() => ({ isHeading: (node) => rootIds.has(node.id) }), [rootIds])
-  const selectedPath = useMemo(
-    () => (values.baseCategoryId === null ? null : pathTo(categories, values.baseCategoryId)),
-    [categories, values.baseCategoryId],
-  )
+  const isSelectable = useCallback((node: CategoryTreeNode) => !rootIds.has(node.id), [rootIds])
+  const pathNames = useMemo(() => pathNamesOf(categories), [categories])
+  const pathOf = useCallback((categoryId: number) => pathNames.get(categoryId) ?? null, [pathNames])
   const methodNames = useMemo(() => new Map(options.methods.map((method) => [String(method.id), method.name])), [options.methods])
 
   const set = <K extends keyof CocktailFormValues>(key: K, value: CocktailFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
+
+  const editIngredient = (edit: IngredientEdit) => {
+    setValues((current) => editIngredients(current, edit))
+    setIngredientErrors((current) => clearIngredientErrors(current, edit))
+  }
 
   // 押したボタン。Enter で送ったときは、先頭のボタン(下書きとして保存)を押したことになる
   const savesAsDraft = useRef(true)
@@ -148,10 +156,19 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const isDraft = savesAsDraft.current
-    setBusy({ kind: 'saving' })
     // 欄を離れずに Enter で送ったときも、英名を半角にして送る
     const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
     setValues(normalized)
+    const blockers = checkIngredientRows(normalized.ingredients, normalized.baseCategoryId, categories)
+    if (blockers.length > 0) {
+      setErrors({})
+      setIngredientErrors({ section: blockers, rows: new Map() })
+      setFailure({ kind: 'save', failure: { kind: 'invalid', errors: {} } })
+      return
+    }
+    setBusy({ kind: 'saving' })
+    // 誤りの「材料 N 行目」は送った並びの位置なので、送ったときの行で結び付ける(待つ間に並べ替えても、送った行に付ける)
+    const sentKeys = normalized.ingredients.map((row) => row.key)
     const result = await saveCocktail(cocktailId, normalized, isDraft)
     // 保存を待つ間に別の画面へ移っていたら、一覧へ戻さない
     if (!mounted.current) return
@@ -159,7 +176,9 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
       onSaved(isDraft)
       return
     }
-    setErrors(result.kind === 'invalid' ? result.errors : {})
+    const split = splitIngredientErrors(result.kind === 'invalid' ? result.errors : {}, sentKeys)
+    setErrors(split.fieldErrors)
+    setIngredientErrors(split.ingredientErrors)
     setFailure({ kind: 'save', failure: result })
     setBusy({ kind: 'idle' })
   }
@@ -180,11 +199,8 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
   }
 
   const disabled = busy.kind !== 'idle'
-  const ingredientErrors = Object.entries(errors)
-    .filter(([key]) => isIngredientKey(key))
-    .flatMap(([, messages]) => messages)
   const otherErrors = Object.entries(errors)
-    .filter(([key]) => !FIELD_KEYS.has(key) && !isIngredientKey(key))
+    .filter(([key]) => !FIELD_KEYS.has(key))
     .flatMap(([, messages]) => messages)
   const hasDuplicates = duplicates.kind === 'loaded' && (duplicates.sameName.length > 0 || duplicates.sameRecipe.length > 0)
 
@@ -206,7 +222,7 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
         <fieldset className={styles.base} aria-describedby={errors.base_category_id?.length ? baseErrorId : undefined}>
           <legend className={styles.legend}>ベース</legend>
           <p className={styles.selected}>
-            選んでいるベース: {selectedPath === null ? '(未選択)' : selectedPath.map((node) => node.name).join(' / ')}
+            選んでいるベース: {(values.baseCategoryId === null ? null : pathOf(values.baseCategoryId)) ?? '(未選択)'}
           </p>
           <FieldErrors id={baseErrorId} messages={errors.base_category_id} />
           <CategoryTree
@@ -216,8 +232,8 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
             selection={{
               mode: 'single',
               selectedId: values.baseCategoryId,
-              onSelect: (node) => set('baseCategoryId', node.id),
-              isSelectable: (node) => !rootIds.has(node.id),
+              onSelect: (node) => editIngredient({ kind: 'base', categoryId: node.id }),
+              isSelectable,
             }}
           />
         </fieldset>
@@ -371,17 +387,15 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
           <TextField label="リンクURL" errors={errors.image_url} value={values.imageUrl} onChange={(value) => set('imageUrl', value)} />
         </div>
 
-        <section className={styles.ingredients} aria-labelledby={ingredientsHeadingId}>
-          <h2 id={ingredientsHeadingId} className={styles.ingredientsHeading}>
-            材料
-          </h2>
-          <p className={styles.ingredientsNote}>
-            {values.ingredients.length === 0
-              ? '材料はまだこの画面で入れられません。'
-              : `材料はまだこの画面で変えられません。保存すると今の材料(${values.ingredients.length} 件)のまま残ります。`}
-          </p>
-          <FieldErrors messages={ingredientErrors} />
-        </section>
+        <IngredientRows
+          rows={values.ingredients}
+          nodes={nodes}
+          appearance={appearance}
+          isSelectable={isSelectable}
+          pathOf={pathOf}
+          errors={ingredientErrors}
+          onEdit={editIngredient}
+        />
 
         <div className={styles.actions}>
           <div className={styles.saveButtons}>
@@ -461,20 +475,19 @@ function toCategoryTreeNode(node: SearchFormNode): CategoryTreeNode {
   return { id: node.id, name: node.name, name_eng: null, is_major: node.is_major, children: node.children.map(toCategoryTreeNode) }
 }
 
-/** 根から id のノードまでのノード(根を除く)。木に無ければ null */
-function pathTo(nodes: readonly SearchFormNode[], id: number): SearchFormNode[] | null {
-  for (const root of nodes) {
-    const found = findPath(root, id)
-    if (found !== null) return found.slice(1)
+/**
+ * 根でないノードの ID から、根を除いたパンくずの文字(「ジン / ドライジン」)を引く表。
+ * ベースと材料の行ごとに選んでいるノードを出すのに、出すたびに木をたどらないよう、木から一度に作る
+ */
+function pathNamesOf(roots: readonly SearchFormNode[]): ReadonlyMap<number, string> {
+  const names = new Map<number, string>()
+  const walk = (node: SearchFormNode, ancestors: readonly string[]) => {
+    const path = [...ancestors, node.name]
+    names.set(node.id, path.join(' / '))
+    for (const child of node.children) walk(child, path)
   }
-  return null
-}
-
-function findPath(node: SearchFormNode, id: number): SearchFormNode[] | null {
-  if (node.id === id) return [node]
-  for (const child of node.children) {
-    const found = findPath(child, id)
-    if (found !== null) return [node, ...found]
+  for (const root of roots) {
+    for (const child of root.children) walk(child, [])
   }
-  return null
+  return names
 }

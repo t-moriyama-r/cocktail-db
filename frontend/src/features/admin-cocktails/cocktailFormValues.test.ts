@@ -53,7 +53,7 @@ const entries = (form: FormData) => {
 }
 
 describe('フォームの入力', () => {
-  test('TC-127-01: 開いたカクテルの値を欄の文字にし、null は空の文字、0 と負の数は数のまま、材料はそのまま持つ', () => {
+  test('TC-127-01: 開いたカクテルの値を欄の文字にし、null は空の文字、0 と負の数は数のまま、材料は並びのまま 1 つずつ行にする', () => {
     expect(cocktailFormValuesOf(COCKTAIL)).toEqual({
       baseCategoryId: 2,
       iceId: '4',
@@ -73,7 +73,10 @@ describe('フォームの入力', () => {
       imageTxt: '',
       imageUrl: '',
       image: null,
-      ingredients: COCKTAIL.ingredients,
+      ingredients: [
+        { key: 0, categoryId: 5, brandId: 6, amount: '45ml', isOptional: false },
+        { key: 1, categoryId: 7, brandId: null, amount: '適量', isOptional: true },
+      ],
     })
   })
 
@@ -118,7 +121,30 @@ describe('フォームの入力', () => {
     expect(form.get('is_major')).toBe('0')
     expect((form.get('image') as File).name).toBe('gin.png')
     expect(form.has('aliases')).toBe(false)
-    expect(entries(form).some(([key]) => key.startsWith('ingredients'))).toBe(false)
+  })
+})
+
+describe('材料の行', () => {
+  test('TC-128-08: 新規の最初の入力は、空の材料の行を 2 つ持ち、行の key は重ならない', () => {
+    expect(EMPTY_COCKTAIL_FORM.ingredients).toEqual([
+      { key: 0, categoryId: null, brandId: null, amount: '', isOptional: false },
+      { key: 1, categoryId: null, brandId: null, amount: '', isOptional: false },
+    ])
+  })
+
+  test('TC-128-09: ノードを選んでいない行も飛ばさずに並びのまま送り、ノードは空の文字にする。行が 1 つも無ければ空の ingredients を送る', () => {
+    const rows = toCocktailFormData(EMPTY_COCKTAIL_FORM, 'POST', true)
+    expect(entries(rows).filter(([key]) => key.startsWith('ingredients'))).toEqual([
+      ['ingredients[0][category_id]', ''],
+      ['ingredients[0][amount]', ''],
+      ['ingredients[0][is_optional]', '0'],
+      ['ingredients[1][category_id]', ''],
+      ['ingredients[1][amount]', ''],
+      ['ingredients[1][is_optional]', '0'],
+    ])
+
+    const none = toCocktailFormData({ ...EMPTY_COCKTAIL_FORM, ingredients: [] }, 'PUT', true)
+    expect(entries(none).filter(([key]) => key.startsWith('ingredients'))).toEqual([['ingredients', '']])
   })
 })
 
