@@ -379,6 +379,20 @@ describe('編集', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした(エラー 500)')
     expect(currentUrl()).toBe('/admin/categories/2')
   })
+
+  test('TC-715-01: 保存が 401 なら、ログインの期限切れとログインし直す手順を出し、入力を残して画面に残る', async () => {
+    await openEdit()
+    captureSave('put', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+
+    fireEvent.change(screen.getByLabelText('名前'), { target: { value: 'ジン(書き換え)' } })
+    submit()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
+    expect(screen.getByLabelText('名前')).toHaveValue('ジン(書き換え)')
+    expect(currentUrl()).toBe('/admin/categories/2')
+  })
 })
 
 describe('名前・英名の重なり(#674)', () => {
