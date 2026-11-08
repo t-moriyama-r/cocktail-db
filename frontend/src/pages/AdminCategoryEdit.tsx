@@ -7,44 +7,43 @@ import ApiView from '../components/ApiView/ApiView'
 import InlineApiView from '../components/ApiView/InlineApiView'
 import { ADMIN_CATEGORIES_PATH, adminBrandEditPath, adminCategoryEditPath } from '../components/AdminLayout/adminPaths'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
+import CategoryDelete from '../features/admin-categories/CategoryDelete'
 import CategoryForm from '../features/admin-categories/CategoryForm'
-import type { CategorySaveWarning } from '../features/admin-categories/categoryApi'
+import CategoryMove from '../features/admin-categories/CategoryMove'
+import { fetchAdminCategoryTree } from '../features/admin-categories/categoryApi'
 import {
   categoryFormValuesOf,
   categoryKeptValuesOf,
   EMPTY_CATEGORY_FORM,
   NEW_CATEGORY_KEPT,
 } from '../features/admin-categories/categoryFormValues'
-import { savedNotice } from '../features/admin-categories/categoryTreeNotice'
+import { deletedNotice, movedNotice, savedNotice, type CategoryTreeNotice } from '../features/admin-categories/categoryTreeNotice'
 import styles from './AdminCategoryEdit.module.css'
 
 type CategoryResource = components['schemas']['CategoryResource']
 type NodeSummary = CategoryResource['children'][number]
 
-/** 親を選ぶ木。カテゴリ木の画面(#123)と同じ管理 API の木を使う */
-const fetchCategoryTree = () => api.GET('/admin/categories')
-
 /**
  * 管理画面のノードの新規(/admin/categories/new)・編集(/admin/categories/:id)の画面(旧 `Detail/CategoryEdit.vue`・`MiddleEdit.vue`。#308)。
  *
  * 編集はノードを読み込んでからフォームを出し、無い ID なら 404 の画面を出す。フォームの下に、子のノードと直下の銘柄の一覧を出す
- * (旧の「登録されているミドルカテゴリ一覧」「登録されている銘柄の一覧」)。保存できたらカテゴリ木の画面へ戻り、保存したことを出す。
+ * (旧の「登録されているミドルカテゴリ一覧」「登録されている銘柄の一覧」)。その下に、親の付け替え(根でないノードだけ)と削除の欄を出す(#125)。
+ * 保存・付け替え・削除ができたらカテゴリ木の画面へ戻り、したことを出す。
  */
 export default function AdminCategoryEdit() {
   const { id } = useParams()
   return id === undefined ? <NewCategory /> : <EditCategory id={Number(id)} />
 }
 
-/** 保存できたら、カテゴリ木の画面へ戻り、保存したこと(と保存の後の警告)を出す */
+/** 保存・付け替え・削除ができたら、カテゴリ木の画面へ戻り、したこと(と保存の後の警告)を出す */
 function useBackToTree() {
   const navigate = useNavigate()
-  return (name: string, warnings: readonly CategorySaveWarning[]) =>
-    void navigate(ADMIN_CATEGORIES_PATH, { state: savedNotice(name, warnings) })
+  return (notice: CategoryTreeNotice) => void navigate(ADMIN_CATEGORIES_PATH, { state: notice })
 }
 
 function NewCategory() {
   usePageTitle('ノードの新規')
-  const { state, retry } = useApi(fetchCategoryTree)
+  const { state, retry } = useApi(fetchAdminCategoryTree)
   const backToTree = useBackToTree()
 
   return (
@@ -58,7 +57,7 @@ function NewCategory() {
             kept={NEW_CATEGORY_KEPT}
             currentImage={null}
             parent={{ kind: 'select', tree: data }}
-            onSaved={backToTree}
+            onSaved={(name, warnings) => backToTree(savedNotice(name, warnings))}
           />
         )}
       </InlineApiView>
@@ -85,10 +84,15 @@ function EditCategory({ id }: { id: number }) {
             kept={categoryKeptValuesOf(node)}
             currentImage={node.image}
             parent={{ kind: 'fixed', path: node.path.map((step) => step.name) }}
-            onSaved={backToTree}
+            onSaved={(name, warnings) => backToTree(savedNotice(name, warnings))}
           />
           <NodeList title="登録されている子のノードの一覧" items={node.children} empty="子のノードはありません" linkTo={adminCategoryEditPath} />
           <NodeList title="登録されている銘柄の一覧" items={node.brands} empty="銘柄はありません" linkTo={adminBrandEditPath} />
+          {/* 根を別のノードの下へ移すのは、根の役割(#310)と関わるので、ここでは根でないノードだけを移す */}
+          {node.parent_id !== null && (
+            <CategoryMove key={node.id} node={node} onMoved={(name, path, warnings) => backToTree(movedNotice(name, path, warnings))} />
+          )}
+          <CategoryDelete key={node.id} node={node} onDeleted={(name) => backToTree(deletedNotice(name))} />
         </main>
       )}
     </ApiView>

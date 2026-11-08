@@ -5,6 +5,9 @@ import { toCategoryFormData, type CategoryFormValues, type CategoryKeptValues } 
 
 type SaveCategoryRequest = components['schemas']['SaveCategoryRequest']
 
+/** 管理 API の木(GET /api/admin/categories。#123)。カテゴリ木の画面・新規の親・付け替えの移す先で使う */
+export const fetchAdminCategoryTree = () => api.GET('/admin/categories')
+
 /** 項目ごとの検証のメッセージ(Laravel の 422 の errors。キーは API の項目名) */
 export type CategoryFieldErrors = Readonly<Record<string, readonly string[]>>
 
@@ -62,6 +65,34 @@ export async function saveCategory(
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
       return { kind: 'invalid', errors: error.errors }
+    }
+    return { kind: 'http-error', status: response.status }
+  } catch {
+    return { kind: 'network-error' }
+  }
+}
+
+/** 削除の結果 */
+export type DeleteCategoryResult =
+  | { kind: 'deleted' }
+  /** 409。消せない理由(子・銘柄・材料・ベース・アフィリエイト。#121)の文 */
+  | { kind: 'blocked'; reasons: readonly string[] }
+  /** 409 以外のエラーの応答(無いノードの 404 など) */
+  | { kind: 'http-error'; status: number }
+  /** 応答が返らなかった */
+  | { kind: 'network-error' }
+
+/** ノードを消す(DELETE /api/admin/categories/{id})。消せないときは、API が返す理由をすべて返す */
+export async function deleteCategory(nodeId: number): Promise<DeleteCategoryResult> {
+  try {
+    const { error, response } = await api.DELETE('/admin/categories/{category}', {
+      params: { path: { category: nodeId } },
+    })
+    if (response.ok) {
+      return { kind: 'deleted' }
+    }
+    if (response.status === 409 && error !== undefined && 'reasons' in error) {
+      return { kind: 'blocked', reasons: error.reasons.map((reason) => reason.message) }
     }
     return { kind: 'http-error', status: response.status }
   } catch {
