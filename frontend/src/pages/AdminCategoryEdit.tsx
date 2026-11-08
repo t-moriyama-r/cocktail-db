@@ -76,9 +76,10 @@ function EditCategory({ id }: { id: number }) {
       {({ data: node }) => (
         <main className={styles.page}>
           <h1 className={styles.title}>ノードの編集</h1>
-          {/* 子のノードの一覧から別のノードへ移ったときに、前のノードの入力を残さない */}
+          {/* 子のノードの一覧から別のノードへ移ったときに、前のノードの入力を残さない。
+              key は兄弟どうしで重ならないよう、部品ごとに接頭辞を付ける(同じ key の兄弟は React が保証しない。#727) */}
           <CategoryForm
-            key={node.id}
+            key={`form-${node.id}`}
             nodeId={node.id}
             initialValues={categoryFormValuesOf(node)}
             kept={categoryKeptValuesOf(node)}
@@ -90,9 +91,9 @@ function EditCategory({ id }: { id: number }) {
           <NodeList title="登録されている銘柄の一覧" items={node.brands} empty="銘柄はありません" linkTo={adminBrandEditPath} />
           {/* 根を別のノードの下へ移すのは、根の役割(#310)と関わるので、ここでは根でないノードだけを移す */}
           {node.parent_id !== null && (
-            <CategoryMove key={node.id} node={node} onMoved={(name, path, warnings) => backToTree(movedNotice(name, path, warnings))} />
+            <CategoryMove key={`move-${node.id}`} node={node} onMoved={(name, path, warnings) => backToTree(movedNotice(name, path, warnings))} />
           )}
-          <CategoryDelete key={node.id} node={node} onDeleted={(name) => backToTree(deletedNotice(name))} />
+          <CategoryDelete key={`delete-${node.id}`} node={node} onDeleted={(name) => backToTree(deletedNotice(name))} />
         </main>
       )}
     </ApiView>

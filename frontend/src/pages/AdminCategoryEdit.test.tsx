@@ -775,3 +775,55 @@ describe('削除(#125)', () => {
     expect(currentUrl()).toBe('/admin/categories/3')
   })
 })
+
+describe('部品の key(#727)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** React が「同じ key の子がある」と出した警告(console.error に出る)の数 */
+  const sameKeyWarnings = (error: { mock: { calls: unknown[][] } }) =>
+    error.mock.calls.filter((args) => args.map(String).join(' ').includes('Encountered two children with the same key')).length
+
+  test('TC-727-01: 根でないノードの編集(フォーム・付け替え・削除の欄)を開いても、同じ key の警告が出ない', async () => {
+    const error = vi.spyOn(console, 'error')
+    await openEdit(GIN)
+
+    expect(moveSection()).toBeInTheDocument()
+    expect(deleteSection()).toBeInTheDocument()
+    expect(sameKeyWarnings(error)).toBe(0)
+  })
+
+  test('TC-727-02: 根のノードの編集(フォーム・削除の欄)を開いても、同じ key の警告が出ない', async () => {
+    const error = vi.spyOn(console, 'error')
+    await openEdit(OTHER_ROOT)
+
+    expect(deleteSection()).toBeInTheDocument()
+    expect(sameKeyWarnings(error)).toBe(0)
+  })
+
+  test('TC-727-03: 子のノードの一覧から別のノードへ移ると、前のノードで入れた名前・開いた移す先の木・選んだ移す先を残さない', async () => {
+    const error = vi.spyOn(console, 'error')
+    loggedIn()
+    mockTree()
+    mockApiHandler('get', '/admin/categories/{category}', (request) =>
+      jsonResponse({ data: new URL(request.url).pathname.endsWith('/3') ? DRY_GIN : GIN }, 200),
+    )
+    renderAt('/admin/categories/2')
+    await screen.findByRole('heading', { level: 1, name: 'ノードの編集' })
+    fireEvent.change(screen.getByLabelText('名前'), { target: { value: 'ジン(入れかけ)' } })
+    await pickTarget('その他')
+    expect(within(moveSection()).getByText('移す先: その他')).toBeInTheDocument()
+
+    const children = screen.getByRole('region', { name: '登録されている子のノードの一覧' })
+    fireEvent.click(within(children).getByRole('link', { name: 'ドライジン(Dry Gin)' }))
+
+    await waitFor(() => expect(screen.getByLabelText('名前')).toHaveValue('ドライジン'))
+    expect(currentUrl()).toBe('/admin/categories/3')
+    expect(within(moveSection()).getByText('今の親: 蒸留酒 / ジン')).toBeInTheDocument()
+    // 移す先の木は閉じた状態に戻り、前に選んだ移す先を出さない
+    expect(within(moveSection()).getByRole('button', { name: '移す先を選ぶ' })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(moveSection()).queryByText(/移す先:/)).not.toBeInTheDocument()
+    expect(sameKeyWarnings(error)).toBe(0)
+  })
+})
