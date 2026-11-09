@@ -77,6 +77,7 @@ describe('フォームの入力', () => {
         { key: 0, categoryId: 5, brandId: 6, amount: '45ml', isOptional: false },
         { key: 1, categoryId: 7, brandId: null, amount: '適量', isOptional: true },
       ],
+      aliases: [{ key: 0, name: 'G&T' }],
     })
   })
 
@@ -108,11 +109,12 @@ describe('フォームの入力', () => {
       ['ingredients[1][category_id]', '7'],
       ['ingredients[1][amount]', '適量'],
       ['ingredients[1][is_optional]', '1'],
+      ['aliases[0]', 'G&T'],
     ])
     expect(toCocktailFormData(values, 'POST', false).get('is_draft')).toBe('0')
   })
 
-  test('TC-127-03: 更新は _method=PUT を付け、ベース・選んだ画像も送り、別名は送らない', () => {
+  test('TC-127-03: 更新は _method=PUT を付け、ベース・選んだ画像も送る', () => {
     const image = new File(['x'], 'gin.png', { type: 'image/png' })
     const form = toCocktailFormData({ ...EMPTY_COCKTAIL_FORM, baseCategoryId: 9, image }, 'PUT', false)
 
@@ -120,7 +122,6 @@ describe('フォームの入力', () => {
     expect(form.get('base_category_id')).toBe('9')
     expect(form.get('is_major')).toBe('0')
     expect((form.get('image') as File).name).toBe('gin.png')
-    expect(form.has('aliases')).toBe(false)
   })
 })
 
@@ -145,6 +146,41 @@ describe('材料の行', () => {
 
     const none = toCocktailFormData({ ...EMPTY_COCKTAIL_FORM, ingredients: [] }, 'PUT', true)
     expect(entries(none).filter(([key]) => key.startsWith('ingredients'))).toEqual([['ingredients', '']])
+  })
+})
+
+describe('別名', () => {
+  test('TC-83-01: 開いたカクテルの別名を、登録した順のまま欄の行にする', () => {
+    const values = cocktailFormValuesOf({ ...COCKTAIL, aliases: ['G&T', 'ジン・トニック'] })
+
+    expect(values.aliases.map((alias) => alias.name)).toEqual(['G&T', 'ジン・トニック'])
+    // 行の印は重ならない(行を消しても、残った行の欄を取り違えない)
+    expect(new Set(values.aliases.map((alias) => alias.key)).size).toBe(2)
+    expect(EMPTY_COCKTAIL_FORM.aliases).toEqual([])
+  })
+
+  test('TC-83-02: 別名は欄の並びのまま aliases[番号] で送り、文字は整えずに送る(空の行も送る)', () => {
+    const values = {
+      ...EMPTY_COCKTAIL_FORM,
+      aliases: [
+        { key: 3, name: 'ジン・トニック' },
+        { key: 1, name: 'G&T' },
+        { key: 5, name: '' },
+      ],
+    }
+
+    const aliasEntries = entries(toCocktailFormData(values, 'PUT', true)).filter(([key]) => key.startsWith('aliases'))
+    expect(aliasEntries).toEqual([
+      ['aliases[0]', 'ジン・トニック'],
+      ['aliases[1]', 'G&T'],
+      ['aliases[2]', ''],
+    ])
+  })
+
+  test('TC-83-03: 別名が 1 つも無ければ、全部消すために空の値の aliases を 1 つだけ送る', () => {
+    const aliasEntries = entries(toCocktailFormData(EMPTY_COCKTAIL_FORM, 'PUT', true)).filter(([key]) => key.startsWith('aliases'))
+
+    expect(aliasEntries).toEqual([['aliases', '']])
   })
 })
 

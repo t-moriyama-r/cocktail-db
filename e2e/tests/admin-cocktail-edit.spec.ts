@@ -354,3 +354,90 @@ test('TC-127-33: xs の幅(375px)で、製法・評価・甘さの行が折り�
 
   await expect(major).toBeChecked()
 })
+
+test.describe('別名(#83)', () => {
+  // 別名は下書き「E2E の下書き」で試す(下書きなので、名前検索・登録数など、ほかの E2E が見ているものに別名が入らない)。
+  // ジントニック(E2eSeeder の seedHeaderData)が別名「G&T」を持つので、同じ別名を足すと保存の後に警告が返る。
+  // 試行ごとに変わる別名にし、途中で落ちても別名が残らないよう、後始末で下書きの別名を全部消す(RC-18)
+  const RUN = Date.now()
+  const aliases = (page: Page) => page.getByRole('region', { name: '別名' })
+
+  /** 別名の欄の値を、上から並べる */
+  const aliasValues = (page: Page) =>
+    aliases(page)
+      .getByRole('textbox')
+      .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value))
+
+  test.afterEach(async ({ page, baseURL }) => {
+    await login(page, baseURL!)
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    const removeButtons = aliases(page).getByRole('button', { name: /^別名 \d+ を削除$/ })
+    if ((await removeButtons.count()) === 0) return
+    while ((await removeButtons.count()) > 0) {
+      await removeButtons.first().click()
+    }
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+    await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+  })
+
+  test('TC-83-15: 別名を足して保存すると、ほかのカクテルと同じ別名の警告を一覧に出し、開き直すと別名が残る。検索用の名前が同じ別名は 422 で止まり、消して保存すると無くなる', async ({
+    page,
+    baseURL,
+  }) => {
+    const own = `E2E の別名 ${RUN}`
+    await login(page, baseURL!)
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    await expect(aliases(page).getByText('別名はありません。')).toBeVisible()
+
+    // 足す: 自分だけの別名と、ジントニックの別名と同じ「G&T」
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 1', { exact: true }).fill(own)
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 2', { exact: true }).fill('G&T')
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+
+    // 警告は保存を止めない。戻った一覧の上に、重なったカクテルへのリンクと一緒に出す
+    await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+    const notice = page.getByRole('status').filter({ hasText: '「E2E の下書き」を保存しました' })
+    await expect(notice).toContainText('別名「G&T」: 「ジントニック」の別名と同じです')
+    await expect(notice.getByRole('link', { name: '「ジントニック」を開く' })).toHaveAttribute('href', /\/admin\/cocktails\/\d+$/)
+
+    // 開き直すと、保存した別名が並びのまま残っている
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    await expect.poll(() => aliasValues(page)).toEqual([own, 'G&T'])
+
+    // 大文字・小文字だけが違う別名は、同じ別名として 422 になり、その行の欄の下に出て画面に残る
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 3', { exact: true }).fill('g&t')
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+    await expect(aliases(page).getByLabel('別名 3', { exact: true })).toHaveAttribute('aria-invalid', 'true')
+    await expect(aliases(page).getByLabel('別名 3', { exact: true })).toHaveAccessibleDescription('同じ別名がほかにあります')
+    await expect(page).toHaveURL(/\/admin\/cocktails\/\d+$/)
+
+    // 消す: 3 行とも消して保存すると、開き直したときに別名が無い
+    for (let i = 0; i < 3; i++) {
+      await aliases(page).getByRole('button', { name: '別名 1 を削除' }).click()
+    }
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+    await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+    await expect(page.getByRole('status').filter({ hasText: 'を保存しました' })).toHaveCount(0)
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    await expect(aliases(page).getByText('別名はありません。')).toBeVisible()
+  })
+
+  test('TC-83-16: xs の幅(375px)で別名の行を足しても、欄と「削除」が横にはみ出さない', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await login(page, baseURL!)
+    await page.goto('/admin/cocktails/new')
+
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 1', { exact: true }).fill('とても長い別名'.repeat(10))
+
+    await expect(aliases(page).getByRole('button', { name: '別名 1 を削除' })).toBeInViewport()
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+})

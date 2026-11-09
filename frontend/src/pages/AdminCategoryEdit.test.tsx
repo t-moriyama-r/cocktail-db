@@ -725,6 +725,46 @@ describe('名前・英名の重なり(#674)', () => {
     await settle()
     expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
   })
+
+  test('TC-738-01: 新規で親 A で知らせが出た後、親を B → A と選び直しても知らせは出ず、名前の欄を離れ直すと A で問い合わせ直す', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    // 名前の欄に触らずに、B(その他)を選んでから A(蒸留酒)に戻す。A で前に問い合わせた結果は出さない
+    pickParent('その他')
+    pickParent('蒸留酒')
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toHaveLength(1)
+
+    // 値を変えずに離れ直すと、A で問い合わせ直す。A の下に「ジン」があるので出る
+    touch('名前')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+    expect(duplicateQueries()).toEqual([
+      { parent_id: '1', name: 'ジン' },
+      { parent_id: '1', name: 'ジン' },
+    ])
+  })
+
+  test('TC-738-02: 新規で親を選び直さずに、名前の欄を値を変えずに離れ直しても、問い合わせない', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    touch('名前')
+    touch('名前')
+    await settle()
+    expect(duplicateQueries()).toEqual([{ parent_id: '1', name: 'ジン' }])
+    expect(screen.getByText(DUPLICATE)).toBeInTheDocument()
+  })
 })
 
 describe('新規', () => {
