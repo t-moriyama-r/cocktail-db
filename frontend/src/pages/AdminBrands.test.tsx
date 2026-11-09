@@ -347,6 +347,22 @@ describe('新規', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
     expect(currentUrl()).toBe('/admin/brands/new')
   })
+
+  test('TC-715-02: 保存が 401 なら、ログインの期限切れとログインし直す手順を出し、入力を残して画面に残る', async () => {
+    loggedIn()
+    mockTree()
+    captureSave('post', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+    renderAt('/admin/brands/new')
+
+    fireEvent.change(await screen.findByLabelText('名前'), { target: { value: 'ビーフィーター' } })
+    fireEvent.click(screen.getByRole('button', { name: '送信' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
+    expect(screen.getByLabelText('名前')).toHaveValue('ビーフィーター')
+    expect(currentUrl()).toBe('/admin/brands/new')
+  })
 })
 
 describe('編集', () => {

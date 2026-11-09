@@ -3,7 +3,12 @@ import { api } from '../api/client'
 import type { paths } from '../api/schema'
 import AdminList, { type AdminListQuery } from '../components/AdminList/AdminList'
 import AdminListLink from '../components/AdminList/AdminListLink'
-import { ADMIN_COCKTAILS_PATH, adminCocktailEditPath } from '../components/AdminLayout/adminPaths'
+import {
+  ADMIN_COCKTAILS_PATH,
+  ADMIN_DRAFT_COCKTAILS_PATH,
+  ADMIN_NEW_COCKTAIL_PATH,
+  adminCocktailEditPath,
+} from '../components/AdminLayout/adminPaths'
 import { usePageTitle } from '../components/SiteLayout/usePageTitle'
 import styles from './AdminCocktails.module.css'
 
@@ -23,8 +28,7 @@ const STATUSES: readonly { status: CocktailStatus; label: string }[] = [
 const toStatus = (value: string | null): CocktailStatus => (value === 'draft' ? 'draft' : 'published')
 
 /** その種類の一覧を開く URL。公開済みはクエリを付けない(メニューから開いたときと同じ URL にする) */
-const statusPath = (status: CocktailStatus): string =>
-  status === 'published' ? ADMIN_COCKTAILS_PATH : `${ADMIN_COCKTAILS_PATH}?${new URLSearchParams({ [STATUS_PARAM]: status })}`
+const statusPath = (status: CocktailStatus): string => (status === 'published' ? ADMIN_COCKTAILS_PATH : ADMIN_DRAFT_COCKTAILS_PATH)
 
 /** 種類ごとに一覧の API を呼ぶ関数。AdminList に渡すので、描画のたびに作り直さないようモジュールで作る */
 const loadCocktails = (status: CocktailStatus) => ({ q, page }: AdminListQuery) =>
@@ -51,6 +55,7 @@ const renderItem = (cocktail: CocktailItem) => (
  *
  * 一覧そのもの(絞り込み・並び・ページ送り)は共通の部品(AdminList。#120)。1 行は旧と同じ「名前(英名)」で、編集画面(#127)へのリンク。
  * 種類を切り替えたら、絞り込みの語とページは消して 1 ページ目から出す(旧も別の画面へ移るので、語は残らなかった)。
+ * 新規は、銘柄の一覧(#64)と同じく一覧の上の「新規」のリンクから開く(旧はメニューの「カクテル新規」。docs/decisions/admin-cocktails.md)。
  */
 export default function AdminCocktails() {
   usePageTitle('カクテル')
@@ -60,6 +65,9 @@ export default function AdminCocktails() {
   return (
     <main>
       <h1>カクテル</h1>
+      <p className={styles.actions}>
+        <Link to={ADMIN_NEW_COCKTAIL_PATH}>新規</Link>
+      </p>
       <nav className={styles.switcher} aria-label="カクテルの一覧の切り替え">
         <ul className={styles.switcherList}>
           {STATUSES.map(({ status, label }) => (

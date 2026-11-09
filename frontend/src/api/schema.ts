@@ -236,7 +236,8 @@ export interface paths {
         /** 編集で開くカクテル。下書きも返す。 */
         get: operations["cocktail.show"];
         /**
-         * カクテルの基本情報と材料・別名を書き換える。材料から作る値(度数・材料の数・材料の組のハッシュ)も作り直す。
+         * カクテルの基本情報と材料・別名を書き換える。材料を送ったときは、送った材料に置き換え、材料から作る値(度数・材料の数・
+         *     材料の組のハッシュ)も作り直す。材料を送らなければ、今の材料と材料から作る値を残す(#720)。別名も、送らなければ今の別名を残す。
          *     別名がほかのカクテルの名前・別名と同じなら、保存したうえで warnings に入れて返す(#293)。
          */
         put: operations["cocktail.update"];
@@ -1776,7 +1777,9 @@ export interface components {
          *
          *     旧の EditCocktailValidate の規則に、長さの上限・ベースの規則と、材料の件数の上限・ノードと銘柄の規則を足したもの。
          *     別名(aliases。#293)は旧に無い項目で、送ったときだけ、送った並びに置き換える(下の aliases())。
+         *     材料(ingredients)は、新規では必須で、更新では送ったときだけ、送った並びに置き換える(下の ingredients()。#720)。
          *     画像を上げるときは multipart で送る(PHP は PUT の multipart を読まないので、更新は POST に `_method=PUT` を付けて送る)。
+         *     更新はこのクラスを継いだ UpdateCocktailRequest で受ける(OpenAPI で更新の材料を任意にするため。#721)。
          */
         SaveCocktailRequest: {
             /** @description ベース。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
@@ -1814,7 +1817,10 @@ export interface components {
              */
             image?: string | null;
             remove_image?: boolean;
-            /** @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る */
+            /**
+             * @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る。新規では必須。更新では送らなければ
+             *     今の材料を残す(#720)が、キーを送ったなら空(null・空の配列。multipart の空の値は null で届く)は受けない
+             */
             ingredients: {
                 /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
                 category_id: number;
@@ -1929,6 +1935,73 @@ export interface components {
         SkipWordResource: {
             id: number;
             name: string;
+        };
+        /**
+         * UpdateCocktailRequest
+         * @description カクテルの更新(PUT /api/admin/cocktails/{id})の入力。規則は新規と同じ SaveCocktailRequest で、更新では材料
+         *     (ingredients)を送らなければ今の材料を残す(#720)。
+         *
+         *     新規と別のクラスにするのは、OpenAPI(Scramble)に新規と別のスキーマを出し、更新の ingredients を任意にするため(#721)。
+         *     Scramble はルートの無いところで規則を読むので、ルートのカクテルの有無ではなく、クラスで更新かを決める。
+         */
+        UpdateCocktailRequest: {
+            /** @description ベース。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
+            base_category_id: number;
+            name: string;
+            name_eng: string;
+            /** @description 技法・グラス(用語辞典の分類「グラス」の項目)・氷。選択肢は GET /api/admin/cocktail-form-options */
+            method_id: number;
+            glass_dictionary_id?: number | null;
+            ice_id?: number | null;
+            /** @description 評価・甘さ(旧と同じ範囲) */
+            rate?: number | null;
+            sweet_degree?: number | null;
+            is_major: boolean;
+            /** @description 下書きとして保存するか(true)、公開するか(false)。保存のボタンで決める(docs/decisions/admin-screens.md の 1) */
+            is_draft: boolean;
+            /**
+             * @description 説明・補足。保存のときに記法へ変換する(DescriptionMarkup。#287)。
+             *     公開するときは説明が要る(旧も説明の無いカクテルは公開にならなかった。#291 の「旧との差分」)
+             */
+            description?: string | null;
+            note?: string | null;
+            /** @description YouTube の URL か動画 ID と、開始位置(時・分・秒。時の 0 は #284 の 8) */
+            youtube?: string | null;
+            youtube_start_hour?: number | null;
+            youtube_start_minute?: number | null;
+            youtube_start_second?: number | null;
+            /** @description 画像のリンクの文字と URL(#288) */
+            image_txt?: string | null;
+            /** Format: uri */
+            image_url?: string | null;
+            /**
+             * Format: binary
+             * @description Maximum file size: 5120 kilobytes.
+             */
+            image?: string | null;
+            remove_image?: boolean;
+            /**
+             * @description 材料の行(#292)。並びは配列の順で、保存のときに position を 1 から振る。新規では必須。更新では送らなければ
+             *     今の材料を残す(#720)が、キーを送ったなら空(null・空の配列。multipart の空の値は null で届く)は受けない
+             */
+            ingredients?: {
+                /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
+                category_id: number;
+                /** @description 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19) */
+                brand_id?: number | null;
+                /**
+                 * @description 量。書式は確かめず、保存のときに整える(docs/decisions/admin-screens.md の決まったこと 4。旧と同じ)。
+                 *     整えた後の長さ(列の長さ)は保存のときに確かめる
+                 */
+                amount: string;
+                /** @description 任意の材料か。送らなければ任意でない(旧と同じ) */
+                is_optional?: boolean;
+            }[];
+            /**
+             * @description 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
+             *     全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
+             */
+            aliases?: string[] | null;
         };
         /**
          * UpdateSettingRequest
@@ -2599,7 +2672,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["SaveCocktailRequest"];
+                "multipart/form-data": components["schemas"]["UpdateCocktailRequest"];
             };
         };
         responses: {

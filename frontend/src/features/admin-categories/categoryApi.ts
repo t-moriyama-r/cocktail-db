@@ -1,10 +1,13 @@
 import type { Middleware } from 'openapi-fetch'
 import { api } from '../../api/client'
-import type { components } from '../../api/schema'
-import { toCategoryFormData, type CategoryFormValues, type CategoryKeptValues } from './categoryFormValues'
+import type { components, paths } from '../../api/schema'
+import { toCategoryFormData, type CategoryFormValues } from './categoryFormValues'
 import { appendFamousBrand, type FamousBrandValues } from './famousBrandValues'
 
 type SaveCategoryRequest = components['schemas']['SaveCategoryRequest']
+
+/** 管理 API の木(GET /api/admin/categories。#123)。カテゴリ木の画面・新規の親・付け替えの移す先で使う */
+export const fetchAdminCategoryTree = () => api.GET('/admin/categories')
 
 /** 項目ごとの検証のメッセージ(Laravel の 422 の errors。キーは API の項目名) */
 export type CategoryFieldErrors = Readonly<Record<string, readonly string[]>>
@@ -39,6 +42,34 @@ const sendAsPost: Middleware = {
   },
 }
 
+/** 重なりを問い合わせる欄(API の項目名。重なりの問い合わせの応答の warnings の field) */
+export type DuplicateField =
+  paths['/admin/categories/duplicates']['get']['responses'][200]['content']['application/json']['warnings'][number]['field']
+
+/**
+ * 名前か英名が、同じ親の下のほかのノードと重なるかを問い合わせる(GET /api/admin/categories/duplicates。#673)。
+ * parentId が null なら根どうしで比べ、nodeId(編集しているノード)は数えない。
+ * 重なれば API の文(「同じ名前が存在しています」)を、重ならなければ null を返す。
+ * 問い合わせに失敗したときも null を返し、重ならないときと区別しない(旧も失敗したときは何も出さなかった)
+ */
+export async function findCategoryDuplicate(
+  field: DuplicateField,
+  value: string,
+  parentId: number | null,
+  nodeId: number | null,
+): Promise<string | null> {
+  // openapi-fetch は null の項目をクエリに入れないので、根どうし(親が null)・新規(nodeId が null)は項目ごと送らない
+  const scope = { parent_id: parentId, exclude_id: nodeId }
+  try {
+    const { data } = await api.GET('/admin/categories/duplicates', {
+      params: { query: field === 'name' ? { ...scope, name: value } : { ...scope, name_eng: value } },
+    })
+    return data?.warnings.find((warning) => warning.field === field)?.message ?? null
+  } catch {
+    return null
+  }
+}
+
 /**
  * ノードを保存する。nodeId が null なら新規(POST /api/admin/categories)、あれば更新(PUT /api/admin/categories/{id})。
  * famousBrand は有名な銘柄の欄の入力で、根(欄を出さない)なら null にして送らない(API は根に有名な銘柄を入れさせない)
@@ -46,11 +77,10 @@ const sendAsPost: Middleware = {
 export async function saveCategory(
   nodeId: number | null,
   values: CategoryFormValues,
-  kept: CategoryKeptValues,
   famousBrand: FamousBrandValues | null,
 ): Promise<SaveCategoryResult> {
   const body = (method: 'POST' | 'PUT') => {
-    const form = toCategoryFormData(values, kept, method)
+    const form = toCategoryFormData(values, method)
     if (famousBrand !== null) {
       appendFamousBrand(form, famousBrand)
     }
@@ -74,6 +104,34 @@ export async function saveCategory(
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
       return { kind: 'invalid', errors: error.errors }
+    }
+    return { kind: 'http-error', status: response.status }
+  } catch {
+    return { kind: 'network-error' }
+  }
+}
+
+/** 削除の結果 */
+export type DeleteCategoryResult =
+  | { kind: 'deleted' }
+  /** 409。消せない理由(子・銘柄・材料・ベース・アフィリエイト。#121)の文 */
+  | { kind: 'blocked'; reasons: readonly string[] }
+  /** 409 以外のエラーの応答(無いノードの 404 など) */
+  | { kind: 'http-error'; status: number }
+  /** 応答が返らなかった */
+  | { kind: 'network-error' }
+
+/** ノードを消す(DELETE /api/admin/categories/{id})。消せないときは、API が返す理由をすべて返す */
+export async function deleteCategory(nodeId: number): Promise<DeleteCategoryResult> {
+  try {
+    const { error, response } = await api.DELETE('/admin/categories/{category}', {
+      params: { path: { category: nodeId } },
+    })
+    if (response.ok) {
+      return { kind: 'deleted' }
+    }
+    if (response.status === 409 && error !== undefined && 'reasons' in error) {
+      return { kind: 'blocked', reasons: error.reasons.map((reason) => reason.message) }
     }
     return { kind: 'http-error', status: response.status }
   } catch {

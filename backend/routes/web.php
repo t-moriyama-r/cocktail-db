@@ -53,7 +53,7 @@ Route::get('/robots.txt', [SitemapController::class, 'robots']);
 
 // 旧の管理画面の一覧・編集の URL は、ブックマークから来た管理者を、新の同じ画面へ移す(#626)。
 // #117 と同じく GET だけを受けて 302 で移し、クエリは持ち越さない。ログインの確かめは移った先の画面がする。
-// 新の画面がまだ無いもの(カクテル・カテゴリ・ミドルの編集、言い換え)はここに無く、下の SPA へ渡すルートが 404 の画面を出す。
+// 新の画面がまだ無いもの(カテゴリ・ミドルの編集、言い換え)はここに無く、下の SPA へ渡すルートが 404 の画面を出す。
 // 決めたことと旧と変えたところは docs/decisions/legacy-admin-urls.md
 foreach ([
     'admin/list/Category' => '/admin/categories',
@@ -64,13 +64,14 @@ foreach ([
     'admin/list/CocktailDraft' => '/admin/cocktails?status=draft',
     'admin/edit/Brand' => '/admin/brands/new',
     'admin/edit/Dictionary' => '/admin/dictionaries/new',
+    'admin/edit/Cocktail' => '/admin/cocktails/new',
 ] as $legacyAdminUrl => $destination) {
     Route::get($legacyAdminUrl, RedirectController::class)
         ->defaults('destination', $destination)
         ->defaults('status', 302);
 }
-// 銘柄・用語辞典は旧の ID のまま移したので(docs/schema.md)、ID はそのまま新の編集画面へ渡す
-foreach (['admin/edit/Brand/{id}' => '/admin/brands/{id}', 'admin/edit/Dictionary/{id}' => '/admin/dictionaries/{id}'] as $legacyAdminUrl => $destination) {
+// 銘柄・用語辞典・カクテルは旧の ID のまま移したので(docs/schema.md)、ID はそのまま新の編集画面へ渡す
+foreach (['admin/edit/Brand/{id}' => '/admin/brands/{id}', 'admin/edit/Dictionary/{id}' => '/admin/dictionaries/{id}', 'admin/edit/Cocktail/{id}' => '/admin/cocktails/{id}'] as $legacyAdminUrl => $destination) {
     Route::get($legacyAdminUrl, RedirectController::class)
         ->whereNumber('id')
         ->defaults('destination', $destination)

@@ -1,18 +1,24 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { components } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
-import type { CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
+import { pathTo, ROLE_OPTIONS, roleLabel, toCategoryTreeNode } from './adminCategoryTree'
 import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
-import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
+import type { CategoryFormValues } from './categoryFormValues'
 import FamousBrandField from './FamousBrandField'
 import { famousBrandFieldsOnForm, famousBrandValuesOf, type FamousBrandSetting } from './famousBrandValues'
+import { useCategoryDuplicateWarning } from './useCategoryDuplicateWarning'
 import styles from './CategoryForm.module.css'
+import { useMounted } from './useMounted'
 
 type AdminTreeItem = components['schemas']['CategoryTreeItemResource']
+type CategoryRole = components['schemas']['CategoryRole']
 
-/** 親の欄。新規は木から選び、編集は今の親(根から親までの名前)を出すだけにする(編集での親の付け替えは #675 で足す) */
+/**
+ * 親の欄。新規は木から選ぶか「親なし」(根を作る。#310)を選び、編集は今の親(根から親までの名前)を出すだけにする
+ * (フォームの親の欄で選び直すのは #675 で足す。移すのは編集画面の下の「親の付け替え」の欄。#125)
+ */
 export type ParentField =
   | { kind: 'select'; tree: readonly AdminTreeItem[] }
   | { kind: 'fixed'; path: readonly string[] }
@@ -22,9 +28,7 @@ type Props = {
   nodeId: number | null
   /** 最初の入力(新規は空、編集は開いたノードの値) */
   initialValues: CategoryFormValues
-  /** このフォームでは変えずに送り直す値(根の役割) */
-  kept: CategoryKeptValues
-  /** 有名な銘柄の欄の候補と今の値(#309)。根では欄を出さない(null) */
+  /** 有名な銘柄の欄の候補と今の値(#309)。根では欄を出さない(null)。新規で「親なし」(根)を選んだときも出さない */
   famousBrand: FamousBrandSetting | null
   /** 今の画像(API の image の値。public ディスクのファイル名か外部の URL)。無ければ null */
   currentImage: string | null
@@ -40,11 +44,12 @@ const HOUR_DIGITS = 1
 const MINUTE_OR_SECOND_DIGITS = 2
 
 /**
- * 欄の下に出す検証のメッセージの項目。ここに無い項目(根の役割など)のメッセージは、送信の下にまとめて出す。
+ * 欄の下に出す検証のメッセージの項目。ここに無い項目のメッセージは、送信の下にまとめて出す。
  * 有名な銘柄の項目は、有名な銘柄の欄が出しているものだけを欄の下に出す(famousBrandFieldsOnForm)
  */
 const FIELDS_ON_FORM = new Set([
   'parent_id',
+  'role',
   'name',
   'name_eng',
   'description',
@@ -66,8 +71,9 @@ const FIELDS_ON_FORM = new Set([
  * 旧のカテゴリとミドルは同じ項目なので、任意の深さのノードを 1 つのフォームで編集する。
  *
  * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL /
- * 有名な銘柄 / 送信(docs/decisions/admin-category-form.md)。
- * - 親は、新規なら木(#123 と同じ管理 API の木)から 1 つ選ぶ。根も選べる。根を作る(親を選ばない)のは #310
+ * 有名な銘柄 / 送信(docs/decisions/admin-category-form.md)。根のときだけ、親の下に役割の欄を出す(#310)。
+ * - 親は、新規なら木(#123 と同じ管理 API の木)から 1 つ選ぶ。根も選べる。「親なし」を選ぶと根を作る(#310)
+ * - 役割(なし・ソフトドリンク・その他)は根のときだけ出す。根以外では出さず、送らない(役割を持てるのは根だけ。#153)
  * - 説明は、API が返す編集の形(記法に指す先の名前を添えたもの。#287)のまま編集し、そのまま送る
  * - 開始位置は数字だけを時 1 桁・分秒 2 桁まで受け付ける(旧と同じ)。英名は欄を離れたときに全角の英数字を半角にする(旧と同じ)
  * - メジャー・お気に入り・粉ものは、押すたびに入れ・外しができる(旧は押すと必ず入れるだけで、外せなかった)
@@ -76,13 +82,18 @@ const FIELDS_ON_FORM = new Set([
  *
  * - 有名な銘柄は、部分木の銘柄から選ぶか、その場で作る(FamousBrandField。#309)。根では欄を出さない
  *
- * 根の役割は #310 で足す。それまでは今の値のまま送り直す(CategoryKeptValues)。
- * 名前・英名の重なりを入れたそばに出す(旧の duplicate_check)のは、問い合わせる API(#673)ができてから #674 で足す。
+ * 名前・英名は、値を変えて欄を離れたら同じ親の下の重なりを問い合わせ(#673 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
+ * (旧の duplicate_check。#674)。知らせるだけで送信は止めず、名前の重なりで保存を止めるのは保存の API の 422 に任せる。
  */
-export default function CategoryForm({ nodeId, initialValues, kept, famousBrand, currentImage, parent, onSaved }: Props) {
+export default function CategoryForm({ nodeId, initialValues, famousBrand, currentImage, parent, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
   const [famous, setFamous] = useState(() => (famousBrand === null ? null : famousBrandValuesOf(famousBrand)))
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
+  // 重なりは、保存する親の下で比べる(根なら根どうし)。新規で「親なし」を選んだら、前に選んでいた親ではなく根どうしで比べる。
+  // 新規で親をまだ選んでいなければ、比べる相手が決まらないので比べない
+  const duplicateScope = values.isRoot ? { parentId: null } : values.parentId !== null ? { parentId: values.parentId } : null
+  const nameDuplicate = useCategoryDuplicateWarning('name', nodeId, duplicateScope, initialValues.name)
+  const nameEngDuplicate = useCategoryDuplicateWarning('name_eng', nodeId, duplicateScope, initialValues.nameEng)
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [picked, setPicked] = useState<{ file: File; url: string | null } | null>(null)
   // 「画像を消す」を入れたときに、選んでいたファイルを欄からも外すため、ファイルの欄を作り直す
@@ -91,13 +102,7 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
   const set = <K extends keyof CategoryFormValues>(key: K, value: CategoryFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
 
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-    }
-  }, [])
+  const mounted = useMounted()
 
   const pickImage = (file: File | null) => {
     setValues((current) => ({ ...current, image: file, removeImage: false }))
@@ -138,7 +143,8 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
     const normalizedFamous =
       famous === null ? null : { ...famous, newBrand: { ...famous.newBrand, nameEng: toHalfWidthAlphanumeric(famous.newBrand.nameEng) } }
     setFamous(normalizedFamous)
-    const result = await saveCategory(nodeId, normalized, kept, normalizedFamous)
+    // 根には有名な銘柄を入れられないので、新規で「親なし」(根)を選んでいるときは欄の入力を送らない
+    const result = await saveCategory(nodeId, normalized, normalized.isRoot ? null : normalizedFamous)
     // 保存を待つ間に別の画面へ移っていたら、カテゴリ木へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -150,7 +156,8 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
   }
 
   const saving = save.kind === 'saving'
-  const famousFields = new Set(famous === null ? [] : famousBrandFieldsOnForm(famous))
+  const showFamousBrand = famousBrand !== null && famous !== null && !values.isRoot
+  const famousFields = new Set(showFamousBrand ? famousBrandFieldsOnForm(famous) : [])
   const otherErrors = Object.entries(errors)
     .filter(([field]) => !FIELDS_ON_FORM.has(field) && !famousFields.has(field))
     .flatMap(([, messages]) => messages)
@@ -161,8 +168,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
         <ParentSelect
           tree={parent.tree}
           selectedId={values.parentId}
+          isRoot={values.isRoot}
           errors={errors.parent_id}
           onSelect={(id) => set('parentId', id)}
+          onRootChange={(isRoot) => set('isRoot', isRoot)}
         />
       ) : (
         <div className={styles.field}>
@@ -172,14 +181,29 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
         </div>
       )}
 
+      {values.isRoot && <RoleSelect role={values.role} errors={errors.role} onChange={(role) => set('role', role)} />}
+
       <div className={styles.row}>
-        <TextField label="名前" errors={errors.name} value={values.name} onChange={(value) => set('name', value)} />
+        <TextField
+          label="名前"
+          errors={errors.name}
+          warning={nameDuplicate.warning}
+          value={values.name}
+          onChange={(value) => set('name', value)}
+          onBlur={() => nameDuplicate.check(values.name)}
+        />
         <TextField
           label="英名"
           errors={errors.name_eng}
+          warning={nameEngDuplicate.warning}
           value={values.nameEng}
           onChange={(value) => set('nameEng', value)}
-          onBlur={() => set('nameEng', toHalfWidthAlphanumeric(values.nameEng))}
+          onBlur={() => {
+            // 保存するのは半角にした値なので、重なりも半角にした値で問い合わせる
+            const nameEng = toHalfWidthAlphanumeric(values.nameEng)
+            set('nameEng', nameEng)
+            nameEngDuplicate.check(nameEng)
+          }}
         />
       </div>
 
@@ -270,7 +294,7 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
         <TextField label="リンクURL" errors={errors.image_url} value={values.imageUrl} onChange={(value) => set('imageUrl', value)} />
       </div>
 
-      {famousBrand !== null && famous !== null && (
+      {showFamousBrand && (
         <FamousBrandField candidates={famousBrand.candidates} values={famous} errors={errors} onChange={setFamous} />
       )}
 
@@ -292,13 +316,18 @@ export default function CategoryForm({ nodeId, initialValues, kept, famousBrand,
 function ParentSelect({
   tree,
   selectedId,
+  isRoot,
   errors,
   onSelect,
+  onRootChange,
 }: {
   tree: readonly AdminTreeItem[]
   selectedId: number | null
+  /** 「親なし」(根を作る)を選んでいるか。選んでいるあいだは木を出さない */
+  isRoot: boolean
   errors: readonly string[] | undefined
   onSelect: (id: number) => void
+  onRootChange: (isRoot: boolean) => void
 }) {
   const errorId = useId()
   const nodes = useMemo(() => tree.map(toCategoryTreeNode), [tree])
@@ -308,43 +337,89 @@ function ParentSelect({
   return (
     <fieldset className={styles.parent} aria-describedby={hasErrors ? errorId : undefined}>
       <legend className={styles.legend}>親</legend>
-      <p className={styles.selected}>
-        選んでいる親: {selectedPath === null ? '(未選択)' : selectedPath.map((node) => node.name).join(' / ')}
-      </p>
+      <label className={`${styles.check} ${styles.rootCheck}`}>
+        <input type="checkbox" checked={isRoot} onChange={(event) => onRootChange(event.target.checked)} />
+        親なし(根のノードを作る)
+      </label>
+      {!isRoot && (
+        <p className={styles.selected}>
+          選んでいる親: {selectedPath === null ? '(未選択)' : selectedPath.map((node) => node.name).join(' / ')}
+        </p>
+      )}
       <FieldErrors id={errorId} messages={errors} />
-      <CategoryTree
-        nodes={nodes}
-        label="親"
-        selection={{ mode: 'single', selectedId, onSelect: (node) => onSelect(node.id) }}
-      />
+      {/* 根を作るあいだは木を出さない。「親なし」を外すと、前に選んでいた親のまま木が戻る */}
+      {!isRoot && (
+        <CategoryTree
+          nodes={nodes}
+          label="親"
+          selection={{ mode: 'single', selectedId, onSelect: (node) => onSelect(node.id) }}
+        />
+      )}
+    </fieldset>
+  )
+}
+
+/** 根の役割の欄(なし・ソフトドリンク・その他。#310)。根のときだけ出す */
+function RoleSelect({
+  role,
+  errors,
+  onChange,
+}: {
+  role: CategoryRole | null
+  errors: readonly string[] | undefined
+  onChange: (role: CategoryRole | null) => void
+}) {
+  const name = useId()
+  const errorId = useId()
+  const hasErrors = errors !== undefined && errors.length > 0
+  return (
+    <fieldset className={styles.parent} aria-describedby={hasErrors ? errorId : undefined}>
+      <legend className={styles.legend}>役割</legend>
+      <div className={styles.checks}>
+        {ROLE_OPTIONS.map((option) => (
+          <label key={option ?? 'none'} className={styles.check}>
+            <input type="radio" name={name} checked={role === option} onChange={() => onChange(option)} />
+            {roleLabel(option)}
+          </label>
+        ))}
+      </div>
+      <FieldErrors id={errorId} messages={errors} />
     </fieldset>
   )
 }
 
 type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
 
-/** ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする */
+/**
+ * ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする。
+ * warning は検証の誤りではない知らせなので、欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
+ */
 function Field({
   label,
   errors,
+  warning = null,
   narrow = false,
   children,
 }: {
   label: string
   errors: readonly string[] | undefined
+  warning?: string | null
   narrow?: boolean
   children: (props: ControlProps) => ReactNode
 }) {
   const id = useId()
   const errorId = useId()
+  const warningId = useId()
   const hasErrors = errors !== undefined && errors.length > 0
+  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
   return (
     <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
       <label className={styles.label} htmlFor={id}>
         {label}
       </label>
-      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': hasErrors ? errorId : undefined })}
+      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': describedBy === '' ? undefined : describedBy })}
       <FieldErrors id={errorId} messages={errors} />
+      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
     </div>
   )
 }
@@ -352,6 +427,7 @@ function Field({
 function TextField({
   label,
   errors,
+  warning,
   value,
   onChange,
   onBlur,
@@ -360,6 +436,7 @@ function TextField({
 }: {
   label: string
   errors: readonly string[] | undefined
+  warning?: string | null
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
@@ -367,7 +444,7 @@ function TextField({
   narrow?: boolean
 }) {
   return (
-    <Field label={label} errors={errors} narrow={narrow}>
+    <Field label={label} errors={errors} warning={warning} narrow={narrow}>
       {(props) => (
         <input
           {...props}
@@ -402,23 +479,12 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
     case 'http-error':
+      // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
+      if (failure.status === 401) {
+        return 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+      }
       return `保存できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'
   }
-}
-
-/** 管理 API の木のノードを、木の部品のノードにする */
-function toCategoryTreeNode(item: AdminTreeItem): CategoryTreeNode {
-  return { id: item.id, name: item.name, name_eng: item.name_eng, is_major: item.is_major, children: item.children.map(toCategoryTreeNode) }
-}
-
-/** 根から id のノードまでのノード(根を含む)。木に無ければ null */
-function pathTo(nodes: readonly AdminTreeItem[], id: number): AdminTreeItem[] | null {
-  for (const node of nodes) {
-    if (node.id === id) return [node]
-    const found = pathTo(node.children, id)
-    if (found !== null) return [node, ...found]
-  }
-  return null
 }

@@ -6,6 +6,7 @@ import AdminBrandEdit from './pages/AdminBrandEdit'
 import AdminBrands from './pages/AdminBrands'
 import AdminCategoryEdit from './pages/AdminCategoryEdit'
 import AdminCategoryTree from './pages/AdminCategoryTree'
+import AdminCocktailEdit from './pages/AdminCocktailEdit'
 import AdminCocktails from './pages/AdminCocktails'
 import AdminDictionaries from './pages/AdminDictionaries'
 import AdminDictionaryEdit from './pages/AdminDictionaryEdit'
@@ -68,6 +69,8 @@ export default function App() {
         <Route path="dictionaries/new" element={<AdminDictionaryNew />} />
         <Route path="dictionaries/:id" element={<RequireNumericId element={<AdminDictionaryEdit />} />} />
         <Route path="cocktails" element={<AdminCocktails />} />
+        <Route path="cocktails/new" element={<AdminCocktailEdit />} />
+        <Route path="cocktails/:id" element={<RequireNumericId element={<AdminCocktailEdit />} />} />
         <Route path="paraphrases" element={<AdminParaphrases />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="passkeys" element={<AdminPasskeys />} />

@@ -33,6 +33,7 @@ class E2eSeeder extends Seeder
         $terms = $this->seedDictionary();
         $this->seedHeaderData($nodes['gin'], $nodes['beefeater'], $nodes['mint'], $terms['build'], $terms['tumbler']);
         $this->seedTopData($nodes['vodka']);
+        $this->seedAdminCocktailEditData($nodes['vodka']);
         $this->seedCategoryImage($nodes['vodka']);
         $this->seedAffiliates($nodes['dryGin'], $nodes['londonDryGin']);
         $this->seedBrandDetailData($nodes['liquor'], $nodes['dryGin']);
@@ -198,6 +199,43 @@ class E2eSeeder extends Seeder
             'youtube_created_at' => '2030-01-01 00:00:00',
             'updated_at' => '2030-01-01 00:00:00',
         ]);
+    }
+
+    /**
+     * 管理画面のカクテルの編集(#127・#128)の E2E 用。既にあるカクテルを開いてそのまま保存するので、保存の API の
+     * 材料の件数(2 件以上。#292)と、編集画面の送る前の確かめ(同じノード・同じ銘柄の行が 2 つあると止める。#128)を
+     * 通るよう、保存を試すカクテルには、ウォッカの行と、ウォッカの銘柄「スミノフ」の行の 2 件を持たせる。
+     *
+     * - 「公開する」を試す: seedTopData の公開のカクテル「カミカゼ」に、2 件目の材料(スミノフ)と、公開に要る説明を足す。
+     *   公開のカクテルを足すと登録数(ヘッダーの 8)が変わるので、足さずに既にあるものを使う。ほかの E2E はカミカゼの材料・説明を見ていない
+     * - 「下書きとして保存」を試す: 材料 2 件(ウォッカとスミノフ)の下書き「E2E の下書き」を足す。下書きなので登録数・公開の一覧・検索には入らない。
+     *   カクテルの一覧の E2E(#126)が「下書きのカクテル」で始まる名前と英名の「Cocktail」で絞るので、どちらにも当たらない名前にする。
+     *   材料の並べ替えの E2E(#128)も、この下書きの 2 行を入れ替えて保存する(並びはどちらでもよい)
+     *
+     * 2 件目をウォッカの銘柄にするのは、ノードの数(カテゴリ木の E2E)も、ウォッカの材料で当たるカクテルの数(条件検索の 7 件)も
+     * 変えないため。銘柄の名前には、名前検索の E2E の語(ジン・ミント・ビーフィーター)を入れない
+     */
+    private function seedAdminCocktailEditData(Category $vodka): void
+    {
+        $smirnoff = $this->createBrand($vodka, 'スミノフ', 'Smirnoff', 40);
+        $secondVodka = fn (Cocktail $cocktail) => CocktailIngredient::factory()->forBrand($smirnoff)->create([
+            'cocktail_id' => $cocktail->id,
+            'position' => 2,
+            'amount' => '15ml',
+        ]);
+
+        $kamikaze = Cocktail::query()->where('name', 'カミカゼ')->firstOrFail();
+        $kamikaze->update(['description' => 'ライムを搾った、ウォッカのショートカクテル。']);
+        $secondVodka($kamikaze);
+
+        $draft = $this->createTopCocktail($vodka, Method::query()->findOrFail($kamikaze->method_id), [
+            'name' => 'E2E の下書き',
+            'name_eng' => 'Save Test',
+            'is_draft' => true,
+        ]);
+        $secondVodka($draft);
+
+        app(RecipeCounter::class)->recount([$kamikaze->id, $draft->id]);
     }
 
     /**
