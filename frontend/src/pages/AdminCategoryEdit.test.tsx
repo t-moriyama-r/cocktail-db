@@ -1167,6 +1167,30 @@ describe('その場で作る有名な銘柄の名前・英名の重なり(#723)'
     // 値を変えていないので、問い合わせ直さない
     expect(brandQueries()).toEqual([{ name: 'スピリタス' }])
   })
+
+  test('TC-723-10: 知らせが出たままノードの親を選び直しても、その場で作る銘柄の知らせは残り、値を変えずに欄を離れ直しても問い合わせ直さない', async () => {
+    await openNew()
+    mockBrandDuplicates()
+    const pickParent = (name: string) => fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name }))
+
+    pickParent('蒸留酒')
+    enter('名前', 'スピリタス')
+    await waitFor(() => expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE))
+
+    // ノードの名前・英名は親を選び直すと前の親の知らせを捨てる(#738)が、銘柄は親によらず銘柄全体で比べるので残る
+    pickParent('その他')
+    await settle()
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+    pickParent('蒸留酒')
+    await settle()
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+
+    fireEvent.focus(brandField('名前'))
+    fireEvent.blur(brandField('名前'))
+    await settle()
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+    expect(brandQueries()).toEqual([{ name: 'スピリタス' }])
+  })
 })
 
 describe('根の作成と役割(#310)', () => {
