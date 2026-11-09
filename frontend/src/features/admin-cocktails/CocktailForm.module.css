@@ -206,20 +206,64 @@
   font: inherit;
 }
 
-.ingredients {
+/* 別名の欄(#83)。材料の欄と同じく枠で囲み、1 行ずつ欄と「削除」を横に並べる */
+.aliases {
+  display: grid;
+  gap: var(--space-2);
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
 }
 
-.ingredientsHeading {
-  margin: 0 0 var(--space-2);
+.aliasesHeading {
+  margin: 0;
   font-size: 1rem;
 }
 
-.ingredientsNote {
+.aliasesNote {
   margin: 0;
   color: var(--color-text-muted);
+}
+
+.aliasList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * 「削除」は欄の右に置き、入力の高さにそろえる(上のラベルの 1 行と、ラベルと入力の間の分だけ下げる)。
+ * 欄の下に誤りが出ても、ボタンは入力の横に残る。狭い幅でも欄は縮めて、ボタンは折り返さない
+ */
+.aliasRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.aliasRow > button {
+  flex: 0 0 auto;
+  margin-top: calc(1lh + var(--space-1));
+}
+
+/* 別名の行を足す・消すボタン。保存のボタンと見分けられるよう、枠だけにする(パスキーの画面の secondaryButton と同じ見た目) */
+.secondaryButton {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-text-muted);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.secondaryButton:disabled {
+  border-color: var(--color-disabled-bg);
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  cursor: wait;
 }
 
 .errors {

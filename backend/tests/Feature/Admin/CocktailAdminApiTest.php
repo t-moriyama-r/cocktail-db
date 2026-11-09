@@ -994,6 +994,46 @@ it('TC-293-12: 保存した別名で、名前の横断検索がカクテルを�
         ->assertJsonPath('cocktails.0.matched_alias', 'ピーチ・ウーロン');
 });
 
+it('TC-731-01: 新規の別名は 10 個まで。10 個は保存し、11 個は 422 で何も保存しない', function (int $count, bool $ok) {
+    $f = cocktailAdminFixture();
+    $aliases = array_map(fn (int $i): string => "別名{$i}", range(1, $count));
+
+    $response = $this->postJson('/api/admin/cocktails', cocktailAdminInput($f, ['name' => 'レゲエパンチ', 'aliases' => $aliases]));
+
+    if (! $ok) {
+        $response->assertUnprocessable()->assertJsonPath('errors.aliases', ['別名は10 個以下にしてください。']);
+        expect(Cocktail::query()->count())->toBe(0)->and(CocktailAlias::query()->count())->toBe(0);
+
+        return;
+    }
+    $response->assertCreated()->assertJsonPath('data.aliases', $aliases);
+    expect(CocktailAlias::query()->count())->toBe($count);
+})->with([
+    '10 個' => [10, true],
+    '11 個' => [11, false],
+]);
+
+it('TC-731-02: 更新の別名も 10 個まで。11 個は 422 で、今の別名を残す', function (int $count, bool $ok) {
+    $f = cocktailAdminFixture();
+    $base = ['base_category_id' => $f['nodes']['ラム']->id, 'method_id' => $f['methods'][0]->id];
+    $cocktail = cocktailWithAliases([...$base, 'name' => 'レゲエパンチ'], ['ピーチウーロン']);
+    $aliases = array_map(fn (int $i): string => "別名{$i}", range(1, $count));
+
+    $response = $this->putJson("/api/admin/cocktails/{$cocktail->id}", cocktailAdminInput($f, ['name' => 'レゲエパンチ', 'aliases' => $aliases]));
+
+    if (! $ok) {
+        $response->assertUnprocessable()->assertJsonValidationErrors('aliases');
+        expect(storedAliases($cocktail))->toBe([['ピーチウーロン', 'ピーチウーロン']]);
+
+        return;
+    }
+    $response->assertOk()->assertJsonPath('data.aliases', $aliases);
+    expect(array_column(storedAliases($cocktail), 0))->toBe($aliases);
+})->with([
+    '10 個' => [10, true],
+    '11 個' => [11, false],
+]);
+
 /**
  * 材料を送らない更新(#720)の前の状態のカクテル。ジン B 30ml・ソーダ 60ml(任意)・ライム 1 個の 3 行を持ち、材料の数・
  * 材料の組のハッシュは材料から作る。度数は材料から計算した値(15.7)と違う 12.5 にしておく(送らない更新が度数を
