@@ -149,7 +149,7 @@ test('TC-674-14: 新規で親を選び、その親の下に既にある名前・
 
   // E2eSeeder の蒸留酒の子の「ウォッカ」「ジン」(英名も同じ文字)。保存はしないので、ほかの E2E のデータは変わらない
   const name = page.getByLabel('名前', { exact: true })
-  const nameEng = page.getByLabel('英名')
+  const nameEng = page.getByLabel('英名', { exact: true })
   await name.fill('ウォッカ')
   await name.blur()
   await nameEng.fill('ジン')
@@ -177,14 +177,14 @@ test('TC-674-15: 同じ親の下に既にある英名を入れて知らせが出
   // ミントの下に、英名の重なる相手を先に作る
   const nameEng = `E2E Node dup ${Date.now()}`
   await createNode(page, 'dup-first', async (page) => {
-    await page.getByLabel('英名').fill(nameEng)
+    await page.getByLabel('英名', { exact: true }).fill(nameEng)
   })
 
   await page.goto('/admin/categories/new')
   await page.getByRole('list', { name: '親' }).getByRole('radio', { name: 'ミント', exact: true }).check()
   const name = `E2E のノード dup-second ${Date.now()}`
   await page.getByLabel('名前', { exact: true }).fill(name)
-  const eng = page.getByLabel('英名')
+  const eng = page.getByLabel('英名', { exact: true })
   await eng.fill(nameEng)
   await eng.blur()
   await expect(eng).toHaveAccessibleDescription(DUPLICATE)
