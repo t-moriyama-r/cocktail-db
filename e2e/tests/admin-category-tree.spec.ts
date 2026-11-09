@@ -193,7 +193,9 @@ test('TC-310-12: 根以外の編集では役割の欄が出ず、根の役割を
   await openNode(page, childName)
   const editUrl = page.url()
   await page.getByRole('button', { name: '送信' }).click()
-  await expect(page.getByRole('alert')).toContainText('有名な銘柄の名前')
+  // 422 のメッセージは、上の知らせではなく有名な銘柄の欄の下に出る(#309)
+  await expect(page.getByRole('alert')).toContainText('保存できませんでした')
+  await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible()
   expect(page.url()).toBe(editUrl)
 
   // 「その他」に変えると、また任意になり、選ばずに保存できる
