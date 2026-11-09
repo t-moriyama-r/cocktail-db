@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ReactNode } from 'react'
 import { sanitizeDigits, sanitizeStrength, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import type { CategoryFieldErrors } from './categoryApi'
 import type { FamousBrandCandidate, FamousBrandValues, NewBrandValues } from './famousBrandValues'
+import fieldStyles from '../../components/AdminForm/AdminField.module.css'
 import styles from './CategoryForm.module.css'
 
 type Props = {
@@ -49,13 +50,13 @@ export default function FamousBrandField({ candidates, values, errors, onChange 
       {candidates.length === 0 ? (
         <p className={styles.selected}>-有名な銘柄を入力して下さい-</p>
       ) : (
-        <div className={styles.field}>
-          <label className={styles.label} htmlFor={selectId}>
+        <div className={fieldStyles.field}>
+          <label className={fieldStyles.label} htmlFor={selectId}>
             有名な銘柄
           </label>
           <select
             id={selectId}
-            className={styles.input}
+            className={fieldStyles.input}
             value={values.selectedId === null ? CREATE_NEW : String(values.selectedId)}
             aria-invalid={hasSelectErrors}
             aria-describedby={hasSelectErrors ? selectErrorId : undefined}
@@ -120,7 +121,7 @@ export default function FamousBrandField({ candidates, values, errors, onChange 
             {(props) => (
               <textarea
                 {...props}
-                className={styles.textarea}
+                className={fieldStyles.textarea}
                 rows={8}
                 value={brand.description}
                 onChange={(event) => set('description', event.target.value)}
@@ -244,9 +245,9 @@ function Field({
   const errorId = useId()
   const hasErrors = errors !== undefined && errors.length > 0
   return (
-    <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
+    <div className={narrow ? `${fieldStyles.field} ${fieldStyles.narrow}` : fieldStyles.field}>
       {/* ノードの欄のラベル(「名前」など)と取り違えないよう、label 要素にはせず、読み上げる名前は欄の aria-label にする */}
-      <span className={styles.label} aria-hidden="true">
+      <span className={fieldStyles.label} aria-hidden="true">
         {label}
       </span>
       {children({
@@ -283,7 +284,7 @@ function TextField({
       {(props) => (
         <input
           {...props}
-          className={styles.input}
+          className={fieldStyles.input}
           type="text"
           inputMode={inputMode}
           value={value}
@@ -300,7 +301,7 @@ function FieldErrors({ id, messages }: { id?: string; messages: readonly string[
     return null
   }
   return (
-    <ul id={id} className={styles.errors}>
+    <ul id={id} className={fieldStyles.errors}>
       {messages.map((message, index) => (
         // 同じ文が 2 度来ることがある(メジャー・お気に入りの両方が必須で落ちたときなど)ので、並びの位置で区別する
         <li key={index}>{message}</li>
