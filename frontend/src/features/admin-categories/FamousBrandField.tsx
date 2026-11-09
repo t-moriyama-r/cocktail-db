@@ -1,4 +1,6 @@
 import { useId, useRef, useState, type ReactNode } from 'react'
+import { useDuplicateWarning } from '../../components/AdminForm/useDuplicateWarning'
+import { findBrandDuplicate } from '../admin-brands/brandApi'
 import { sanitizeDigits, sanitizeStrength, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import type { CategoryFieldErrors } from './categoryApi'
 import type { FamousBrandCandidate, FamousBrandValues, NewBrandValues } from './famousBrandValues'
@@ -23,6 +25,9 @@ const MINUTE_OR_SECOND_DIGITS = 2
 /** その場で作る銘柄の欄の名前の前に付ける語。ノードの欄と見分けられるよう、読み上げる名前(aria-label)に付ける */
 const PREFIX = '有名な銘柄の'
 
+/** その場で作る銘柄の名前・英名の重なりは、銘柄のフォームと同じく、所属によらず銘柄全体で比べる(比べる範囲は変わらない) */
+const ALL_BRANDS = { key: 'all' } as const
+
 /**
  * ノードの編集フォームの有名な銘柄の欄(旧 `Detail/component/FamousBrandSelect.vue`。#309)。
  *
@@ -31,11 +36,16 @@ const PREFIX = '有名な銘柄の'
  * - 「新しく作成する」のときは、その場で作る銘柄の欄(銘柄のフォームと同じ並び)を出す。作った銘柄は、このノードの直下の銘柄になり、
  *   有名な銘柄に入る(API の AdminCategoryWriter)
  * - 必須かどうかは API が根の役割で決め(#155・#158)、画面では確かめない(docs/decisions/admin-category-form.md の決まったこと 7)
+ * - その場で作る銘柄の名前・英名は、値を変えて欄を離れたら重なりを問い合わせ(銘柄のフォームと同じ #632 の API)、重なれば欄の下に
+ *   「同じ名前が存在しています」を出す(旧の duplicate_check。#723)。作るのは新しい銘柄なので、どの銘柄も除かずに比べる。
+ *   知らせるだけで、送信は止めない(旧と同じ)
  */
 export default function FamousBrandField({ candidates, values, errors, onChange }: Props) {
   const brand = values.newBrand
   const set = <K extends keyof NewBrandValues>(key: K, value: NewBrandValues[K]) =>
     onChange({ ...values, newBrand: { ...brand, [key]: value } })
+  const nameDuplicate = useDuplicateWarning((name) => findBrandDuplicate('name', name, null), ALL_BRANDS, brand.name)
+  const nameEngDuplicate = useDuplicateWarning((nameEng) => findBrandDuplicate('name_eng', nameEng, null), ALL_BRANDS, brand.nameEng)
   const selectId = useId()
   const selectErrorId = useId()
   const hasSelectErrors = (errors.famous_brand_id ?? []).length > 0
@@ -77,13 +87,26 @@ export default function FamousBrandField({ candidates, values, errors, onChange 
       {values.selectedId === null && (
         <div className={styles.form}>
           <div className={styles.row}>
-            <TextField label="名前" errors={errors.brand_name} value={brand.name} onChange={(value) => set('name', value)} />
+            <TextField
+              label="名前"
+              errors={errors.brand_name}
+              warning={nameDuplicate.warning}
+              value={brand.name}
+              onChange={(value) => set('name', value)}
+              onBlur={() => nameDuplicate.check(brand.name)}
+            />
             <TextField
               label="英名"
               errors={errors.brand_name_eng}
+              warning={nameEngDuplicate.warning}
               value={brand.nameEng}
               onChange={(value) => set('nameEng', value)}
-              onBlur={() => set('nameEng', toHalfWidthAlphanumeric(brand.nameEng))}
+              onBlur={() => {
+                // 保存するのは半角にした値なので、重なりも半角にした値で問い合わせる(銘柄のフォームと同じ)
+                const nameEng = toHalfWidthAlphanumeric(brand.nameEng)
+                set('nameEng', nameEng)
+                nameEngDuplicate.check(nameEng)
+              }}
             />
             <TextField
               label="度数(%)"
@@ -227,23 +250,28 @@ type ControlProps = { 'aria-label': string; 'aria-invalid': boolean; 'aria-descr
 /**
  * ラベルと、検証のメッセージ(あれば)を付けた欄(ノードの欄の Field と同じ作り)。
  * 見えるラベルはノードの欄と同じ短い名前にし、読み上げる名前(aria-label)には「有名な銘柄の」を付けて、ノードの欄と見分けられるようにする
- * (name を渡したら、読み上げる名前はラベルの代わりに name を使う。API のメッセージの欄の名前と同じにする)
+ * (name を渡したら、読み上げる名前はラベルの代わりに name を使う。API のメッセージの欄の名前と同じにする)。
+ * warning(名前・英名の重なり)は、保存を止めない知らせなので欄を aria-invalid にはせず、欄の下の文と説明にだけ出す(ノードの欄の Field と同じ)
  */
 function Field({
   label,
   name = label,
   errors,
+  warning = null,
   narrow = false,
   children,
 }: {
   label: string
   name?: string
   errors: readonly string[] | undefined
+  warning?: string | null
   narrow?: boolean
   children: (props: ControlProps) => ReactNode
 }) {
   const errorId = useId()
+  const warningId = useId()
   const hasErrors = errors !== undefined && errors.length > 0
+  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
   return (
     <div className={narrow ? `${fieldStyles.field} ${fieldStyles.narrow}` : fieldStyles.field}>
       {/* ノードの欄のラベル(「名前」など)と取り違えないよう、label 要素にはせず、読み上げる名前は欄の aria-label にする */}
@@ -253,9 +281,10 @@ function Field({
       {children({
         'aria-label': `${PREFIX}${name}`,
         'aria-invalid': hasErrors,
-        'aria-describedby': hasErrors ? errorId : undefined,
+        'aria-describedby': describedBy === '' ? undefined : describedBy,
       })}
       <FieldErrors id={errorId} messages={errors} />
+      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
     </div>
   )
 }
@@ -264,6 +293,7 @@ function TextField({
   label,
   name,
   errors,
+  warning,
   value,
   onChange,
   onBlur,
@@ -273,6 +303,7 @@ function TextField({
   label: string
   name?: string
   errors: readonly string[] | undefined
+  warning?: string | null
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
@@ -280,7 +311,7 @@ function TextField({
   narrow?: boolean
 }) {
   return (
-    <Field label={label} name={name} errors={errors} narrow={narrow}>
+    <Field label={label} name={name} errors={errors} warning={warning} narrow={narrow}>
       {(props) => (
         <input
           {...props}
