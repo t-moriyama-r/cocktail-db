@@ -327,6 +327,39 @@ test('TC-309-14: その場で作った銘柄が、ノードの直下の銘柄と
   await expect(page.getByLabel('リンクURL', { exact: true })).toHaveValue('https://example.com/e2e-brand')
 })
 
+// その場で作る銘柄の名前・英名の重なりの知らせ(#723)。相手は本物の銘柄の重なりの問い合わせ(#632)。保存はしないので、ほかの E2E のデータは変わらない
+
+test('TC-723-09: ノードの新規の画面で、既にある銘柄の名前・英名を、その場で作る銘柄の欄に入れて離れると、それぞれの欄の下に知らせが出て、直すと消える', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  // ミントの下のノード(銘柄はその他の部分木に作る)。E2eSeeder の「スピリタス」(Spirytus)は蒸留酒の下の銘柄で、所属によらず銘柄全体で比べる
+  await fillNewNode(page, 'ミント', 'brand-dup')
+  const name = brandField(page, '名前')
+  const nameEng = brandField(page, '英名')
+  await name.fill('スピリタス')
+  await name.blur()
+  await nameEng.fill('Spirytus')
+  await nameEng.blur()
+
+  await expect(name).toHaveAccessibleDescription(DUPLICATE)
+  await expect(nameEng).toHaveAccessibleDescription(DUPLICATE)
+  await expect(name).toHaveAttribute('aria-invalid', 'false')
+  // 説明の文が CSS で隠れていないこと。ノードの欄には出ない
+  const notices = famousBrand(page).getByText(DUPLICATE, { exact: true })
+  await expect(notices).toHaveCount(2)
+  await expect(notices.nth(0)).toBeVisible()
+  await expect(notices.nth(1)).toBeVisible()
+  await expect(page.getByText(DUPLICATE, { exact: true })).toHaveCount(2)
+
+  await name.fill(`E2E の重ならない銘柄 ${Date.now()}`)
+  await name.blur()
+  await expect(name).not.toHaveAccessibleDescription(DUPLICATE)
+  await expect(nameEng).toHaveAccessibleDescription(DUPLICATE)
+  await expect(notices).toHaveCount(1)
+})
+
 // 親の付け替えと削除(#125)。ここでもミントの下に作ったノードだけを移す・消す。
 // 根をまたぐ付け替え(役割が変わる)は、ほかの E2E が見ている根の下を変えないよう、Vitest(TC-125-03)で確かめる
 

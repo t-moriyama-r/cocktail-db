@@ -7,7 +7,7 @@ import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import { pathTo, ROLE_OPTIONS, roleLabel, toCategoryTreeNode } from './adminCategoryTree'
 import { findCategoryDuplicate, saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
-import type { CategoryFormValues } from './categoryFormValues'
+import { savedParentOf, type CategoryFormValues } from './categoryFormValues'
 import FamousBrandField from './FamousBrandField'
 import { famousBrandFieldsOnForm, famousBrandValuesOf, type FamousBrandSetting } from './famousBrandValues'
 import styles from './CategoryForm.module.css'
@@ -90,9 +90,10 @@ export default function CategoryForm({ nodeId, initialValues, famousBrand, curre
   const [values, setValues] = useState(initialValues)
   const [famous, setFamous] = useState(() => (famousBrand === null ? null : famousBrandValuesOf(famousBrand)))
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
-  // 重なりは、保存する親の下で比べる(根なら根どうし)。新規で「親なし」を選んだら、前に選んでいた親ではなく根どうしで比べる。
+  // 重なりは、保存する親の下で比べる(保存で送る親と同じ savedParentOf で決める。#705)。
   // 新規で親をまだ選んでいなければ、比べる相手が決まらないので比べない
-  const duplicateScope = values.isRoot ? { key: null } : values.parentId !== null ? { key: values.parentId } : null
+  const savedParent = savedParentOf(values)
+  const duplicateScope = savedParent === null ? null : { key: savedParent.parentId }
   const nameDuplicate = useDuplicateWarning<number | null>(
     (name, parentId) => findCategoryDuplicate('name', name, parentId, nodeId),
     duplicateScope,

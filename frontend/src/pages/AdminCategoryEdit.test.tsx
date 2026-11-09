@@ -725,6 +725,46 @@ describe('名前・英名の重なり(#674)', () => {
     await settle()
     expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
   })
+
+  test('TC-738-01: 新規で親 A で知らせが出た後、親を B → A と選び直しても知らせは出ず、名前の欄を離れ直すと A で問い合わせ直す', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    // 名前の欄に触らずに、B(その他)を選んでから A(蒸留酒)に戻す。A で前に問い合わせた結果は出さない
+    pickParent('その他')
+    pickParent('蒸留酒')
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(duplicateQueries()).toHaveLength(1)
+
+    // 値を変えずに離れ直すと、A で問い合わせ直す。A の下に「ジン」があるので出る
+    touch('名前')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+    expect(duplicateQueries()).toEqual([
+      { parent_id: '1', name: 'ジン' },
+      { parent_id: '1', name: 'ジン' },
+    ])
+  })
+
+  test('TC-738-02: 新規で親を選び直さずに、名前の欄を値を変えずに離れ直しても、問い合わせない', async () => {
+    await openNew()
+    mockDuplicates()
+
+    pickParent('蒸留酒')
+    enter('名前', 'ジン')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    touch('名前')
+    touch('名前')
+    await settle()
+    expect(duplicateQueries()).toEqual([{ parent_id: '1', name: 'ジン' }])
+    expect(screen.getByText(DUPLICATE)).toBeInTheDocument()
+  })
 })
 
 describe('新規', () => {
@@ -950,6 +990,206 @@ describe('有名な銘柄', () => {
 
     await screen.findByRole('status')
     expect(sent()!.get('brand_image')).toBeNull()
+  })
+})
+
+describe('その場で作る有名な銘柄の名前・英名の重なり(#723)', () => {
+  type Duplicates = paths['/admin/brands/duplicates']['get']['responses'][200]['content']['application/json']
+  const DUPLICATE = '同じ名前が存在しています'
+
+  /** 既にある銘柄(所属は問わない。銘柄の重なりは銘柄全体で比べる。#632) */
+  const EXISTING = { name: ['スピリタス', 'ゴードン'], name_eng: ['Spirytus', "Gordon's"] }
+
+  /** 銘柄の重なりの問い合わせに、EXISTING と名前・英名をそのまま比べて答える(名前をそろえて比べるなどの細かいところは BE の #632 のテスト) */
+  const mockBrandDuplicates = () =>
+    mockApiHandler('get', '/admin/brands/duplicates', (request) => {
+      const query = new URL(request.url).searchParams
+      const warnings: Duplicates['warnings'] = []
+      const name = query.get('name')
+      const nameEng = query.get('name_eng')
+      if (name !== null && EXISTING.name.includes(name)) warnings.push({ field: 'name', message: DUPLICATE })
+      if (nameEng !== null && EXISTING.name_eng.includes(nameEng)) warnings.push({ field: 'name_eng', message: DUPLICATE })
+      return jsonResponse({ warnings } satisfies Duplicates, 200)
+    })
+
+  /** 送った問い合わせのクエリ(送った順) */
+  const queriesTo = (pathname: string) =>
+    apiRequests()
+      .map((request) => new URL(request.url))
+      .filter((url) => url.pathname === pathname)
+      .map((url) => Object.fromEntries(url.searchParams))
+  const brandQueries = () => queriesTo('/api/admin/brands/duplicates')
+
+  const brandField = (name: string) => screen.getByRole('textbox', { name: `有名な銘柄の${name}` })
+  const famousSelect = () => screen.getByRole('combobox', { name: '有名な銘柄' })
+
+  /** その場で作る銘柄の欄に値を入れて離れる(旧の @change と同じく、値を変えて離れたときに問い合わせる) */
+  const enter = (name: string, value: string) => {
+    const field = brandField(name)
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value } })
+    fireEvent.blur(field)
+  }
+
+  /** 送りかけの問い合わせと、返った応答を画面に出すまでを待つ(「問い合わせない」「出ない」を、届く前に通さないため) */
+  const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)))
+
+  /** 候補のあるジン。開くと今の有名な銘柄(ビーフィーター)を選んでいる */
+  const GIN_WITH_CANDIDATES: CategoryResource = {
+    ...GIN,
+    famous_brand_candidates: [
+      { id: 8, name: 'ビーフィーター', name_eng: 'Beefeater' },
+      { id: 9, name: 'ゴードン', name_eng: "Gordon's" },
+    ],
+  }
+
+  test('TC-723-01: 新規で、その場で作る銘柄の名前に既にある銘柄の名前を入れて欄を離れると、欄の下に「同じ名前が存在しています」が出て欄の説明にもなり、欄は誤りの印にしない', async () => {
+    await openNew()
+    mockBrandDuplicates()
+
+    enter('名前', 'スピリタス')
+
+    await waitFor(() => expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE))
+    expect(within(screen.getByRole('group', { name: '有名な銘柄' })).getByText(DUPLICATE)).toBeInTheDocument()
+    expect(brandField('名前')).toHaveAttribute('aria-invalid', 'false')
+    // 作るのは新しい銘柄なので、どの銘柄も除かない。親(所属)も送らない(銘柄全体で比べる)
+    expect(brandQueries()).toEqual([{ name: 'スピリタス' }])
+    // ノードの名前の欄には出さない
+    expect(screen.getByLabelText('名前', { exact: true })).not.toHaveAccessibleDescription(DUPLICATE)
+  })
+
+  test('TC-723-02: 重ならない名前に直して欄を離れると、出ていた知らせが消える', async () => {
+    await openNew()
+    mockBrandDuplicates()
+
+    enter('名前', 'スピリタス')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+
+    enter('名前', 'E2E の新しい銘柄')
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument())
+    expect(brandField('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(brandQueries()).toEqual([{ name: 'スピリタス' }, { name: 'E2E の新しい銘柄' }])
+  })
+
+  test('TC-723-03: 英名は、全角の英数字を半角にした値で問い合わせ、重なれば英名の欄の下に出る。直すと消える', async () => {
+    await openNew()
+    mockBrandDuplicates()
+
+    enter('英名', 'Ｓｐｉｒｙｔｕｓ')
+
+    await waitFor(() => expect(brandField('英名')).toHaveAccessibleDescription(DUPLICATE))
+    expect(brandField('英名')).toHaveValue('Spirytus')
+    expect(brandField('名前')).not.toHaveAccessibleDescription(DUPLICATE)
+    expect(brandQueries()).toEqual([{ name_eng: 'Spirytus' }])
+
+    enter('英名', 'New Brand')
+    await waitFor(() => expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument())
+  })
+
+  test('TC-723-04: 編集で「(新しく作成する)」を選び、候補にある銘柄の名前を入れて欄を離れても、除かずに比べて知らせが出る', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+    mockBrandDuplicates()
+
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+    enter('名前', 'ゴードン')
+
+    await waitFor(() => expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE))
+    expect(brandQueries()).toEqual([{ name: 'ゴードン' }])
+  })
+
+  test('TC-723-05: 値を変えずに欄を離れたときと、空にして離れたときは問い合わせない。空にすると出ていた知らせを消す', async () => {
+    await openNew()
+    mockBrandDuplicates()
+
+    fireEvent.focus(brandField('名前'))
+    fireEvent.blur(brandField('名前'))
+    await settle()
+    expect(brandQueries()).toEqual([])
+
+    enter('名前', 'スピリタス')
+    expect(await screen.findByText(DUPLICATE)).toBeInTheDocument()
+    fireEvent.focus(brandField('名前'))
+    fireEvent.blur(brandField('名前'))
+    enter('名前', '')
+    await settle()
+
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(brandQueries()).toEqual([{ name: 'スピリタス' }])
+  })
+
+  test('TC-723-06: 名前・英名が重なっていても送信を止めず、入れた値を brand_* で送る', async () => {
+    await openNew()
+    mockBrandDuplicates()
+    const sent = captureSave('post', () => jsonResponse(saved({ ...GIN, id: 10, name: 'ラム' }), 201))
+
+    fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name: 'ミント' }))
+    fireEvent.change(screen.getByLabelText('名前', { exact: true }), { target: { value: 'ラム' } })
+    fireEvent.change(screen.getByLabelText('英名', { exact: true }), { target: { value: 'Rum' } })
+    enter('名前', 'スピリタス')
+    enter('英名', 'Spirytus')
+    await waitFor(() => expect(screen.getAllByText(DUPLICATE)).toHaveLength(2))
+
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ラム」を保存しました')
+    expect([sent()!.get('brand_name'), sent()!.get('brand_name_eng')]).toEqual(['スピリタス', 'Spirytus'])
+  })
+
+  test('TC-723-07: 問い合わせがエラーや通信の失敗になったら、知らせを出さない', async () => {
+    await openNew()
+    mockApiHandler('get', '/admin/brands/duplicates', () => jsonResponse({ message: 'Server Error' }, 500))
+
+    enter('名前', 'スピリタス')
+    await waitFor(() => expect(brandQueries()).toHaveLength(1))
+    mockApiHandler('get', '/admin/brands/duplicates', () => Promise.reject(new TypeError('Failed to fetch')))
+    enter('英名', 'Spirytus')
+    await waitFor(() => expect(brandQueries()).toHaveLength(2))
+
+    await settle()
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  test('TC-723-08: 知らせが出たまま候補を選び直して「(新しく作成する)」に戻すと、入れた名前と知らせが残っている', async () => {
+    await openEdit(GIN_WITH_CANDIDATES)
+    mockBrandDuplicates()
+
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+    enter('名前', 'スピリタス')
+    await waitFor(() => expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE))
+
+    fireEvent.change(famousSelect(), { target: { value: '9' } })
+    expect(screen.queryByText(DUPLICATE)).not.toBeInTheDocument()
+    fireEvent.change(famousSelect(), { target: { value: '' } })
+
+    expect(brandField('名前')).toHaveValue('スピリタス')
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+    // 値を変えていないので、問い合わせ直さない
+    expect(brandQueries()).toEqual([{ name: 'スピリタス' }])
+  })
+
+  test('TC-723-10: 知らせが出たままノードの親を選び直しても、その場で作る銘柄の知らせは残り、値を変えずに欄を離れ直しても問い合わせ直さない', async () => {
+    await openNew()
+    mockBrandDuplicates()
+    const pickParent = (name: string) => fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name }))
+
+    pickParent('蒸留酒')
+    enter('名前', 'スピリタス')
+    await waitFor(() => expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE))
+
+    // ノードの名前・英名は親を選び直すと前の親の知らせを捨てる(#738)が、銘柄は親によらず銘柄全体で比べるので残る
+    pickParent('その他')
+    await settle()
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+    pickParent('蒸留酒')
+    await settle()
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+
+    fireEvent.focus(brandField('名前'))
+    fireEvent.blur(brandField('名前'))
+    await settle()
+    expect(brandField('名前')).toHaveAccessibleDescription(DUPLICATE)
+    expect(brandQueries()).toEqual([{ name: 'スピリタス' }])
   })
 })
 
