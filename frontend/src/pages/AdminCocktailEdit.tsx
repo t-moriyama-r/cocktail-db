@@ -12,6 +12,7 @@ import {
   EMPTY_COCKTAIL_FORM,
   type CocktailFormValues,
 } from '../features/admin-cocktails/cocktailFormValues'
+import { cocktailSaveNotice } from '../features/admin-cocktails/cocktailSaveNotice'
 
 /** ベースを選ぶ木。検索フォームの API(#95)が、根から一番深い段までの木全体を返すので、それを使う(銘柄の所属と同じ) */
 const fetchCategoryTree = () => api.GET('/search-form')
@@ -24,7 +25,8 @@ const fetchFormOptions = () => api.GET('/admin/cocktail-form-options')
  *
  * 編集はカクテルを読み込んでからフォームを出し、無い ID なら 404 の画面を出す。
  * 保存できたら、旧と同じく、下書きなら下書きの一覧へ、公開なら公開済みの一覧へ戻る(旧は結果を待たずに移っていた。
- * docs/decisions/admin-screens.md の既定)。消せたら、旧と同じくメニューへ移る。
+ * docs/decisions/admin-screens.md の既定)。別名がほかのカクテルの名前・別名と同じだったときは、戻った一覧の上にそれを出す
+ * (履歴の state で持たせる。#83)。消せたら、旧と同じくメニューへ移る。
  */
 export default function AdminCocktailEdit() {
   const { id } = useParams()
@@ -85,7 +87,11 @@ function CocktailEditPage({
                 currentImage={currentImage}
                 categories={categories}
                 options={formOptions}
-                onSaved={(isDraft) => void navigate(isDraft ? ADMIN_DRAFT_COCKTAILS_PATH : ADMIN_COCKTAILS_PATH)}
+                onSaved={(isDraft, name, warnings) =>
+                  void navigate(isDraft ? ADMIN_DRAFT_COCKTAILS_PATH : ADMIN_COCKTAILS_PATH, {
+                    state: cocktailSaveNotice(name, warnings),
+                  })
+                }
                 onDeleted={() => void navigate(ADMIN_HOME_PATH)}
               />
             )}
