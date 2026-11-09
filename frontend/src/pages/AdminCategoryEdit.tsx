@@ -11,13 +11,9 @@ import CategoryDelete from '../features/admin-categories/CategoryDelete'
 import CategoryForm from '../features/admin-categories/CategoryForm'
 import CategoryMove from '../features/admin-categories/CategoryMove'
 import { fetchAdminCategoryTree } from '../features/admin-categories/categoryApi'
-import {
-  categoryFormValuesOf,
-  categoryKeptValuesOf,
-  EMPTY_CATEGORY_FORM,
-  NEW_CATEGORY_KEPT,
-} from '../features/admin-categories/categoryFormValues'
+import { categoryFormValuesOf, EMPTY_CATEGORY_FORM } from '../features/admin-categories/categoryFormValues'
 import { deletedNotice, movedNotice, savedNotice, type CategoryTreeNotice } from '../features/admin-categories/categoryTreeNotice'
+import { famousBrandSettingOf, NEW_NODE_FAMOUS_BRAND } from '../features/admin-categories/famousBrandValues'
 import styles from './AdminCategoryEdit.module.css'
 
 type CategoryResource = components['schemas']['CategoryResource']
@@ -54,7 +50,7 @@ function NewCategory() {
           <CategoryForm
             nodeId={null}
             initialValues={EMPTY_CATEGORY_FORM}
-            kept={NEW_CATEGORY_KEPT}
+            famousBrand={NEW_NODE_FAMOUS_BRAND}
             currentImage={null}
             parent={{ kind: 'select', tree: data }}
             onSaved={(name, warnings) => backToTree(savedNotice(name, warnings))}
@@ -82,7 +78,7 @@ function EditCategory({ id }: { id: number }) {
             key={`form-${node.id}`}
             nodeId={node.id}
             initialValues={categoryFormValuesOf(node)}
-            kept={categoryKeptValuesOf(node)}
+            famousBrand={famousBrandSettingOf(node)}
             currentImage={node.image}
             parent={{ kind: 'fixed', path: node.path.map((step) => step.name) }}
             onSaved={(name, warnings) => backToTree(savedNotice(name, warnings))}

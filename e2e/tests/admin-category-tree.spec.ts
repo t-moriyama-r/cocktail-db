@@ -90,8 +90,8 @@ async function createNode(page: Page, name: string, parent: string | null, role?
     await page.getByRole('list', { name: '親' }).getByRole('radio', { name: parent, exact: true }).check()
   }
   await page.getByLabel('名前', { exact: true }).fill(name)
-  await page.getByLabel('英名').fill(englishName(name))
-  await page.getByLabel('説明').fill('E2E で作ったノード')
+  await page.getByLabel('英名', { exact: true }).fill(englishName(name))
+  await page.getByLabel('説明', { exact: true }).fill('E2E で作ったノード')
   await page.getByRole('button', { name: '送信' }).click()
   await expect(page).toHaveURL(/\/admin\/categories$/)
   await expect(page.getByRole('status').filter({ hasText: '保存しました' })).toHaveText(`「${name}」を保存しました`)
@@ -193,7 +193,9 @@ test('TC-310-12: 根以外の編集では役割の欄が出ず、根の役割を
   await openNode(page, childName)
   const editUrl = page.url()
   await page.getByRole('button', { name: '送信' }).click()
-  await expect(page.getByRole('alert')).toContainText('有名な銘柄の名前')
+  // 422 のメッセージは、上の知らせではなく有名な銘柄の欄の下に出る(#309)
+  await expect(page.getByRole('alert')).toContainText('保存できませんでした')
+  await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible()
   expect(page.url()).toBe(editUrl)
 
   // 「その他」に変えると、また任意になり、選ばずに保存できる
