@@ -480,6 +480,10 @@ function saveFailureMessage(failure: SaveFailure): string {
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
     case 'http-error':
+      // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
+      if (failure.status === 401) {
+        return 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+      }
       return `保存できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'
@@ -502,6 +506,10 @@ function DeleteFailureMessage({ failure }: { failure: DeleteFailure }) {
         </>
       )
     case 'http-error':
+      // ログインの期限が切れた後の削除も 401。何度押しても同じなので、ログインし直す手順を出す(RC-17。削除は入力を送らないので、控える案内は付けない)
+      if (failure.status === 401) {
+        return <p>ログインの期限が切れていて削除できませんでした。ページを開き直して、ログインし直してください。</p>
+      }
       return <p>削除できませんでした(エラー {failure.status})。時間をおいて、もう一度お試しください。</p>
     case 'network-error':
       return <p>削除できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。</p>
