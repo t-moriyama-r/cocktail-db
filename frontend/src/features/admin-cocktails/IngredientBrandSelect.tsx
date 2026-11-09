@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import type { components } from '../../api/schema'
 import { useApi, type ApiState } from '../../api/useApi'
 import { fetchCategoryBrands } from '../admin-paraphrases/adminParaphraseApi'
-import { SelectField, type SelectOption } from './CocktailFormFields'
+import { SelectField, type SelectOption } from '../../components/AdminForm/AdminField'
 import styles from './IngredientRows.module.css'
 
 type Brand = components['schemas']['BrandSummaryResource']

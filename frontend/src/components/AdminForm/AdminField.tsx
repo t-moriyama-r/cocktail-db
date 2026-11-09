@@ -5,7 +5,7 @@ import styles from './AdminField.module.css'
 export type FieldControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
 
 /**
- * 管理画面のフォームの、ラベルと検証のメッセージ(あれば)を付けた欄(銘柄・ノードの編集フォームで共有する。#704)。
+ * 管理画面のフォームの、ラベルと検証のメッセージ(あれば)を付けた欄(銘柄・ノード・カクテルの編集フォームで共有する。#704・#729)。
  * メッセージは欄の説明(aria-describedby)にもする。
  * warning(名前・英名の重なりなど)は、保存を止めない知らせなので欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
  */
@@ -105,6 +105,59 @@ export function TextAreaField({
   )
 }
 
+export type SelectOption = { value: string; label: string }
+
+/**
+ * 選択の欄(カクテルの編集フォームから移した。#729)。empty が 'none' なら、旧(append_null_select)と同じく文字の無い空の選択肢を先頭に置く。
+ * 'placeholder' なら、まだ選んでいないときだけ出す、選べない「(選んでください)」を置く(空の選択肢の無い製法。新規ではまだ選んでいない)
+ */
+export function SelectField({
+  label,
+  errors,
+  value,
+  options,
+  empty,
+  disabled = false,
+  onChange,
+}: {
+  label: string
+  errors: readonly string[] | undefined
+  value: string
+  options: readonly SelectOption[]
+  empty: 'none' | 'placeholder'
+  disabled?: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <Field label={label} errors={errors}>
+      {(props) => (
+        <select
+          {...props}
+          className={styles.input}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {empty === 'none' ? (
+            <option value="" />
+          ) : (
+            value === '' && (
+              <option value="" disabled>
+                (選んでください)
+              </option>
+            )
+          )}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  )
+}
+
 /** 欄の下に並べるメッセージ(検証の誤り・重なりの知らせ)。無ければ何も出さない */
 export function FieldErrors({ id, messages }: { id?: string; messages: readonly string[] | undefined }) {
   if (messages === undefined || messages.length === 0) {
@@ -113,7 +166,7 @@ export function FieldErrors({ id, messages }: { id?: string; messages: readonly 
   return (
     <ul id={id} className={styles.errors}>
       {messages.map((message, index) => (
-        // 同じ文が 2 度来ることがある(メジャー・お気に入りの両方が必須で落ちたときなど)ので、並びの位置で区別する
+        // 同じ文が 2 度来ることがある(メジャー・お気に入りの両方が必須で落ちたとき、材料の行ごとの同じメッセージなど)ので、並びの位置で区別する
         <li key={index}>{message}</li>
       ))}
     </ul>
