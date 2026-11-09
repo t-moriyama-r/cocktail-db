@@ -37,16 +37,6 @@ export type CategoryFormValues = {
   removeImage: boolean
 }
 
-/**
- * このフォームでは変えないが、保存のときに今の値のまま送り直すもの。
- *
- * - 有名な銘柄(#309 で選べるようにする)。送らなければ API は今の値のまま残すが、有名な銘柄が必須の部分木では、
- *   送らないと 422 になるので送り直す
- */
-export type CategoryKeptValues = {
-  famousBrandId: number | null
-}
-
 /** 新規の画面の最初の入力。旧(CategoryEdit.vue・MiddleEdit.vue の detailEditObj)と同じく、すべて空でチェックは外す */
 export const EMPTY_CATEGORY_FORM: CategoryFormValues = {
   parentId: null,
@@ -67,9 +57,6 @@ export const EMPTY_CATEGORY_FORM: CategoryFormValues = {
   image: null,
   removeImage: false,
 }
-
-/** 新規のノードは、有名な銘柄を持たない */
-export const NEW_CATEGORY_KEPT: CategoryKeptValues = { famousBrandId: null }
 
 const text = (value: string | number | null): string => (value === null ? '' : String(value))
 
@@ -94,11 +81,6 @@ export function categoryFormValuesOf(node: CategoryResource): CategoryFormValues
     image: null,
     removeImage: false,
   }
-}
-
-/** 編集で開いたノードから、このフォームでは変えずに送り直す値を取り出す */
-export function categoryKeptValuesOf(node: CategoryResource): CategoryKeptValues {
-  return { famousBrandId: node.famous_brand_id }
 }
 
 /** 保存する親。parentId の子として保存する(null なら根) */
@@ -127,8 +109,9 @@ export function savedParentOf(values: Pick<CategoryFormValues, 'isRoot' | 'paren
  * (API が「親が要る」の 422 を返す)。役割は「なし」なら送らない(API は送られない役割を null にする)。
  * 根以外では役割を送らない(役割を持てるのは根だけ。#153)。
  * 真偽値は API が読める "1"・"0" にする。更新は PHP が PUT の multipart を読まないので、POST に `_method=PUT` を付けて送る。
+ * 有名な銘柄の欄は、appendFamousBrand(famousBrandValues.ts)が足す。
  */
-export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKeptValues, method: 'POST' | 'PUT'): FormData {
+export function toCategoryFormData(values: CategoryFormValues, method: 'POST' | 'PUT'): FormData {
   const form = new FormData()
   if (method === 'PUT') {
     form.append('_method', 'PUT')
@@ -139,9 +122,6 @@ export function toCategoryFormData(values: CategoryFormValues, kept: CategoryKep
   }
   if (values.isRoot && values.role !== null) {
     form.append('role', values.role)
-  }
-  if (!values.isRoot && kept.famousBrandId !== null) {
-    form.append('famous_brand_id', String(kept.famousBrandId))
   }
   form.append('name', values.name)
   form.append('name_eng', values.nameEng)

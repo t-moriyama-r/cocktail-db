@@ -30,44 +30,6 @@
   gap: var(--space-3);
 }
 
-.field {
-  display: grid;
-  flex: 1 1 14em;
-  gap: var(--space-1);
-  min-width: 0;
-  align-content: start;
-}
-
-/* 度数・開始位置のように数文字しか入れない欄 */
-.narrow {
-  flex: 0 0 5em;
-}
-
-.label {
-  font-weight: bold;
-}
-
-/* 狭い幅でもはみ出さないよう、欄の幅は親に合わせて縮める */
-.input,
-.textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font: inherit;
-}
-
-.textarea {
-  resize: vertical;
-}
-
-.input[aria-invalid='true'],
-.textarea[aria-invalid='true'] {
-  border-color: var(--color-danger);
-}
-
 /* 画像。旧と同じく、画像は中央に 350px の高さまでで出す */
 .image {
   display: grid;
@@ -95,14 +57,6 @@
   display: inline-flex;
   gap: var(--space-1);
   align-items: center;
-}
-
-.errors {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--color-danger);
-  overflow-wrap: anywhere;
 }
 
 .submit {

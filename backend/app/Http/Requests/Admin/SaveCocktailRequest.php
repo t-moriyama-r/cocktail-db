@@ -36,6 +36,13 @@ class SaveCocktailRequest extends FormRequest
     public const MAX_INGREDIENTS = 20;
 
     /**
+     * 別名の数の上限(#731)。旧に別名が無いので、材料の上限と同じく、実際のカクテルで起きる数(ふつうは 1〜2 個)に
+     * 余裕を持たせた数にする。巨大な配列で、正規化・重複の確かめと INSERT を件数だけ行わせないため
+     * (docs/review-checklist.md の RC-11)。
+     */
+    public const MAX_ALIASES = 10;
+
+    /**
      * multipart(画像つき)では真偽値が文字列の "true"・"false" で届くので、boolean の規則が読める 1・0 に直す。
      */
     protected function prepareForValidation(): void
@@ -105,8 +112,8 @@ class SaveCocktailRequest extends FormRequest
             // 任意の材料か。送らなければ任意でない(旧と同じ)
             'ingredients.*.is_optional' => ['sometimes', 'boolean'],
             // 別名(#293)。名前の配列で、送った並びに置き換える。送らなければ今の別名を残す。
-            // 全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る
-            'aliases' => ['nullable', 'array'],
+            // 全部消すときは空の配列(multipart では空の値の aliases。空文字は null で届く)を送る。件数の上限は MAX_ALIASES(#731)
+            'aliases' => ['nullable', 'array', 'max:'.self::MAX_ALIASES],
             'aliases.*' => ['required', 'string', 'max:255'],
         ];
     }

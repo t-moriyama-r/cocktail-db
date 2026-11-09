@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 
-// 管理画面のカクテルの新規・編集(#127)。相手は本物の管理 API(#291・#129)と、E2eSeeder のカクテル。
-// 保存の API は材料を 2 件以上求め、この画面はまだ材料を変えられない(#128)ので、保存は材料を 2 件持つカクテルで試す
-// (E2eSeeder の seedAdminCocktailEditData): 公開の「カミカゼ」と、下書きの「E2E の下書き」。
-// どちらも保存しても公開・下書きは変わらないので、登録数(ヘッダーの 8)など、ほかの E2E が見ている数は変わらない。
+// 管理画面のカクテルの新規・編集(#127・#128)。相手は本物の管理 API(#291・#292・#129)と、E2eSeeder のカクテル。
+// 既にあるカクテルの保存は、材料を 2 件持つカクテルで試す(E2eSeeder の seedAdminCocktailEditData): 公開の「カミカゼ」と、
+// 下書きの「E2E の下書き」。どちらも保存しても公開・下書きは変わらないので、登録数(ヘッダーの 8)など、ほかの E2E が見ている数は変わらない。
+// 新規の画面で材料の行を入れて保存するテスト(#128)は、試行ごとに名前の変わるカクテルを作り、テストごとに消す(RC-18)。
+// 公開で作ったカクテルは、消すまでの数秒だけ登録数などに数えられる。同時に流れる別のファイルの E2E がその数を見ないよう、
+// 材料はウォッカ・ミントにし、このファイルの最初の方で流す(登録数・材料の数を見る E2E は、名前の順で後ろのファイルにある)。
 // ログインは、admin-layout.spec.ts と同じく、E2eSeeder の管理者で非常用のログイン URL(#115)を出して開く
 
 /** php artisan admin:login-link で、E2eSeeder の管理者の非常用のログイン URL を出す(APP_URL を E2E が開くオリジンにする) */
@@ -48,6 +50,157 @@ async function openFromList(page: Page, listPath: string, name: string, nameEng:
   await expect(page.getByLabel('名前', { exact: true })).toHaveValue(name)
 }
 
+/** 試行ごとに変わる印。作るカクテルの名前に入れ、リトライで同じ名前を作らない */
+const RUN = Date.now()
+
+/** このファイルで作ったカクテルの名前。テストが途中で落ちても残さないよう、テストごと(afterEach)に消す */
+const created: string[] = []
+
+/** 画面と同じく CSRF のトークンを付けて、名前の完全一致で探したカクテル(公開済み・下書きのどちらでも)を消す */
+async function deleteCocktails(page: Page, names: readonly string[]) {
+  await page.goto('/admin')
+  const statuses = await page.evaluate(async (targets) => {
+    type Index = { data: { id: number; name: string }[] }
+    const token = document.cookie
+      .split('; ')
+      .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
+      ?.slice('XSRF-TOKEN='.length)
+    const headers = { Accept: 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(token ?? '') }
+    const result: number[] = []
+    for (const name of targets) {
+      for (const status of ['published', 'draft']) {
+        const query = new URLSearchParams({ status, q: name })
+        const { data } = (await (await fetch(`/api/admin/cocktails?${query}`, { headers })).json()) as Index
+        for (const cocktail of data.filter((item) => item.name === name)) {
+          result.push((await fetch(`/api/admin/cocktails/${cocktail.id}`, { method: 'DELETE', headers })).status)
+        }
+      }
+    }
+    return result
+  }, names)
+  // 作る前に落ちたカクテルは、消すものが無い
+  for (const status of statuses) {
+    expect(status).toBe(204)
+  }
+}
+
+test.afterEach(async ({ page, baseURL }) => {
+  if (created.length === 0) return
+  await login(page, baseURL!)
+  await deleteCocktails(page, created.splice(0))
+})
+
+const ingredients = (page: Page) => page.getByRole('region', { name: '材料' })
+const ingredientRow = (page: Page, position: number) => ingredients(page).getByRole('group', { name: `${position} 行目` })
+
+/** 行の「ノードを選ぶ」で木を開き、ノードを選ぶ。開く枝(根の直下にないノードの祖先)は openNames に上から並べる */
+async function pickNode(page: Page, position: number, name: string, openNames: readonly string[] = []) {
+  await ingredientRow(page, position).getByRole('button', { name: `${position} 行目のノードを選ぶ` }).click()
+  const tree = page.getByRole('list', { name: `${position} 行目のノード` })
+  for (const open of openNames) {
+    await tree.getByRole('button', { name: `${open}を開く`, exact: true }).click()
+  }
+  await tree.getByRole('radio', { name, exact: true }).click()
+  await expect(tree).toHaveCount(0)
+}
+
+/** 行の銘柄の欄で選んでいる選択肢の文字(銘柄の選択肢は、行のノードの銘柄を読み込んでから出る) */
+const selectedBrand = (page: Page, position: number) =>
+  ingredientRow(page, position)
+    .getByLabel('銘柄')
+    .evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? '')
+
+/** 新規の画面で、基本情報の欄(名前・英名・製法。公開するなら説明も)を入れる */
+async function fillBasics(page: Page, name: string, description = '') {
+  await page.getByLabel('名前', { exact: true }).fill(name)
+  await page.getByLabel('英名').fill(`E2E Ingredients ${RUN}`)
+  await page.getByLabel('製法').selectOption({ label: 'シェイク' })
+  await page.getByLabel('説明').fill(description)
+}
+
+test('TC-128-25: 新規の画面で材料を 2 行入れて「下書きとして保存」で保存でき、開き直すと行が並びのまま、量が整って入っている', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/cocktails/new')
+  const name = `E2E の材料の下書き ${RUN}`
+  await fillBasics(page, name)
+  // 1 行目: ジンを選ぶと空のベースにも入り、銘柄(タンカレー)を選ぶとノードが銘柄の所属(ドライジン)になる
+  await pickNode(page, 1, 'ジン')
+  await expect(page.getByText('選んでいるベース: ジン', { exact: true })).toBeVisible()
+  await ingredientRow(page, 1).getByLabel('銘柄').selectOption({ label: 'タンカレー(Tanqueray)' })
+  await expect(ingredientRow(page, 1).getByText('ノード: ジン / ドライジン', { exact: true })).toBeVisible()
+  await ingredientRow(page, 1).getByLabel('量').fill('45')
+  await pickNode(page, 2, 'ウォッカ')
+  await ingredientRow(page, 2).getByLabel('量').fill('15')
+
+  created.push(name)
+  await page.getByRole('button', { name: '下書きとして保存' }).click()
+
+  await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+  await openFromList(page, '/admin/cocktails?status=draft', name, `E2E Ingredients ${RUN}`)
+  await expect(ingredientRow(page, 1).getByText('ノード: ジン / ドライジン', { exact: true })).toBeVisible()
+  await expect.poll(() => selectedBrand(page, 1)).toBe('タンカレー(Tanqueray)')
+  await expect(ingredientRow(page, 1).getByLabel('量')).toHaveValue('45ml')
+  await expect(ingredientRow(page, 2).getByText('ノード: ウォッカ', { exact: true })).toBeVisible()
+  await expect(ingredientRow(page, 2).getByLabel('量')).toHaveValue('15ml')
+})
+
+test('TC-128-28: 開いたカクテルの材料の 2 行目を上へ動かして保存すると、開き直したときに入れ替わっている', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  // E2eSeeder の下書き「E2E の下書き」(ウォッカ 45ml と、銘柄スミノフ 15ml)。入れ替えたまま残るので、
+  // リトライ・ほかのテストの後でもよいよう、開いたときの 2 行の中身を読んでから入れ替える
+  await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+  const amountOf = (position: number) => ingredientRow(page, position).getByLabel('量').inputValue()
+  const [first, second] = [await amountOf(1), await amountOf(2)]
+  expect([first, second].sort()).toEqual(['15ml', '45ml'])
+
+  await ingredientRow(page, 2).getByRole('button', { name: '2 行目を上へ' }).click()
+  await page.getByRole('button', { name: '下書きとして保存' }).click()
+
+  await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+  await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+  await expect(ingredientRow(page, 1).getByLabel('量')).toHaveValue(second)
+  await expect(ingredientRow(page, 2).getByLabel('量')).toHaveValue(first)
+})
+
+test('TC-128-26: 新規の画面で材料を 2 行入れて「公開する」で保存でき、公開済みの一覧に出る', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/cocktails/new')
+  const name = `E2E の材料の公開 ${RUN}`
+  await fillBasics(page, name, '材料の行を入れて公開する E2E。')
+  await pickNode(page, 1, 'ウォッカ')
+  await ingredientRow(page, 1).getByLabel('量').fill('30')
+  await pickNode(page, 2, 'ミント')
+  await ingredientRow(page, 2).getByLabel('量').fill('-')
+  await ingredientRow(page, 2).getByRole('checkbox', { name: '任意' }).check()
+
+  created.push(name)
+  await page.getByRole('button', { name: '公開する' }).click()
+
+  await expect(page).toHaveURL(/\/admin\/cocktails$/)
+  await expect(await findInList(page, name, `E2E Ingredients ${RUN}`)).toBeVisible()
+})
+
+test('TC-128-27: 新規の画面で材料を 1 行にして保存すると、API の件数のメッセージを材料の欄に出して画面に残る', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/cocktails/new')
+  const name = `E2E の材料 1 行 ${RUN}`
+  await fillBasics(page, name)
+  await pickNode(page, 1, 'ウォッカ')
+  await ingredientRow(page, 1).getByLabel('量').fill('30')
+  await ingredientRow(page, 2).getByRole('button', { name: '2 行目を消す' }).click()
+  await expect(ingredientRow(page, 2)).toHaveCount(0)
+
+  created.push(name)
+  await saveDraftAndWait(page)
+
+  await expect(page.getByRole('alert')).toContainText('保存できませんでした。入力を確かめてください。')
+  await expect(ingredients(page).getByText('材料は2 個以上にしてください。', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/\/admin\/cocktails\/new$/)
+})
+
 test('TC-127-27: カクテルの一覧の「新規」から、新規のフォームを開く', async ({ page, baseURL }) => {
   await login(page, baseURL!)
   await page.goto('/admin/cocktails')
@@ -78,7 +231,9 @@ test('TC-127-28: 新規で必須の欄を空のまま保存すると、ベース
     await expect(field).not.toHaveAccessibleDescription('')
   }
   await expect(page.getByRole('group', { name: 'ベース' })).not.toHaveAccessibleDescription('')
-  await expect(page.getByRole('region', { name: '材料' }).getByRole('listitem')).not.toHaveCount(0)
+  // 空の材料の行は飛ばさずに送るので、行ごとにノード・量のメッセージが付く
+  await expect(page.getByRole('button', { name: '1 行目のノードを選ぶ' })).not.toHaveAccessibleDescription('')
+  await expect(page.getByRole('group', { name: '1 行目' }).getByLabel('量')).toHaveAttribute('aria-invalid', 'true')
 
   // 直前の「必須」のメッセージのままでは通らないよう、256 文字の応答で説明の文が変わる(長さのメッセージになる)ことを見る
   const requiredMessage = await name.evaluate((el) => {
@@ -198,4 +353,91 @@ test('TC-127-33: xs の幅(375px)で、製法・評価・甘さの行が折り�
   await major.click({ timeout: 5000 })
 
   await expect(major).toBeChecked()
+})
+
+test.describe('別名(#83)', () => {
+  // 別名は下書き「E2E の下書き」で試す(下書きなので、名前検索・登録数など、ほかの E2E が見ているものに別名が入らない)。
+  // ジントニック(E2eSeeder の seedHeaderData)が別名「G&T」を持つので、同じ別名を足すと保存の後に警告が返る。
+  // 試行ごとに変わる別名にし、途中で落ちても別名が残らないよう、後始末で下書きの別名を全部消す(RC-18)
+  const RUN = Date.now()
+  const aliases = (page: Page) => page.getByRole('region', { name: '別名' })
+
+  /** 別名の欄の値を、上から並べる */
+  const aliasValues = (page: Page) =>
+    aliases(page)
+      .getByRole('textbox')
+      .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value))
+
+  test.afterEach(async ({ page, baseURL }) => {
+    await login(page, baseURL!)
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    const removeButtons = aliases(page).getByRole('button', { name: /^別名 \d+ を削除$/ })
+    if ((await removeButtons.count()) === 0) return
+    while ((await removeButtons.count()) > 0) {
+      await removeButtons.first().click()
+    }
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+    await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+  })
+
+  test('TC-83-15: 別名を足して保存すると、ほかのカクテルと同じ別名の警告を一覧に出し、開き直すと別名が残る。検索用の名前が同じ別名は 422 で止まり、消して保存すると無くなる', async ({
+    page,
+    baseURL,
+  }) => {
+    const own = `E2E の別名 ${RUN}`
+    await login(page, baseURL!)
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    await expect(aliases(page).getByText('別名はありません。')).toBeVisible()
+
+    // 足す: 自分だけの別名と、ジントニックの別名と同じ「G&T」
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 1', { exact: true }).fill(own)
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 2', { exact: true }).fill('G&T')
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+
+    // 警告は保存を止めない。戻った一覧の上に、重なったカクテルへのリンクと一緒に出す
+    await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+    const notice = page.getByRole('status').filter({ hasText: '「E2E の下書き」を保存しました' })
+    await expect(notice).toContainText('別名「G&T」: 「ジントニック」の別名と同じです')
+    await expect(notice.getByRole('link', { name: '「ジントニック」を開く' })).toHaveAttribute('href', /\/admin\/cocktails\/\d+$/)
+
+    // 開き直すと、保存した別名が並びのまま残っている
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    await expect.poll(() => aliasValues(page)).toEqual([own, 'G&T'])
+
+    // 大文字・小文字だけが違う別名は、同じ別名として 422 になり、その行の欄の下に出て画面に残る
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 3', { exact: true }).fill('g&t')
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+    await expect(aliases(page).getByLabel('別名 3', { exact: true })).toHaveAttribute('aria-invalid', 'true')
+    await expect(aliases(page).getByLabel('別名 3', { exact: true })).toHaveAccessibleDescription('同じ別名がほかにあります')
+    await expect(page).toHaveURL(/\/admin\/cocktails\/\d+$/)
+
+    // 消す: 3 行とも消して保存すると、開き直したときに別名が無い
+    for (let i = 0; i < 3; i++) {
+      await aliases(page).getByRole('button', { name: '別名 1 を削除' }).click()
+    }
+    await page.getByRole('button', { name: '下書きとして保存' }).click()
+    await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+    await expect(page.getByRole('status').filter({ hasText: 'を保存しました' })).toHaveCount(0)
+    await openFromList(page, '/admin/cocktails?status=draft', 'E2E の下書き', 'Save Test')
+    await expect(aliases(page).getByText('別名はありません。')).toBeVisible()
+  })
+
+  test('TC-83-16: xs の幅(375px)で別名の行を足しても、欄と「削除」が横にはみ出さない', async ({ page, baseURL }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await login(page, baseURL!)
+    await page.goto('/admin/cocktails/new')
+
+    await aliases(page).getByRole('button', { name: '別名を足す' }).click()
+    await aliases(page).getByLabel('別名 1', { exact: true }).fill('とても長い別名'.repeat(10))
+
+    await expect(aliases(page).getByRole('button', { name: '別名 1 を削除' })).toBeInViewport()
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
 })

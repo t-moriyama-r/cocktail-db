@@ -338,6 +338,22 @@ describe('保存の失敗', () => {
     expect(within(section).getByRole('button', { name: '保存' })).toBeEnabled()
   })
 
+  test('TC-715-05: 保存が 401 なら、ログインの期限切れとログインし直す手順を出し、入力を残してもう一度押せる', async () => {
+    mockApiHandler('put', '/admin/settings', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+    await renderSettings()
+    const section = itemSection(PLAIN_ENV.label)
+
+    const input = within(section).getByLabelText('値')
+    fireEvent.change(input, { target: { value: 'G-NEW' } })
+    fireEvent.click(within(section).getByRole('button', { name: '保存' }))
+
+    const alert = await within(section).findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
+    expect(input).toHaveValue('G-NEW')
+    expect(within(section).getByRole('button', { name: '保存' })).toBeEnabled()
+  })
+
   test('TC-133-11: 保存の応答を待つあいだは、その項目の保存を押せない', async () => {
     let respond: ((response: Response) => void) | undefined
     mockApiHandler('put', '/admin/settings', () => new Promise<Response>((resolve) => (respond = resolve)))
