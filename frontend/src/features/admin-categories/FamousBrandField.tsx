@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { sanitizeDigits, sanitizeStrength, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import type { CategoryFieldErrors } from './categoryApi'
 import type { FamousBrandCandidate, FamousBrandValues, NewBrandValues } from './famousBrandValues'
@@ -183,12 +183,16 @@ function BrandImage({
 }) {
   const [preview, setPreview] = useState<{ file: File; url: string } | null>(null)
 
+  // いま選んでいる画像。読み込みが前後して終わっても、古い画像の結果でプレビューを上書きしない
+  const latest = useRef<File | null>(null)
+
   const pick = (file: File | null) => {
+    latest.current = file
     onPick(file)
     if (file === null) return
     const reader = new FileReader()
     reader.addEventListener('load', () => {
-      if (typeof reader.result === 'string') {
+      if (latest.current === file && typeof reader.result === 'string') {
         const url = reader.result
         setPreview({ file, url })
       }

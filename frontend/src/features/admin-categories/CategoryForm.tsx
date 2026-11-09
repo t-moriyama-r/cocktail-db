@@ -171,7 +171,13 @@ export default function CategoryForm({ nodeId, initialValues, famousBrand, curre
           isRoot={values.isRoot}
           errors={errors.parent_id}
           onSelect={(id) => set('parentId', id)}
-          onRootChange={(isRoot) => set('isRoot', isRoot)}
+          onRootChange={(isRoot) => {
+            set('isRoot', isRoot)
+            // 有名な銘柄の欄は隠れるとファイルの欄の選択も消えるので、選んでいた画像を送らないよう外しておく(文字の入力は残す)
+            if (isRoot) {
+              setFamous((current) => (current === null ? null : { ...current, newBrand: { ...current.newBrand, image: null } }))
+            }
+          }}
         />
       ) : (
         <div className={styles.field}>
