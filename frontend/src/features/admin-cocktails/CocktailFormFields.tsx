@@ -78,6 +78,7 @@ export function SelectField({
   value,
   options,
   empty,
+  disabled = false,
   onChange,
 }: {
   label: string
@@ -85,12 +86,19 @@ export function SelectField({
   value: string
   options: readonly SelectOption[]
   empty: 'none' | 'placeholder'
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   return (
     <Field label={label} errors={errors}>
       {(props) => (
-        <select {...props} className={styles.input} value={value} onChange={(event) => onChange(event.target.value)}>
+        <select
+          {...props}
+          className={styles.input}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        >
           {empty === 'none' ? (
             <option value="" />
           ) : (

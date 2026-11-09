@@ -1,9 +1,19 @@
 import type { components } from '../../api/schema'
+import type { IngredientField } from './ingredientErrors.types'
 
 type CocktailResource = components['schemas']['CocktailResource']
 
-/** 保存のときに送る形の材料の 1 行(GET /api/admin/cocktails/{id} の ingredients。#292) */
-export type CocktailIngredientInput = CocktailResource['ingredients'][number]
+/**
+ * 材料の 1 行の入力(#128)。並べ替え・削除の後も同じ行を指せるよう、行ごとに key を持つ(画面の部品の key・誤りの付け先)。
+ * ノード・銘柄は、まだ選んでいなければ null。量は欄に出す文字のまま持つ。
+ */
+export type CocktailIngredientRow = {
+  key: number
+  categoryId: number | null
+  brandId: number | null
+  amount: string
+  isOptional: boolean
+}
 
 /**
  * カクテルの基本情報のフォームの入力(#127)。欄に出す文字のまま持ち、送るときに multipart の値にする(toCocktailFormData)。
@@ -35,14 +45,35 @@ export type CocktailFormValues = {
   imageUrl: string
   /** 新しく上げる画像。選んでいなければ null(今の画像のまま) */
   image: File | null
-  /**
-   * 材料。この画面では編集せず(材料の行の編集は #128)、開いたカクテルの材料をそのまま送り返す。
-   * 新規では空で、API が材料の件数(2 件以上)で 422 を返す
-   */
-  ingredients: readonly CocktailIngredientInput[]
+  /** 材料の行。画面の並びのまま送る(並びがレシピの順になる) */
+  ingredients: readonly CocktailIngredientRow[]
 }
 
-/** 新規の画面の最初の入力。旧(CocktailEdit.vue の detailEditObj)と同じく、すべて空でメジャーは外す */
+/**
+ * 材料の行の上限(docs/decisions/admin-screens.md の決まったこと 5)。BE の SaveCocktailRequest::MAX_INGREDIENTS
+ * (openapi.json の ingredients の maxItems)と同じ値。生成した型には件数が出ないので、ここに持つ
+ */
+export const MAX_INGREDIENT_ROWS = 20
+
+/**
+ * 新規の画面で最初に出す材料の行の数(docs/decisions/admin-cocktails.md の決まったこと 10)。保存に要る最低の件数
+ * (BE の SaveCocktailRequest::MIN_INGREDIENTS。openapi.json の minItems)と同じ値
+ */
+const INITIAL_INGREDIENT_ROWS = 2
+
+/** 何も入れていない材料の行 */
+export const emptyIngredientRow = (key: number): CocktailIngredientRow => ({
+  key,
+  categoryId: null,
+  brandId: null,
+  amount: '',
+  isOptional: false,
+})
+
+/**
+ * 新規の画面の最初の入力。旧(CocktailEdit.vue の detailEditObj)と同じく、すべて空でメジャーは外す。
+ * 材料は、保存に要る 2 行を空で出す(旧は 12 行の枠を空で出した)
+ */
 export const EMPTY_COCKTAIL_FORM: CocktailFormValues = {
   baseCategoryId: null,
   iceId: '',
@@ -62,7 +93,7 @@ export const EMPTY_COCKTAIL_FORM: CocktailFormValues = {
   imageTxt: '',
   imageUrl: '',
   image: null,
-  ingredients: [],
+  ingredients: Array.from({ length: INITIAL_INGREDIENT_ROWS }, (_, index) => emptyIngredientRow(index)),
 }
 
 const text = (value: string | number | null): string => (value === null ? '' : String(value))
@@ -88,7 +119,13 @@ export function cocktailFormValuesOf(cocktail: CocktailResource): CocktailFormVa
     imageTxt: cocktail.image_txt ?? '',
     imageUrl: cocktail.image_url ?? '',
     image: null,
-    ingredients: cocktail.ingredients,
+    ingredients: cocktail.ingredients.map((ingredient, index) => ({
+      key: index,
+      categoryId: ingredient.category_id,
+      brandId: ingredient.brand_id,
+      amount: ingredient.amount,
+      isOptional: ingredient.is_optional,
+    })),
   }
 }
 
@@ -99,6 +136,8 @@ export function cocktailFormValuesOf(cocktail: CocktailResource): CocktailFormVa
  * 空の欄・空の選択肢は空の文字のまま送る(Laravel が null に読み、必須の欄なら 422 になる)。ベースを選んでいなければ送らない。
  * 下書きか公開かは押したボタンで決め、isDraft で受ける(docs/decisions/admin-screens.md の 1)。
  * 真偽値は API が読める "1"・"0" にする。材料は `ingredients[<行>][<項目>]` の形で、銘柄の無い行は銘柄を送らない。
+ * 材料は、ノードを選んでいない行も飛ばさずに画面の並びのまま送る(API の誤りの「材料 N 行目」が画面の行と合うように)。
+ * 行が 1 つも無いときは、空の ingredients を送る(更新で ingredients を送らないと、API は今の材料を残すため。#720)。
  * 更新は PHP が PUT の multipart を読まないので、POST に `_method=PUT` を付けて送る(SaveCocktailRequest の説明のとおり)。
  * 別名(aliases。#293)は送らない(送らなければ今の別名が残る)。
  */
@@ -130,14 +169,17 @@ export function toCocktailFormData(values: CocktailFormValues, method: 'POST' | 
   if (values.image !== null) {
     form.append('image', values.image)
   }
-  values.ingredients.forEach((ingredient, index) => {
-    const key = (field: string) => `ingredients[${index}][${field}]`
-    form.append(key('category_id'), String(ingredient.category_id))
-    if (ingredient.brand_id !== null) {
-      form.append(key('brand_id'), String(ingredient.brand_id))
+  if (values.ingredients.length === 0) {
+    form.append('ingredients', '')
+  }
+  values.ingredients.forEach((row, index) => {
+    const key = (field: IngredientField) => `ingredients[${index}][${field}]`
+    form.append(key('category_id'), row.categoryId === null ? '' : String(row.categoryId))
+    if (row.brandId !== null) {
+      form.append(key('brand_id'), String(row.brandId))
     }
-    form.append(key('amount'), ingredient.amount)
-    form.append(key('is_optional'), ingredient.is_optional ? '1' : '0')
+    form.append(key('amount'), row.amount)
+    form.append(key('is_optional'), row.isOptional ? '1' : '0')
   })
   return form
 }

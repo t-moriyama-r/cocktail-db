@@ -221,6 +221,22 @@ describe('新規', () => {
     expect(textbox('名前')).toHaveValue('ロック')
     expect(currentUrl()).toBe('/admin/dictionaries/new')
   })
+
+  test('TC-715-03: 保存が 401 なら、ログインの期限切れとログインし直す手順を出し、入力を残して画面を移らない', async () => {
+    setUp()
+    mockApiHandler('post', '/admin/dictionaries', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+    renderAt('/admin/dictionaries/new')
+
+    fireEvent.change(await screen.findByRole('combobox', { name: '分類' }), { target: { value: '1' } })
+    fireEvent.change(textbox('名前'), { target: { value: 'ロック' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
+    expect(textbox('名前')).toHaveValue('ロック')
+    expect(currentUrl()).toBe('/admin/dictionaries/new')
+  })
 })
 
 describe('編集', () => {
@@ -339,6 +355,21 @@ describe('編集', () => {
     expect(within(alert).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       'カクテルのグラスに使われています',
     ])
+    expect(currentUrl()).toBe('/admin/dictionaries/20')
+    expect(textbox('名前')).toHaveValue('タンブラー')
+  })
+
+  test('TC-715-04: 削除が 401 なら、ログインの期限切れとログインし直す手順を出し、画面に残る', async () => {
+    setUp()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockApiHandler('delete', '/admin/dictionaries/{dictionary}', () => jsonResponse({ message: 'Unauthenticated.' }, 401))
+    renderAt('/admin/dictionaries/20')
+
+    fireEvent.click(await screen.findByRole('button', { name: '削除する' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('ログインの期限が切れていて削除できませんでした。ページを開き直して、ログインし直してください。')
+    expect(alert).not.toHaveTextContent('時間をおいて')
     expect(currentUrl()).toBe('/admin/dictionaries/20')
     expect(textbox('名前')).toHaveValue('タンブラー')
   })

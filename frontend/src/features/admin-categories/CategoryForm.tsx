@@ -8,6 +8,8 @@ import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFo
 import { pathTo, ROLE_OPTIONS, roleLabel, toCategoryTreeNode } from './adminCategoryTree'
 import { findCategoryDuplicate, saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
 import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
+import FamousBrandField from './FamousBrandField'
+import { famousBrandFieldsOnForm, famousBrandValuesOf, type FamousBrandSetting } from './famousBrandValues'
 import styles from './CategoryForm.module.css'
 import { useMounted } from './useMounted'
 
@@ -27,8 +29,8 @@ type Props = {
   nodeId: number | null
   /** 最初の入力(新規は空、編集は開いたノードの値) */
   initialValues: CategoryFormValues
-  /** このフォームでは変えずに送り直す値(有名な銘柄) */
-  kept: CategoryKeptValues
+  /** 有名な銘柄の欄の候補と今の値(#309)。根では欄を出さない(null)。新規で「親なし」(根)を選んだときも出さない */
+  famousBrand: FamousBrandSetting | null
   /** 今の画像(API の image の値。public ディスクのファイル名か外部の URL)。無ければ null */
   currentImage: string | null
   parent: ParentField
@@ -42,7 +44,10 @@ type SaveState = { kind: 'idle' } | { kind: 'saving' } | Exclude<SaveCategoryRes
 const HOUR_DIGITS = 1
 const MINUTE_OR_SECOND_DIGITS = 2
 
-/** 欄の下に出す検証のメッセージの項目。ここに無い項目(有名な銘柄など)のメッセージは、送信の下にまとめて出す */
+/**
+ * 欄の下に出す検証のメッセージの項目。ここに無い項目のメッセージは、送信の下にまとめて出す。
+ * 有名な銘柄の項目は、有名な銘柄の欄が出しているものだけを欄の下に出す(famousBrandFieldsOnForm)
+ */
 const FIELDS_ON_FORM = new Set([
   'parent_id',
   'role',
@@ -66,8 +71,8 @@ const FIELDS_ON_FORM = new Set([
  * 管理画面のノードの編集フォームの基本の項目(旧 `Detail/CategoryEdit.vue`・`MiddleEdit.vue`・`component/NamesAndDescription.vue`。#308)。
  * 旧のカテゴリとミドルは同じ項目なので、任意の深さのノードを 1 つのフォームで編集する。
  *
- * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / 送信
- * (docs/decisions/admin-category-form.md)。根のときだけ、親の下に役割の欄を出す(#310)。
+ * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL /
+ * 有名な銘柄 / 送信(docs/decisions/admin-category-form.md)。根のときだけ、親の下に役割の欄を出す(#310)。
  * - 親は、新規なら木(#123 と同じ管理 API の木)から 1 つ選ぶ。根も選べる。「親なし」を選ぶと根を作る(#310)
  * - 役割(なし・ソフトドリンク・その他)は根のときだけ出す。根以外では出さず、送らない(役割を持てるのは根だけ。#153)
  * - 説明は、API が返す編集の形(記法に指す先の名前を添えたもの。#287)のまま編集し、そのまま送る
@@ -76,12 +81,14 @@ const FIELDS_ON_FORM = new Set([
  * - 画像は選ぶとその場で出し、差し替えられる。今の画像があれば「画像を消す」で画像だけを消せる(#288)
  * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定)
  *
- * 有名な銘柄の選択・その場での作成は #309 で足す。それまでは今の値のまま送り直す(CategoryKeptValues)。
+ * - 有名な銘柄は、部分木の銘柄から選ぶか、その場で作る(FamousBrandField。#309)。根では欄を出さない
+ *
  * 名前・英名は、値を変えて欄を離れたら同じ親の下の重なりを問い合わせ(#673 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
  * (旧の duplicate_check。#674)。知らせるだけで送信は止めず、名前の重なりで保存を止めるのは保存の API の 422 に任せる。
  */
-export default function CategoryForm({ nodeId, initialValues, kept, currentImage, parent, onSaved }: Props) {
+export default function CategoryForm({ nodeId, initialValues, famousBrand, currentImage, parent, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
+  const [famous, setFamous] = useState(() => (famousBrand === null ? null : famousBrandValuesOf(famousBrand)))
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
   // 重なりは、保存する親の下で比べる(根なら根どうし)。新規で「親なし」を選んだら、前に選んでいた親ではなく根どうしで比べる。
   // 新規で親をまだ選んでいなければ、比べる相手が決まらないので比べない
@@ -142,7 +149,11 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
     // 欄を離れずに Enter で送ったときも、英名を半角にして送る
     const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
     setValues(normalized)
-    const result = await saveCategory(nodeId, normalized, kept)
+    const normalizedFamous =
+      famous === null ? null : { ...famous, newBrand: { ...famous.newBrand, nameEng: toHalfWidthAlphanumeric(famous.newBrand.nameEng) } }
+    setFamous(normalizedFamous)
+    // 根には有名な銘柄を入れられないので、新規で「親なし」(根)を選んでいるときは欄の入力を送らない
+    const result = await saveCategory(nodeId, normalized, normalized.isRoot ? null : normalizedFamous)
     // 保存を待つ間に別の画面へ移っていたら、カテゴリ木へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -154,8 +165,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
   }
 
   const saving = save.kind === 'saving'
+  const showFamousBrand = famousBrand !== null && famous !== null && !values.isRoot
+  const famousFields = new Set(showFamousBrand ? famousBrandFieldsOnForm(famous) : [])
   const otherErrors = Object.entries(errors)
-    .filter(([field]) => !FIELDS_ON_FORM.has(field))
+    .filter(([field]) => !FIELDS_ON_FORM.has(field) && !famousFields.has(field))
     .flatMap(([, messages]) => messages)
 
   return (
@@ -167,7 +180,13 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
           isRoot={values.isRoot}
           errors={errors.parent_id}
           onSelect={(id) => set('parentId', id)}
-          onRootChange={(isRoot) => set('isRoot', isRoot)}
+          onRootChange={(isRoot) => {
+            set('isRoot', isRoot)
+            // 有名な銘柄の欄は隠れるとファイルの欄の選択も消えるので、選んでいた画像を送らないよう外しておく(文字の入力は残す)
+            if (isRoot) {
+              setFamous((current) => (current === null ? null : { ...current, newBrand: { ...current.newBrand, image: null } }))
+            }
+          }}
         />
       ) : (
         <div className={styles.fixedParent}>
@@ -286,6 +305,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
         <TextField label="リンクURL" errors={errors.image_url} value={values.imageUrl} onChange={(value) => set('imageUrl', value)} />
       </div>
 
+      {showFamousBrand && (
+        <FamousBrandField candidates={famousBrand.candidates} values={famous} errors={errors} onChange={setFamous} />
+      )}
+
       <div className={styles.submit}>
         <button className={styles.submitButton} type="submit" disabled={saving}>
           送信
@@ -381,6 +404,10 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
     case 'http-error':
+      // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
+      if (failure.status === 401) {
+        return 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+      }
       return `保存できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'
