@@ -5,7 +5,8 @@ import InlineApiView from '../../components/ApiView/InlineApiView'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import { pathTo, roleLabel, subtreeIdsOf, toCategoryTreeNode } from './adminCategoryTree'
 import { fetchAdminCategoryTree, saveCategory, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
-import { categoryFormValuesOf, categoryKeptValuesOf } from './categoryFormValues'
+import { categoryFormValuesOf } from './categoryFormValues'
+import { EMPTY_NEW_BRAND } from './famousBrandValues'
 import styles from './CategoryActions.module.css'
 import { useMounted } from './useMounted'
 
@@ -80,7 +81,8 @@ function MoveForm({ node, tree, onMoved }: Props & { tree: readonly AdminTreeIte
     const result = await saveCategory(
       node.id,
       { ...categoryFormValuesOf(node), parentId: target.id },
-      categoryKeptValuesOf(node),
+      // 有名な銘柄は今のまま送り直す(送らなくても API は残すが、必須の部分木では 422 になる)
+      node.famous_brand_id === null ? null : { selectedId: node.famous_brand_id, newBrand: EMPTY_NEW_BRAND },
     )
     // 待つ間に別の画面へ移っていたら、カテゴリ木へ戻さない
     if (!mounted.current) return

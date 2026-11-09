@@ -283,7 +283,7 @@ export default function DictionaryForm({ categories, dictionary }: Props) {
               </ul>
             </>
           ) : (
-            <p>{failureMessage('削除できませんでした', deletion)}</p>
+            <p>{failureMessage('削除', deletion)}</p>
           )}
         </div>
       )}
@@ -308,14 +308,21 @@ function submitErrorMessage(state: Exclude<SubmitState, { kind: 'idle' | 'pendin
   if (state.kind === 'invalid') {
     return '保存できませんでした。入力を確かめてください。'
   }
-  return failureMessage('保存できませんでした', state)
+  return failureMessage('保存', state)
 }
 
-function failureMessage(what: string, failure: RequestFailure): string {
+function failureMessage(action: '保存' | '削除', failure: RequestFailure): string {
   switch (failure.kind) {
     case 'network-error':
-      return `${what}。通信に失敗しました。接続を確かめて、もう一度お試しください。`
+      return `${action}できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。`
     case 'http-error':
-      return `${what}(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
+      // ログインの期限が切れた後の保存・削除は 401。何度送っても同じなので、ログインし直す手順を出す。
+      // 開き直すと入力が消えるので、保存のときは先に控えるよう書く(RC-17)
+      if (failure.status === 401) {
+        return action === '保存'
+          ? 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+          : 'ログインの期限が切れていて削除できませんでした。ページを開き直して、ログインし直してください。'
+      }
+      return `${action}できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
   }
 }

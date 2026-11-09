@@ -1,12 +1,15 @@
-import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useMemo, useState, type FormEvent } from 'react'
 import type { components } from '../../api/schema'
+import { Field, FieldErrors, TextAreaField, TextField } from '../../components/AdminForm/AdminField'
+import { useDuplicateWarning } from '../../components/AdminForm/useDuplicateWarning'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import { pathTo, ROLE_OPTIONS, roleLabel, toCategoryTreeNode } from './adminCategoryTree'
-import { saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
-import type { CategoryFormValues, CategoryKeptValues } from './categoryFormValues'
-import { useCategoryDuplicateWarning } from './useCategoryDuplicateWarning'
+import { findCategoryDuplicate, saveCategory, type CategoryFieldErrors, type CategorySaveWarning, type SaveCategoryResult } from './categoryApi'
+import type { CategoryFormValues } from './categoryFormValues'
+import FamousBrandField from './FamousBrandField'
+import { famousBrandFieldsOnForm, famousBrandValuesOf, type FamousBrandSetting } from './famousBrandValues'
 import styles from './CategoryForm.module.css'
 import { useMounted } from './useMounted'
 
@@ -26,8 +29,8 @@ type Props = {
   nodeId: number | null
   /** 最初の入力(新規は空、編集は開いたノードの値) */
   initialValues: CategoryFormValues
-  /** このフォームでは変えずに送り直す値(有名な銘柄) */
-  kept: CategoryKeptValues
+  /** 有名な銘柄の欄の候補と今の値(#309)。根では欄を出さない(null)。新規で「親なし」(根)を選んだときも出さない */
+  famousBrand: FamousBrandSetting | null
   /** 今の画像(API の image の値。public ディスクのファイル名か外部の URL)。無ければ null */
   currentImage: string | null
   parent: ParentField
@@ -41,7 +44,10 @@ type SaveState = { kind: 'idle' } | { kind: 'saving' } | Exclude<SaveCategoryRes
 const HOUR_DIGITS = 1
 const MINUTE_OR_SECOND_DIGITS = 2
 
-/** 欄の下に出す検証のメッセージの項目。ここに無い項目(有名な銘柄など)のメッセージは、送信の下にまとめて出す */
+/**
+ * 欄の下に出す検証のメッセージの項目。ここに無い項目のメッセージは、送信の下にまとめて出す。
+ * 有名な銘柄の項目は、有名な銘柄の欄が出しているものだけを欄の下に出す(famousBrandFieldsOnForm)
+ */
 const FIELDS_ON_FORM = new Set([
   'parent_id',
   'role',
@@ -65,8 +71,8 @@ const FIELDS_ON_FORM = new Set([
  * 管理画面のノードの編集フォームの基本の項目(旧 `Detail/CategoryEdit.vue`・`MiddleEdit.vue`・`component/NamesAndDescription.vue`。#308)。
  * 旧のカテゴリとミドルは同じ項目なので、任意の深さのノードを 1 つのフォームで編集する。
  *
- * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL / 送信
- * (docs/decisions/admin-category-form.md)。根のときだけ、親の下に役割の欄を出す(#310)。
+ * 並びは旧と同じく、親 / 名前・英名 / メジャー・お気に入り・粉もの / 説明 / YouTube と開始位置 / 画像 / リンクテキスト・リンクURL /
+ * 有名な銘柄 / 送信(docs/decisions/admin-category-form.md)。根のときだけ、親の下に役割の欄を出す(#310)。
  * - 親は、新規なら木(#123 と同じ管理 API の木)から 1 つ選ぶ。根も選べる。「親なし」を選ぶと根を作る(#310)
  * - 役割(なし・ソフトドリンク・その他)は根のときだけ出す。根以外では出さず、送らない(役割を持てるのは根だけ。#153)
  * - 説明は、API が返す編集の形(記法に指す先の名前を添えたもの。#287)のまま編集し、そのまま送る
@@ -75,18 +81,28 @@ const FIELDS_ON_FORM = new Set([
  * - 画像は選ぶとその場で出し、差し替えられる。今の画像があれば「画像を消す」で画像だけを消せる(#288)
  * - 検証は API に任せ、422 は項目ごとに欄の下に出し、画面を移らない。入力は残す(docs/decisions/admin-screens.md の既定)
  *
- * 有名な銘柄の選択・その場での作成は #309 で足す。それまでは今の値のまま送り直す(CategoryKeptValues)。
+ * - 有名な銘柄は、部分木の銘柄から選ぶか、その場で作る(FamousBrandField。#309)。根では欄を出さない
+ *
  * 名前・英名は、値を変えて欄を離れたら同じ親の下の重なりを問い合わせ(#673 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
  * (旧の duplicate_check。#674)。知らせるだけで送信は止めず、名前の重なりで保存を止めるのは保存の API の 422 に任せる。
  */
-export default function CategoryForm({ nodeId, initialValues, kept, currentImage, parent, onSaved }: Props) {
+export default function CategoryForm({ nodeId, initialValues, famousBrand, currentImage, parent, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
+  const [famous, setFamous] = useState(() => (famousBrand === null ? null : famousBrandValuesOf(famousBrand)))
   const [errors, setErrors] = useState<CategoryFieldErrors>({})
   // 重なりは、保存する親の下で比べる(根なら根どうし)。新規で「親なし」を選んだら、前に選んでいた親ではなく根どうしで比べる。
   // 新規で親をまだ選んでいなければ、比べる相手が決まらないので比べない
-  const duplicateScope = values.isRoot ? { parentId: null } : values.parentId !== null ? { parentId: values.parentId } : null
-  const nameDuplicate = useCategoryDuplicateWarning('name', nodeId, duplicateScope, initialValues.name)
-  const nameEngDuplicate = useCategoryDuplicateWarning('name_eng', nodeId, duplicateScope, initialValues.nameEng)
+  const duplicateScope = values.isRoot ? { key: null } : values.parentId !== null ? { key: values.parentId } : null
+  const nameDuplicate = useDuplicateWarning<number | null>(
+    (name, parentId) => findCategoryDuplicate('name', name, parentId, nodeId),
+    duplicateScope,
+    initialValues.name,
+  )
+  const nameEngDuplicate = useDuplicateWarning<number | null>(
+    (nameEng, parentId) => findCategoryDuplicate('name_eng', nameEng, parentId, nodeId),
+    duplicateScope,
+    initialValues.nameEng,
+  )
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
   const [picked, setPicked] = useState<{ file: File; url: string | null } | null>(null)
   // 「画像を消す」を入れたときに、選んでいたファイルを欄からも外すため、ファイルの欄を作り直す
@@ -133,7 +149,11 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
     // 欄を離れずに Enter で送ったときも、英名を半角にして送る
     const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
     setValues(normalized)
-    const result = await saveCategory(nodeId, normalized, kept)
+    const normalizedFamous =
+      famous === null ? null : { ...famous, newBrand: { ...famous.newBrand, nameEng: toHalfWidthAlphanumeric(famous.newBrand.nameEng) } }
+    setFamous(normalizedFamous)
+    // 根には有名な銘柄を入れられないので、新規で「親なし」(根)を選んでいるときは欄の入力を送らない
+    const result = await saveCategory(nodeId, normalized, normalized.isRoot ? null : normalizedFamous)
     // 保存を待つ間に別の画面へ移っていたら、カテゴリ木へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -145,8 +165,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
   }
 
   const saving = save.kind === 'saving'
+  const showFamousBrand = famousBrand !== null && famous !== null && !values.isRoot
+  const famousFields = new Set(showFamousBrand ? famousBrandFieldsOnForm(famous) : [])
   const otherErrors = Object.entries(errors)
-    .filter(([field]) => !FIELDS_ON_FORM.has(field))
+    .filter(([field]) => !FIELDS_ON_FORM.has(field) && !famousFields.has(field))
     .flatMap(([, messages]) => messages)
 
   return (
@@ -158,11 +180,17 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
           isRoot={values.isRoot}
           errors={errors.parent_id}
           onSelect={(id) => set('parentId', id)}
-          onRootChange={(isRoot) => set('isRoot', isRoot)}
+          onRootChange={(isRoot) => {
+            set('isRoot', isRoot)
+            // 有名な銘柄の欄は隠れるとファイルの欄の選択も消えるので、選んでいた画像を送らないよう外しておく(文字の入力は残す)
+            if (isRoot) {
+              setFamous((current) => (current === null ? null : { ...current, newBrand: { ...current.newBrand, image: null } }))
+            }
+          }}
         />
       ) : (
-        <div className={styles.field}>
-          <span className={styles.label}>親</span>
+        <div className={styles.fixedParent}>
+          <span className={styles.fixedParentLabel}>親</span>
           <p className={styles.selected}>{parent.path.length === 0 ? '(根のノード)' : parent.path.join(' / ')}</p>
           <FieldErrors messages={errors.parent_id} />
         </div>
@@ -210,17 +238,13 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
       </div>
       <FieldErrors messages={[...(errors.is_major ?? []), ...(errors.is_like ?? []), ...(errors.is_powder ?? [])]} />
 
-      <Field label="説明" errors={errors.description}>
-        {(props) => (
-          <textarea
-            {...props}
-            className={styles.textarea}
-            rows={8}
-            value={values.description}
-            onChange={(event) => set('description', event.target.value)}
-          />
-        )}
-      </Field>
+      <TextAreaField
+        label="説明"
+        errors={errors.description}
+        rows={8}
+        value={values.description}
+        onChange={(value) => set('description', value)}
+      />
 
       <div className={styles.row}>
         <TextField label="YouTube" errors={errors.youtube} value={values.youtube} onChange={(value) => set('youtube', value)} />
@@ -280,6 +304,10 @@ export default function CategoryForm({ nodeId, initialValues, kept, currentImage
         <TextField label="リンクテキスト" errors={errors.image_txt} value={values.imageTxt} onChange={(value) => set('imageTxt', value)} />
         <TextField label="リンクURL" errors={errors.image_url} value={values.imageUrl} onChange={(value) => set('imageUrl', value)} />
       </div>
+
+      {showFamousBrand && (
+        <FamousBrandField candidates={famousBrand.candidates} values={famous} errors={errors} onChange={setFamous} />
+      )}
 
       <div className={styles.submit}>
         <button className={styles.submitButton} type="submit" disabled={saving}>
@@ -371,97 +399,15 @@ function RoleSelect({
   )
 }
 
-type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined }
-
-/**
- * ラベルと、検証のメッセージ(あれば)を付けた欄。メッセージは欄の説明(aria-describedby)にもする。
- * warning は検証の誤りではない知らせなので、欄を aria-invalid にはせず、欄の下の文と説明にだけ出す
- */
-function Field({
-  label,
-  errors,
-  warning = null,
-  narrow = false,
-  children,
-}: {
-  label: string
-  errors: readonly string[] | undefined
-  warning?: string | null
-  narrow?: boolean
-  children: (props: ControlProps) => ReactNode
-}) {
-  const id = useId()
-  const errorId = useId()
-  const warningId = useId()
-  const hasErrors = errors !== undefined && errors.length > 0
-  const describedBy = [hasErrors ? errorId : null, warning !== null ? warningId : null].filter((part) => part !== null).join(' ')
-  return (
-    <div className={narrow ? `${styles.field} ${styles.narrow}` : styles.field}>
-      <label className={styles.label} htmlFor={id}>
-        {label}
-      </label>
-      {children({ id, 'aria-invalid': hasErrors, 'aria-describedby': describedBy === '' ? undefined : describedBy })}
-      <FieldErrors id={errorId} messages={errors} />
-      <FieldErrors id={warningId} messages={warning === null ? undefined : [warning]} />
-    </div>
-  )
-}
-
-function TextField({
-  label,
-  errors,
-  warning,
-  value,
-  onChange,
-  onBlur,
-  inputMode,
-  narrow,
-}: {
-  label: string
-  errors: readonly string[] | undefined
-  warning?: string | null
-  value: string
-  onChange: (value: string) => void
-  onBlur?: () => void
-  inputMode?: 'numeric'
-  narrow?: boolean
-}) {
-  return (
-    <Field label={label} errors={errors} warning={warning} narrow={narrow}>
-      {(props) => (
-        <input
-          {...props}
-          className={styles.input}
-          type="text"
-          inputMode={inputMode}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur}
-        />
-      )}
-    </Field>
-  )
-}
-
-function FieldErrors({ id, messages }: { id?: string; messages: readonly string[] | undefined }) {
-  if (messages === undefined || messages.length === 0) {
-    return null
-  }
-  return (
-    <ul id={id} className={styles.errors}>
-      {messages.map((message, index) => (
-        // 同じ文が 2 度来ることがある(メジャー・お気に入りの両方が必須で落ちたときなど)ので、並びの位置で区別する
-        <li key={index}>{message}</li>
-      ))}
-    </ul>
-  )
-}
-
 function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>): string {
   switch (failure.kind) {
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
     case 'http-error':
+      // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
+      if (failure.status === 401) {
+        return 'ログインの期限が切れていて保存できませんでした。入力を控えてから、ページを開き直してログインし直してください。'
+      }
       return `保存できませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
     case 'network-error':
       return '保存できませんでした。通信に失敗しました。接続を確かめて、もう一度お試しください。'

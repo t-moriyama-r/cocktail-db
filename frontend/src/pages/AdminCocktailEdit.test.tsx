@@ -13,6 +13,8 @@ type FormOptions = paths['/admin/cocktail-form-options']['get']['responses'][200
 type CocktailIndex = paths['/admin/cocktails']['get']['responses'][200]['content']['application/json']
 type Saved = paths['/admin/cocktails']['post']['responses'][201]['content']['application/json']
 type Conflict = paths['/admin/cocktails/{cocktail}']['delete']['responses'][409]['content']['application/json']
+type CategoryDetail = paths['/categories/{category}']['get']['responses'][200]['content']['application/json']
+type Brand = components['schemas']['BrandSummaryResource']
 
 const loggedIn = () => mockApi('get', '/admin/me', 200, { id: 1, name: '管理者' })
 
@@ -31,6 +33,55 @@ const TREE: SearchFormNode[] = [
 ]
 
 const mockTree = () => mockApi('get', '/search-form', 200, { categories: TREE, methods: [] } satisfies SearchForm)
+
+/** 銘柄。所属はどちらもドライジン(パンくずは根から所属ノードまで) */
+const brand = (id: number, name: string, nameEng: string): Brand => ({
+  id,
+  name,
+  name_eng: nameEng,
+  strength: 40,
+  youtube: null,
+  path: [
+    { id: 1, name: '蒸留酒', name_eng: 'Liquor' },
+    { id: 2, name: 'ジン', name_eng: 'Gin' },
+    { id: 3, name: 'ドライジン', name_eng: 'Dry Gin' },
+  ],
+})
+const BEEFEATER = brand(8, 'ビーフィーター', 'Beefeater')
+const TANQUERAY = brand(9, 'タンカレー', 'Tanqueray')
+
+/** ノードの詳細(GET /api/categories/{id})が返す、そのノードと配下の銘柄。ジン・ドライジンの配下にだけ銘柄がある */
+const BRANDS_BY_NODE: Readonly<Record<number, Brand[]>> = { 2: [BEEFEATER, TANQUERAY], 3: [BEEFEATER, TANQUERAY] }
+
+const categoryDetail = (id: number, brands: Brand[]): CategoryDetail => ({
+  data: {
+    id,
+    name: '',
+    name_eng: '',
+    description: null,
+    is_major: true,
+    is_like: false,
+    youtube: null,
+    youtube_created_at: null,
+    youtube_start_seconds: null,
+    image: null,
+    image_txt: null,
+    image_url: null,
+    created_at: null,
+    updated_at: null,
+    path: [],
+    children: [],
+    famous_brand: null,
+    brands,
+  },
+})
+
+/** 材料の行の銘柄の選択肢に使う、ノードの詳細の API。ノードの ID ごとに BRANDS_BY_NODE の銘柄を返す */
+const mockCategories = () =>
+  mockApiHandler('get', '/categories/{category}', (request) => {
+    const id = Number(new URL(request.url).pathname.split('/').at(-1))
+    return jsonResponse(categoryDetail(id, BRANDS_BY_NODE[id] ?? []), 200)
+  })
 
 /** 選択肢。製法 2 つ・グラス 1 つ・氷 1 つ(型は API の定義に合わせる) */
 const OPTIONS: FormOptions = {
@@ -144,6 +195,7 @@ const openNew = async () => {
   loggedIn()
   mockTree()
   mockOptions()
+  mockCategories()
   renderAt('/admin/cocktails/new')
   await screen.findByRole('button', { name: '公開する' })
 }
@@ -152,13 +204,18 @@ const openNew = async () => {
  * 編集の画面を開き、フォームが出るまで待つ。重複チェックの API の応答も登録し、送られた問い合わせを返す関数を返す
  * (`/admin/cocktails/duplicates` は `/admin/cocktails/{cocktail}` の形にも当たるので、カクテルの後に登録して先に当てる)
  */
-const openEdit = async ({ sameName = [], sameRecipe = [] }: { sameName?: Duplicate[]; sameRecipe?: Duplicate[] } = {}) => {
+const openEdit = async ({
+  sameName = [],
+  sameRecipe = [],
+  cocktail = COCKTAIL,
+}: { sameName?: Duplicate[]; sameRecipe?: Duplicate[]; cocktail?: CocktailResource } = {}) => {
   loggedIn()
   mockTree()
   mockOptions()
-  mockApi('get', '/admin/cocktails/{cocktail}', 200, { data: COCKTAIL })
+  mockCategories()
+  mockApi('get', '/admin/cocktails/{cocktail}', 200, { data: cocktail })
   const queries = mockDuplicates(sameName, sameRecipe)
-  renderAt(`/admin/cocktails/${COCKTAIL.id}`)
+  renderAt(`/admin/cocktails/${cocktail.id}`)
   await screen.findByRole('button', { name: '公開する' })
   return queries
 }
@@ -207,7 +264,8 @@ describe('欄', () => {
   test('TC-127-07: 欄は ベース / 氷・グラス / 名前・英名 / 検索のリンク / 別名 / 製法・評価・甘さ・メジャー / 説明 / 補足 / YouTube と開始位置 / 画像 / リンク / 材料 / 保存の順', async () => {
     await openNew()
 
-    // ベースの木の中(ノードのラベル・開閉のボタン)は除き、欄の名前・リンク・見出し・ボタンを上から並べる
+    // ベースの木・材料の行の中(ノードのラベル・開閉のボタン・行の欄)は除き、欄の名前・リンク・見出し・ボタンと、
+    // 枠の名前(ベース・材料の行)を上から並べる
     const labels = Array.from(form().querySelectorAll('legend, label, a, h2, button'))
       .filter((element) => element.tagName === 'LEGEND' || element.closest('fieldset') === null)
       .map((element) => element.textContent)
@@ -235,6 +293,9 @@ describe('欄', () => {
       'リンクテキスト',
       'リンクURL',
       '材料',
+      '1 行目',
+      '2 行目',
+      '行を足す',
       '下書きとして保存',
       '公開する',
     ])
@@ -311,7 +372,7 @@ describe('欄', () => {
     expect(new URL(word.getAttribute('href')!).searchParams.get('q')).toBe('ジントニック カクテル言葉')
   })
 
-  test('TC-127-12: 編集で開くと、開いたカクテルの値を欄に出し、今のベース・画像・材料の件数を出す', async () => {
+  test('TC-127-12: 編集で開くと、開いたカクテルの値を欄に出し、今のベース・画像を出す', async () => {
     await openEdit()
 
     expect(screen.getByRole('heading', { level: 1, name: 'カクテルの編集' })).toBeInTheDocument()
@@ -333,7 +394,6 @@ describe('欄', () => {
     expect(screen.getByLabelText('リンクテキスト')).toHaveValue('公式')
     expect(screen.getByLabelText('リンクURL')).toHaveValue('https://example.com/')
     expect(screen.getByRole('img', { name: 'カクテルの画像' })).toHaveAttribute('src', '/storage/gin.png')
-    expect(screen.getByText('材料はまだこの画面で変えられません。保存すると今の材料(2 件)のまま残ります。')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument()
   })
 })
@@ -758,5 +818,332 @@ describe('削除', () => {
     expect(alert).toHaveTextContent('削除できませんでした。')
     expect(alert).toHaveTextContent('ほかのカクテルの説明文から参照されています: ギムレット、マティーニ')
     expect(currentUrl()).toBe('/admin/cocktails/7')
+  })
+})
+
+describe('材料の行', () => {
+  const ingredients = () => screen.getByRole('region', { name: '材料' })
+  const row = (position: number) => within(ingredients()).getByRole('group', { name: `${position} 行目` })
+  const baseText = () => screen.getByText(/^選んでいるベース: /).textContent
+
+  /** 行の「ノードを選ぶ」で木を開き、名前のノードを選ぶ(根の直下か、開いている枝のノード) */
+  const pickNode = (position: number, name: string) => {
+    fireEvent.click(within(row(position)).getByRole('button', { name: `${position} 行目のノードを選ぶ` }))
+    fireEvent.click(within(screen.getByRole('list', { name: `${position} 行目のノード` })).getByRole('radio', { name }))
+  }
+  const pickBase = (name: string) => fireEvent.click(within(screen.getByRole('list', { name: 'ベース' })).getByRole('radio', { name }))
+  const brandSelect = (position: number) => within(row(position)).getByLabelText('銘柄')
+  const amount = (position: number, value: string) => fireEvent.change(within(row(position)).getByLabelText('量'), { target: { value } })
+  const fillRequired = () => {
+    fireEvent.change(screen.getByLabelText('名前'), { target: { value: 'モスコミュール' } })
+    fireEvent.change(screen.getByLabelText('英名'), { target: { value: 'Moscow Mule' } })
+    fireEvent.change(screen.getByLabelText('製法'), { target: { value: '1' } })
+  }
+  const savePosts = () => apiRequests().filter((request) => request.method === 'POST' && request.url.endsWith('/api/admin/cocktails'))
+
+  test('TC-128-10: 新規は空の行を 2 つ出し、「行を足す」で末尾に足せ、20 行になると足せない', async () => {
+    await openNew()
+
+    expect(within(row(1)).getByText('ノード: (未選択)')).toBeInTheDocument()
+    expect(brandSelect(1)).toBeDisabled()
+    expect(within(row(2)).getByLabelText('量')).toHaveValue('')
+    expect(within(ingredients()).queryByRole('group', { name: '3 行目' })).not.toBeInTheDocument()
+
+    const add = within(ingredients()).getByRole('button', { name: '行を足す' })
+    for (let rows = 2; rows < 19; rows += 1) fireEvent.click(add)
+    expect(row(19)).toBeInTheDocument()
+    expect(add).toBeEnabled()
+    fireEvent.click(add)
+
+    expect(row(20)).toBeInTheDocument()
+    expect(add).toBeDisabled()
+  })
+
+  test('TC-128-11: ノードは木で選び、根は選べない。選ぶとパンくずを出して木を閉じ、木を開くのは 1 行だけ', async () => {
+    await openNew()
+
+    fireEvent.click(within(row(1)).getByRole('button', { name: '1 行目のノードを選ぶ' }))
+    const tree = screen.getByRole('list', { name: '1 行目のノード' })
+    expect(within(tree).queryByRole('radio', { name: '蒸留酒' })).not.toBeInTheDocument()
+    expect(within(row(1)).getByRole('button', { name: '1 行目のノードを選ぶ' })).toHaveAttribute('aria-expanded', 'true')
+
+    // 2 行目の木を開くと、1 行目の木は閉じる
+    fireEvent.click(within(row(2)).getByRole('button', { name: '2 行目のノードを選ぶ' }))
+    expect(screen.queryByRole('list', { name: '1 行目のノード' })).not.toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('list', { name: '2 行目のノード' })).getByRole('radio', { name: 'ジン' }))
+
+    expect(within(row(2)).getByText('ノード: ジン')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: '2 行目のノード' })).not.toBeInTheDocument()
+    expect(within(row(2)).getByRole('button', { name: '2 行目のノードを選ぶ' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('TC-128-12: 銘柄の選択肢は、行のノードとその配下の銘柄を「名前(英名)」で出し、銘柄を選ぶとノードを銘柄の所属ノードにする', async () => {
+    await openNew()
+
+    pickNode(1, 'ジン')
+    await within(row(1)).findByRole('option', { name: 'タンカレー(Tanqueray)' })
+    expect(within(brandSelect(1)).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      '',
+      'ビーフィーター(Beefeater)',
+      'タンカレー(Tanqueray)',
+    ])
+    fireEvent.change(brandSelect(1), { target: { value: '9' } })
+
+    expect(within(row(1)).getByText('ノード: ジン / ドライジン')).toBeInTheDocument()
+    await waitFor(() => expect(brandSelect(1)).toBeEnabled())
+    expect(brandSelect(1)).toHaveDisplayValue('タンカレー(Tanqueray)')
+  })
+
+  test('TC-128-13: ノードを木で選び直すと、銘柄を空にする', async () => {
+    await openNew()
+    pickNode(1, 'ジン')
+    await within(row(1)).findByRole('option', { name: 'タンカレー(Tanqueray)' })
+    fireEvent.change(brandSelect(1), { target: { value: '9' } })
+    await waitFor(() => expect(brandSelect(1)).toHaveDisplayValue('タンカレー(Tanqueray)'))
+
+    pickNode(1, 'ウォッカ')
+
+    expect(within(row(1)).getByText('ノード: ウォッカ')).toBeInTheDocument()
+    await waitFor(() => expect(brandSelect(1)).toBeEnabled())
+    expect(brandSelect(1)).toHaveValue('')
+  })
+
+  test('TC-128-14: ベースが空のときに、空の 1 行目のノードを選ぶとベースにも入れる。2 行目・ノードのある 1 行目を選んでも入れない', async () => {
+    await openNew()
+
+    pickNode(2, 'ミント')
+    expect(baseText()).toBe('選んでいるベース: (未選択)')
+
+    pickNode(1, 'ウォッカ')
+    expect(baseText()).toBe('選んでいるベース: ウォッカ')
+
+    pickNode(1, 'ジン')
+    expect(baseText()).toBe('選んでいるベース: ウォッカ')
+    expect(within(row(1)).getByText('ノード: ジン')).toBeInTheDocument()
+  })
+
+  test('TC-128-15: ベースを空から選ぶと、空の 1 行目にも入れる。ベースを選び直したとき・1 行目にノードがあるときは 1 行目を変えない', async () => {
+    await openNew()
+
+    pickBase('ジン')
+    expect(within(row(1)).getByText('ノード: ジン')).toBeInTheDocument()
+    pickBase('ウォッカ')
+    expect(within(row(1)).getByText('ノード: ジン')).toBeInTheDocument()
+    expect(baseText()).toBe('選んでいるベース: ウォッカ')
+  })
+
+  test('TC-128-24: 2 行目に入れてから 1 行目へ上げ、空のベースを選んでも、1 行目のノードは変えない', async () => {
+    await openNew()
+    pickNode(2, 'ミント')
+    fireEvent.click(within(row(2)).getByRole('button', { name: '2 行目を上へ' }))
+    expect(within(row(1)).getByText('ノード: ミント')).toBeInTheDocument()
+
+    pickBase('ウォッカ')
+
+    expect(within(row(1)).getByText('ノード: ミント')).toBeInTheDocument()
+    expect(within(row(2)).getByText('ノード: (未選択)')).toBeInTheDocument()
+    expect(baseText()).toBe('選んでいるベース: ウォッカ')
+  })
+
+  test('TC-128-16: 並べ替え・消すと、その並びで送る。先頭の「上へ」と末尾の「下へ」は押せない', async () => {
+    await openNew()
+    mockDuplicates()
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    const sent = captureSave('post', () => jsonResponse(savedBody({ ...COCKTAIL, is_draft: true }), 201))
+    fillRequired()
+    pickNode(1, 'ウォッカ')
+    amount(1, '45')
+    pickNode(2, 'ミント')
+    amount(2, '適量')
+    fireEvent.click(within(row(2)).getByRole('checkbox', { name: '任意' }))
+    fireEvent.click(within(ingredients()).getByRole('button', { name: '行を足す' }))
+    pickNode(3, 'ジン')
+    amount(3, '10')
+
+    expect(within(row(1)).getByRole('button', { name: '1 行目を上へ' })).toBeDisabled()
+    expect(within(row(3)).getByRole('button', { name: '3 行目を下へ' })).toBeDisabled()
+    fireEvent.click(within(row(3)).getByRole('button', { name: '3 行目を上へ' }))
+    expect(within(row(2)).getByText('ノード: ジン')).toBeInTheDocument()
+    expect(within(row(3)).getByText('ノード: ミント')).toBeInTheDocument()
+    fireEvent.click(within(row(2)).getByRole('button', { name: '2 行目を消す' }))
+    expect(within(row(2)).getByText('ノード: ミント')).toBeInTheDocument()
+    expect(within(ingredients()).queryByRole('group', { name: '3 行目' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails?status=draft'))
+    const body = sent()!
+    expect(body.get('base_category_id')).toBe('4')
+    const keys: string[] = []
+    body.forEach((_, key) => keys.push(key))
+    expect(keys.filter((key) => key.startsWith('ingredients'))).toEqual([
+      'ingredients[0][category_id]',
+      'ingredients[0][amount]',
+      'ingredients[0][is_optional]',
+      'ingredients[1][category_id]',
+      'ingredients[1][amount]',
+      'ingredients[1][is_optional]',
+    ])
+    expect(body.get('ingredients[0][category_id]')).toBe('4')
+    expect(body.get('ingredients[0][amount]')).toBe('45')
+    expect(body.get('ingredients[0][is_optional]')).toBe('0')
+    expect(body.get('ingredients[1][category_id]')).toBe('6')
+    expect(body.get('ingredients[1][amount]')).toBe('適量')
+    expect(body.get('ingredients[1][is_optional]')).toBe('1')
+  })
+
+  test('TC-128-17: 同じノード・同じ銘柄(どちらも銘柄なし)の行が 2 つあると、送らずに「レシピが重複しています！」を材料の欄に出し、行を直すと消す', async () => {
+    await openNew()
+    pickBase('ウォッカ')
+    pickNode(2, 'ウォッカ')
+
+    fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした。入力を確かめてください。')
+    expect(within(ingredients()).getByText('レシピが重複しています！')).toBeInTheDocument()
+    expect(savePosts()).toHaveLength(0)
+    expect(currentUrl()).toBe('/admin/cocktails/new')
+
+    pickNode(2, 'ミント')
+    expect(within(ingredients()).queryByText('レシピが重複しています！')).not.toBeInTheDocument()
+  })
+
+  test('TC-128-18: ベースが、どの行のノードとも同じでなく祖先でもなければ、送らずに「ベースが見つかりません！」を出す', async () => {
+    await openNew()
+    pickNode(1, 'ウォッカ')
+    pickNode(2, 'ミント')
+    // 1 行目でベースに入ったウォッカを、行に無いジンに選び直す
+    pickBase('ジン')
+
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存できませんでした。入力を確かめてください。')
+    expect(within(ingredients()).getByText('ベースが見つかりません！')).toBeInTheDocument()
+    expect(within(ingredients()).queryByText('レシピが重複しています！')).not.toBeInTheDocument()
+    expect(savePosts()).toHaveLength(0)
+  })
+
+  test('TC-128-19: 422 の行のメッセージは、その行の欄の下に出し、並べ替えても行に付いたまま動き、欄を直すと消す', async () => {
+    await openNew()
+    mockDuplicates()
+    captureSave('post', () =>
+      jsonResponse({ message: 'invalid', errors: { 'ingredients.1.amount': ['材料 2 行目の量を入力してください。'] } }, 422),
+    )
+    pickNode(1, 'ウォッカ')
+    amount(1, '45')
+    pickNode(2, 'ミント')
+
+    fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+
+    const mintAmount = () => within(row(2)).getByLabelText('量')
+    await waitFor(() => expect(mintAmount()).toHaveAccessibleDescription('材料 2 行目の量を入力してください。'))
+    expect(within(row(1)).getByLabelText('量')).toHaveAttribute('aria-invalid', 'false')
+
+    fireEvent.click(within(row(2)).getByRole('button', { name: '2 行目を上へ' }))
+    expect(within(row(1)).getByText('ノード: ミント')).toBeInTheDocument()
+    expect(within(row(1)).getByLabelText('量')).toHaveAccessibleDescription('材料 2 行目の量を入力してください。')
+    expect(within(row(2)).getByLabelText('量')).toHaveAttribute('aria-invalid', 'false')
+
+    amount(1, '適量')
+    expect(within(row(1)).getByLabelText('量')).toHaveAttribute('aria-invalid', 'false')
+    expect(within(row(1)).getByLabelText('量')).toHaveAccessibleDescription('')
+  })
+
+  test('TC-128-30: 1 行目のノードの 422 は、ベースを空から選んで 1 行目にノードが入ったときにも消える', async () => {
+    await openNew()
+    captureSave('post', () =>
+      jsonResponse({ message: 'invalid', errors: { 'ingredients.0.category_id': ['材料 1 行目のノードを入力してください。'] } }, 422),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+
+    const nodeButton = () => within(row(1)).getByRole('button', { name: '1 行目のノードを選ぶ' })
+    await waitFor(() => expect(nodeButton()).toHaveAccessibleDescription('材料 1 行目のノードを入力してください。'))
+
+    pickBase('ウォッカ')
+
+    expect(within(row(1)).getByText('ノード: ウォッカ')).toBeInTheDocument()
+    expect(nodeButton()).toHaveAccessibleDescription('')
+  })
+
+  test('TC-128-20: 新規で材料を 2 行入れて保存すると、行の並びのまま ingredients[行][項目] でノード・銘柄・量・任意を送る', async () => {
+    await openNew()
+    mockDuplicates()
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    const sent = captureSave('post', () => jsonResponse(savedBody(COCKTAIL), 201))
+    fillRequired()
+    pickNode(1, 'ジン')
+    await within(row(1)).findByRole('option', { name: 'タンカレー(Tanqueray)' })
+    fireEvent.change(brandSelect(1), { target: { value: '9' } })
+    amount(1, '45')
+    pickNode(2, 'ミント')
+    amount(2, '適量')
+    fireEvent.click(within(row(2)).getByRole('checkbox', { name: '任意' }))
+    fireEvent.change(screen.getByLabelText('説明'), { target: { value: '辛口。' } })
+
+    fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    const body = sent()!
+    // 1 行目のノード(ジン)を選んだときに、空のベースにも入った
+    expect(body.get('base_category_id')).toBe('2')
+    expect(body.get('ingredients[0][category_id]')).toBe('3')
+    expect(body.get('ingredients[0][brand_id]')).toBe('9')
+    expect(body.get('ingredients[0][amount]')).toBe('45')
+    expect(body.get('ingredients[0][is_optional]')).toBe('0')
+    expect(body.get('ingredients[1][category_id]')).toBe('6')
+    expect(body.has('ingredients[1][brand_id]')).toBe(false)
+    expect(body.get('ingredients[1][amount]')).toBe('適量')
+    expect(body.get('ingredients[1][is_optional]')).toBe('1')
+  })
+
+  test('TC-128-21: 編集で開くと、今の材料を並びのまま行に出す(ノードのパンくず・銘柄・量・任意)', async () => {
+    await openEdit()
+
+    expect(within(row(1)).getByText('ノード: ジン / ドライジン')).toBeInTheDocument()
+    await waitFor(() => expect(brandSelect(1)).toHaveDisplayValue('ビーフィーター(Beefeater)'))
+    expect(within(row(1)).getByLabelText('量')).toHaveValue('45ml')
+    expect(within(row(1)).getByRole('checkbox', { name: '任意' })).not.toBeChecked()
+    expect(within(row(2)).getByText('ノード: ミント')).toBeInTheDocument()
+    await waitFor(() => expect(brandSelect(2)).toBeEnabled())
+    expect(brandSelect(2)).toHaveValue('')
+    expect(within(row(2)).getByLabelText('量')).toHaveValue('適量')
+    expect(within(row(2)).getByRole('checkbox', { name: '任意' })).toBeChecked()
+    expect(within(ingredients()).queryByRole('group', { name: '3 行目' })).not.toBeInTheDocument()
+  })
+
+  test('TC-128-22: 今の銘柄が行のノードの配下に無いときは、そのことを出す選択肢で出す', async () => {
+    await openEdit({
+      cocktail: {
+        ...COCKTAIL,
+        ingredients: [
+          { category_id: 4, brand_id: 8, amount: '45ml', is_optional: false },
+          { category_id: 6, brand_id: null, amount: '適量', is_optional: true },
+        ],
+      },
+    })
+
+    await waitFor(() => expect(brandSelect(1)).toBeEnabled())
+    expect(brandSelect(1)).toHaveValue('8')
+    expect(brandSelect(1)).toHaveDisplayValue('(このノードの配下に無い銘柄)')
+  })
+
+  test('TC-128-23: 銘柄の選択肢を読み込めなければそのことを出し、「銘柄を読み込み直す」で読み直す', async () => {
+    await openNew()
+    let failures = 1
+    mockApiHandler('get', '/categories/{category}', () => {
+      if (failures > 0) {
+        failures -= 1
+        return jsonResponse({ message: 'Server Error' }, 500)
+      }
+      return jsonResponse(categoryDetail(2, [BEEFEATER]), 200)
+    })
+
+    pickNode(1, 'ジン')
+
+    expect(await within(row(1)).findByText('銘柄を読み込めませんでした。')).toBeInTheDocument()
+    expect(brandSelect(1)).toBeDisabled()
+    fireEvent.click(within(row(1)).getByRole('button', { name: '銘柄を読み込み直す' }))
+    expect(await within(row(1)).findByRole('option', { name: 'ビーフィーター(Beefeater)' })).toBeInTheDocument()
+    expect(within(row(1)).queryByText('銘柄を読み込めませんでした。')).not.toBeInTheDocument()
   })
 })
