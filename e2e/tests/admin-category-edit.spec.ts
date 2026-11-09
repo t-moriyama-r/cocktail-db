@@ -188,7 +188,7 @@ test('TC-674-15: 同じ親の下に既にある英名を入れて知らせが出
   await eng.fill(nameEng)
   await eng.blur()
   await expect(eng).toHaveAccessibleDescription(DUPLICATE)
-  await page.getByLabel('説明').fill('E2E で作ったノード')
+  await page.getByLabel('説明', { exact: true }).fill('E2E で作ったノード')
   await page.getByRole('button', { name: '送信' }).click()
 
   await expect(page).toHaveURL(/\/admin\/categories$/)

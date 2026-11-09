@@ -91,7 +91,7 @@ async function createNode(page: Page, name: string, parent: string | null, role?
   }
   await page.getByLabel('名前', { exact: true }).fill(name)
   await page.getByLabel('英名', { exact: true }).fill(englishName(name))
-  await page.getByLabel('説明').fill('E2E で作ったノード')
+  await page.getByLabel('説明', { exact: true }).fill('E2E で作ったノード')
   await page.getByRole('button', { name: '送信' }).click()
   await expect(page).toHaveURL(/\/admin\/categories$/)
   await expect(page.getByRole('status').filter({ hasText: '保存しました' })).toHaveText(`「${name}」を保存しました`)
