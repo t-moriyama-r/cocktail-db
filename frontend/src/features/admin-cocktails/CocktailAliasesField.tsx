@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import type { CocktailFieldErrors } from './cocktailApi'
-import { FieldErrors, TextField } from './CocktailFormFields'
+import { FieldErrors, TextField } from '../../components/AdminForm/AdminField'
 import type { CocktailAliasRow } from './cocktailFormValues'
 import styles from './CocktailForm.module.css'
 

@@ -86,7 +86,10 @@
   white-space: pre-wrap;
 }
 
+/* 欄(AdminField)の基準の幅。横に並べる欄が多いので、銘柄・ノードのフォーム(14em)より狭くする */
 .form {
+  --admin-field-basis: 10em;
+
   display: grid;
   gap: var(--space-4);
   min-width: 0;
@@ -121,44 +124,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-}
-
-.field {
-  display: grid;
-  flex: 1 1 10em;
-  gap: var(--space-1);
-  min-width: 0;
-  align-content: start;
-}
-
-/* 開始位置のように数文字しか入れない欄 */
-.narrow {
-  flex: 0 0 5em;
-}
-
-.label {
-  font-weight: bold;
-}
-
-/* 狭い幅でもはみ出さないよう、欄の幅は親に合わせて縮める */
-.input,
-.textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font: inherit;
-}
-
-.textarea {
-  resize: vertical;
-}
-
-.input[aria-invalid='true'],
-.textarea[aria-invalid='true'] {
-  border-color: var(--color-danger);
 }
 
 /* 外の検索サイトへのリンク。旧と同じく 2 つを横に並べる */
@@ -264,14 +229,6 @@
   background: var(--color-disabled-bg);
   color: var(--color-text-muted);
   cursor: wait;
-}
-
-.errors {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--color-danger);
-  overflow-wrap: anywhere;
 }
 
 /* 保存のボタンを左に、削除を右に置く(旧と同じ) */

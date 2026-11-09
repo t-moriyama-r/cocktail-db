@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEven
 import type { components, paths } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
+import { Field, FieldErrors, SelectField, TextAreaField, TextField, type SelectOption } from '../../components/AdminForm/AdminField'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import CocktailAliasesField from './CocktailAliasesField'
@@ -15,7 +16,6 @@ import {
   type SaveCocktailResult,
 } from './cocktailApi'
 import { checkIngredientRows } from './checkIngredientRows'
-import { Field, FieldErrors, SelectField, TextField, type SelectOption } from './CocktailFormFields'
 import {
   cocktailWordSearchUrl,
   meaningSearchUrl,
@@ -353,29 +353,21 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
           </div>
         </div>
 
-        <Field label="説明" errors={errors.description}>
-          {(props) => (
-            <textarea
-              {...props}
-              className={styles.textarea}
-              rows={8}
-              value={values.description}
-              onChange={(event) => set('description', event.target.value)}
-            />
-          )}
-        </Field>
+        <TextAreaField
+          label="説明"
+          errors={errors.description}
+          rows={8}
+          value={values.description}
+          onChange={(value) => set('description', value)}
+        />
 
-        <Field label="補足" errors={errors.note}>
-          {(props) => (
-            <textarea
-              {...props}
-              className={styles.textarea}
-              rows={4}
-              value={values.note}
-              onChange={(event) => set('note', event.target.value)}
-            />
-          )}
-        </Field>
+        <TextAreaField
+          label="補足"
+          errors={errors.note}
+          rows={4}
+          value={values.note}
+          onChange={(value) => set('note', value)}
+        />
 
         <div className={styles.row}>
           <TextField label="YouTube" errors={errors.youtube} value={values.youtube} onChange={(value) => set('youtube', value)} />

@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
-import { FieldErrors, TextField } from './CocktailFormFields'
+import { FieldErrors, TextField } from '../../components/AdminForm/AdminField'
 import IngredientBrandSelect from './IngredientBrandSelect'
 import { MAX_INGREDIENT_ROWS, type CocktailIngredientRow } from './cocktailFormValues'
 import { canAddIngredientRow, type IngredientEdit } from './editIngredients'
