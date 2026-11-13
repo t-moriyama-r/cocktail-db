@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# permission-denials.sh のテスト(TC-455-18〜)。claude-code-action の execution_file を模したファイルを渡して流す。
+# permission-denials.sh のテスト(TC-455-18〜・TC-742-13〜)。claude-code-action の execution_file を模したファイルを渡して流す。
 #
 # 使い方: .github/scripts/tests/permission-denials.test.sh
 
@@ -15,12 +15,34 @@ FAILED=0
 PASSED=0
 
 main() {
-	execution "$(denial Bash '{"command":"gh pr edit 426 --body \"表に行を足す\""}')" "$(denial Write '{"file_path":"/tmp/body.md"}')"
+	execution "$(denial Bash '{"command":"gh pr edit 426 --body \"表に行を足す\""}')" "$(denial Glob '{"pattern":"**/*.md"}')"
 	run
-	expect TC-455-18 'Bash はツールの名前とコマンドを、ほかのツールは名前だけを ::warning:: で出す' \
+	expect TC-455-18 'Bash はツールの名前とコマンドを、ほかのツール(Write・Edit 以外)は名前だけを ::warning:: で出す' \
 		"$(warnings)" "$(printf '%s\n%s' \
 			'::warning title=Claude Code が拒否されたツール::Bash: gh pr edit 426 --body "表に行を足す"' \
-			'::warning title=Claude Code が拒否されたツール::Write')"
+			'::warning title=Claude Code が拒否されたツール::Glob')"
+
+	execution "$(denial Write '{"file_path":"/tmp/body.md","content":"本文"}')" "$(denial Edit '{"file_path":"../issue.md","old_string":"a","new_string":"b"}')"
+	run
+	expect TC-742-13 'Write・Edit は、ツールの名前と書こうとしたファイルのパスを出す(書く中身は出さない)' \
+		"$(warnings)" "$(printf '%s\n%s' \
+			'::warning title=Claude Code が拒否されたツール::Write: /tmp/body.md' \
+			'::warning title=Claude Code が拒否されたツール::Edit: ../issue.md')"
+
+	execution "$(denial Write "{\"file_path\":\"/tmp/$(printf 'a%.0s' $(seq 1 100))\"}")"
+	run
+	expect TC-742-14 'Write・Edit のパスも、Bash と同じく先頭 80 文字に切る' \
+		"$(warnings | sed 's/.*::Write: //' | awk '{ print length($0) }')" 80
+
+	execution "$(denial Edit '{"file_path":"a\n::error::偽のエラー\r\n100%.md"}')"
+	run
+	expect TC-742-15 'パスの改行は空白にし、% は置き換える(ログのワークフローのコマンドとして読まれない)' \
+		"$(warnings)" '::warning title=Claude Code が拒否されたツール::Edit: a ::error::偽のエラー 100%25.md'
+
+	execution "$(denial Write '{}')"
+	run
+	expect TC-742-16 'Write の file_path が無ければ、名前だけを出して成功で終わる' \
+		"$(warnings)|$RC" '::warning title=Claude Code が拒否されたツール::Write|0'
 
 	execution "$(denial Bash "{\"command\":\"echo $(printf 'a%.0s' $(seq 1 100))\"}")"
 	run
