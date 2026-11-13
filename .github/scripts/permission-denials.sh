@@ -6,9 +6,10 @@
 # claude-code-action のログには、拒否された回数(permission_denials_count)しか出ない。何が拒否されたかが分からないと、
 # --allowedTools とプロンプトのどちらを直せばよいか決められない(#426 の resume は 7 回拒否されて何もせずに終わったが、
 # 中身が残っておらず直しようがなかった。#455)。execution_file の結果(type が result のもの)の permission_denials から、
-# ツールの名前と、Bash ならコマンドの先頭を出す。
+# ツールの名前と、Bash ならコマンドの先頭、Write・Edit なら書こうとしたファイルのパス(tool_input.file_path)の先頭を出す
+# (ai-decision-loop.yml で Write を拒否されて何もせずに終わった回に、どこへ書こうとしたかが分からなかった。#742)。
 #
-# コマンドは PR のコメント(外の人も書ける)から作られることがあるので、秘密や長い文を出し過ぎないよう先頭 80 文字に切り、
+# コマンド・パスは PR のコメント(外の人も書ける)から作られることがあるので、秘密や長い文を出し過ぎないよう先頭 80 文字に切り、
 # 改行などをワークフローのコマンドとして読まれないよう ::warning:: の決まりで置き換える。
 # ログに出すだけの手順なので、ファイルが無い・読めないときも警告を出して成功で終わる(後ろの手順を止めない)
 set -euo pipefail
@@ -37,7 +38,10 @@ permission_denials() {
     echo "::warning title=Claude Code が拒否されたツール::$(escape "$line")"
   done < <(jq -r --argjson max "$MAX" '.[]
     | (.tool_name // "(不明)") as $name
-    | (if $name == "Bash" then (.tool_input.command // "" | gsub("[\r\n\t]+"; " ") | .[0:$max]) else "" end) as $cmd
+    | (if $name == "Bash" then .tool_input.command
+       elif $name == "Write" or $name == "Edit" then .tool_input.file_path
+       else null end
+       | if type == "string" then gsub("[\r\n\t]+"; " ") | .[0:$max] else "" end) as $cmd
     | "\($name)\(if $cmd == "" then "" else ": \($cmd)" end)"' <<<"$denials")
   echo "Claude Code が拒否されたツール: $count 件"
 }

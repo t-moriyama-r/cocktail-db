@@ -54,7 +54,7 @@ issue・PR のタイトルの先頭に、対象を示す接頭辞を付ける(�
 
 | ラベル | 付けるもの | 誰がいつ付けるか | 付けると何が起きるか |
 |---|---|---|---|
-| `needs-decision` | 着手する前に、人に決めてもらうことがある issue | issue を作るときに、本文の「判断が要ること」を書いて付ける(issue-breakdown・人)。判断になっていない返信のときは、Actions の Claude Code が付けたままにする | next-issue が選ばない。付けたときに Slack に知らせる(下の「人に頼む」)。リポジトリのオーナーが issue にコメントすると、`ai-decision-loop.yml` の Claude Code が本文に「決まったこと」を書き、このラベルを外す。外れると next-issue が選ぶようになる |
+| `needs-decision` | 着手する前に、人に決めてもらうことがある issue | issue を作るときに、本文の「判断が要ること」を書いて付ける(issue-breakdown・人)。判断になっていない返信のときは、Actions の Claude Code が付けたままにする | next-issue が選ばない。付けたときに Slack に知らせる(下の「人に頼む」)。リポジトリのオーナーが issue にコメントすると、`ai-decision-loop.yml` の Claude Code が本文に「決まったこと」を書き、このラベルを外す。外れると next-issue が選ぶようになる。Claude Code が本文もラベルも変えず、コメントもせずに終わったときは、反映しなかったことを issue にコメントして実行を失敗にする(ラベルは残る。#742) |
 | `later` | 今回の完了に入れない issue | issue を分けるとき・人が後回しにすると決めたとき | next-issue が選ばない。外すと候補に戻る |
 | `priority:high` | 依存の数に関係なく先にやる issue(規約の文書・自動化の仕組みなど) | issue を分けるとき・人 | next-issue が、ほかの並び(待っている issue の数・Epic の順・番号)より先に並べる |
 | `needs-review` | 出来上がりを人が見て承認してからマージする issue(設計書・データの扱いなど) | issue を分けるとき・人 | next-issue は選ぶ(`[要レビュー]` と表示する)。この issue を `Closes #N` で閉じる PR は自動でマージしない。レビューの指摘への対応が終わり、CI が緑でマージできる状態になったら、`ai-auto-merge.yml` が PR に `needs-approval` を付けて、人の承認(マージ)を待つ |
