@@ -314,7 +314,7 @@ it('TC-689-01: .env の値が空の行なら、一覧はどの項目も未設定
         'GA4_MEASUREMENT_ID' => '',
     ], function () {
         // 前提: env() は値の無い行に空の文字を返す
-        expect(array_values(array_unique(config()->array('settings'))))->toBe(['']);
+        expect(array_values(array_unique(array_map('strval', config()->array('settings')))))->toBe(['']);
 
         $response = $this->getJson('/api/admin/settings')->assertOk();
 
