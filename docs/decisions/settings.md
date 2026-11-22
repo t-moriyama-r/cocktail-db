@@ -4,7 +4,7 @@
 
 ## 決まったこと
 
-1. 画面から変えられる項目は、コードの一覧 `App\Support\SettingDefinitions` で定義する(キー・名前・説明・秘密かどうか・検証の規則)。いまの項目は、コードが `Settings` から読んでいる 6 つ
+1. 画面から変えられる項目は、コードの一覧 `App\Support\SettingDefinitions` で定義する(キー・名前・説明・秘密かどうか・検証の規則)。いまの項目は、コードが `Settings` から読んでいる 7 つ
 
    | キー | 秘密 | 形 |
    |---|---|---|
@@ -14,10 +14,12 @@
    | `rakuten.application_id` | ○ | 空白を含まない ASCII、255 文字まで(#72) |
    | `rakuten.access_key` | ○ | 同上(#72) |
    | `rakuten.affiliate_id` | | `amazon.partner_tag` と同じ |
+   | `ga4.measurement_id` | | `G-` に英大文字と数字が続く、30 文字まで(HTML のタグに入る。#59。`docs/decisions/analytics.md`) |
 
    - Credential ID は OAuth の Client ID で、厳密には秘密ではないが、画面に出しても使い道が無いので秘密として扱う。パートナータグと楽天のアフィリエイト ID は公開のリンクに載る値なので、秘密にしない
    - 楽天のアプリ ID は、規約 第5条が他人に知られないよう管理するよう求めているので、アクセスキーと同じく秘密として扱う(#72。`docs/decisions/rakuten-client.md`)
-   - #69 の案にある GA4 の測定 ID・アフィリエイト収集の間隔は、読むコードがまだ無いので載せない。読むコードを作る issue で、`SettingDefinitions` と `config/settings.php` の両方に足す(キーがそろっていることはテストで確かめる)
+   - #69 の案にあるアフィリエイト収集の間隔は、読むコードがまだ無いので載せない。読むコードを作る issue で、`SettingDefinitions` と `config/settings.php` の両方に足す(キーがそろっていることはテストで確かめる)。GA4 の測定 ID は、読むコード(`App\Support\Ga4Tag`)を作った #59 で足した
+   - GA4 の測定 ID は、公開ページの HTML に出る値なので、秘密にしない
    - `APP_KEY`・DB の接続・`APP_URL` は載せない(#69 の 5)
 2. API(`openapi/openapi.json` に出る。どちらもログインが要る)
 

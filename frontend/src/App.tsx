@@ -24,6 +24,7 @@ import DictionaryDetail from './pages/DictionaryDetail'
 import DictionaryIndex from './pages/DictionaryIndex'
 import NameSearchResult from './pages/NameSearchResult'
 import NotFound from './pages/NotFound'
+import Privacy from './pages/Privacy'
 import Top from './pages/Top'
 
 /**
@@ -54,6 +55,8 @@ export default function App() {
         <Route path="/dictionary" element={<DictionaryIndex />} />
         {/* 旧は用語の ID に数字の制限が無く、数字でない ID では API が 422 で何も出さなかった。新は無い ID と同じく 404 の画面(#56) */}
         <Route path="/dictionary/:id" element={<RequireNumericId element={<DictionaryDetail />} />} />
+        {/* アクセス解析(GA4)を使っていることを書くページ(#59。旧に無い)。フッターからリンクする */}
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="/admin/login" element={<AdminLogin />} />
