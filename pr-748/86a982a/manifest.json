@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "before": "0af5242041faf122b67ff4d5a23e17ccbbaa66e2",
+  "after": "86a982a237410d6c910084532b4685fb65012877",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-745-01",
+        "TC-745-02"
+      ],
+      "note": "修正前は何も出ず、修正後は足した手順と、以降の手順の条件が steps.branch.outputs.run に替わったことが出る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    }
+  ]
+}
