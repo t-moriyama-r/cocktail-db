@@ -19,7 +19,7 @@ test('TC-59-16: 測定 ID が未設定なら、GA4 のタグ(gtag.js)を読み�
   const googleRequests: string[] = []
   page.on('request', (request) => {
     const host = new URL(request.url()).hostname
-    if (host.endsWith('googletagmanager.com') || host.endsWith('google-analytics.com')) googleRequests.push(request.url())
+    if (/(^|\.)(googletagmanager|google-analytics)\.com$/.test(host)) googleRequests.push(request.url())
   })
 
   await page.goto('/privacy')
