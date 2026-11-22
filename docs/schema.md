@@ -30,6 +30,7 @@
 | `users` | 管理者 | `users` | 旧 ID のまま | Laravel の雛形にある |
 | `admin_login_links` | 非常用のログイン URL の発行の記録 | 無し(新設) | — | #115 |
 | `passkeys` | 管理画面にログインするパスキー | 無し(新設) | — | #311 |
+| `idempotency_keys` | 管理画面の保存の冪等キーと、最初の応答 | 無し(新設) | — | #657 |
 
 ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にすると ID がぶつかるので、ノードだけ振り直して `legacy_id_maps` に残す。カクテル・銘柄は URL(`/detail/cocktail/{id}`・`/detail/brand/{id}`)を変えないため旧 ID のまま入れ、カクテルが指す技法・氷・用語辞典(`method_id`・`ice_id`・`glass_dictionary_id`)も旧 ID のまま入れる。旧 ID のまま入れた表も、`legacy_id_maps` に同じ値の対応を入れる(技法・氷・辞典の分類・用語辞典・ユーザーは #33、カクテル・銘柄は #30・#31)。旧に作成・更新日時の列が無い表(用語辞典・言い換え・スキップ語など)は、取り込みで `created_at`・`updated_at` を null にする。旧 ID のまま入れた表は、移行の後の自動採番が旧の最大値の次から始まる。
 
@@ -387,6 +388,24 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `credential` | `json` | | 公開鍵・署名の回数・AAGUID など(webauthn-lib の `CredentialRecord` の JSON)。MariaDB では `longtext` になる |
 | `last_used_at` | `timestamp` | ○ | 最後にログインに使った時刻。登録しただけなら null |
 | `created_at`・`updated_at` | `timestamps()` | ○ | `created_at` が登録した日時 |
+
+
+### `idempotency_keys`(新設。#657)
+
+管理画面の保存の再送で同じ行を 2 件作らないよう、送信に付いた `Idempotency-Key` と、最初に成功した送信の応答を残す(決まりは [admin-idempotency.md](decisions/admin-idempotency.md))。書くのはミドルウェア `idempotent` だけ。行は、保存と同じトランザクションの中で先に作り、成功した応答を書いてからコミットする(成功しなかった送信は、保存ごとロールバックして残さない)。
+
+| 列 | 型 | null | 中身 |
+|---|---|---|---|
+| `id` | `id()` | | |
+| `user_id` | `foreignId` → `users` | | 送った管理者。キーは管理者ごとに数える。ユーザーを消すと消える(`cascadeOnDelete`) |
+| `key` | `char(36)` | | 送られた `Idempotency-Key`(UUID) |
+| `fingerprint` | `char(64)` | | 送信の中身(メソッド・経路・入力。画像は中身のハッシュ)の SHA-256。同じキーで違う中身が来たら 422 |
+| `response_status` | `unsignedSmallInteger` | ○ | 最初に成功した送信のステータス。保存が終わるまで(コミットの前)だけ null |
+| `response_content_type` | `string(255)` | ○ | その応答の `Content-Type` |
+| `response_body` | `longText` | ○ | その応答の本文。保存が終わるまで(コミットの前)だけ null |
+| `created_at`・`updated_at` | `timestamps()` | ○ | |
+
+インデックス: (`user_id`, `key`) に unique。古い行はまだ消さない(どれだけ残すかは別の issue で決める。[admin-idempotency.md](decisions/admin-idempotency.md) の「残り」)。
 
 ## 説明文の参照の記法
 
