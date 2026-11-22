@@ -179,7 +179,7 @@ it('TC-657-08: 1 回目の後に銘柄を書き換えても、再送は 1 回目
     $headers = [Idempotent::HEADER => IDEMPOTENCY_KEY];
 
     $first = $this->postJson('/api/admin/brands', idempotencyBrandInput($category), $headers)->assertCreated();
-    $brand = Brand::query()->findOrFail($first->json('data.id'));
+    $brand = Brand::query()->where('id', $first->json('data.id'))->firstOrFail();
     $brand->update(['name' => '書き換えた名前']);
 
     $this->postJson('/api/admin/brands', idempotencyBrandInput($category), $headers)
