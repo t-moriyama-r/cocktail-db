@@ -25,8 +25,8 @@ export type AdminMenuItem = {
 export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [
   { label: 'カテゴリ木', path: ADMIN_CATEGORIES_PATH },
   { label: '銘柄', path: ADMIN_BRANDS_PATH },
-  { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
   { label: 'カクテル', path: ADMIN_COCKTAILS_PATH },
+  { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
   { label: '言い換え・スキップ語', path: ADMIN_PARAPHRASES_PATH },
   { label: '設定', path: '/admin/settings' },
   { label: 'パスキー', path: ADMIN_PASSKEYS_PATH },
