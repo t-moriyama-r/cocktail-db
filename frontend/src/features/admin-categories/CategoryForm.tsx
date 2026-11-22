@@ -18,7 +18,7 @@ type CategoryRole = components['schemas']['CategoryRole']
 
 /**
  * 親の欄。新規は木から選ぶか「親なし」(根を作る。#310)を選び、編集は今の親(根から親までの名前)を出すだけにする
- * (フォームの親の欄で選び直すのは #675 で足す。移すのは編集画面の下の「親の付け替え」の欄。#125)
+ * (親は編集画面の下の「親の付け替え」の欄(#125)で移す。フォームの親の欄では選び直さない。#675)
  */
 export type ParentField =
   | { kind: 'select'; tree: readonly AdminTreeItem[] }

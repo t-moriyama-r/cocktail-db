@@ -368,7 +368,7 @@ const nodeIdOf = (page: Page): number => Number(new URL(page.url()).pathname.spl
 
 const publicBreadcrumb = (page: Page) => page.getByRole('navigation', { name: 'パンくず' })
 
-test('TC-125-13: ノードを別の親の下へ移すと、確かめてから移し、公開側のパンくずが新しい親までになる', async ({ page, baseURL }) => {
+test('TC-125-13: ノードを別の親の下へ移すと、確かめてから移し、カテゴリ木・管理の編集画面・公開側のパンくずで新しい親の下に出る', async ({ page, baseURL }) => {
   await login(page, baseURL!)
   const parentName = await createNode(page, 'move-parent')
   const name = await createNode(page, 'move-child')
@@ -400,6 +400,21 @@ test('TC-125-13: ノードを別の親の下へ移すと、確かめてから移
   await expect(page.getByRole('status').filter({ hasText: '移しました' })).toHaveText(
     `「${name}」を「その他 / ミント / ${parentName}」の下へ移しました`,
   )
+  // カテゴリ木の画面(移した後に戻った画面)で新しい親を開くと、移したノードがその下に出る。
+  // 木は根だけを開いて出るので、ミントと新しい親を順に開く。新しい親を開く前は出ない(ミントの直下には無い)
+  const adminTree = page.getByRole('list', { name: 'カテゴリ木' })
+  await adminTree.getByRole('button', { name: 'ミントを開く', exact: true }).click()
+  await expect(adminTree.getByRole('radio', { name: parentName, exact: true })).toBeVisible()
+  await expect(adminTree.getByRole('radio', { name, exact: true })).toHaveCount(0)
+  await adminTree.getByRole('button', { name: `${parentName}を開く`, exact: true }).click()
+  await expect(adminTree.getByRole('radio', { name, exact: true })).toBeVisible()
+
+  // 管理の編集画面を開き直すと、フォームの親の表示と付け替えの欄の今の親が、新しい親までになる
+  await page.goto(`/admin/categories/${id}`)
+  await expect(page.getByLabel('名前', { exact: true })).toHaveValue(name)
+  await expect(page.getByText(`その他 / ミント / ${parentName}`, { exact: true })).toBeVisible()
+  await expect(move.getByText(`今の親: その他 / ミント / ${parentName}`, { exact: true })).toBeVisible()
+
   await page.goto(`/category/${id}`)
   await expect(publicBreadcrumb(page)).toHaveText(`その他 / ミント / ${parentName}`)
 })
