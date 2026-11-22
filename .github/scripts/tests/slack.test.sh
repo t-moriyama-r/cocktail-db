@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# slack-post.sh・slack-mark-done.sh のテスト(TC-221-01〜)。curl と gh を、決まった JSON を返す偽物に差し替えて流す。
+# slack-post.sh・slack-mark-done.sh のテスト(TC-221-01〜。同じ頼みを 2 回送らないのは TC-577-xx)。curl と gh を、決まった JSON を返す偽物に差し替えて流す。
 # Slack にも GitHub にも触らない。
 #
 # 使い方: .github/scripts/tests/slack.test.sh
@@ -17,6 +17,9 @@ FAILED=0
 PASSED=0
 
 REPO=owner/app
+# 頼むコメントの URL
+C1=https://github.com/owner/app/pull/7#issuecomment-1
+C2=https://github.com/owner/app/pull/7#issuecomment-2
 
 main() {
 	setup_fakes
@@ -41,6 +44,56 @@ main() {
 	echo '{"ok":false,"error":"channel_not_found"}' >"$FAKE/res/chat.postMessage.json"
 	run_post bot '{"text":"hi"}' >/dev/null
 	expect TC-221-04 'Slack が ok: false を返したら失敗で終わる' "$?" 1
+
+	# --- slack-post.sh: 同じ頼みを 2 回送らない(#577) ---
+	reset
+	history ''
+	SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-human "$C1")" >/dev/null
+	# 1 回目に送ったものを、2 回目の回が DM の履歴で読む
+	history "$(sent chat.postMessage '. + {ts: "300"} | del(.channel) | tojson')"
+	out=$(SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-human "$C1")")
+	expect TC-577-01 'ほかのワークフローが送った頼みと同じコメントで呼び直されたら、2 回目は送らず、成功で終わる' \
+		"$?:$(calls | grep -c chat.postMessage):$(grep -c '送らなかった' <<<"$out")" '0:1:1'
+
+	reset
+	history "$(ask 100 7 needs-human | with_ask "$C1")"
+	SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-human "$C2")" >/dev/null
+	expect TC-577-02 '頼むコメントが新しくなっていれば(この回の Claude Code が頼み直した)、送る' \
+		"$(sent chat.postMessage '.metadata.event_payload.ask')" "$C2"
+
+	reset
+	history "$(done_msg 100 7 needs-human | with_ask "$C1")"
+	SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-human "$C1")" >/dev/null
+	expect TC-577-03 '同じコメントでも、前の通知が「済」になっていれば送る' "$(calls | grep -c chat.postMessage)" 1
+
+	reset
+	history "$(ask 100 7 needs-human | with_ask "$C1"),$(ask 200 8 needs-human | with_ask "$C1"),$(ask 300 7 needs-human repo/other | with_ask "$C1")"
+	SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-manual "$C1")" >/dev/null
+	expect TC-577-04 '別のラベル・別の番号・別のリポジトリの通知は、同じ頼みとみなさない' "$(calls | grep -c chat.postMessage)" 1
+
+	reset
+	history "$(ask 100 7 needs-human | with_ask "$C1")"
+	run_post bot "$(ask_payload 7 needs-human "$C1")" >/dev/null
+	expect TC-577-05 'SKIP_SAME_ASK が無ければ(人がラベルを付けた)、履歴を読まずに送る' \
+		"$(calls | grep -c conversations.history):$(calls | grep -c chat.postMessage)" '0:1'
+
+	reset
+	SKIP_SAME_ASK=true run_post bot '{"text":"hi","metadata":{"event_type":"ai_dev_ask","event_payload":{"repo":"owner/app","number":"7","label":"needs-human"}}}' >/dev/null
+	expect TC-577-06 '頼むコメントの URL が無い通知(前の形・ほかの通知)は、履歴を読まずに送る' \
+		"$(calls | grep -c conversations.history):$(calls | grep -c chat.postMessage)" '0:1'
+
+	reset
+	echo '{"ok":false,"error":"missing_scope"}' >"$FAKE/res/conversations.history.json"
+	out=$(SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-human "$C1")" 2>&1)
+	expect TC-577-07 '履歴を読めなければ、警告を出して送る(知らせ漏れにしない)' \
+		"$?:$(calls | grep -c chat.postMessage):$(grep -c '::warning::' <<<"$out")" '0:1:2'
+
+	reset
+	echo '{"ok":true,"messages":[],"response_metadata":{"next_cursor":"p2"}}' >"$FAKE/res/conversations.history.json"
+	echo "{\"ok\":true,\"messages\":[$(ask 100 7 needs-human | with_ask "$C1")]}" >"$FAKE/res/conversations.history.p2.json"
+	SKIP_SAME_ASK=true run_post bot "$(ask_payload 7 needs-human "$C1")" >/dev/null
+	expect TC-577-08 '同じ頼みの通知が 2 ページ目にあっても見つけて、送らない' \
+		"$(calls | grep -c conversations.history):$(calls | grep -c chat.postMessage)" '2:0'
 
 	# --- slack-mark-done.sh ---
 	reset
@@ -189,9 +242,13 @@ case "$url" in
 	https://hooks.*) method=hooks ;;
 	*) method=${url##*/} ;;
 esac
+# 履歴の 2 ページ目以降は、cursor=<値> ごとの応答を置く(conversations.history.<値>.json)
+cursor=""
+for a in "$@"; do case "$a" in cursor=?*) cursor=${a#cursor=} ;; esac; done
 echo "curl $method" >>"$FAKE/calls"
 [ -n "$body" ] && printf '%s\n' "$body" >>"$FAKE/body.$method"
-if [ -f "$FAKE/res/$method.json" ]; then cat "$FAKE/res/$method.json"; else echo '{"ok":true}'; fi
+if [ -n "$cursor" ] && [ -f "$FAKE/res/$method.$cursor.json" ]; then cat "$FAKE/res/$method.$cursor.json"
+elif [ -f "$FAKE/res/$method.json" ]; then cat "$FAKE/res/$method.json"; else echo '{"ok":true}'; fi
 SH
 	cat >"$FAKE/bin/gh" <<'SH'
 #!/usr/bin/env bash
@@ -243,6 +300,18 @@ ask() {
 
 done_msg() {
 	ask "$@" | sed 's/"ai_dev_ask"/"ai_dev_done"/'
+}
+
+# notify-needs-human.yml が送る形の頼む通知(頼むコメントの URL 付き)
+ask_payload() {
+	jq -cn --arg repo "$REPO" --arg number "$1" --arg label "$2" --arg ask "$3" \
+		'{text: "ask \($number)", unfurl_links: false,
+			metadata: {event_type: "ai_dev_ask", event_payload: {repo: $repo, number: $number, label: $label, ask: $ask}}}'
+}
+
+# 標準入力のメッセージに、頼むコメントの URL を足す
+with_ask() {
+	jq -c --arg ask "$1" '.metadata.event_payload.ask = $ask'
 }
 
 # 標準入力のメッセージの本文を差し替える
