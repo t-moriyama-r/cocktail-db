@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Storage;
 use Tests\Support\LegacyFixture;
 use Tests\Support\LegacyImportCommand;
 use Tests\Support\LegacyNodeMap;
-use Tests\TestCase;
 
 // legacy:import で、ミドル 58(グリーン)の有名な銘柄 138(グリーン バナナ)を、親のカテゴリ 94 の直下からグリーンの下へ移す
 // (#752。docs/migration-anomalies.md の 15)。旧 DB を使うので db グループ
