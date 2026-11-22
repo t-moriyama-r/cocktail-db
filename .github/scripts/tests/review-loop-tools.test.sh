@@ -34,6 +34,38 @@ Bash(gh pr edit ${{ env.PR }} --add-label needs-local)
 Bash(gh pr edit ${{ env.PR }} --add-label needs-manual)
 Bash(gh pr edit ${{ env.PR }} --remove-label ai-in-actions)
 Bash(gh pr edit ${{ env.PR }} --remove-label needs-approval)'
+# Claude Code に許す git のコマンド(この形のままだけを許す。git config:*・git <alias>:* を許すと、alias の !… でどんなコマンドも動かせる)
+ALLOWED_GIT='Bash(git add:*)
+Bash(git checkout --ours:*)
+Bash(git checkout --theirs:*)
+Bash(git commit:*)
+Bash(git diff -- *)
+Bash(git diff --cached -- *)
+Bash(git diff --cached --name-only)
+Bash(git diff --cached --stat)
+Bash(git diff --cached)
+Bash(git diff --check)
+Bash(git diff --name-only)
+Bash(git diff --stat)
+Bash(git diff HEAD -- *)
+Bash(git diff HEAD)
+Bash(git diff)
+Bash(git log --oneline -30 -- *)
+Bash(git log --oneline -30)
+Bash(git log -p -5 -- *)
+Bash(git ls-files:*)
+Bash(git merge:*)
+Bash(git mv:*)
+Bash(git push origin HEAD)
+Bash(git push origin HEAD:${{ steps.pr.outputs.head }})
+Bash(git push)
+Bash(git restore:*)
+Bash(git rev-parse:*)
+Bash(git rm:*)
+Bash(git show --stat HEAD)
+Bash(git show HEAD -- *)
+Bash(git show HEAD)
+Bash(git status:*)'
 AGENT_WRITE='Bash(bash ${{ runner.temp }}/ai-dev/agent-write.sh:*)'
 # Bash 以外に許すツール
 ALLOWED_OTHER='Read
@@ -61,12 +93,22 @@ main() {
 	expect TC-507-06 'agent-write.sh が呼ぶ gh api は、GraphQL(返信・解決・スレッドの PR の確かめ)と、対象の PR の読み取り・本文の PATCH だけ' \
 		"$(gh_api_calls "$AGENT_WRITE_SH")" '-X PATCH repos/$REPO/pulls/$PR|-X PATCH repos/$REPO/pulls/$PR|graphql|graphql|graphql|repos/$REPO/pulls/$PR'
 
+	expect TC-507-08 'agent-write.sh の GraphQL の操作は、スレッドへの返信と解決だけ(mergePullRequest などが無い)' \
+		"$(graphql_ops "$AGENT_WRITE_SH")" 'addPullRequestReviewThreadReply|resolveReviewThread'
+
 	# 確かめ方が空振りしていないこと(広げた形を書き足すと、上の確かめで見つかること)
 	local widened="$WORK/widened.yml"
 	sed -e 's#--allowedTools "Read,#--allowedTools "Read,Bash(gh api:*),Bash(gh pr merge ${{ env.PR }}:*),Bash(gh pr:*),Bash(curl:*),#' "$WORKFLOW" >"$widened"
 	expect TC-507-07 'gh api・gh pr merge・gh pr:*・curl を足した形は、resume・review のどちらでも見つかる' \
 		"$(entries "$widened" resume review | grep -c '^Bash(gh api')|$(entries "$widened" resume review | grep -v '^Bash(git merge:\*)$' | grep -ci 'merge')|$(bad_entries "$widened" resume | tr '\n' ' ')" \
 		'2|2|Bash(gh api:*) Bash(gh pr merge ${{ env.PR }}:*) Bash(gh pr:*) Bash(curl:*) '
+
+	local aliased="$WORK/aliased.yml" merging="$WORK/merging.sh"
+	sed -e 's#--allowedTools "Read,#--allowedTools "Read,Bash(git config:*),Bash(git publish:*),#' "$WORKFLOW" >"$aliased"
+	sed -e 's/resolveReviewThread(input/mergePullRequest(input/' "$AGENT_WRITE_SH" >"$merging"
+	expect TC-507-09 'git config・git publish を足した形と、GraphQL を mergePullRequest に替えた形は見つかる' \
+		"$(bad_entries "$aliased" resume | tr '\n' ' ')|$(graphql_ops "$merging")" \
+		'Bash(git config:*) Bash(git publish:*) |addPullRequestReviewThreadReply|mergePullRequest'
 
 	echo "passed: $PASSED, failed: $FAILED"
 	[[ $FAILED -eq 0 ]]
@@ -98,8 +140,7 @@ bad_entries() {
 	local e
 	while IFS= read -r e; do
 		case "$e" in
-		'Bash(git:'* | 'Bash(git -'* | 'Bash(git *'*) echo "$e" ;; # git:* などは -c alias.x='!…' でどんなコマンドも動かせる
-		'Bash(git '*) ;;
+		'Bash(git'*) grep -qxF -- "$e" <<<"$ALLOWED_GIT" || echo "$e" ;; # git:*・git config:* などは alias.x='!…' でどんなコマンドも動かせる
 		'Bash('*)
 			grep -qxF -- "$e" <<<"$ALLOWED_GH" || [[ $e == "$AGENT_WRITE" ]] || echo "$e"
 			;;
@@ -123,6 +164,11 @@ missing_entries() {
 # スクリプトの gh api の呼び出しを、メソッドとパス(graphql)だけにし、並べ替えて | でつなぐ(書く順を変えただけでは落ちないように)
 gh_api_calls() {
 	grep -o 'gh api \(-X [A-Z]* \)\?[^ ]*' "$1" | sed -e 's/^gh api //' -e 's/"//g' | LC_ALL=C sort | paste -sd'|' -
+}
+
+# スクリプトの GraphQL の操作名(input を取るもの)を並べ替えて | でつなぐ
+graphql_ops() {
+	grep -o '[A-Za-z]*(input:' "$1" | sed -e 's/(input://' | LC_ALL=C sort -u | paste -sd'|' -
 }
 
 expect() {
