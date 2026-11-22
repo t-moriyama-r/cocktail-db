@@ -24,7 +24,7 @@ export type IngredientEdit =
  * 入れるのは空の側にだけで、もう選んである側は変えない(選び直しで、もう片方の選んだものを消さないため)。
  *
  * 行のノードを木で選び直すと、銘柄を空にする(前のノードの銘柄が、新しいノードの配下にあるとは限らないため)。
- * 銘柄を選ぶと、ノードは銘柄の所属ノードにする(API は銘柄のある行のノードを所属ノードに限る。#19)。
+ * 銘柄を選ぶと、ノードは銘柄の所属ノードにする(API は銘柄のある行のノードを、銘柄の所属ノードか、その上のノードに限る。#19・#751)。
  */
 export function editIngredients(values: CocktailFormValues, edit: IngredientEdit): CocktailFormValues {
   switch (edit.kind) {
