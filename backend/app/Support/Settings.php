@@ -81,12 +81,21 @@ final class Settings
     /**
      * キーに「.」を含めても入れ子の配列として辿らないように、config('settings.<key>') ではなく
      * 配列から直接引く。
+     *
+     * .env の値が空の文字(`AMAZON_CREDENTIAL_ID=` のように値の無い行)なら、値が無いものとして null を返す(#689)。
+     * env() は値の無い行に空の文字を返すので、そのままだと管理 API が「値あり」「.env の値」として返してしまうため。
+     * 保存した値(stored())が空の文字のときは、これまでどおり空の文字を返す(TC-131-06)。
      */
     private function fromEnv(string $key): ?string
     {
         $values = config('settings');
         $value = is_array($values) ? ($values[$key] ?? null) : null;
+        if (! is_scalar($value)) {
+            return null;
+        }
 
-        return is_scalar($value) ? (string) $value : null;
+        $value = (string) $value;
+
+        return $value === '' ? null : $value;
     }
 }

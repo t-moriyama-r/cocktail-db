@@ -114,3 +114,14 @@ it('TC-131-11: キーごとに別の値を持ち、ほかのキーの値を返�
 
     expect(settings()->get('b.key', 'B-DEFAULT'))->toBe('B-DEFAULT');
 });
+
+it('TC-689-04: .env の値が空の文字なら、値が無いものとして既定値を返し、出どころも null にする', function () {
+    config()->set('settings', ['rakuten.affiliate_id' => '']);
+
+    $resolved = settings()->resolve('rakuten.affiliate_id');
+
+    expect(settings()->get('rakuten.affiliate_id', 'DEFAULT'))->toBe('DEFAULT')
+        ->and(settings()->get('rakuten.affiliate_id'))->toBeNull()
+        ->and($resolved->value)->toBeNull()
+        ->and($resolved->source)->toBeNull();
+});

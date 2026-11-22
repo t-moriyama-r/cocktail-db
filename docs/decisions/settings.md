@@ -31,6 +31,7 @@
    - キーに `.` が入るので、キーは経路に載せず本文で受ける。定義に無いキーは 422(`errors.key`)
    - `value` は必須の欄(省くと 422)。`null` か空の文字を送ると、保存した値を消して `.env` の値に戻す(行は残し、変えた人と日時を記録する)
 3. 返す 1 項目の形: `key`・`label`・`description`・`secret`・`is_set`(値があるか)・`value`・`last_four`・`source`(`saved`: 画面で保存した値 / `env`: `.env` の値 / `null`: どちらにも無い)・`updated_at`・`updated_by`(`{id, name}`)
+   - `.env` の値が空の文字(`AMAZON_CREDENTIAL_ID=` のように値の無い行)は、値が無いものとして扱う(`is_set: false`・`source: null`。`Settings::get` も既定値を返す。#689)
 4. **秘密の項目は、値を平文で返さない**。`value` はいつも `null` で、`last_four` に末尾 4 文字だけを返す。`.env` から来た値でも同じ。値が 8 文字より短いときは、4 文字でも値のほとんどが分かるので、`last_four` も `null` にする(画面は `is_set` で「設定済み」だけを出す)。秘密でない項目は `value` に値を返し、`last_four` は `null`
 5. 変えた人と日時は、`settings` 表の行の `updated_by`・`updated_at`(最後に変えた 1 回分)。変えた履歴を 1 件ごとに残す表は、この issue では作らない(要るかは `docs/schema.md` の「settings」のとおり #69 で決める)
 
