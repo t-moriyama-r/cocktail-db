@@ -18,9 +18,10 @@ use UnexpectedValueException;
 /**
  * 管理画面の銘柄の新規・更新(#314)。旧の DetailEditController@brand と FactoryHelper::generateFromRequest の銘柄の分。
  *
- * 所属を変えたときは、同じトランザクションで、その銘柄を使う材料・アフィリエイトのノードを新しい所属にそろえ
- * (docs/schema.md の「材料が銘柄を持つときのノード」)、それらのカクテルの材料の数を数え直し(#156)、材料の組の
- * ハッシュ(recipe_signature)を作り直す(#82。材料のノードが変わるため)。
+ * 所属を変えたときは、同じトランザクションで、その銘柄を使う材料の行のうち、新しい所属が材料のノードと同じでも子孫でも
+ * なくなる行と、その銘柄のアフィリエイトのノードを新しい所属にそろえ(docs/schema.md の「材料が銘柄を持つときのノード」。
+ * #751)、ノードを書き換えた材料のカクテルの材料の数を数え直し(#156)、材料の組のハッシュ(recipe_signature)を作り直す
+ * (#82。材料のノードが変わるため)。
  */
 class AdminBrandWriter
 {
@@ -147,23 +148,38 @@ class AdminBrandWriter
     }
 
     /**
-     * $brand を使う材料・アフィリエイトのノードを、$brand の所属にそろえ、その材料のカクテルの材料の数を数え直し、
+     * $brand を使う材料の行のうち、材料のノードが $brand の新しい所属の祖先(自分を含む)でなくなった行と、$brand の
+     * アフィリエイトのノードを、$brand の所属にそろえる。ノードを書き換えた材料のカクテルの材料の数を数え直し、
      * 材料の組のハッシュを作り直す。
+     *
+     * 新しい所属が材料のノードと同じか子孫のままの行は、材料のノードを変えない(検索で引かれるノードを変えないため。#751)。
      */
     private function followCategory(Brand $brand): void
     {
-        CocktailIngredient::query()->where('brand_id', $brand->id)->update(['category_id' => $brand->category_id]);
-        Affiliate::query()->where('brand_id', $brand->id)->update(['category_id' => $brand->category_id]);
-
-        $cocktailIds = CocktailIngredient::query()
-            ->where('brand_id', $brand->id)
+        // 書き換えると祖先になって引けなくなるので、書き換える前にカクテルを引く
+        $cocktailIds = $this->ingredientsOutside($brand)
             ->distinct()
             ->toBase()
             ->pluck('cocktail_id')
             ->map(fn (mixed $id): int => is_numeric($id) ? (int) $id : throw new UnexpectedValueException('カクテルの ID が数でない'))
             ->all();
 
+        $this->ingredientsOutside($brand)->update(['category_id' => $brand->category_id]);
+        Affiliate::query()->where('brand_id', $brand->id)->update(['category_id' => $brand->category_id]);
+
         $this->counter->recount(array_values($cocktailIds));
         $this->signature->rewrite(array_values($cocktailIds));
+    }
+
+    /**
+     * $brand を使う材料の行のうち、材料のノードが $brand の所属ノードの祖先(自分を含む。閉包表の depth 0 の行)でないもの。
+     *
+     * @return Builder<CocktailIngredient>
+     */
+    private function ingredientsOutside(Brand $brand): Builder
+    {
+        return CocktailIngredient::query()
+            ->where('brand_id', $brand->id)
+            ->whereNotIn('category_id', CategoryClosure::query()->select('ancestor_id')->where('descendant_id', $brand->category_id));
     }
 }

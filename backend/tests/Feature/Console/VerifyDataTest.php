@@ -101,18 +101,49 @@ it('TC-157-01: 決まりどおりのデータでは、問題なしで 0 で終�
         ->and($output)->not->toContain('警告');
 });
 
-it('TC-157-02: 銘柄を持つ材料のノードが銘柄の所属と違うと、その材料を挙げて失敗する', function () {
+it('TC-157-02: 銘柄を持つ材料のノードが銘柄の所属と違う(別の枝の)と、その材料を挙げて失敗する', function () {
     $data = verifyDataFixture();
+    // ジンは銘柄の所属(ホワイトラム)と同じでも祖先でもない(#751 で、祖先は破れでなくなった)
     CocktailIngredient::query()->where('cocktail_id', $data['cocktails']['ラムソーダ']->id)->where('position', 0)
-        ->update(['category_id' => $data['nodes']['ラム']->id]);
+        ->update(['category_id' => $data['nodes']['ジン']->id]);
 
     [$code, $output] = runVerifyData();
 
     expect($code)->toBe(1)
         ->and($output)->toContain('材料のノードと銘柄の所属')
         ->and($output)->toContain("カクテル #{$data['cocktails']['ラムソーダ']->id} ラムソーダ の 0 行目")
-        ->and($output)->toContain("材料のノードは #{$data['nodes']['ラム']->id} ラム")
+        ->and($output)->toContain("材料のノードは #{$data['nodes']['ジン']->id} ジン")
         ->and($output)->toContain("の所属は #{$data['nodes']['ホワイトラム']->id} ホワイトラム");
+});
+
+it('TC-751-03: 銘柄の所属が材料のノードの子孫なら、材料のノードと銘柄の所属の破れに挙げない', function () {
+    $data = verifyDataFixture();
+    // 移行の 62 行の形: 材料のノードはラム、銘柄バカルディの所属はラムの子のホワイトラム
+    CocktailIngredient::query()->where('cocktail_id', $data['cocktails']['ラムソーダ']->id)->where('position', 0)
+        ->update(['category_id' => $data['nodes']['ラム']->id]);
+    // 材料のノードを変えたので、材料の組のハッシュも作り直しておく(ほかの破れを出さないため)
+    app(RecipeSignature::class)->rewrite([$data['cocktails']['ラムソーダ']->id]);
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('問題なし')
+        ->and($output)->not->toContain('材料のノードと銘柄の所属');
+});
+
+it('TC-751-04: 銘柄の所属が材料のノードの祖先(材料のノードより上)だと、その材料を挙げて失敗する', function () {
+    $data = verifyDataFixture();
+    $rum = Brand::factory()->create(['category_id' => $data['nodes']['ラム']->id, 'name' => 'ラムの銘柄']);
+    CocktailIngredient::query()->where('cocktail_id', $data['cocktails']['ラムソーダ']->id)->where('position', 0)
+        ->update(['brand_id' => $rum->id]);
+    app(RecipeSignature::class)->rewrite([$data['cocktails']['ラムソーダ']->id]);
+
+    [$code, $output] = runVerifyData();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('材料のノードと銘柄の所属')
+        ->and($output)->toContain("材料のノードは #{$data['nodes']['ホワイトラム']->id} ホワイトラム")
+        ->and($output)->toContain("銘柄 #{$rum->id} ラムの銘柄 の所属は #{$data['nodes']['ラム']->id} ラム");
 });
 
 it('TC-157-03: 銘柄のアフィリエイトのノードが銘柄の所属と違うと、その行を挙げて失敗する', function () {
