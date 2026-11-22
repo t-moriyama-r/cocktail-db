@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "before": "a726475a540e6f9daba879b87e96f59b84482398",
+  "after": "c77c2fcc036bf12bcee6d976c8323b33fa14dcaf",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-751-03",
+        "TC-157-02"
+      ],
+      "note": "修正前は EV751 子孫・EV751 別の枝の 2 行、修正後は EV751 別の枝の 1 行だけが「材料のノードと銘柄の所属」に出ること",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-751-01",
+        "TC-751-02",
+        "TC-751-03",
+        "TC-751-04",
+        "TC-751-05",
+        "TC-157-02",
+        "TC-292-04",
+        "TC-314-16",
+        "TC-314-17",
+        "TC-82-27"
+      ],
+      "note": "修正後はすべて通ること(修正前は TC-751 のテストが無い)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
