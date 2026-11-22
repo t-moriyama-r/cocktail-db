@@ -7868,7 +7868,8 @@
                             "amazon.partner_tag",
                             "rakuten.application_id",
                             "rakuten.access_key",
-                            "rakuten.affiliate_id"
+                            "rakuten.affiliate_id",
+                            "ga4.measurement_id"
                         ]
                     },
                     "value": {
