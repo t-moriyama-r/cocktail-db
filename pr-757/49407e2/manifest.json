@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "before": "a726475a540e6f9daba879b87e96f59b84482398",
+  "after": "49407e22faf35404b47b47ee1bd3a2df2c8a04b6",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-387-01",
+        "TC-387-02",
+        "TC-387-03",
+        "TC-387-04",
+        "TC-387-05",
+        "TC-387-06",
+        "TC-387-07",
+        "TC-387-08",
+        "TC-387-09",
+        "TC-387-10"
+      ],
+      "note": "修正後は passed 21, failed 0 になり、TC-387 の行が並ぶこと。修正前は TC-367 の 11 件だけ",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    }
+  ]
+}
