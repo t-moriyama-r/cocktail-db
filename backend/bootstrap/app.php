@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // 管理 API(/api/admin/*)。管理画面はログインで作ったセッションのクッキーで API を呼ぶので、公開の API と違い
         // セッションと CSRF の確かめ(web のグループ)を通してから、ログインしているかを確かめる
         $middleware->group('admin', ['web', 'auth']);
+        // 管理画面の保存の冪等キー(#657。docs/decisions/admin-idempotency.md)。admin のグループの後に、作る保存の経路ごとに付ける
+        $middleware->alias(['idempotent' => Idempotent::class]);
         // ログインの画面は SPA の中にあり、サーバーに login のルートは無い。既定の route('login') への転送をやめ、401 を返させる
         $middleware->redirectGuestsTo(fn () => null);
     })
