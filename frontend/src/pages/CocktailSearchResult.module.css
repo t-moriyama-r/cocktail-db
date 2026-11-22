@@ -1,0 +1,17 @@
+/* 条件検索の結果の画面。中身の幅に収める(名前検索の結果の画面と同じ) */
+.page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.title {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-left: var(--heading-border-left);
+  border-bottom: var(--heading-border-bottom);
+  background: var(--heading-bg);
+  color: var(--heading-color);
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+}

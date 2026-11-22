@@ -10,6 +10,8 @@ import { rateStars } from './rateStars'
 import { sortCocktails } from './sortCocktails'
 import { strengthLabel } from './strengthLabel'
 import { sweetDegreeLabel } from './sweetDegreeLabel'
+import { categoryPath, cocktailPath } from '../../utils/detailPaths'
+import { youtubeWatchUrl } from '../../utils/youtubeWatchUrl'
 
 /**
  * カクテルの一覧の表(旧 Results/Tables/Cocktails.vue)。
@@ -23,9 +25,14 @@ type Props = {
   sort: CocktailTableSortMode
   /** 表の名前(読み上げに使う)。画面に出す見出しは表の外に置く */
   label: string
+  /**
+   * 別名で当たったカクテルの、当たった別名(カクテルの ID → 別名)。名前の後ろに添える。
+   * 名前検索の結果(#52)で、名前では当たらず別名(#82。旧に無い)で当たったカクテルに使う
+   */
+  matchedAliases?: ReadonlyMap<number, string>
 }
 
-export default function CocktailTable({ cocktails, sort, label }: Props) {
+export default function CocktailTable({ cocktails, sort, label, matchedAliases }: Props) {
   const [localSort, setLocalSort] = useState<CocktailSort | null>(null)
   const current = sort.mode === 'local' ? localSort : sort.sort
   const rows = sort.mode === 'local' ? sortCocktails(cocktails, localSort) : cocktails
@@ -68,6 +75,7 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
             </td>
             <td className={styles.name}>
               <Link to={cocktailPath(c.id)}>{c.name}</Link>
+              {matchedAliases?.has(c.id) && <span className={styles.alias}>(別名: {matchedAliases.get(c.id)})</span>}
             </td>
             <td className={styles.nameEng}>
               {c.name_eng && <Link to={cocktailPath(c.id)}>{c.name_eng}</Link>}
@@ -96,17 +104,4 @@ export default function CocktailTable({ cocktails, sort, label }: Props) {
       </tbody>
     </table>
   )
-}
-
-function cocktailPath(id: number): string {
-  return `/detail/cocktail/${id}`
-}
-
-function categoryPath(id: number): string {
-  return `/category/${id}`
-}
-
-/** 動画は YouTube の動画の ID で持っていて、旧と同じく YouTube の動画のページを開く */
-function youtubeWatchUrl(videoId: string): string {
-  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`
 }

@@ -23,6 +23,11 @@ class CocktailIngredient extends Model
     /** @use HasFactory<CocktailIngredientFactory> */
     use HasFactory;
 
+    /**
+     * 量(amount)の列の長さ。保存する量(整えた後の値)はこれを超えられない。
+     */
+    public const AMOUNT_MAX_LENGTH = 20;
+
     // 複合の主キー(compositeKeyColumns)のうち、Eloquent に 1 列として渡せる方
     protected $primaryKey = 'position';
 

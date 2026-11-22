@@ -174,15 +174,28 @@ class DescriptionMarkup
      */
     private function rejectStrayAtMarks(string $text, string $attribute): void
     {
-        if (preg_match(self::STRAY_AT_PATTERN, $text, $m, PREG_OFFSET_CAPTURE) !== 1) {
+        $around = self::strayAtContext($text);
+        if ($around === null) {
             return;
+        }
+
+        throw ValidationException::withMessages([$attribute => ['記法になっていない @ があります: '.$around]]);
+    }
+
+    /**
+     * ID の記法の外に残った最初の @(全角の ＠ も)と、その前後の文字。残っていなければ null。
+     * 保存のときの検査(toStored)と、移した説明文が保存のときの検査を通るかを見る data:verify(#393)が使う。
+     */
+    public static function strayAtContext(string $text): ?string
+    {
+        if (preg_match(self::STRAY_AT_PATTERN, $text, $m, PREG_OFFSET_CAPTURE) !== 1) {
+            return null;
         }
 
         $at = mb_strlen(substr($text, 0, $m[0][1]));
         $start = max(0, $at - self::STRAY_AT_CONTEXT);
-        $around = mb_substr($text, $start, $at - $start + 1 + self::STRAY_AT_CONTEXT);
 
-        throw ValidationException::withMessages([$attribute => ['記法になっていない @ があります: '.$around]]);
+        return mb_substr($text, $start, $at - $start + 1 + self::STRAY_AT_CONTEXT);
     }
 
     /**

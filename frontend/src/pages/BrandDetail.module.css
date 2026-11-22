@@ -1,0 +1,144 @@
+/* 銘柄の詳細(旧 Detail/BrandDetail.vue と detail.scss) */
+.detail {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+/* 旧のタイトルは地の文の 2.5 倍だった。ページの題の大きさにそろえる(カテゴリの詳細と同じ) */
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* 旧の brand_data_container。「Data」の見出しの右に線を引き、その右に度数を置く */
+.data {
+  display: flex;
+  margin-top: var(--space-2);
+}
+
+.dataTitle {
+  display: flex;
+  align-items: center;
+  margin: 0 var(--space-1);
+  padding-right: var(--space-2);
+  border-right: 5px solid var(--color-brand-data-line);
+}
+
+/* 旧は見出しの四角だけを線と同じ色にしていた */
+.dataTitle > span {
+  border-color: var(--color-brand-data-line);
+}
+
+/* 説明文・動画と、画像を並べる。960px 未満は画像を上にして縦に積む(旧の column-reverse) */
+.body {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.text,
+.media {
+  min-width: 0;
+}
+
+/* 旧の description_block(上 16px・左右と下 8px)と、説明文の下の 25px */
+.description {
+  margin: var(--space-4) var(--space-2) var(--space-5);
+}
+
+/* 旧の youtube_section。幅は 550px までにし、960px 未満では真ん中に置く */
+.youtube {
+  max-width: 550px;
+  margin: 0 auto;
+}
+
+/* 旧の image_container */
+.media {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-2);
+}
+
+/* 旧と同じく、960px 未満では画像の高さを 250px までにする */
+.media img {
+  max-height: 250px;
+}
+
+/* 画像が無いときに画像の場所に出すアフィリエイト。旧と同じく 960px 未満では出さない(下のアフィリエイトが出る) */
+.affiliateInImage {
+  display: none;
+}
+
+/* これを使ったカクテル・銘柄の一覧の欄(旧の using_cocktail_container など)。左に 5px の線を引き、欄ごとに色を変える */
+.section {
+  margin-top: var(--space-5);
+  padding-left: var(--space-2);
+  border-left: 5px solid;
+}
+
+.usingCocktails {
+  border-left-color: var(--color-brand-using-line);
+}
+
+.sameNodeList {
+  border-left-color: var(--color-brand-same-node-line);
+}
+
+.parentSubtreeList {
+  border-left-color: var(--color-brand-parent-subtree-line);
+}
+
+/* 旧の block_title。地の文と同じ大きさ・太さ */
+.listHeading {
+  display: flex;
+  align-items: center;
+  margin: 0 0 var(--space-2);
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+}
+
+/* 下のアフィリエイト(旧の amazon_container.bottom) */
+.affiliateBottom {
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 960px) {
+  .title {
+    font-size: var(--font-size-title);
+  }
+
+  .body {
+    flex-direction: row;
+  }
+
+  .text,
+  .media {
+    flex: 1;
+  }
+
+  .youtube {
+    margin-left: 0;
+  }
+
+  /* 旧の image_container は幅 200〜500px で、余った幅の真ん中に置いていた */
+  .media {
+    min-width: 200px;
+    max-width: 500px;
+  }
+
+  .media img {
+    max-height: 500px;
+  }
+
+  .affiliateInImage {
+    display: block;
+  }
+
+  /* 画像が無いときは画像の場所にアフィリエイトを出しているので、下には出さない(旧と同じ) */
+  .affiliateBottomNoImage {
+    display: none;
+  }
+}

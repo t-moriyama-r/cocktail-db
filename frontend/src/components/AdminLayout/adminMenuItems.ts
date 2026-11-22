@@ -1,0 +1,33 @@
+import {
+  ADMIN_BRANDS_PATH,
+  ADMIN_CATEGORIES_PATH,
+  ADMIN_COCKTAILS_PATH,
+  ADMIN_DICTIONARIES_PATH,
+  ADMIN_PARAPHRASES_PATH,
+  ADMIN_PASSKEYS_PATH,
+} from './adminPaths'
+
+export type AdminMenuItem = {
+  /** メニューに出す名前 */
+  label: string
+  /** 開く画面の URL(/admin 以下) */
+  path: string
+}
+
+/**
+ * 管理画面のメニューに並べる画面(ログアウトはこの後ろに必ず出す)。
+ *
+ * 並びは #119 で決めたもの: カテゴリ木(#123)/ 銘柄(#64)/ カクテル(#126)/ 用語辞典(#66)/
+ * 言い換え・スキップ語(#67)/ 設定(#133)/ パスキー(#313)/ ログアウト。
+ * まだ画面が無い項目は、開いても何も無いので出さない。画面を作る issue で、この並びの位置に足す。
+ * 旧のメニューにあったオートインプット(実行・該当ページを開く・カウント+1)は引き継がない(#68)ので足さない。
+ */
+export const ADMIN_MENU_ITEMS: readonly AdminMenuItem[] = [
+  { label: 'カテゴリ木', path: ADMIN_CATEGORIES_PATH },
+  { label: '銘柄', path: ADMIN_BRANDS_PATH },
+  { label: '用語辞典', path: ADMIN_DICTIONARIES_PATH },
+  { label: 'カクテル', path: ADMIN_COCKTAILS_PATH },
+  { label: '言い換え・スキップ語', path: ADMIN_PARAPHRASES_PATH },
+  { label: '設定', path: '/admin/settings' },
+  { label: 'パスキー', path: ADMIN_PASSKEYS_PATH },
+]

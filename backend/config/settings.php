@@ -6,7 +6,8 @@
 |--------------------------------------------------------------------------
 |
 | App\Support\Settings が、画面で保存した値が無いときに使う値。キーは settings 表の key と同じにする。
-| 画面で変えられる項目の定義(説明・秘密かどうか・検証の規則)は #132 で作る。
+| 画面で変えられる項目の定義(説明・秘密かどうか・検証の規則)は App\Support\SettingDefinitions(#132)。
+| 項目を足すときは、ここと SettingDefinitions の両方に足す。
 |
 */
 
@@ -16,6 +17,11 @@ return [
     'amazon.credential_secret' => env('AMAZON_CREDENTIAL_SECRET'),
     'amazon.partner_tag' => env('AMAZON_PARTNER_TAG'),
 
-    // 楽天アフィリエイトの ID(App\Services\Affiliate\AffiliateSearchUrls が、検索結果のページへのリンクに付ける)
+    // 楽天の商品検索 API のアプリ ID とアクセスキー(App\Services\Affiliate\RakutenClient。docs/rakuten-api.md の 2)
+    'rakuten.application_id' => env('RAKUTEN_APPLICATION_ID'),
+    'rakuten.access_key' => env('RAKUTEN_ACCESS_KEY'),
+
+    // 楽天アフィリエイトの ID(App\Services\Affiliate\AffiliateSearchUrls が検索結果のページへのリンクに、
+    // RakutenClient が商品検索 API の呼び出しに付ける)
     'rakuten.affiliate_id' => env('RAKUTEN_AFFILIATE_ID'),
 ];

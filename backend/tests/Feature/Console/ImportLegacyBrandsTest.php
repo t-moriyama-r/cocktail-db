@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\PendingCommand;
 use Tests\Support\LegacyFixture;
 use Tests\Support\LegacyImportCommand;
+use Tests\Support\LegacyNodeMap;
 use Tests\TestCase;
 
 // legacy:import --only=brands(銘柄を移し、ノードに有名な銘柄を付ける。#30)。旧 DB を使うので db グループ
@@ -23,19 +24,6 @@ function importLegacyBrands(TestCase $test): PendingCommand
     LegacyImportCommand::run($test, ['--only' => 'categories'])->assertExitCode(0)->run();
 
     return LegacyImportCommand::run($test, ['--only' => 'brands']);
-}
-
-/**
- * 旧の表と ID から、移した先のノードの ID を legacy_id_maps で引く。
- */
-function brandNodeId(string $legacyTable, int $legacyId): int
-{
-    return LegacyIdMap::query()
-        ->where('legacy_table', $legacyTable)
-        ->where('legacy_id', $legacyId)
-        ->where('new_table', 'categories')
-        ->sole()
-        ->new_id;
 }
 
 /**
@@ -106,9 +94,9 @@ it('TC-30-02: 銘柄の ID を旧 ID のまま入れ、legacy_id_maps に同じ�
 it('TC-30-03: ミドルがあればミドルのノード、無ければカテゴリのノードに付ける', function () {
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    expect(Brand::query()->findOrFail(1)->category_id)->toBe(brandNodeId('m_category', 1))
+    expect(Brand::query()->findOrFail(1)->category_id)->toBe(LegacyNodeMap::id('m_category', 1))
         ->and(brandPath(1))->toBe(['蒸留酒', 'ジン'])
-        ->and(Brand::query()->findOrFail(2)->category_id)->toBe(brandNodeId('m_middle', 3))
+        ->and(Brand::query()->findOrFail(2)->category_id)->toBe(LegacyNodeMap::id('m_middle', 3))
         ->and(brandPath(2))->toBe(['蒸留酒', 'ラム', 'ダークラム'])
         ->and(brandPath(3))->toBe(['ソフトドリンク', 'トニックウォーター']);
 });
@@ -117,7 +105,7 @@ it('TC-30-04: ミドルの親とカテゴリが合わない銘柄は、カテゴ
     // LegacyFixture の銘柄 4 は、カテゴリ 1(ジン)・ミドル 3(親はカテゴリ 2 のラム)
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    expect(Brand::query()->findOrFail(4)->category_id)->toBe(brandNodeId('m_middle', 3))
+    expect(Brand::query()->findOrFail(4)->category_id)->toBe(LegacyNodeMap::id('m_middle', 3))
         ->and(brandPath(4))->toBe(['蒸留酒', 'ラム', 'ダークラム']);
 });
 
@@ -126,7 +114,7 @@ it('TC-30-05: ミドルが 0 の銘柄は、ミドル無しとしてカテゴリ
 
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    expect(Brand::query()->findOrFail(1)->category_id)->toBe(brandNodeId('m_category', 1));
+    expect(Brand::query()->findOrFail(1)->category_id)->toBe(LegacyNodeMap::id('m_category', 1));
 });
 
 it('TC-30-06: 銘柄の列の値を旧からそのまま移す', function () {
@@ -201,7 +189,7 @@ it('TC-30-11: カテゴリ・ミドルの有名な銘柄を、移したノード
 
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    $famous = fn (string $table, int $id): ?int => Category::query()->findOrFail(brandNodeId($table, $id))->famous_brand_id;
+    $famous = fn (string $table, int $id): ?int => Category::query()->findOrFail(LegacyNodeMap::id($table, $id))->famous_brand_id;
     expect($famous('m_category', 1))->toBe(1)
         ->and($famous('m_middle', 3))->toBe(2)
         ->and($famous('m_category', 2))->toBeNull()
@@ -216,8 +204,8 @@ it('TC-30-12: 有名な銘柄を付けても、ノードの更新日時は旧の
 
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    expect(DB::table('categories')->where('id', brandNodeId('m_category', 1))->value('updated_at'))->toBe('2021-02-03 04:05:06')
-        ->and(DB::table('categories')->where('id', brandNodeId('m_middle', 3))->value('updated_at'))->toBeNull();
+    expect(DB::table('categories')->where('id', LegacyNodeMap::id('m_category', 1))->value('updated_at'))->toBe('2021-02-03 04:05:06')
+        ->and(DB::table('categories')->where('id', LegacyNodeMap::id('m_middle', 3))->value('updated_at'))->toBeNull();
 });
 
 it('TC-30-13: 2 回流しても、銘柄・ID の対応・ノードの有名な銘柄が 1 回目と同じ', function () {
@@ -240,8 +228,8 @@ it('TC-30-14: 2 回目の前に旧の値が変わっていたら、銘柄を増�
 
     $brand = Brand::query()->findOrFail(1);
     expect($brand->name)->toBe('サンプル・ドライジン(変更)')
-        ->and($brand->category_id)->toBe(brandNodeId('m_middle', 3))
-        ->and(Category::query()->findOrFail(brandNodeId('m_category', 1))->famous_brand_id)->toBe(1)
+        ->and($brand->category_id)->toBe(LegacyNodeMap::id('m_middle', 3))
+        ->and(Category::query()->findOrFail(LegacyNodeMap::id('m_category', 1))->famous_brand_id)->toBe(1)
         ->and(DB::table('brands')->count())->toBe(4)
         ->and(LegacyIdMap::query()->where('legacy_table', 'm_brand')->count())->toBe(4);
 
@@ -249,7 +237,7 @@ it('TC-30-14: 2 回目の前に旧の値が変わっていたら、銘柄を増�
     $legacy->table('m_category')->where('id', 1)->update(['famous_brand_id' => 0]);
     importLegacyBrands($this)->assertExitCode(0)->run();
 
-    expect(Category::query()->findOrFail(brandNodeId('m_category', 1))->famous_brand_id)->toBeNull();
+    expect(Category::query()->findOrFail(LegacyNodeMap::id('m_category', 1))->famous_brand_id)->toBeNull();
 });
 
 it('TC-30-15: 所属するノードが無いと、例外で止まり、何も入れない(:dataset)', function (bool $importCategories, ?string $column, int $value) {
@@ -287,5 +275,5 @@ it('TC-30-17: --only を付けないと、カテゴリ木の後に銘柄も移�
     LegacyImportCommand::run($this, [])->expectsOutput('brands:')->expectsOutput('brands: 4')->assertExitCode(0)->run();
 
     expect(DB::table('brands')->count())->toBe(4)
-        ->and(Category::query()->findOrFail(brandNodeId('m_middle', 3))->famous_brand_id)->toBe(2);
+        ->and(Category::query()->findOrFail(LegacyNodeMap::id('m_middle', 3))->famous_brand_id)->toBe(2);
 });

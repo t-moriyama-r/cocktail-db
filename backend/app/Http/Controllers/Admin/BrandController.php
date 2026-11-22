@@ -81,6 +81,33 @@ class BrandController extends Controller
     }
 
     /**
+     * 名前・英名の重なりの問い合わせ(#632)。銘柄の編集画面で、名前・英名を入れたそばに「同じ名前が存在しています」を出すため。
+     * 旧 DetailEditController@duplicate_check の銘柄の分の置き換え。
+     *
+     * 比べ方は保存の後の warnings と同じ(名前は検索用の名前で、英名はそのまま。所属によらず表の全体で比べる)。
+     * exclude_id の銘柄(編集している銘柄)とは比べない。名前・英名は、空なら比べない(どちらか 1 つは要る)。
+     *
+     * @return array{warnings: list<array{field: string, message: string}>}
+     */
+    public function duplicates(Request $request, AdminBrandWriter $writer): array
+    {
+        $request->validate([
+            // 名前。英名と、どちらか 1 つは要る
+            'name' => ['required_without:name_eng', 'nullable', 'string', 'max:255'],
+            // 英名。名前と、どちらか 1 つは要る
+            'name_eng' => ['required_without:name', 'nullable', 'string', 'max:255'],
+            // 編集している銘柄の ID。新規なら送らない
+            'exclude_id' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        return ['warnings' => $writer->nameDuplicates(
+            $request->filled('name') ? $request->string('name')->toString() : null,
+            $request->filled('name_eng') ? $request->string('name_eng')->toString() : null,
+            $request->filled('exclude_id') ? $request->integer('exclude_id') : null,
+        )];
+    }
+
+    /**
      * 編集で開く銘柄。
      */
     public function show(int $brand): BrandResource

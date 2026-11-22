@@ -1,0 +1,177 @@
+/* トップページ(旧 components/index.vue・Top/infomationMenu.vue) */
+.top {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+/* サイト名と副題。600px 未満は中央に寄せ、副題を出さない(旧と同じ) */
+.titleBox {
+  margin-bottom: var(--space-3);
+  text-align: center;
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--heading-weight);
+  line-height: 1.3;
+}
+
+.subtitle {
+  display: none;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* 欄の見出し(案 A は左と下の線) */
+.heading {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2);
+  border-left: var(--heading-border-left);
+  border-bottom: var(--heading-border-bottom);
+  background: var(--heading-bg);
+  color: var(--heading-color);
+  font-size: var(--font-size-lg);
+  font-weight: var(--heading-weight);
+  line-height: 1.4;
+}
+
+/* 新着動画。960px 未満は動画の下に説明、以上は左右に並べる */
+.video {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.videoPlayer {
+  min-width: 0;
+}
+
+.videoDetail {
+  min-width: 0;
+}
+
+/* 旧と同じく、説明文が長いときは欄の中でスクロールする */
+.videoText {
+  max-height: 270px;
+  margin-left: var(--space-3);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.videoBase {
+  margin: 0 0 var(--space-2);
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* メニュー。1264px 以上は「Menu」と「What is this!?」を左右に並べる(旧の lg6) */
+.menu {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.menuChild {
+  min-width: 0;
+}
+
+.menuBlock {
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.menuLink {
+  font-size: calc(var(--font-size-base) * 1.3);
+}
+
+.about {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 3 つの一覧 */
+.lists {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.list {
+  min-width: 0;
+}
+
+/* 見出しと「再取得」を 1 行に並べる */
+.listHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.listHeading {
+  flex: 1;
+  margin: 0;
+  padding: 0 var(--space-2);
+  border-left: var(--heading-border-left);
+  border-bottom: var(--heading-border-bottom);
+  font-size: inherit;
+  font-weight: var(--heading-weight);
+}
+
+/* 旧の link_reget。リンクの色で出し、指したときは下線と濃い色にする */
+.reget {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reget:hover,
+.reget:focus-visible {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+/* 条件検索のフォームの置き場所。メニューのページ内リンクで飛んだとき、固定のヘッダーに隠れないようにする */
+.searchForm {
+  margin-top: var(--space-5);
+  scroll-margin-top: calc(var(--header-height) + var(--space-3));
+}
+
+@media (min-width: 600px) {
+  .titleBox {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    text-align: left;
+  }
+
+  .subtitle {
+    display: block;
+  }
+}
+
+@media (min-width: 960px) {
+  .title {
+    font-size: var(--font-size-title);
+  }
+
+  .video {
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+  }
+}
+
+@media (min-width: 1264px) {
+  .menu {
+    grid-template-columns: 1fr 1fr;
+  }
+}

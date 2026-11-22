@@ -9,6 +9,6 @@ reviewer: coderabbit # coderabbit / claude / both
                      # Actions からの依頼は、オーナーの PAT(secret CODERABBIT_REQUEST_TOKEN)で書く。ボットの依頼には CodeRabbit が応じないため(#227)。
                      # 同じ PAT で、CI の pull_request の回が無い PR を閉じて開き直す(ci-rerun.sh。#389)
                      # 依頼に 30 分返事が無い・依頼を書けないときも、Claude が代わりにレビューする(.github/scripts/request-review.sh)
-review_rounds: 2     # レビューの指摘に対応して再レビューを頼む回数の上限
+review_rounds: 2     # レビューの指摘に対応して再レビューを頼む回数の上限(明らかな不具合の指摘には当てない。#555)
 record: confluence   # 段階ごとの人に見せる記録の形式: confluence / html / none(ai-driven-dev スキルの「記録の形式」)。
                      # confluence: StepN:〇〇 の下書きページ。置き場所は public なのでここに書かない

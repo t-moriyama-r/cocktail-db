@@ -1,0 +1,90 @@
+/* 枠・縞・見出しのボタンは、カクテルの一覧の表(CocktailTable.module.css)と同じ見た目にする */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--color-row-alt);
+}
+
+/* 列の幅と寄せ方は旧(Results/Tables/table.scss)に合わせる */
+.name {
+  max-width: 300px;
+  text-align: left;
+}
+
+.nameEng {
+  width: 200px;
+  text-align: left;
+}
+
+/* 旧の「親カテゴリ」(最大 180px)と「ミドルカテゴリ」(最小 200px)を合わせた列 */
+.affiliation {
+  min-width: 200px;
+  max-width: 380px;
+  text-align: left;
+}
+
+.lastNodeEng {
+  color: var(--color-text-muted);
+}
+
+.strength {
+  width: 3em;
+}
+
+.table td.strength {
+  text-align: right;
+}
+
+.youtube {
+  width: 3em;
+  text-align: center;
+}
+
+/* 動画のある銘柄の行は、リンクの色を変えて目立たせる(旧 table.scss の hasMovie) */
+.hasMovie a,
+.hasMovie .lastNodeEng {
+  color: var(--color-has-movie);
+}
+
+.hasMovie .youtube svg {
+  color: var(--color-youtube);
+}
+
+/* 960px 未満: 旧と同じく、所属するノードの段の英名を出さない */
+@media (max-width: 959px) {
+  .lastNodeEng {
+    display: none;
+  }
+}
+
+/* 700px 未満: 旧が「ミドルカテゴリ」の列を隠していたのに合わせ、所属するノードの段を出さない(幅の区切りの例外。docs/design/style.md の「幅の区切り」) */
+@media (max-width: 699px) {
+  .lastNode {
+    display: none;
+  }
+
+  .affiliation {
+    min-width: 0;
+  }
+}
+
+/* 600px 未満: 旧と同じく英名の列を出さない */
+@media (max-width: 599px) {
+  .nameEng {
+    display: none;
+  }
+}

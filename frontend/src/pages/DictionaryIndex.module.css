@@ -1,0 +1,41 @@
+/* 用語辞典の一覧(旧 Dictionary/index.vue)。旧は中身を幅の 90% にして中央に置き、上に 20px 空けていた */
+.page {
+  width: 90%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding-top: var(--space-5);
+}
+
+/* 旧の画面には題が無かったので、見た目には出さず読み上げにだけ出す */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 旧の big_category_container(分類のあいだを 25px 空ける) */
+.category {
+  margin-bottom: var(--space-5);
+}
+
+/* 旧の category_title_block(1.5 倍の太字に、左 5px・下 2px の線)。線の色は、ほかの見出しの線と違う旧の色のまま */
+.categoryTitle {
+  margin: 0;
+  padding-left: var(--space-1);
+  border-left: 5px solid var(--color-dictionary-category-line);
+  border-bottom: 2px solid var(--color-dictionary-category-line);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+
+/* 旧は用語を 1 行に 1 つ、印も字下げも無く並べていた */
+.terms {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

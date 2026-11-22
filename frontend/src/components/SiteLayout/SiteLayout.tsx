@@ -1,12 +1,17 @@
 import { useEffect, useLayoutEffect } from 'react'
 import { Outlet, useLocation } from 'react-router'
+import LegacySearchMigration from '../../features/search/LegacySearchMigration'
+import SearchFormValuesProvider from '../../features/search/SearchFormValuesProvider'
+import SiteHeader from '../SiteHeader/SiteHeader'
 import SiteFooter from './SiteFooter'
 import styles from './SiteLayout.module.css'
 import { SITE_TITLE } from './usePageTitle'
 
 /**
  * すべての公開ページを包む枠(旧 components/mainView.vue)。上に固定のヘッダー、本文(各ページ)、フッターを置く。
- * ヘッダーの中身(名前検索・条件検索・ランダムウォーク)は #99 で作る。ここでは場所だけを取る。
+ * ヘッダー(名前検索・条件検索・ランダムウォーク)は SiteHeader(#99)。
+ * ヘッダーのモーダルの条件検索のフォームの値は、結果の画面(#102)も書き換えるので、枠で持つ(SearchFormValuesProvider)。
+ * 開いたときに、旧サイトが保存した検索条件を新しい保存に移し、戻せなかったものがあれば本文の上に出す(LegacySearchMigration。#175)。
  */
 export default function SiteLayout() {
   useScrollToTopOnNavigate()
@@ -17,13 +22,16 @@ export default function SiteLayout() {
   }, [])
 
   return (
-    <div className={styles.root}>
-      <header className={styles.header}>{/* 中身は #99 */}</header>
-      <div className={styles.content}>
-        <Outlet />
+    <SearchFormValuesProvider>
+      <div className={styles.root}>
+        <SiteHeader />
+        <div className={styles.content}>
+          <LegacySearchMigration />
+          <Outlet />
+        </div>
+        <SiteFooter />
       </div>
-      <SiteFooter />
-    </div>
+    </SearchFormValuesProvider>
   )
 }
 

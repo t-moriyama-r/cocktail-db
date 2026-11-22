@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AffiliateNotFoundReason;
 use Database\Factories\AffiliateFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,11 @@ use Illuminate\Support\Carbon;
  * Fillable に入れていない。
  *
  * @property Carbon|null $amazon_fetched_at
+ * @property Carbon|null $amazon_searched_at
+ * @property AffiliateNotFoundReason|null $amazon_not_found_reason
  * @property Carbon|null $rakuten_fetched_at
+ * @property Carbon|null $rakuten_searched_at
+ * @property AffiliateNotFoundReason|null $rakuten_not_found_reason
  * @property Carbon|null $last_viewed_at
  * @property-read Category $category 外部キー(RESTRICT)で、いつもある
  */
@@ -25,8 +30,10 @@ use Illuminate\Support\Carbon;
     'amazon_asin', 'amazon_title', 'amazon_price',
     'amazon_image_large_url', 'amazon_image_medium_url', 'amazon_image_small_url',
     'amazon_detail_url', 'amazon_search_url', 'amazon_fetched_at',
+    'amazon_searched_at', 'amazon_not_found_reason',
     'rakuten_item_code', 'rakuten_title', 'rakuten_price',
     'rakuten_image_url', 'rakuten_detail_url', 'rakuten_search_url', 'rakuten_fetched_at',
+    'rakuten_searched_at', 'rakuten_not_found_reason',
     'human_title', 'human_price', 'human_image_url',
     'human_amazon_detail_url', 'human_amazon_search_url',
     'last_viewed_at',
@@ -35,6 +42,24 @@ class Affiliate extends Model
 {
     /** @use HasFactory<AffiliateFactory> */
     use HasFactory;
+
+    /** Amazon の商品の ID と、API から取った値の列(取れなかったときに、まとめて消す) */
+    public const AMAZON_COLUMNS = [
+        'amazon_asin', 'amazon_title', 'amazon_price',
+        'amazon_image_large_url', 'amazon_image_medium_url', 'amazon_image_small_url',
+        'amazon_detail_url', 'amazon_search_url', 'amazon_fetched_at',
+    ];
+
+    /** 楽天の商品の ID と、API から取った値の列(同じく) */
+    public const RAKUTEN_COLUMNS = [
+        'rakuten_item_code', 'rakuten_title', 'rakuten_price',
+        'rakuten_image_url', 'rakuten_detail_url', 'rakuten_search_url', 'rakuten_fetched_at',
+    ];
+
+    /** 手で入れた値の列。収集(affiliates:collect)は書き換えない */
+    public const HUMAN_COLUMNS = [
+        'human_title', 'human_price', 'human_image_url', 'human_amazon_detail_url', 'human_amazon_search_url',
+    ];
 
     /**
      * 商品を出すノード。銘柄の行では、銘柄の所属ノードと同じ。
@@ -85,8 +110,12 @@ class Affiliate extends Model
             'brand_key' => 'integer',
             'amazon_price' => 'integer',
             'amazon_fetched_at' => 'datetime',
+            'amazon_searched_at' => 'datetime',
+            'amazon_not_found_reason' => AffiliateNotFoundReason::class,
             'rakuten_price' => 'integer',
             'rakuten_fetched_at' => 'datetime',
+            'rakuten_searched_at' => 'datetime',
+            'rakuten_not_found_reason' => AffiliateNotFoundReason::class,
             'human_price' => 'integer',
             'last_viewed_at' => 'datetime',
         ];

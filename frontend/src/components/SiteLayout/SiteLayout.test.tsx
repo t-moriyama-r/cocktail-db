@@ -1,13 +1,9 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, test } from 'vitest'
 import App from '../../App'
-import type { paths } from '../../api/schema'
+import { buildCocktailDetail } from '../../features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from '../../test/api'
-
-type HelloResponse = paths['/hello']['get']['responses'][200]['content']['application/json']
-
-const HELLO: HelloResponse = { message: 'Hello World from Laravel' }
 
 const renderAt = (path: string) =>
   render(
@@ -20,8 +16,16 @@ const footer = () => within(screen.getByRole('contentinfo'))
 
 describe('共通の枠(SiteLayout)', () => {
   beforeEach(() => {
-    // トップの画面が GET /api/hello を呼ぶ
-    mockApi('get', '/hello', 200, HELLO)
+    // 用語辞典の一覧の画面が GET /api/dictionaries を呼ぶ
+    mockApi('get', '/dictionaries', 200, { data: [] })
+    // カクテルの詳細の画面が GET /api/cocktails/{id} を呼ぶ(見出しは「マティーニ(Martini)」)
+    mockApi('get', '/cocktails/{cocktail}', 200, { data: buildCocktailDetail() })
+    // 詳細の画面は、同じ名前・材料が似た・同じベースのカクテルの API も呼ぶ。どれも 0 件を返す。
+    // 差し替えは `{cocktail}` を任意の 1 区切りに当て、後から登録したものを先に使うので、
+    // /cocktails/random は上の登録より後に登録する(登録しないと詳細の本文が返り、一覧が配列でなく落ちる。#569)
+    mockApi('get', '/cocktails/{cocktail}/same-name', 200, { data: [] })
+    mockApi('get', '/cocktails/{cocktail}/related', 200, { data: [] })
+    mockApi('get', '/cocktails/random', 200, { data: [] })
   })
 
   test('TC-296-01: フッターに著作の表示と、作者のサイトへのリンク(新しいタブ)がある', async () => {
@@ -43,26 +47,31 @@ describe('共通の枠(SiteLayout)', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
-  test('TC-296-03: フッターの「更新ボランティア募集中...」で /helpme の画面に移る', async () => {
-    renderAt('/')
-
-    fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
-
-    expect(await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })).toBeInTheDocument()
-  })
-
   test.each([
-    ['/', 'Hello World from Laravel'],
-    ['/helpme', '更新ボランティア募集'],
-    ['/detail/cocktail/1', 'カクテルの詳細'],
+    ['/', '宅飲みカクテルデータベース'],
+    ['/detail/cocktail/1', 'マティーニ(Martini)'],
     ['/nope', 'ページが見つかりません'],
   ])('TC-296-04: %s でも、ヘッダーの場所とフッターの中に画面を出す', async (path, heading) => {
     renderAt(path)
 
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
-    expect(footer().getByRole('link', { name: '更新ボランティア募集中...' })).toBeInTheDocument()
+    expect(footer().getByRole('link', { name: 'ろんぐ' })).toBeInTheDocument()
   })
+
+  test.each([['/'], ['/detail/cocktail/1'], ['/nope']])(
+    'TC-641-02: %s のフッターに、更新ボランティア募集へのリンクが無い',
+    async (path) => {
+      renderAt(path)
+
+      await screen.findByRole('heading', { level: 1 })
+      expect(footer().getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+        'https://trc-vlackhistory.net/',
+        'https://twitter.com/virtualDollym',
+      ])
+      expect(screen.getByRole('contentinfo')).not.toHaveTextContent('ボランティア')
+    },
+  )
 
   test.each([
     ['/', 'トップページ ｜ 宅飲みカクテルデータベース(RC)'],
@@ -74,28 +83,32 @@ describe('共通の枠(SiteLayout)', () => {
     renderAt(path)
 
     await screen.findByRole('heading', { level: 1 })
-    expect(document.title).toBe(title)
+    await waitFor(() => expect(document.title).toBe(title))
   })
 
-  test.each([['/helpme'], ['/detail/cocktail/1']])(
+  test.each([['/detail/cocktail/1']])(
     'TC-296-06: ページ名を渡さない画面 %s のタイトルはサイト名だけ',
     async (path) => {
       document.title = '前のタイトル'
       renderAt(path)
 
       await screen.findByRole('heading', { level: 1 })
-      expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
+      await waitFor(() => expect(document.title).toBe('宅飲みカクテルデータベース(RC)'))
     },
   )
 
   test('TC-296-07: 画面を移るとタイトルが変わり、ページ名の無い画面ではサイト名だけに戻る', async () => {
+    // ヘッダーの登録数のリンク(ランダムウォーク)で、ページ名を渡さないカクテルの詳細へ移る。
+    // /cocktails/count は `{cocktail}` の差し替えより後に登録して先に当てる
+    mockApi('get', '/cocktails/count', 200, { count: 1 })
+    mockApi('get', '/random-walk', 200, { type: 'cocktail', id: 1 })
     renderAt('/')
-    await screen.findByRole('heading', { level: 1, name: HELLO.message })
-    expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)')
+    await screen.findByRole('heading', { level: 1, name: '宅飲みカクテルデータベース' })
+    await waitFor(() => expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)'))
 
-    fireEvent.click(footer().getByRole('link', { name: '更新ボランティア募集中...' }))
+    fireEvent.click(await within(screen.getByRole('banner')).findByRole('link', { name: '現在の登録数：1' }))
 
-    await screen.findByRole('heading', { level: 1, name: '更新ボランティア募集' })
-    expect(document.title).toBe('宅飲みカクテルデータベース(RC)')
+    await screen.findByRole('heading', { level: 1, name: 'マティーニ(Martini)' })
+    await waitFor(() => expect(document.title).toBe('宅飲みカクテルデータベース(RC)'))
   })
 })

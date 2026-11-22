@@ -10,9 +10,10 @@ namespace App\Services\LegacyImport;
 interface LegacyImporter
 {
     /**
-     * 旧 DB(接続 legacy)から新しい DB に移し、移した後の新しい表ごとの件数を返す。
+     * 旧 DB(接続 legacy)から新しい DB に移し、移した後の新しい表ごとの件数を返す。表の行を作らずに値を直す部分
+     * (説明文の参照の記法。#285)は、直したものの数を返す。
      *
-     * @return array<string, int> 新しい表の名前 => 件数
+     * @return array<string, int> 新しい表の名前(か、数えたものの名前) => 件数
      */
     public function import(): array;
 }

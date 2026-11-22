@@ -4,6 +4,7 @@ namespace App\Services\LegacyImport;
 
 use App\Models\LegacyIdMap;
 use App\Services\RecipeCounter;
+use App\Services\RecipeSignature;
 use Illuminate\Support\Facades\DB;
 use UnexpectedValueException;
 
@@ -22,6 +23,7 @@ use UnexpectedValueException;
  * - 2: 1 つのカクテルの中で材料・銘柄・量まで同じ行は、最初の 1 行だけ移す(量が違えば両方移す)
  * - 3: ミドルの親とカテゴリが合わない材料の行は、カテゴリの列を見ずにミドルのノードに付ける
  * - 5: recipe_count は旧の値を使わず、移した材料から RecipeCounter で数え直す
+ * - 10: 材料の組が同じで名前の違うカクテルは別々のまま移し、移した材料から RecipeSignature で recipe_signature を作る(#82)
  *
  * 2 回目は、カクテルを消さずに上書きし(銘柄などと同じく、ほかの表が外部キーで指しうるため)、材料は消して入れ直す。
  * Eloquent を通さずに書くのは、作成・更新日時を旧の値(null を含む)のまま入れるため。
@@ -49,7 +51,10 @@ final class CocktailImporter implements LegacyImporter
     /** @var array<int, int> 旧の銘柄の ID => 新の銘柄の ID */
     private array $brandIds = [];
 
-    public function __construct(private readonly RecipeCounter $counter) {}
+    public function __construct(
+        private readonly RecipeCounter $counter,
+        private readonly RecipeSignature $signature,
+    ) {}
 
     public function import(): array
     {
@@ -60,6 +65,7 @@ final class CocktailImporter implements LegacyImporter
             $cocktailIds = KeptIdCopier::copy(self::LEGACY_TABLE, self::NEW_TABLE, $this->cocktailAttrs(...));
             $this->replaceIngredients($cocktailIds);
             $this->counter->recount($cocktailIds);
+            $this->signature->rewrite($cocktailIds);
         });
 
         return [
@@ -69,7 +75,7 @@ final class CocktailImporter implements LegacyImporter
     }
 
     /**
-     * 旧のカクテルの行を、cocktails の列にする。recipe_count は入れない(材料を移した後に数え直す)。
+     * 旧のカクテルの行を、cocktails の列にする。recipe_count・recipe_signature は入れない(材料を移した後に作り直す)。
      *
      * @param  array<mixed>  $row
      * @return array<string, mixed>

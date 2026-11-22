@@ -23,10 +23,15 @@ final class AdminImageStore
     /** 受け付ける画像の種類。中身から推定した拡張子で確かめる(名前の拡張子は見ない) */
     private const TYPES = ['jpeg', 'png', 'gif', 'webp'];
 
+    /** 画像の列(image)を持ち、public ディスクのファイルを指しうる表 */
+    private const IMAGE_TABLES = ['cocktails', 'categories', 'brands', 'dictionaries'];
+
     /**
      * 画像の列に入れる値を返す。
      *
      * 新しいファイルを置けてから前のファイルを消す。置くのに失敗したとき、画像の無い行にしないため。
+     * トランザクションの中で呼ぶときは、行の保存より前に呼んでよい。後の処理が落ちてロールバックされると、置いた
+     * ファイルを指す行は残らないので、置いたファイルを消す(外側のトランザクションが後でロールバックされたときも同じ)。
      */
     public function update(?UploadedFile $image, bool $removeImage, ?string $current): ?string
     {
@@ -35,6 +40,7 @@ final class AdminImageStore
             if ($stored === false) {
                 throw new RuntimeException('画像を保存できなかった');
             }
+            DB::afterRollBack(fn () => $this->disk()->delete($stored));
             $this->deleteStored($current);
 
             return $stored;
@@ -50,11 +56,24 @@ final class AdminImageStore
     }
 
     /**
-     * update() で置いたばかりのファイルを、保存に失敗したときに消す。
+     * 行を消したときに、その行の画像のファイルを消す。ほかの行(カクテル・ノード・銘柄・用語)が同じファイルを指していれば残す。
+     *
+     * 消す行と同じトランザクションの中で、行を消した後に呼ぶ(消した行は数えないため。#578)。
+     * 移した画像(#34)は、旧で同じファイルを複数の行が指していることがあるので、指す行が残るあいだは消さない。
      */
-    public function discard(string $stored): void
+    public function deleteUnreferenced(?string $current): void
     {
-        $this->disk()->delete($stored);
+        if ($current === null) {
+            return;
+        }
+
+        foreach (self::IMAGE_TABLES as $table) {
+            if (DB::table($table)->where('image', $current)->exists()) {
+                return;
+            }
+        }
+
+        $this->deleteStored($current);
     }
 
     /**
@@ -93,8 +112,20 @@ final class AdminImageStore
     public static function rules(): array
     {
         return [
-            'image' => ['nullable', 'file', 'mimes:'.implode(',', self::TYPES), 'max:'.self::MAX_KILOBYTES, 'prohibited_if_accepted:remove_image'],
+            'image' => [...self::fileRules(), 'prohibited_if_accepted:remove_image'],
             'remove_image' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /**
+     * 上げる画像のファイルそのものの規則(種類と大きさ)。rules() の image と同じ。
+     *
+     * 新規にしか使わず、消す指定の要らない画像の欄(ノードの編集でその場で作る銘柄の brand_image。#121)に使う。
+     *
+     * @return list<string>
+     */
+    public static function fileRules(): array
+    {
+        return ['nullable', 'file', 'mimes:'.implode(',', self::TYPES), 'max:'.self::MAX_KILOBYTES];
     }
 }

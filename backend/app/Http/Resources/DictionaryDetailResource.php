@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
 use App\Models\Method;
+use App\Support\DescriptionParser;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,7 +16,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * それ以外は other。技法なら、その技法の ID(method_id)も返す。旧は分類の名前で判定し、技法の ID と用語の ID が
  * たまたま同じことに頼っていた(docs/decisions/dictionary.md)。
  *
- * 説明文(description)は、保存した記法(`@n<ID>@` など)のまま返す。リンクの区切りの並びにするのは #286。
+ * 説明文(description)は、文字とリンクの区切りの並び(DescriptionParser。#286)にして返す(ノード・銘柄の詳細と同じ。#542)。
  * 画像(image)は保存した値のまま返す(カクテルの詳細と同じ)。
  *
  * @property Dictionary $resource
@@ -48,7 +49,9 @@ class DictionaryDetailResource extends JsonResource
             },
             // 技法の用語なら、その技法の ID(技法から探すカクテルの条件に使う)。技法でなければ null
             'method_id' => $methodId,
-            'description' => $dictionary->description,
+            // 型は DescriptionParser::parse の戻り値。Scramble が app() の戻り値から型を読めないので、ここに書く
+            /** @var list<array{type: 'text', text: string}|array{type: 'node'|'cocktail'|'brand'|'dictionary', id: int, text: string, has_youtube: bool}>|null */
+            'description' => app(DescriptionParser::class)->parse($dictionary->description),
             'youtube' => $dictionary->youtube,
             'youtube_start_seconds' => $dictionary->youtube_start_seconds,
             'image' => $dictionary->image,

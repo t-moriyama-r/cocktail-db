@@ -1,0 +1,5 @@
+{
+    "The given data was invalid.": "入力に誤りがあります。",
+    "(and :count more error)": "(ほか :count 件)",
+    "(and :count more errors)": "(ほか :count 件)"
+}

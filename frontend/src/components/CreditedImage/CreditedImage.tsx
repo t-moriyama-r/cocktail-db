@@ -1,3 +1,4 @@
+import { storageImageUrl } from '../../utils/storageImageUrl'
 import styles from './CreditedImage.module.css'
 
 /**
@@ -6,6 +7,7 @@ import styles from './CreditedImage.module.css'
  * 画像の無い詳細もあるため、画像が無ければ出典があっても何も出さない。
  */
 type Props = {
+  /** 画像の列(image)の値。API が返したまま(ファイル名か外部の URL)渡す */
   src: string | null | undefined
   alt: string
   /** 出典のページの URL */
@@ -21,7 +23,7 @@ export default function CreditedImage({ src, alt, creditUrl, creditText }: Props
 
   return (
     <figure className={styles.figure}>
-      <img className={styles.image} src={src} alt={alt} />
+      <img className={styles.image} src={storageImageUrl(src)} alt={alt} />
       <figcaption className={styles.credit}>
         <Credit url={creditUrl} text={creditText} />
       </figcaption>

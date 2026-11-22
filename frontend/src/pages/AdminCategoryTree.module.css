@@ -1,0 +1,22 @@
+/* 管理画面のカテゴリ木(#123)。保存の後の知らせは、用語辞典の一覧と同じ出し方 */
+.page {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-row-alt);
+  overflow-wrap: anywhere;
+}
+
+.page > p {
+  margin: 0;
+}

@@ -8,6 +8,7 @@ use App\Models\CocktailIngredient;
 use App\Models\User;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
+use App\Services\RecipeSignature;
 use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -463,6 +464,25 @@ it('TC-314-16: 所属を変えると、その銘柄を使う材料・アフィ�
         ->and($withoutBrand->refresh()->recipe_count)->toBe(2)
         ->and(CocktailIngredient::query()->where('cocktail_id', $withoutBrand->id)->pluck('category_id')->all())
         ->toBe([$n['ジン']->id, $n['ラム']->id]);
+});
+
+it('TC-82-27: 所属を変えると、その銘柄を使うカクテルの recipe_signature が新しいノードで作り直される(使わないカクテルは変わらない)', function () {
+    ['nodes' => $n] = brandAdminTree();
+    $brand = Brand::factory()->create(['category_id' => $n['ジン']->id]);
+    $withBrand = brandAdminCocktail([$brand, $n['ラム']]);
+    $withoutBrand = brandAdminCocktail([$n['ジン'], $n['ラム']]);
+    app(RecipeSignature::class)->rewrite([$withBrand->id, $withoutBrand->id]);
+    $before = [$withBrand->refresh()->recipe_signature, $withoutBrand->refresh()->recipe_signature];
+
+    $this->putJson("/api/admin/brands/{$brand->id}", brandAdminInput($n['砂糖'], ['name' => $brand->name, 'name_eng' => $brand->name_eng]))
+        ->assertOk();
+
+    expect($withBrand->refresh()->recipe_signature)->not->toBe($before[0])
+        ->toBe(RecipeSignature::of([
+            ['category_id' => $n['砂糖']->id, 'brand_id' => $brand->id, 'amount' => '30ml', 'is_optional' => false],
+            ['category_id' => $n['ラム']->id, 'brand_id' => null, 'amount' => '30ml', 'is_optional' => false],
+        ]))
+        ->and($withoutBrand->refresh()->recipe_signature)->toBe($before[1]);
 });
 
 it('TC-314-17: 有名な銘柄は、そのノードの部分木の中へは移せ、外へ移すと 422 で理由を返す', function () {

@@ -1,0 +1,50 @@
+/* 管理画面の用語辞典の一覧(旧 Admin/Super/DictionaryList.vue)。旧は中身を幅の 90% にして中央に置いていた */
+.page {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-row-alt);
+  overflow-wrap: anywhere;
+}
+
+.page > p {
+  margin: 0;
+}
+
+.empty {
+  color: var(--color-text-muted);
+}
+
+/* 旧の big_category_container(分類のあいだを 25px 空ける) */
+.category {
+  margin-bottom: var(--space-5);
+}
+
+/* 旧の category_title_block(1.5 倍の太字に、左 5px・下 2px の線)。公開の用語辞典の一覧と同じ線の色 */
+.categoryTitle {
+  margin: 0;
+  padding-left: var(--space-1);
+  border-left: 5px solid var(--color-dictionary-category-line);
+  border-bottom: 2px solid var(--color-dictionary-category-line);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* 旧は用語を 1 行に 1 つ、印も字下げも無く並べていた。長い名前は折り返す */
+.terms {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}

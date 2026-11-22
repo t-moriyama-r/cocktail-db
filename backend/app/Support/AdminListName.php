@@ -46,6 +46,16 @@ final class AdminListName
     }
 
     /**
+     * 旧の管理画面の用語辞典の一覧(旧 DictionaryList.vue の sortedList)と同じ順に並べるための鍵。比べ方は sortKey と同じ。
+     *
+     * 旧の用語辞典の一覧は Helper.aiu を使わず、fold しただけの名前を比べていた(小文字にしない)ので、それに合わせる。
+     */
+    public static function caseSensitiveSortKey(string $name): string
+    {
+        return mb_convert_encoding(self::fold($name), 'UTF-16BE', 'UTF-8');
+    }
+
+    /**
      * 語 $q が、名前か英名のどこかに含まれるか。
      *
      * 旧の ListComponent.vue の絞り込みと同じそろえ方で比べる(名前は fold だけで大文字・小文字を区別し、英名は

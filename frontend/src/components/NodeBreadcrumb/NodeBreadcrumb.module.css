@@ -1,0 +1,11 @@
+/* 旧の breadcrumb_container(タイトルと重ならないよう、周りに少し余白を取っていた) */
+.breadcrumb {
+  margin: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+
+/* アイコンを文字の並びにそろえ、名前との間を空ける */
+.breadcrumb svg {
+  margin-right: var(--space-1);
+  vertical-align: -0.125em;
+}

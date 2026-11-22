@@ -23,4 +23,18 @@ enum CategoryDeleteBlocker: string
 
     /** このノードのアフィリエイトの行がある */
     case Affiliates = 'affiliates';
+
+    /**
+     * 管理画面にそのまま出す、消せない理由の文(#121)。
+     */
+    public function message(): string
+    {
+        return match ($this) {
+            self::Children => '子のノードがあります',
+            self::Brands => 'このノードの銘柄があります',
+            self::Ingredients => 'カクテルの材料に使われています',
+            self::BaseCocktails => 'カクテルのベースに使われています',
+            self::Affiliates => 'このノードのアフィリエイトがあります',
+        };
+    }
 }

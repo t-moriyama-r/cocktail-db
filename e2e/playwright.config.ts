@@ -7,6 +7,10 @@ export default defineConfig({
   testDir: './tests',
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // 相手は php artisan serve 1 本なので、手元では worker を 1 本にする。既定(コア数の半分)で並べると要求が重なり、
+  // page.goto のタイムアウトで大半が落ちる(#708)。CI は既定のまま(今の runner は 2 本で、213 件が 1.5 分で通っている)
+  // 一時的に並べたいときは npm test -- --workers=<数> で上書きできる
+  workers: process.env.CI ? undefined : 1,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,

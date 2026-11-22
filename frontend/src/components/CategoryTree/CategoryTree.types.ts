@@ -32,6 +32,19 @@ export type CategoryTreeMultipleSelection = {
 
 export type CategoryTreeSelection = CategoryTreeSingleSelection | CategoryTreeMultipleSelection
 
+/** ノードごとの見え方を、部品の外から変える(省いたものは既定のまま) */
+export type CategoryTreeAppearance = {
+  /**
+   * 見出しにするノード。選ぶ入力も名前のボタンも出さず、名前を太字で出すだけにする(開閉はできる)。
+   * 例: 検索の材料の木の根(旧の種別。旧の画面ではチェックも詳細へのリンクも無かった)
+   */
+  isHeading?: (node: CategoryTreeNode) => boolean
+  /** ノードの行(開いた子を含む)に足すクラス。例: 根ごとに背景の色を分ける */
+  itemClassName?: (node: CategoryTreeNode) => string | undefined
+  /** 名前の後ろに添える注記。無ければ undefined */
+  noteOf?: (node: CategoryTreeNode) => string | undefined
+}
+
 /** 名前での絞り込みの結果 */
 export type CategoryTreeFilterResult = {
   /** 出すノード(当たったノードと、その祖先・子孫) */

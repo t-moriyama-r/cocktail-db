@@ -38,6 +38,33 @@ class CocktailSearch
     }
 
     /**
+     * まとまりごとに、そのまとまりのどれかと一致する材料を使うカクテル(AND 検索)を、ID の昇順で引くクエリ。
+     *
+     * まとまりは画面が「同じ親から選んだもの」をまとめて送る(docs/decisions/search-screen.md の 1。#282)。
+     * 旧の AND がカテゴリごとに 1 つの条件だったのと同じ結果になる。下書き・並び・技法とかんたん検索の絞り込みは
+     * OR 検索と同じ。
+     *
+     * @param  list<list<int>>  $groups
+     * @param  list<int>|null  $methodIds
+     * @return Builder<Cocktail>
+     */
+    public function queryEach(array $groups, ?array $methodIds = null, bool $easy = false): Builder
+    {
+        // 同じ内容のまとまりを何度 AND しても結果は変わらないので、重複を除いて条件の数を減らす
+        $groups = array_map(static function (array $group): array {
+            $group = array_values(array_unique($group));
+            sort($group);
+
+            return $group;
+        }, $groups);
+        $groups = array_values(array_unique($groups, SORT_REGULAR));
+
+        return $this->match
+            ->whereUsesEach($this->narrow(Cocktail::query()->published(), $methodIds, $easy), $groups)
+            ->orderBy('id');
+    }
+
+    /**
      * 手持ちの材料(選んだノード)だけで作れるカクテル(あるもの検索)を、ID の昇順で引くクエリ。
      *
      * 持っていなくてよい材料(任意・「その他」)の判定は IngredientMatch::whereMakeableWith に任せる。下書き・並び・

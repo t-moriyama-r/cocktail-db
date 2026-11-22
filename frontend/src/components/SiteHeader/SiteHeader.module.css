@@ -1,0 +1,193 @@
+/* 上に固定のヘッダー(旧 header.vue の v-app-bar)。左から並べ、登録数だけを右端に寄せる */
+.header {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  height: var(--header-height);
+  padding: 0 var(--space-2);
+  background: var(--color-header-bg);
+  color: var(--color-header-text);
+  box-shadow: var(--header-shadow);
+}
+
+/* 幅で出し分ける文字。xsOnly は 600px 未満だけ、smUp は 600px 以上、mdUp は 960px 以上で出す */
+.smUp,
+.mdUp {
+  display: none;
+}
+
+@media (min-width: 600px) {
+  .smUp {
+    display: inline;
+  }
+
+  .xsOnly {
+    display: none;
+  }
+}
+
+@media (min-width: 960px) {
+  .mdUp {
+    display: inline;
+  }
+}
+
+/* サイト名(アイコンと名前)。トップへのリンク */
+.siteName {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  align-items: center;
+  color: inherit;
+  font-size: var(--font-size-lg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.siteName:hover {
+  color: inherit;
+}
+
+/* 「検索をはじめる」 */
+.searchStart {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid currentcolor;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-header-text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 名前検索の入力欄と右のボタン。空いた幅を使い、狭い幅では縮む */
+.nameSearch {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 360px;
+}
+
+.nameSearchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-right: none;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.nameSearchButton {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--color-disabled-bg);
+  color: var(--color-text-muted);
+  font: inherit;
+  white-space: nowrap;
+}
+
+/* 1 件以上当たって押せるとき */
+.nameSearchHits {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  cursor: pointer;
+}
+
+/* 禁止文字を含むとき。押すと入力を空にする */
+.nameSearchError {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-on-accent);
+  cursor: pointer;
+}
+
+/* 右端の登録数。600px 未満では出さない */
+.countArea {
+  display: none;
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+@media (min-width: 600px) {
+  .countArea {
+    display: block;
+  }
+}
+
+.count a {
+  color: inherit;
+}
+
+/* 条件検索のモーダル(旧の v-dialog)。後ろを暗くし、真ん中に枠を出す。600px 未満は画面いっぱいにする */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-overlay);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--content-max-width);
+  max-height: 100%;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+@media (max-width: 599px) {
+  .modalOverlay {
+    padding: 0;
+  }
+
+  .modal {
+    height: 100%;
+    border-radius: 0;
+  }
+}
+
+/* 右上の Close */
+.modalBar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-2);
+}
+
+.modalClose {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.modalBody {
+  flex: 1;
+  min-height: var(--space-6);
+  padding: 0 var(--space-4) var(--space-4);
+  overflow-y: auto;
+}

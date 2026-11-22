@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
-// 条件検索の API(POST /api/cocktails/search。#163)の OR 検索・あるもの検索(#165)と、条件の検証。
+// 条件検索の API(POST /api/cocktails/search。#163・#164)の OR 検索・AND 検索・あるもの検索(#165)と、条件の検証。
 // 一致の意味は docs/search.md の「新しい木での意味」(#161)。期待値は、手元で動かした旧の CocktailFactory::cocktailSearch と
 // SearchCocktail の検証の結果と、docs/search-expected-diffs.md の「[#163] で変えたところ」から置く。
 
@@ -118,6 +118,21 @@ function cocktailSearchNames(TestResponse $response): array
 }
 
 /**
+ * まとまりを名前で書いて AND 検索し、当たったカクテルの名前を返す。
+ *
+ * @param  array<string, Category>  $nodes
+ * @param  list<list<string>>  $groups
+ * @return list<string>
+ */
+function cocktailSearchAnd(TestCase $test, array $nodes, array $groups): array
+{
+    return cocktailSearchNames(cocktailSearchPost($test, [
+        'mode' => 'and',
+        'category_groups' => array_map(fn (array $names): array => cocktailSearchIds($nodes, ...$names), $groups),
+    ]));
+}
+
+/**
  * 手持ちの材料をノードの名前で選んで、あるもの検索(mode=having)をし、当たったカクテルの名前を返った順で返す。
  *
  * @param  array<string, Category>  $nodes
@@ -215,6 +230,210 @@ describe('OR 検索の結果', function () {
     });
 });
 
+describe('AND 検索の結果', function () {
+    beforeEach(function () {
+        $this->n = cocktailSearchTree();
+        $n = $this->n;
+        // 「ラム」から「ゴールドラム」だけ外す例のため、ラムの子をもう 1 つ足す(docs/search.md の例の木)
+        $this->n['ゴールドラム'] = app(CategoryTree::class)->addNode(
+            $n['ラム'],
+            Category::factory()->make(['name' => 'ゴールドラム'])->getAttributes(),
+        );
+        $bacardi = Brand::factory()->create(['category_id' => $n['ホワイトラム']->id]);
+        // ID の順に作る。結果は ID の昇順で返る
+        cocktailSearchCocktail('キューバ・リブレ', [[$n['ラム'], false], [$n['コーラ'], false], [$n['ライム'], false]]);
+        cocktailSearchCocktail('モヒート', [[$n['ホワイトラム'], false], [$n['ライム'], false]]);
+        cocktailSearchCocktail('ダイキリ', [[$bacardi, false], [$n['ライム'], false]]);
+        cocktailSearchCocktail('ラム・コーク', [[$n['ダークラム'], false], [$n['コーラ'], false]]);
+        cocktailSearchCocktail('ジン・リッキー', [[$n['ジン'], false], [$n['ライム'], true]]);
+        cocktailSearchCocktail('マイタイ', [[$n['ホワイトラム'], false], [$n['ダークラム'], false]]);
+        cocktailSearchCocktail('ロングアイランド', [[$n['ホワイトラム'], false], [$n['ジン'], false], [$n['コーラ'], false]]);
+    });
+
+    it('TC-164-01: まとまり 2 つは、両方のまとまりに一致する材料を使うカクテル(積)が当たる', function () {
+        expect(cocktailSearchAnd($this, $this->n, [['ラム'], ['コーラ']]))
+            ->toBe(['キューバ・リブレ', 'ラム・コーク', 'ロングアイランド']);
+    });
+
+    it('TC-164-02: まとまり 3 つは、3 つすべてに一致する材料を使うカクテルが当たる', function () {
+        // キューバ・リブレはラム(ホワイトラムの祖先)とコーラは満たすが、ジンを使わない
+        expect(cocktailSearchAnd($this, $this->n, [['ホワイトラム'], ['ジン'], ['コーラ']]))
+            ->toBe(['ロングアイランド']);
+    });
+
+    it('TC-164-03: 祖先と子孫を別のまとまりで選ぶと、深いほうだけを選んだのと同じ結果になる', function () {
+        $deeperOnly = cocktailSearchAnd($this, $this->n, [['ホワイトラム']]);
+
+        expect(cocktailSearchAnd($this, $this->n, [['ラム'], ['ホワイトラム']]))
+            ->toBe($deeperOnly)
+            ->toBe(['キューバ・リブレ', 'モヒート', 'ダイキリ', 'マイタイ', 'ロングアイランド']);
+    });
+
+    it('TC-164-04: どれか 1 つのまとまりに一致するカクテルが無ければ、200 で空の配列を返す', function () {
+        $unused = app(CategoryTree::class)->addNode(
+            $this->n['洋酒'],
+            Category::factory()->make(['name' => 'テキーラ'])->getAttributes(),
+        );
+
+        // #167 でページングを足し、応答に件数(meta)が付いた(TC-163-16 と同じ確かめ方)
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [[$this->n['ラム']->id], [$unused->id]]])
+            ->assertOk()
+            ->assertJsonPath('data', [])
+            ->assertJsonPath('meta.total', 0);
+    });
+
+    it('TC-164-05: まとまりごとには当たるカクテルがあっても、全部を同時に満たすものが無ければ空', function () {
+        expect(cocktailSearchAnd($this, $this->n, [['ダークラム'], ['ジン']]))->toBe([]);
+    });
+
+    it('TC-164-06: 1 つのまとまりの中は、どれか 1 つを使えばよい(親を選んで子を 1 つ外したとき)', function () {
+        // 「ラム」から「ゴールドラム」だけ外すと、画面はホワイトラム・ダークラムを 1 つのまとまりにして送る(#282 の 1)
+        expect(cocktailSearchAnd($this, $this->n, [['ホワイトラム', 'ダークラム']]))
+            ->toBe(['キューバ・リブレ', 'モヒート', 'ダイキリ', 'ラム・コーク', 'マイタイ', 'ロングアイランド']);
+    });
+
+    it('TC-164-07: 同じノードを別々のまとまりにすると、両方を使うカクテルだけになる。1 つの材料はいくつものまとまりを満たしてよい', function () {
+        // キューバ・リブレの「ラム」(種類を指定しない)は、ホワイトラム・ダークラムのどちらのまとまりにも一致する
+        expect(cocktailSearchAnd($this, $this->n, [['ホワイトラム'], ['ダークラム']]))
+            ->toBe(['キューバ・リブレ', 'マイタイ']);
+    });
+
+    it('TC-164-08: まとまり 1 つは、同じノードの OR 検索と同じ結果になる', function () {
+        $ids = cocktailSearchIds($this->n, 'ダークラム', 'ジン');
+
+        expect(cocktailSearchNames(cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [$ids]])))
+            ->toBe(cocktailSearchNames(cocktailSearchPost($this, ['mode' => 'or', 'category_ids' => $ids])))
+            ->toBe(['キューバ・リブレ', 'ラム・コーク', 'ジン・リッキー', 'マイタイ', 'ロングアイランド']);
+    });
+
+    it('TC-164-09: 任意の材料も一致の対象にする', function () {
+        // ライムはジン・リッキーでは任意
+        expect(cocktailSearchAnd($this, $this->n, [['ジン'], ['ライム']]))->toBe(['ジン・リッキー']);
+    });
+
+    it('TC-164-10: 下書きのカクテルは、すべてのまとまりに一致しても返さない', function () {
+        cocktailSearchCocktail('下書きのラム・コーク', [[$this->n['ダークラム'], false], [$this->n['コーラ'], false]], ['is_draft' => true]);
+
+        // キューバ・リブレは、種類を指定しない「ラム」(ダークラムの祖先)とコーラで当たる
+        expect(cocktailSearchAnd($this, $this->n, [['ダークラム'], ['コーラ']]))
+            ->toBe(['キューバ・リブレ', 'ラム・コーク']);
+    });
+});
+
+describe('AND 検索の条件の検証', function () {
+    beforeEach(function () {
+        $this->n = cocktailSearchTree();
+    });
+
+    it('TC-164-11: mode=and で category_groups を省くと 422。category_ids では受けない', function () {
+        cocktailSearchPost($this, ['mode' => 'and'])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+        cocktailSearchPost($this, ['mode' => 'and', 'category_ids' => cocktailSearchIds($this->n, 'ラム')])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups', 'category_ids']);
+    });
+
+    it('TC-164-12: mode=and で category_ids も一緒に送ると 422', function () {
+        cocktailSearchPost($this, [
+            'mode' => 'and',
+            'category_groups' => [cocktailSearchIds($this->n, 'ラム')],
+            'category_ids' => cocktailSearchIds($this->n, 'ラム'),
+        ])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_ids']);
+    });
+
+    it('TC-164-19: 方式に合わない項目は、空の配列でも 422', function () {
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [cocktailSearchIds($this->n, 'ラム')], 'category_ids' => []])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_ids']);
+        cocktailSearchPost($this, ['category_ids' => cocktailSearchIds($this->n, 'ラム'), 'category_groups' => []])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+    });
+
+    it('TC-164-13: or(mode を省いたときも)で category_groups を送ると 422', function (?string $mode) {
+        $body = [
+            'category_ids' => cocktailSearchIds($this->n, 'ラム'),
+            'category_groups' => [cocktailSearchIds($this->n, 'ラム')],
+        ];
+        if ($mode !== null) {
+            $body['mode'] = $mode;
+        }
+
+        cocktailSearchPost($this, $body)
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+    })->with([
+        'or' => ['or'],
+        '省く' => [null],
+    ]);
+
+    it('TC-164-14: category_groups が空の配列・配列でなければ 422', function (mixed $value) {
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => $value])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+    })->with([
+        '空の配列' => [[]],
+        '数' => [1],
+        '文字' => ['1,2'],
+        'null' => [null],
+        'キーのある連想配列' => [['a' => [1]]],
+    ]);
+
+    it('TC-164-15: まとまりが空・配列でなければ、そのまとまりが 422', function (mixed $group) {
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [[$this->n['ラム']->id], $group]])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups.1']);
+    })->with([
+        '空の配列' => [[]],
+        '数' => [1],
+        '文字' => ['1'],
+        'null' => [null],
+    ]);
+
+    it('TC-164-16: まとまりに整数でない ID が入っていれば 422', function (mixed $value) {
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [[$this->n['ラム']->id, $value]]])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups.0.1']);
+    })->with([
+        '文字' => ['abc'],
+        '整数と同じ値の小数' => [1.0],
+        '真偽値' => [true],
+        'null' => [null],
+        '配列' => [[1]],
+    ]);
+
+    it('TC-164-17: どれかのまとまりに無いノードの ID が 1 つでも入っていれば 422', function () {
+        $missing = Category::query()->latest('id')->firstOrFail()->id + 1000;
+
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [[$this->n['ラム']->id], [$this->n['コーラ']->id, $missing]]])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+    });
+
+    it('TC-164-23: まとまりの個数が 20 個を超えたら 422、20 個までは受ける', function () {
+        $id = $this->n['ラム']->id;
+
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => array_fill(0, 21, [$id])])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => array_fill(0, 20, [$id])])
+            ->assertOk();
+    });
+
+    it('TC-164-18: ID の総数が 1000 個を超えたら 422、1000 個までは受ける', function () {
+        $id = $this->n['ラム']->id;
+
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [array_fill(0, 500, $id), array_fill(0, 501, $id)]])
+            ->assertUnprocessable()
+            ->assertOnlyJsonValidationErrors(['category_groups']);
+        cocktailSearchPost($this, ['mode' => 'and', 'category_groups' => [array_fill(0, 500, $id), array_fill(0, 500, $id)]])
+            ->assertOk();
+    });
+});
+
 it('TC-163-17: 1 件ごとに一覧の表に出す項目を、ID の昇順で返す', function () {
     $n = cocktailSearchTree();
     $shake = Method::factory()->create(['name' => 'シェイク', 'name_eng' => 'Shake']);
@@ -249,13 +468,12 @@ describe('条件の検証', function () {
         $this->n = cocktailSearchTree();
     });
 
-    it('TC-163-10: mode が or・having 以外なら 422', function (mixed $mode) {
+    it('TC-163-10: mode が or・and・having 以外なら 422', function (mixed $mode) {
         cocktailSearchPost($this, ['mode' => $mode, 'category_ids' => cocktailSearchIds($this->n, 'ラム')])
             ->assertUnprocessable()
             ->assertOnlyJsonValidationErrors(['mode']);
     })->with([
         '無い方式' => ['xyz'],
-        'and(#164 で受ける)' => ['and'],
         '大文字' => ['OR'],
         '大文字の having' => ['HAVING'],
         '数' => [1],

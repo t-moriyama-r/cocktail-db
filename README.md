@@ -23,7 +23,7 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 .github/workflows/deploy-env.yml   dev・stg へのデプロイの中身(上の 2 つから呼ぶ)
 .github/workflows/branch-flow.yml  staging・release への PR の元のブランチ(release 向けはタイトルの版も)を確かめる
 .github/workflows/release-tag.yml  release にマージした PR のタイトルの版で、タグと GitHub Release を作る
-.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画・動画。画面を変えた PR は幅の区切りごと)があるかを確かめる
+.github/workflows/evidence-gate.yml  FE・BE のコードを変えた PR に、修正前後の証跡(静止画。画面を変えた PR は動画と、幅の区切りごとの静止画)があるかを確かめる。本文の「気づいたこと」が issue につながっているかは、コードを変えていない文書だけの PR でも確かめる
 ```
 
 サーバー上の配置:
@@ -46,12 +46,13 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 cd backend
 composer install
 cp .env.example .env && php artisan key:generate
+php artisan storage:link     # /storage(画像)用の public/storage を作る
 php artisan serve            # http://127.0.0.1:8000
 
 # FE(別のターミナル)
 cd frontend
 npm install
-npm run dev                  # http://localhost:5173 。/api は Laravel に流れる
+npm run dev                  # http://localhost:5173 。/api と /storage(画像)は Laravel に流れる
 ```
 
 Laravel から本番と同じ形で確かめるときは、`frontend` で `npm run build` してから http://127.0.0.1:8000 を開く。
@@ -89,7 +90,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす(SQLite では代用しない)
 - 移行のテストは、旧 DB の接続(`legacy`)で 2 つ目の DB `legacy_test` を使う。同じ MariaDB に `legacy_test` を作り、接続先を `LEGACY_DB_HOST` などで渡す(DB 名は `phpunit.xml` が `legacy_test` に固定する)。表と旧データは `tests/Support/LegacyFixture.php` が `database/legacy/schema.sql`(旧 DB の DDL)から作る
 - CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR と `develop` への push で動く
-- E2E(Playwright)は `e2e/` にある。`frontend` で `npm run build` してから、`e2e` で `npm test`(`php artisan serve` を自動で起こす)。CI では `e2e` ジョブで流れる
+- E2E(Playwright)は `e2e/` にある。`frontend` で `npm run build` してから、`e2e` で `npm test`(`php artisan serve` を自動で起こす。相手がサーバー 1 本なので、手元では worker 1 本で流れる。設定は `e2e/playwright.config.ts` の `workers`)。CI では `e2e` ジョブで流れる
 - テスト名の先頭はテストケースの ID(`TC-<issue 番号>-<連番>`)。ケースの表は PR 本文にある
 
 ## ブランチ
@@ -106,7 +107,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 - `develop`・`staging`・`release` には直接 push できない(管理者も)。PR からマージする(マージコミット)
 - `staging` へは `develop` から、`release` へは `staging` からしか PR をマージできない(`branch-flow.yml` のチェックが落ちる)。ステージングに何を出したか・本番に何を出すかは、その PR の差分で見る
 - `staging`・`release` への PR のタイトルは、`staging` 向けが作った日(`【運用】staging 2026-10-26`)、`release` 向けが本番に出す版(`【運用】release v1.2.0`。SemVer)。`release` にマージすると、その版のタグと GitHub Release ができる(`release-tag.yml`)。形と版の上げ方は `CLAUDE.md` の「ブランチ・コミット・PR」の 9
-- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
+- `staging`・`release` への PR は、自動ではマージしない。レビューは CodeRabbit ではなく、PR を作った手元の Claude がする(`CLAUDE.md` の「ブランチ・コミット・PR」の 9)。CI が緑でそのレビューが済むと、`needs-approval` が付いて Slack に知らせが来るので、人が差分を見てマージする。AI レビューの指摘が残っていてもマージは止まらない(中身は `develop` に入る前にレビュー済み。指摘は昇格の PR では直さず、妥当なものは 1 件ずつ `develop` で直す issue にし、妥当でないものは理由を書き、公開できないセキュリティ指摘は issue やコメントに内容を書かず、下書きの security advisory にする)。`release` 向けの PR の CI は、lint とテスト(`backend`・`backend-lint`・`frontend`・`actionlint`)だけ
 - コミットメッセージは `issue-<番号>: <何をしたか>` で始め、本文に `Refs #<番号>` を書く(GitHub 上で issue に結び付く)
 
 ## デプロイ
@@ -141,10 +142,10 @@ Basic 認証で閉じた確認用の環境が 2 つある。中身は `.github/w
 | dev | https://cocktail-dev.trc-vlackhistory.net/ | `develop` | `deploy-dev.yml` | `~/cocktail-db-dev` | `<user>_cocktail_dev` |
 | stg(ステージング) | https://cocktail-stg.trc-vlackhistory.net/ | `staging` | `deploy-stg.yml` | `~/cocktail-db-stg` | `<user>_cocktail_stg` |
 
-- **dev**: `develop` に push される(PR がマージされる)たびに出す。`ai-auto-merge.yml` のマージは `GITHUB_TOKEN` なので push のワークフローが起きず、マージの後に `ai-auto-merge.yml` が `deploy-dev.yml` を直接呼ぶ。マージされた変更を、ステージングに出す前に画面で確かめる
+- **dev**: `develop` に push される(PR がマージされる)たびに出す。`ai-auto-merge.yml` が secret `AUTO_MERGE_TOKEN`(オーナーの PAT)でマージしたときもこの push で出す。secret が無く `GITHUB_TOKEN` でマージしたときは push のワークフローが起きないので、マージの後に `ai-auto-merge.yml` が `deploy-dev.yml` を直接呼ぶ(#540)。マージされた変更を、ステージングに出す前に画面で確かめる
 - **stg**: `staging` にマージしたときに出す。`develop` から `staging` への PR を作り、その差分(前回ステージングに出したところからの変更)を見てマージする
 - **出し直したいとき**: Actions の「deploy-dev」「deploy-stg」→「Run workflow」(ブランチはそれぞれ `develop`・`staging`)、または `gh workflow run deploy-dev.yml --ref develop`・`gh workflow run deploy-stg.yml --ref staging`。前回出したコミット(サーバーの `~/<アプリ本体>/REVISION`)と同じなら出さないので、同じコミットを出し直すとき(`.env` の中身を変えた後など)は `force` を付ける(`-f force=true`)。決まったブランチ以外からは出さない
-- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `migrate` → `optimize` → 動作確認)。動作確認では、資格情報なしで 401 になることも確かめる
+- 流れは本番と同じ(テスト → FE のビルド → rsync → `.env` → `storage:link` → `migrate` → `optimize` → 動作確認)。ただし dev は、最初のテストを流さない(`deploy-dev.yml` の `run_tests: false`。develop に入るコミットは PR の CI で通しているため。#535)。rsync は本番と同じく `public/storage`(`storage:link` が作る画像のリンク)を消さない。動作確認では、資格情報なしで 401 になることも確かめる
 - `.env` はデプロイのたびに Secret から作り直す(手で直さない)。`APP_KEY` だけは初回にサーバーで作ったものを使い続ける
 - Basic 認証の資格情報は dev と stg で同じ。ユーザーは cPanel の「ディレクトリのプライバシー」(`public_html/cocktail-db-dev`・`public_html/cocktail-db-stg`)で足す・消す。ドキュメントルートの 1 つ上にかけているので、デプロイで消えない
 
@@ -155,10 +156,19 @@ GitHub 側に要る設定(本番の `MIXHOST_*` も使う):
 | Secret | `DEV_DB_PASSWORD` | dev の DB ユーザー(`<user>_cocktail_dev`)のパスワード。単一引用符は使えない |
 | Secret | `STG_DB_PASSWORD` | stg の DB ユーザー(`<user>_cocktail_stg`)のパスワード。単一引用符は使えない |
 | Secret | `DEV_BASIC_AUTH` | 動作確認に使う Basic 認証の `<ユーザー名>:<パスワード>`(dev・stg 共通) |
+| Secret | `DEV_AMAZON_CREDENTIAL_ID`・`STG_AMAZON_CREDENTIAL_ID` | dev・stg の `.env` の `AMAZON_CREDENTIAL_ID`(Amazon Creators API の資格情報の ID) |
+| Secret | `DEV_AMAZON_CREDENTIAL_SECRET`・`STG_AMAZON_CREDENTIAL_SECRET` | dev・stg の `.env` の `AMAZON_CREDENTIAL_SECRET`(同じく、シークレット) |
+| Secret | `DEV_AMAZON_PARTNER_TAG`・`STG_AMAZON_PARTNER_TAG` | dev・stg の `.env` の `AMAZON_PARTNER_TAG`(Amazon のパートナータグ) |
+| Secret | `DEV_RAKUTEN_AFFILIATE_ID`・`STG_RAKUTEN_AFFILIATE_ID` | dev・stg の `.env` の `RAKUTEN_AFFILIATE_ID`(楽天アフィリエイトの ID) |
+| Secret | `STG_LEGACY_DB_DATABASE`・`STG_LEGACY_DB_USERNAME`・`STG_LEGACY_DB_PASSWORD` | stg の `.env` の `LEGACY_DB_*`(旧 DB の接続。stg で `legacy:verify-images`・`legacy:import` を流すときに入れる。#211・#36)。DB 名・ユーザー名には cPanel のユーザー名が頭に付く |
 | Variable | `DEV_APP_URL` | `https://cocktail-dev.trc-vlackhistory.net` |
 | Variable | `STG_APP_URL` | `https://cocktail-stg.trc-vlackhistory.net` |
 
-Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは、デプロイの最初の check で止まる。
+Amazon・楽天の 8 つ(`DEV_AMAZON_*`・`STG_AMAZON_*`・`DEV_RAKUTEN_AFFILIATE_ID`・`STG_RAKUTEN_AFFILIATE_ID`)は入れなくてよい。空なら `.env` にその行を書かず、デプロイは通る(鍵が無ければ Amazon に問い合わせず、設定は既定の値になるので、Amazon の情報が出ず、楽天のリンクに ID が付かない)。値に改行・復帰文字・単一引用符は使えない(入っているとデプロイの `.env` を書くところで止まる)。管理画面の設定で保存した値があれば、`.env` よりそちらが優先する。
+
+旧 DB の 3 つ(`STG_LEGACY_DB_*`)も入れなくてよい。`STG_LEGACY_DB_DATABASE` が空なら `.env` に `LEGACY_DB_*` の行を書かない。入っていれば、3 つの値と `LEGACY_DB_HOST=localhost`・`LEGACY_DB_PORT=3306` を書く(旧 DB は新の DB と同じサーバーにある)。値に改行・復帰文字・単一引用符は使えないのは同じ。dev には渡していない。`.env` はデプロイのたびに作り直し、設定もキャッシュするので、サーバーの `.env` に手で足しても効かない・次のデプロイで消える。入れた後は stg を `force` 付きで出し直す。
+
+Secret は GitHub の画面(Settings → Secrets and variables → Actions)か、自分で開いたターミナルの `gh secret set <名前>` で入れる。入力を受け付けない場所(Claude Code の `!` など)で `gh secret set` を打つと、値が空のまま保存される。空のときは(Amazon・楽天の 8 つと旧 DB の 3 つを除き)、デプロイの最初の check で止まる。
 
 ## サーバーの PHP の版
 

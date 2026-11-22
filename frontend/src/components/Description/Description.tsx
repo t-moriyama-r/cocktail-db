@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Link } from 'react-router'
 import type { components } from '../../api/schema'
+import { brandPath, categoryPath, cocktailPath, dictionaryPath } from '../../utils/detailPaths'
 import styles from './Description.module.css'
 
 /**
@@ -11,12 +12,12 @@ export type DescriptionSegment = NonNullable<components['schemas']['CocktailDeta
 
 type LinkSegment = Exclude<DescriptionSegment, { type: 'text' }>
 
-/** リンクの区切りの種類ごとのリンク先(App.tsx のルートと同じ URL) */
+/** リンクの区切りの種類ごとのリンク先 */
 const LINK_PATHS: Record<LinkSegment['type'], (id: number) => string> = {
-  node: (id) => `/category/${id}`,
-  cocktail: (id) => `/detail/cocktail/${id}`,
-  brand: (id) => `/detail/brand/${id}`,
-  dictionary: (id) => `/dictionary/${id}`,
+  node: categoryPath,
+  cocktail: cocktailPath,
+  brand: brandPath,
+  dictionary: dictionaryPath,
 }
 
 type Props = {

@@ -1,5 +1,5 @@
 import TriStateCheckbox from './TriStateCheckbox'
-import type { CategoryTreeNode, CategoryTreeSelection } from './CategoryTree.types'
+import type { CategoryTreeAppearance, CategoryTreeNode, CategoryTreeSelection } from './CategoryTree.types'
 import styles from './CategoryTree.module.css'
 
 type Props = {
@@ -12,6 +12,7 @@ type Props = {
   radioName: string
   onToggleOpen: (id: number) => void
   onNameClick?: (node: CategoryTreeNode) => void
+  appearance: CategoryTreeAppearance
 }
 
 /** 木の 1 ノードの行と、開いていればその子を出す。畳んでいる子は描かない */
@@ -23,6 +24,7 @@ export default function CategoryTreeItem({
   radioName,
   onToggleOpen,
   onNameClick,
+  appearance,
 }: Props) {
   const children = visibleIds === null ? node.children : node.children.filter((child) => visibleIds.has(child.id))
   const isOpen = openIds.has(node.id)
@@ -30,10 +32,13 @@ export default function CategoryTreeItem({
   const isSelectable = selection.mode === 'single' && selection.isSelectable?.(node) !== false
 
   const hasChildren = children.length > 0
+  const isHeading = appearance.isHeading?.(node) === true
+  const note = appearance.noteOf?.(node)
+  const itemClassName = appearance.itemClassName?.(node)
 
   // 600 ノードを一度に開いても詰まらないよう、1 行の要素は li・開閉のボタン・選ぶ入力・名前だけにする
   return (
-    <li className={styles.item}>
+    <li className={itemClassName === undefined ? styles.item : `${styles.item} ${itemClassName}`}>
       {hasChildren && (
         <button
           type="button"
@@ -45,7 +50,7 @@ export default function CategoryTreeItem({
           {isOpen ? '▾' : '▸'}
         </button>
       )}
-      {selection.mode === 'single' ? (
+      {isHeading ? null : selection.mode === 'single' ? (
         <input
           type="radio"
           className={hasChildren ? styles.control : styles.leafControl}
@@ -65,13 +70,16 @@ export default function CategoryTreeItem({
           onChange={(checked) => selection.onToggle(node, checked)}
         />
       )}
-      {onNameClick === undefined ? (
+      {isHeading ? (
+        <span className={styles.heading}>{node.name}</span>
+      ) : onNameClick === undefined ? (
         node.name
       ) : (
         <button type="button" className={styles.nameLink} onClick={() => onNameClick(node)}>
           {node.name}
         </button>
       )}
+      {note !== undefined && <span className={styles.note}>{note}</span>}
       {isOpen && hasChildren && (
         <ul className={styles.children}>
           {children.map((child) => (
@@ -84,6 +92,7 @@ export default function CategoryTreeItem({
               radioName={radioName}
               onToggleOpen={onToggleOpen}
               onNameClick={onNameClick}
+              appearance={appearance}
             />
           ))}
         </ul>

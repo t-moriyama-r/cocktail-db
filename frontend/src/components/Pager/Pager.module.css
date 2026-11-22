@@ -1,0 +1,43 @@
+/* ページを選ぶ部品。狭い幅では折り返す(横スクロールを出さない) */
+.pager {
+  margin: var(--space-3) 0;
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 指で押しやすいよう、番号も 40px 四方より小さくしない */
+.item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  text-decoration: none;
+}
+
+/* いまのページ。地の色はリンクの色(白い文字と 4.5:1 以上) */
+.current {
+  border-color: var(--color-link);
+  background: var(--color-link);
+  color: var(--color-on-accent);
+  font-weight: 700;
+}
+
+.gap {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--color-text-muted);
+}

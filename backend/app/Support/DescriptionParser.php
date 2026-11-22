@@ -21,8 +21,9 @@ final class DescriptionParser
 {
     /**
      * ID の記法。種類は n・c・b・d(大文字も同じ意味)。ID は経路(routes/api.php)と同じく int に収まる 18 桁まで。
+     * 説明文の参照が指す先があるかを data:verify(#285)も同じ形で調べるので、公開する。
      */
-    private const REFERENCE_PATTERN = '/@([nNcCbBdD])([1-9][0-9]{0,17})@/';
+    public const REFERENCE_PATTERN = '/@([nNcCbBdD])([1-9][0-9]{0,17})@/';
 
     /**
      * 記法の種類と、応答の type。

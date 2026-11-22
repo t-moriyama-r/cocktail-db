@@ -1,0 +1,58 @@
+/* 保存の後の別名の警告(#83)。カテゴリ木の画面の知らせと同じ見た目 */
+.notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-row-alt);
+  overflow-wrap: anywhere;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.noticeList {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+
+/* 一覧の上の「新規」のリンク(銘柄の一覧と同じ) */
+.actions {
+  margin: 0 0 var(--space-3);
+}
+
+/* 公開済み・下書きの切り替え。タブのように横に並べ、下に線を引く */
+.switcher {
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.switcherList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 押せる範囲を広げ、下の線に重ねる(選んでいるものは線の色で示す) */
+.switcherLink {
+  display: block;
+  margin-bottom: -1px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 3px solid transparent;
+  text-decoration: none;
+}
+
+.switcherLink:hover {
+  border-bottom-color: var(--color-border);
+}
+
+/* いま出している一覧(aria-current="page") */
+.switcherLink[aria-current='page'] {
+  border-bottom-color: var(--color-heading-line);
+  color: var(--color-text);
+  font-weight: bold;
+}

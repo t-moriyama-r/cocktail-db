@@ -1,0 +1,9 @@
+/* 管理画面の用語の新規・編集の画面 */
+.page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.title {
+  margin: 0;
+}

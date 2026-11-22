@@ -57,6 +57,20 @@ class LegacyIdMap extends Model
     }
 
     /**
+     * 旧の表の 1 つの ID から、新しい表の ID を引く。対応が無ければ null。
+     */
+    public static function newIdOf(string $legacyTable, string $newTable, int $legacyId): ?int
+    {
+        $map = static::query()
+            ->where('legacy_table', $legacyTable)
+            ->where('legacy_id', $legacyId)
+            ->where('new_table', $newTable)
+            ->first();
+
+        return $map?->new_id;
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
