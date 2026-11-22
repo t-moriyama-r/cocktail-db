@@ -59,7 +59,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `is_major` | `boolean` | | メジャーか(既定 false) | `is_major`(根は false) |
 | `is_like` | `boolean` | | 管理者のおすすめか(既定 false) | `is_like`(根は false) |
 | `is_powder` | `boolean` | | 粉末か(既定 false) | `is_powder`(根は false) |
-| `famous_brand_id` | `foreignId` → `brands` | ○ | 有名な銘柄(度数の計算に使う。#158) | `famous_brand_id`。0 は null にする(ミドルに 119 件)。カテゴリ木を移す #29 では null で入れ、銘柄を移す #30(`legacy:import --only=brands`)で旧の値を付ける。部分木の外の銘柄を指すもの(ミドル 58。[strength.md](decisions/strength.md) の「決まったことに書かれていないこと」)も旧のまま付ける |
+| `famous_brand_id` | `foreignId` → `brands` | ○ | 有名な銘柄(度数の計算に使う。#158) | `famous_brand_id`。0 は null にする(ミドルに 119 件)。カテゴリ木を移す #29 では null で入れ、銘柄を移す #30(`legacy:import --only=brands`)で旧の値を付ける。ミドル 58 の有名な銘柄(銘柄 138)も旧のまま付ける。銘柄 138 は旧ではミドル 58 の部分木の外にあるが、銘柄を移すときにミドル 58 の下へ移す(#752。[strength.md](decisions/strength.md) の決まったこと 6) |
 | `youtube` | `string(255)` | ○ | YouTube の動画 | `youtube` |
 | `youtube_created_at` | `dateTime` | ○ | 動画の公開日時 | `youtube_created_at` |
 | `youtube_start_seconds` | `unsignedInteger` | ○ | 動画の開始位置(秒) | `y_hour`・`y_minute`・`y_second`(下の「YouTube の開始位置」) |
@@ -123,7 +123,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | 列 | 型 | null | 中身 | 旧 DB(`m_brand`) |
 |---|---|---|---|---|
 | `id` | `id()` | | 旧 ID のまま | `id` |
-| `category_id` | `foreignId` → `categories` | | 所属するノード(どの深さでもよい) | ミドルがあれば `middle_category`、無ければ `category` の新ノード(#30。`middle_category` の 0 は無しと読む)。親が合わない 1 件は [migration-anomalies.md](migration-anomalies.md) の 4 |
+| `category_id` | `foreignId` → `categories` | | 所属するノード(どの深さでもよい) | ミドルがあれば `middle_category`、無ければ `category` の新ノード(#30。`middle_category` の 0 は無しと読む)。親が合わない 1 件は [migration-anomalies.md](migration-anomalies.md) の 4。ミドルの有名な銘柄が親のカテゴリの直下にある 1 件(銘柄 138)は、そのミドルの下へ移す(同じく 15。#752) |
 | `name` | `string(255)` | | 名前 | `name` |
 | `name_search` | `string(255)` | | 検索用に正規化した名前 | `name_search` |
 | `name_eng` | `string(255)` | | 英名 | `name_eng` |
