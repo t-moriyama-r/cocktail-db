@@ -90,6 +90,7 @@ PR・issue(PR なら閉じる issue も)に、オーナー・コラボレータ�
 次のラベルが付くと、`notify-needs-human.yml` が Slack に知らせる(送り方は下の「Slack の設定」)。通知には、PR・issue と、PR が閉じる issue へのリンク、頼むコメント(目印 `<!-- ai-dev:<ラベル> -->` の付いたいちばん新しいもの)の抜粋が入る(図のコードブロックは「(図は GitHub で見る)」に置き換える。頼むコメントの形と、図のラベルの字数(ノードは全角 12 字・矢印のラベルは全角 6 字まで)は `CLAUDE.md` の「人に判断を頼むとき」)。そのため、ラベルより先に頼むコメントを書く。頼む中身(目印の付いたコメント、`needs-decision` なら本文の「判断が要ること」、ほかは人のいちばん新しいコメント)が見つからないときは、開いても答えることが無いので送らない(毎朝のまとめには載る)。
 
 - bot(GitHub Actions の中の Claude Code など)が付けたラベルでは送らない。Actions の中で付けたときは、ワークフローが `gh workflow run notify-needs-human.yml` で送る
+- ワークフローから呼ばれたとき(`gh workflow run`)は、同じ PR・issue の同じラベルで、同じ頼むコメントの通知を送っていて、まだ「済」になっていなければ送らない(bot で送るときだけ。DM の履歴を見る。`.github/scripts/slack-post.sh`)。回のあいだにほかのワークフロー(`ai-auto-merge.yml` など)が付けたラベルを、`ai-review-loop.yml` などが自分の回で付いたとみなして呼び直しても、同じ頼みが 2 通届かないようにするため(#577)。頼むコメントが新しくなっていれば、頼み直しとして送る
 - 本文に目印 `ai-dev:pending-body` がある issue(issue-breakdown が作っている途中のもの)では送らない。作り終えたときに、開いている `needs-decision` の issue を 1 通にまとめて送る
 - 付いたときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだこれらのラベルが付いて開いている PR・issue を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件の日は送らない。手動で送るときは、`notify-needs-human.yml` を `number` を空、`label` を `all` にして動かす
 - 頼んだラベルが外れるか、PR・issue が閉じるか、同じラベルで頼み直したら、その通知に ✅ のリアクションが付き、本文の先頭に「【済】」が付いて、残りが打ち消し線になる(bot で送ったときだけ)。ラベルが外れた・閉じたときのイベント、ラベルを外すワークフロー(`ai-review-loop.yml`・`ai-decision-loop.yml`・`ai-review-sweep.yml`)の終わり、毎朝の見回りで、`notify-needs-human.yml` の `mark-done` ジョブが付ける。手動で付けさせるときは、`label` を `done` にして動かす
@@ -98,7 +99,7 @@ PR・issue(PR なら閉じる issue も)に、オーナー・コラボレータ�
 
 送るのは `.github/scripts/slack-post.sh`。`notify-workflow-merged.yml`(ワークフローを変えた PR のマージ)と `notify-started.yml`(エージェントが着手した issue。`gh workflow run notify-started.yml -f issues=<番号>,<番号> -f note=<任意>` で呼ぶ)も同じ送り先に送る。
 
-- **bot で送る(おすすめ)**: Slack App の bot token を secret `SLACK_BOT_TOKEN` に、送り先の人のメンバー ID(`U` で始まるもの。Slack のプロフィールの「︙」→「メンバー ID をコピー」)をリポジトリ変数 `SLACK_NOTIFY_USER` に入れる。通知は、その人と bot の DM(Slack の左側の「App」の下)に届く。App の bot に要る権限(OAuth & Permissions の Bot Token Scopes)は、`chat:write`(送る)・`reactions:write`(✅ を付ける)・`im:write`(DM を開く)・`im:history`(頼んだ通知を探す)。権限を足したら、App をワークスペースに入れ直す
+- **bot で送る(おすすめ)**: Slack App の bot token を secret `SLACK_BOT_TOKEN` に、送り先の人のメンバー ID(`U` で始まるもの。Slack のプロフィールの「︙」→「メンバー ID をコピー」)をリポジトリ変数 `SLACK_NOTIFY_USER` に入れる。通知は、その人と bot の DM(Slack の左側の「App」の下)に届く。App の bot に要る権限(OAuth & Permissions の Bot Token Scopes)は、`chat:write`(送る)・`reactions:write`(✅ を付ける)・`im:write`(DM を開く)・`im:history`(頼んだ通知を探す・同じ頼みを送ったかを確かめる)。権限を足したら、App をワークスペースに入れ直す
 - **Webhook で送る**: bot が無ければ、secret `SLACK_WEBHOOK_URL`(Incoming Webhook)に送る。「済」は付かない
 - どちらも無いときは、送らずに警告だけ出す
 

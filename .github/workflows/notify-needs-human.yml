@@ -21,6 +21,8 @@
 #   GITHUB_TOKEN で付けたラベルはワークフローを起こさないので、Actions の中からはこちらに頼れない
 # - workflow_dispatch: Actions の中から `gh workflow run` で呼ぶ(GITHUB_TOKEN でも起こせる)。
 #   number を空にすると、開いている needs-decision の issue を 1 通にまとめる(issue を一度にたくさん作ったとき)
+#   回のあいだにほかのワークフローが付けたラベルを、呼ぶ側が自分の回で付いたとみなして呼び直すことがあるので、
+#   同じ頼み(同じ PR・issue・ラベル・頼むコメント)の通知がまだ「済」になっていなければ送らない(#577。決め方は .github/scripts/slack-post.sh)
 #
 # 頼んだときの通知は 1 回きりなので、毎朝 9:00(日本時間)に、まだ人の番になっているもの(上の 4 つのラベルが
 # 付いて開いている PR・issue)を、ラベルごとに待っている日数を添えて 1 通にまとめて知らせ直す。0 件なら送らない。
@@ -66,6 +68,15 @@ jobs:
         && github.event.sender.type != 'Bot'
         && !contains(github.event.issue.body, 'ai-dev:pending-body'))
     runs-on: ubuntu-latest
+    # ワークフローから同じ PR・issue の同じラベルで続けて呼ばれたときは、1 つずつ動かして、後の回が前の回の送った通知を履歴で見られるようにする。
+    # 待てるのは 1 つだけで、さらに来れば待っている方が取り消されるが、同じ頼みを知らせる回なので困らない。
+    # ラベルのイベントは関係ないラベルでも起きるので、実行ごとのグループに逃がす(RC-03)
+    concurrency:
+      group: >-
+        ${{ github.event_name == 'workflow_dispatch'
+          && format('notify-needs-human-{0}-{1}', inputs.number, inputs.label)
+          || format('notify-needs-human-run-{0}', github.run_id) }}
+      cancel-in-progress: false
     steps:
       # 送るスクリプトだけを取る。pull_request_target でも取るのは既定のブランチのもので、PR のコードは動かない
       - uses: actions/checkout@v6
@@ -85,6 +96,9 @@ jobs:
           NUMBER: ${{ inputs.number || github.event.pull_request.number || github.event.issue.number }}
           LABEL: ${{ inputs.label || github.event.label.name }}
           SENDER: ${{ github.event_name != 'workflow_dispatch' && github.event.sender.login || '' }}
+          # ワークフローから呼ばれたときは、同じ頼み(同じ頼むコメント)の通知がまだ「済」になっていなければ送らない。
+          # 回のあいだにほかのワークフローが付けたラベルを、呼ぶ側が自分の回で付いたとみなして呼び直すことがあるため(#577。決め方は slack-post.sh)
+          SKIP_SAME_ASK: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           # 本文やコメントは長い PR だと引数の長さの上限を超えるので、jq にはファイルで渡す(#469)
           # issue の API は PR も返す(PR なら pull_request が付く)
@@ -143,7 +157,8 @@ jobs:
           | {
               unfurl_links: false,
               # 片付いたときに「済」を付ける通知を、後から見つけるための印(slack-mark-done.sh が読む)
-              metadata: {event_type: "ai_dev_ask", event_payload: {repo: $repo, number: $number, label: $label}},
+              # ask は頼む中身にしたコメント(無ければ PR・issue)。同じ頼みを 2 回送らないために slack-post.sh が見る(#577)
+              metadata: {event_type: "ai_dev_ask", event_payload: {repo: $repo, number: $number, label: $label, ask: $ask.url}},
               text: ([
                 "\($t.head)(\($repo))",
                 "",

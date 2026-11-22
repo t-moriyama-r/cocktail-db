@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# notify-needs-human.yml の Slack の文面(message.jq・digest.jq)のテスト(TC-444-xx)。
+# notify-needs-human.yml の Slack の文面(message.jq・digest.jq)のテスト(TC-444-xx。メタデータの頼むコメントは TC-577-xx)。
 # ワークフローの run に書いた jq のプログラムをそのまま取り出し、決まった入力で流す。Slack にも GitHub にも触らない。
 #
 # 使い方: .github/scripts/tests/notify-message.test.sh
@@ -39,6 +39,14 @@ main() {
 	expect TC-444-04 'PR のタイトルの & < > は、番号を外してもエスケープする' \
 		"$(line '^\*PR\*: ')" '*PR*: <https://example.test/c/1|a &amp; &lt;b&gt;>'
 
+	message 445 "$pr" "$ask" "$closing"
+	expect TC-577-09 'メタデータに、頼む中身にした目印のコメントの URL を持たせる(同じ頼みを 2 回送らないため)' \
+		"$(jq -r '.metadata.event_payload | [.number, .label, .ask] | join(",")' "$WORK/out.json")" '445,needs-human,https://example.test/c/1'
+
+	message 445 "$pr" '[{"author_association":"OWNER","user":{"type":"User"},"body":"B で","html_url":"https://example.test/c/2"}]' "$closing"
+	expect TC-577-10 '目印のコメントが無ければ、引用した人のいちばん新しいコメントの URL を持たせる' \
+		"$(jq -r .metadata.event_payload.ask "$WORK/out.json")" 'https://example.test/c/2'
+
 	digest \
 		'{"number":445,"title":"【CI】issue-444: 通知の番号を消す","url":"https://example.test/pull/445","kind":"PR","label":"needs-human","ask":{"text":"","url":"https://example.test/pull/445"},"days":2}' \
 		'{"number":444,"title":"【CI】通知の番号を消す","url":"https://example.test/issues/444","kind":"issue","label":"needs-human","ask":{"text":"","url":"https://example.test/issues/444"},"days":0}'
@@ -72,7 +80,8 @@ message() {
 	jq -n -r -f "$WORK/message.jq" \
 		--arg repo owner/app --arg number "$1" --arg label needs-human --arg sender "" \
 		--slurpfile target "$WORK/target.json" --slurpfile comments "$WORK/comments.json" --slurpfile issues "$WORK/issues.json" \
-		| jq -r .text >"$WORK/out.txt"
+		>"$WORK/out.json"
+	jq -r .text "$WORK/out.json" >"$WORK/out.txt"
 }
 
 digest() {
