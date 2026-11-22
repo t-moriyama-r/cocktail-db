@@ -40,7 +40,8 @@ for (const { path, title } of pages) {
     await page.goto(path)
 
     await expect(footer(page)).toContainText('宅飲みカクテルデータベース ©ろんぐ')
-    await expect(footer(page).getByRole('link')).toHaveCount(2)
+    // 作者のサイト・作者の X と、プライバシーポリシー(#59)の 3 つ
+    await expect(footer(page).getByRole('link')).toHaveCount(3)
     await expect(footer(page)).not.toContainText('ボランティア')
     await expect(page.locator('a[href="/helpme"]')).toHaveCount(0)
   })

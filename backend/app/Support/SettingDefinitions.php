@@ -73,6 +73,13 @@ final class SettingDefinitions
                 false,
                 self::LINK_ID_RULES,
             ),
+            new SettingDefinition(
+                Ga4Tag::SETTING_MEASUREMENT_ID,
+                'GA4 の測定 ID',
+                'アクセス解析(Google アナリティクス 4)の測定 ID(「G-」で始まる)。値があるときだけ、公開ページに計測のタグを入れる。dev・stg のアクセスを混ぜないよう、本番だけに入れる',
+                false,
+                ['regex:'.Ga4Tag::MEASUREMENT_ID_PATTERN, 'max:'.Ga4Tag::MEASUREMENT_ID_MAX_LENGTH],
+            ),
         ];
 
         $byKey = [];

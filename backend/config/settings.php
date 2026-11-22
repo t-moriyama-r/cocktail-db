@@ -24,4 +24,7 @@ return [
     // 楽天アフィリエイトの ID(App\Services\Affiliate\AffiliateSearchUrls が検索結果のページへのリンクに、
     // RakutenClient が商品検索 API の呼び出しに付ける)
     'rakuten.affiliate_id' => env('RAKUTEN_AFFILIATE_ID'),
+
+    // アクセス解析(GA4)の測定 ID(App\Support\Ga4Tag。docs/decisions/analytics.md)。本番だけに入れる
+    'ga4.measurement_id' => env('GA4_MEASUREMENT_ID'),
 ];

@@ -23,6 +23,7 @@ beforeEach(function () {
         'rakuten.application_id' => null,
         'rakuten.access_key' => null,
         'rakuten.affiliate_id' => null,
+        'ga4.measurement_id' => null,
     ]);
 });
 
@@ -42,15 +43,17 @@ function settingItem(mixed $json, string $key): array
     throw new RuntimeException("一覧に {$key} が無い");
 }
 
-it('TC-132-01: 一覧は、定義の 6 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
+// GA4 の測定 ID(#59)を足して 7 項目になった
+it('TC-132-01: 一覧は、定義の 7 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
     $response = $this->getJson('/api/admin/settings')->assertOk();
     $json = $response->json();
 
     expect($response->json('data.*.key'))->toBe([
         'amazon.credential_id', 'amazon.credential_secret', 'amazon.partner_tag',
         'rakuten.application_id', 'rakuten.access_key', 'rakuten.affiliate_id',
+        'ga4.measurement_id',
     ])
-        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false])
+        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false, false])
         ->and(settingItem($json, 'amazon.partner_tag'))->toBe([
             'key' => 'amazon.partner_tag',
             'label' => 'Amazon のパートナータグ',

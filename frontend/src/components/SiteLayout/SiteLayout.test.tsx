@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from '../../App'
 import { buildCocktailDetail } from '../../features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from '../../test/api'
@@ -65,9 +65,11 @@ describe('共通の枠(SiteLayout)', () => {
       renderAt(path)
 
       await screen.findByRole('heading', { level: 1 })
+      // 右には、プライバシーポリシーへのリンクを置いた(#59)
       expect(footer().getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
         'https://trc-vlackhistory.net/',
         'https://twitter.com/virtualDollym',
+        '/privacy',
       ])
       expect(screen.getByRole('contentinfo')).not.toHaveTextContent('ボランティア')
     },
@@ -110,5 +112,84 @@ describe('共通の枠(SiteLayout)', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'マティーニ(Martini)' })
     await waitFor(() => expect(document.title).toBe('宅飲みカクテルデータベース(RC)'))
+  })
+})
+
+describe('フッターのプライバシーポリシーへのリンク(#59)', () => {
+  beforeEach(() => {
+    mockApi('get', '/dictionaries', 200, { data: [] })
+  })
+
+  test.each([['/'], ['/dictionary'], ['/nope']])(
+    'TC-59-11: %s のフッターのリンクから、同じタブでプライバシーポリシーを開ける',
+    async (path) => {
+      renderAt(path)
+      await screen.findByRole('heading', { level: 1 })
+
+      const link = footer().getByRole('link', { name: 'プライバシーポリシー' })
+      expect(link).toHaveAttribute('href', '/privacy')
+      expect(link).not.toHaveAttribute('target')
+      fireEvent.click(link)
+
+      expect(await screen.findByRole('heading', { level: 1, name: 'プライバシーポリシー' })).toBeInTheDocument()
+    },
+  )
+})
+
+// GA4 の page_view(#59)。gtag はサーバーが HTML に入れる外のスクリプト(gtag.js)の関数なので、境界として差し替え、
+// 送った中身(外への送信そのものが仕様)を確かめる。差し替えない(測定 ID が未設定でタグが無い)ときは window.gtag が無い
+describe('アクセス解析(GA4)の page_view(#59)', () => {
+  const gtag = vi.fn()
+  const pageViews = () =>
+    gtag.mock.calls
+      .filter(([command, eventName]) => command === 'event' && eventName === 'page_view')
+      .map(([, , params]) => params as { page_location: string; page_title: string })
+
+  beforeEach(() => {
+    mockApi('get', '/dictionaries', 200, { data: [] })
+    window.gtag = gtag
+  })
+
+  afterEach(() => {
+    delete window.gtag
+    gtag.mockReset()
+  })
+
+  test('TC-59-12: 公開ページを開くと、page_view を 1 回送る(URL とページ名は開いた画面のもの)', async () => {
+    renderAt('/dictionary?x=1')
+    await screen.findByRole('heading', { level: 1, name: '用語辞典' })
+
+    await waitFor(() =>
+      expect(pageViews()).toEqual([
+        { page_location: `${window.location.origin}/dictionary?x=1`, page_title: '用語辞典 ｜ 宅飲みカクテルデータベース(RC)' },
+      ]),
+    )
+  })
+
+  test('TC-59-13: 画面を移るたびに、移った先の page_view を送る。同じ URL へのリンクを押しても送らない', async () => {
+    renderAt('/nope')
+    await screen.findByRole('heading', { level: 1, name: 'ページが見つかりません' })
+
+    fireEvent.click(footer().getByRole('link', { name: 'プライバシーポリシー' }))
+    await screen.findByRole('heading', { level: 1, name: 'プライバシーポリシー' })
+    fireEvent.click(footer().getByRole('link', { name: 'プライバシーポリシー' }))
+
+    await waitFor(() =>
+      expect(pageViews()).toEqual([
+        { page_location: `${window.location.origin}/nope`, page_title: 'ページが見つかりません ｜ 宅飲みカクテルデータベース(RC)' },
+        { page_location: `${window.location.origin}/privacy`, page_title: 'プライバシーポリシー ｜ 宅飲みカクテルデータベース(RC)' },
+      ]),
+    )
+  })
+
+  test('TC-59-14: タグが無い(測定 ID が未設定)ときは、送らずにそのまま画面を出し、移れる', async () => {
+    delete window.gtag
+    renderAt('/nope')
+    await screen.findByRole('heading', { level: 1, name: 'ページが見つかりません' })
+
+    fireEvent.click(footer().getByRole('link', { name: 'プライバシーポリシー' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'プライバシーポリシー' })).toBeInTheDocument()
+    expect(gtag).not.toHaveBeenCalled()
   })
 })

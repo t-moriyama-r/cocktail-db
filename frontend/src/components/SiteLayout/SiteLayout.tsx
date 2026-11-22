@@ -6,15 +6,18 @@ import SiteHeader from '../SiteHeader/SiteHeader'
 import SiteFooter from './SiteFooter'
 import styles from './SiteLayout.module.css'
 import { SITE_TITLE } from './usePageTitle'
+import { usePageViewTracking } from './usePageViewTracking'
 
 /**
  * すべての公開ページを包む枠(旧 components/mainView.vue)。上に固定のヘッダー、本文(各ページ)、フッターを置く。
  * ヘッダー(名前検索・条件検索・ランダムウォーク)は SiteHeader(#99)。
  * ヘッダーのモーダルの条件検索のフォームの値は、結果の画面(#102)も書き換えるので、枠で持つ(SearchFormValuesProvider)。
  * 開いたときに、旧サイトが保存した検索条件を新しい保存に移し、戻せなかったものがあれば本文の上に出す(LegacySearchMigration。#175)。
+ * 画面を開いた・移ったときに、アクセス解析(GA4)に page_view を送る(usePageViewTracking。#59)。管理画面の枠では送らない。
  */
 export default function SiteLayout() {
   useScrollToTopOnNavigate()
+  usePageViewTracking()
   // 最初に開いた画面がページ名を渡さないときもサイト名だけを出す(HTML に書いた仮のタイトルを残さない)。
   // 画面の usePageTitle(useEffect)より先に動くよう useLayoutEffect にする(親の useEffect は子の後に動き、ページ名を消してしまう)
   useLayoutEffect(() => {
