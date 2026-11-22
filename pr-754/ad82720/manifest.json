@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "before": "a726475a540e6f9daba879b87e96f59b84482398",
+  "after": "ad8272007e21c7bdac63462efbdfe34243dfaf0a",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-689-01",
+        "TC-689-04"
+      ],
+      "note": "修正前は is_set=true source='env'、修正後は is_set=false source=NULL(7 項目とも)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-689-01",
+        "TC-689-02",
+        "TC-689-03",
+        "TC-689-04",
+        "TC-689-05"
+      ],
+      "note": "修正後で TC-689 のテストがすべて通ること",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
