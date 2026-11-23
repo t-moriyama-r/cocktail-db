@@ -18,6 +18,11 @@ export type SaveResult<T> =
   | { kind: 'saved'; data: T }
   /** 入力の誤り。画面は欄ごとに出し、入力を残して画面に残る(docs/decisions/admin-screens.md の既定) */
   | { kind: 'invalid'; errors: FieldErrors }
+  /**
+   * 422 で、冪等キーを断られた(`errors.idempotency_key`)。同じキーの前の送信が保存済みで、今の送信と中身が違う
+   * (応答が返らなかった後に入力を直して送った)とき。docs/decisions/admin-idempotency.md の決まったこと 1・5
+   */
+  | { kind: 'key-rejected' }
   | RequestFailure
 
 export type DeleteResult = { kind: 'deleted' } | RequestFailure
@@ -45,11 +50,25 @@ export const fetchCategoryTree = () => api.GET('/search-form')
 export const fetchCategoryBrands = (id: number) =>
   api.GET('/categories/{category}', { params: { path: { category: id } } })
 
-/** 言い換えを保存する。id が null なら足し(POST)、あれば書き換える(PUT) */
-export const saveParaphrase = (id: number | null, body: SaveParaphraseBody): Promise<SaveResult<ParaphraseResource>> =>
+/**
+ * 新規の送信に付ける `Idempotency-Key` ヘッダ(docs/decisions/admin-idempotency.md。#762)。キーを省くと付けない。
+ * 同じキーの再送には BE が 1 回目の応答を返す(`Idempotent-Replayed: true`)ので、ふつうの成功と同じく saved になる
+ */
+const idempotencyHeader = (idempotencyKey: string | undefined) =>
+  idempotencyKey === undefined ? undefined : { 'Idempotency-Key': idempotencyKey }
+
+/**
+ * 言い換えを保存する。id が null なら足し(POST)、あれば書き換える(PUT)。
+ * 足すときは idempotencyKey を `Idempotency-Key` ヘッダで送る。書き換えは、同じ内容を送り直しても行が増えないので、キーを付けない
+ */
+export const saveParaphrase = (
+  id: number | null,
+  body: SaveParaphraseBody,
+  idempotencyKey?: string,
+): Promise<SaveResult<ParaphraseResource>> =>
   toSaveResult(() =>
     id === null
-      ? api.POST('/admin/paraphrases', { body })
+      ? api.POST('/admin/paraphrases', { params: { header: idempotencyHeader(idempotencyKey) }, body })
       : api.PUT('/admin/paraphrases/{paraphrase}', { params: { path: { paraphrase: id } }, body }),
   )
 
@@ -57,11 +76,18 @@ export const saveParaphrase = (id: number | null, body: SaveParaphraseBody): Pro
 export const deleteParaphrase = (id: number): Promise<DeleteResult> =>
   toDeleteResult(() => api.DELETE('/admin/paraphrases/{paraphrase}', { params: { path: { paraphrase: id } } }))
 
-/** スキップ語を保存する。id が null なら足し(POST)、あれば書き換える(PUT) */
-export const saveSkipWord = (id: number | null, body: SaveSkipWordBody): Promise<SaveResult<SkipWordResource>> =>
+/**
+ * スキップ語を保存する。id が null なら足し(POST)、あれば書き換える(PUT)。
+ * 足すときは idempotencyKey を `Idempotency-Key` ヘッダで送る(言い換えと同じ)
+ */
+export const saveSkipWord = (
+  id: number | null,
+  body: SaveSkipWordBody,
+  idempotencyKey?: string,
+): Promise<SaveResult<SkipWordResource>> =>
   toSaveResult(() =>
     id === null
-      ? api.POST('/admin/skip-words', { body })
+      ? api.POST('/admin/skip-words', { params: { header: idempotencyHeader(idempotencyKey) }, body })
       : api.PUT('/admin/skip-words/{skipWord}', { params: { path: { skipWord: id } }, body }),
   )
 
@@ -71,7 +97,7 @@ export const deleteSkipWord = (id: number): Promise<DeleteResult> =>
 
 type SaveResponse<T> = { data?: { data: T }; error?: unknown; response: Response }
 
-/** 保存の応答を、保存できた・入力の誤り(422)・そのほかの失敗に分ける。通信の失敗(例外)も種類で返す */
+/** 保存の応答を、保存できた・冪等キーを断られた(422)・入力の誤り(422)・そのほかの失敗に分ける。通信の失敗(例外)も種類で返す */
 async function toSaveResult<T>(request: () => Promise<SaveResponse<T>>): Promise<SaveResult<T>> {
   let result: SaveResponse<T>
   try {
@@ -84,6 +110,7 @@ async function toSaveResult<T>(request: () => Promise<SaveResponse<T>>): Promise
     return { kind: 'saved', data: data.data }
   }
   if (response.status === 422 && hasFieldErrors(error)) {
+    if (error.errors.idempotency_key !== undefined) return { kind: 'key-rejected' }
     return { kind: 'invalid', errors: error.errors }
   }
   return response.status === 404 ? { kind: 'not-found' } : { kind: 'http-error', status: response.status }
@@ -96,6 +123,13 @@ async function toDeleteResult(request: () => Promise<FetchResult<unknown>>): Pro
 
 const hasFieldErrors = (error: unknown): error is { errors: FieldErrors } =>
   typeof error === 'object' && error !== null && 'errors' in error && typeof error.errors === 'object'
+
+/**
+ * 冪等キーを断られたときに出す文(銘柄の新規(#758)と同じ文。この画面の送信のボタンは「保存する」なので、「送信」を「保存」と書く)。
+ * 通信に失敗した前の送信が、実は保存できていた。もう一度保存すると別の語として保存するので、先に一覧で確かめてもらう
+ */
+export const KEY_REJECTED_MESSAGE =
+  '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度保存してください。'
 
 /** 保存・削除が失敗したときに出す文。入力は残すので、そう書く */
 export function failureMessage(failure: RequestFailure, action: '保存' | '削除'): string {
