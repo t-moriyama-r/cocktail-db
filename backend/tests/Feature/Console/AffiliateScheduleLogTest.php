@@ -105,7 +105,7 @@ it('TC-778-02: 同じ日の 2 回目は、前の回の行を消さずに後ろ�
 
     runAffiliateLogEvent(scheduleAffiliateLogEvent());
 
-    $lines = file($path, FILE_IGNORE_NEW_LINES);
+    $lines = file($path, FILE_IGNORE_NEW_LINES) ?: [];
     expect(array_slice($lines, 0, 3))->toBe([
         '[2026-11-23 11:50:00] affiliates:collect --refresh --new',
         '前の回の行',
