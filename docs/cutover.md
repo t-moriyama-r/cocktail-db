@@ -48,13 +48,13 @@ flowchart TD
 - 6 で失敗して、移行を直したものを出してから 4 から流し直すときは `--from migrate` を付ける。別の日に切り替えをやり直すときは `--restart` を付ける(済みの記録を外して 2 から流す)
 - 各手順の出力は、進み具合のディレクトリの `<手順>.log` にも残り、かかった秒数は `<手順>.done` に残る(手元の記録に写す)
 
-スクリプトはデプロイでは配られないので、`ops/backup/`・`ops/migrate/`・`ops/cutover/` をそろえて `~/cocktail-ops/` に置く(`migrate-data.sh` は、隣の `backup/`・`migrate/` のスクリプトを呼ぶ)。`php artisan` に版の付いたコマンドを使うときは、環境変数 `PHP` で渡す(`README.md` の「サーバーの PHP の版」)。
+`--offsite` は B2 に送らないなら省ける(下の例では付けている)。スクリプトはデプロイでは配られないので、`ops/backup/`・`ops/migrate/`・`ops/cutover/` をそろえて `~/cocktail-ops/` に置く(`migrate-data.sh` は、隣の `backup/`・`migrate/` のスクリプトを呼ぶ)。`php artisan` に版の付いたコマンドを使うときは、環境変数 `PHP` で渡す(`README.md` の「サーバーの PHP の版」)。
 
 ```bash
 scp -r ops/backup ops/migrate ops/cutover <user>@<host>:~/cocktail-ops/   # 手元のリポジトリから
 # 1 の後に、サーバーで
 bash ~/cocktail-ops/cutover/migrate-data.sh --old-env <旧アプリの .env> --old-storage <旧の画像のディレクトリ> \
-  --verify-db <user>_cocktail_verify [--offsite $HOME/cocktail-ops/offsite.conf]
+  --verify-db <user>_cocktail_verify --offsite $HOME/cocktail-ops/offsite.conf
 # 7 の後に
 bash ~/cocktail-ops/cutover/smoke.sh https://cocktail.trc-vlackhistory.net --legacy-category <旧のカテゴリの ID> \
   --expect-count <旧サイトの「現在の登録数」>

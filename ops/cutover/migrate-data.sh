@@ -108,9 +108,13 @@ migrate_data() {
       stopped "$step" "$status"
       exit "$status"
     fi
-    write_state "$step" finished "$(date '+%Y-%m-%d %H:%M:%S')"
-    write_state "$step" seconds "$((SECONDS - started))"
-    mv -- "$STATE_DIR/$step.done.tmp" "$STATE_DIR/$step.done"
+    # 記録を残せなければ(容量・inode が尽きたなど)、後ろへ進まずに止める。進むと、流し直しで新 DB のダンプを取り直してしまう
+    if ! { write_state "$step" finished "$(date '+%Y-%m-%d %H:%M:%S')" \
+      && write_state "$step" seconds "$((SECONDS - started))" \
+      && mv -- "$STATE_DIR/$step.done.tmp" "$STATE_DIR/$step.done"; }; then
+      log "[$step] 済みの記録を書けなかった。進み具合のディレクトリの空きを確かめてから、同じコマンドで流し直す: $STATE_DIR"
+      exit 1
+    fi
     log "[$step] 済んだ($((SECONDS - started)) 秒)"
   done
   log "すべての手順が済んだ。次は docs/cutover.md の 7(ドキュメントルートの切り替え)"
@@ -137,9 +141,9 @@ step_backup() {
   [[ -n $check && -f $check ]] || { log "[backup] 出力から退避の突き合わせ(check.tsv)のパスを読めない"; return 1; }
   missing=$(grep -c "^missing"$'\t' "$check")
   [[ $missing =~ ^[0-9]+$ ]] || { log "[backup] check.tsv の missing を数えられない: $check"; return 1; }
-  write_state backup dump "$dump"
-  write_state backup check "$check"
-  write_state backup missing "$missing"
+  write_state backup dump "$dump" || return 1
+  write_state backup check "$check" || return 1
+  write_state backup missing "$missing" || return 1
   log "[backup] 旧のダンプ: $dump / 旧から欠けていた画像(missing): $missing"
 }
 
@@ -153,7 +157,7 @@ step_dump_new() {
   }
   dump=$(tail -n 1 "$out")
   [[ -n $dump && -f $dump ]] || { log "[dump-new] 出力からダンプのパスを読めない"; return 1; }
-  write_state dump-new dump "$dump"
+  write_state dump-new dump "$dump" || return 1
   log "[dump-new] 新 DB の切り替え前のダンプ: $dump(戻すときは docs/cutover.md の 4 の戻し方)"
 }
 
