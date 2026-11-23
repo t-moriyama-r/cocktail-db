@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\CategoryClosure;
 use App\Models\Cocktail;
 use App\Models\CocktailIngredient;
+use App\Models\IdempotencyKey;
 use App\Models\User;
 use App\Services\CategoryTree;
 use App\Services\RecipeCounter;
@@ -142,10 +144,10 @@ function categoryAdminCurrentInput(Category $node, array $overrides = []): array
     ], $overrides);
 }
 
-function categoryAdminPng(): UploadedFile
+function categoryAdminPng(string $png = CATEGORY_ADMIN_PNG): UploadedFile
 {
     $path = tempnam(sys_get_temp_dir(), 'category-image-') ?: throw new RuntimeException('一時ファイルを作れない');
-    file_put_contents($path, base64_decode(CATEGORY_ADMIN_PNG, true));
+    file_put_contents($path, base64_decode($png, true));
 
     return new UploadedFile($path, 'a.png', null, null, true);
 }
@@ -962,4 +964,152 @@ it('TC-647-03: 根へ移して空になったノードを洋酒の下へ戻す�
         ->assertJsonPath('data.famous_brand_id', $gordons->id);
     expect(categoryAdminPathNames($n['ジン']))->toBe(['洋酒', 'ジン']);
     expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});
+
+// ノードの新規の冪等キー(#760。決まりは docs/decisions/admin-idempotency.md)。仕組み(ミドルウェア idempotent)そのものは
+// IdempotencyApiTest(#657)で確かめているので、ここではノードの新規につないだこと(その場で作る銘柄・画像を含む multipart の
+// 再送で 1 組だけ作り、閉包表の行も増えないこと)を確かめる。旧に冪等キーは無い(旧を動かして確かめてはいない)。
+
+/** 色だけ違う 1x1 の PNG(中身の違う画像の再送を確かめるため) */
+const CATEGORY_ADMIN_PNG_OTHER = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+
+const CATEGORY_ADMIN_IDEMPOTENCY_KEY = '8d2f4b6a-1c3e-4a5b-9e7d-2f6c8a0b4d13';
+
+/**
+ * ジンの下に、その場で作る銘柄・ノードの画像・銘柄の画像を付けて作る、画面と同じ multipart の新規の入力(真偽値は文字列で送る)。
+ * 画像は送るたびに作り直す。
+ *
+ * @param  array<string, Category>  $n
+ * @param  array<array-key, mixed>  $overrides
+ * @return array<array-key, mixed>
+ */
+function categoryAdminMultipartInput(array $n, string $png, array $overrides = []): array
+{
+    return [
+        ...categoryAdminInput($n['ジン'], ['name' => 'プレミアムジン', 'is_major' => 'true', 'is_like' => 'false', 'is_powder' => 'false']),
+        ...categoryAdminBrandInput(['brand_is_major' => 'true', 'brand_is_like' => 'false']),
+        'image' => categoryAdminPng($png),
+        'brand_image' => categoryAdminPng(CATEGORY_ADMIN_PNG),
+        ...$overrides,
+    ];
+}
+
+it('TC-760-01: Idempotency-Key を付けなければ、同じ本文の 2 回目は今までどおり同じ名前の 422 で断り、記録を残さない', function () {
+    ['nodes' => $n] = categoryAdminTree();
+
+    $this->postJson('/api/admin/categories', categoryAdminInput($n['砂糖']))->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $this->postJson('/api/admin/categories', categoryAdminInput($n['砂糖']))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.name', ['同じ親の下に、同じ名前のノードがあります']);
+
+    expect(Category::query()->where('name', 'ゴールドラム')->count())->toBe(1)
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+});
+
+it('TC-760-02: その場で作る銘柄・画像つき(multipart)を同じ Idempotency-Key で再送すると、ノード・銘柄・画像のファイルを 1 組だけ作り、閉包表の行も増やさず、1 回目と同じ応答を返す', function () {
+    Storage::fake('public');
+    ['nodes' => $n] = categoryAdminTree();
+    $headers = [Idempotent::HEADER => CATEGORY_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+
+    $first = $this->post('/api/admin/categories', categoryAdminMultipartInput($n, CATEGORY_ADMIN_PNG), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $closureRows = categoryAdminClosureRows();
+    $second = $this->post('/api/admin/categories', categoryAdminMultipartInput($n, CATEGORY_ADMIN_PNG), $headers)
+        ->assertCreated()
+        ->assertHeader(Idempotent::REPLAYED_HEADER, 'true')
+        ->assertHeader('Content-Type', 'application/json');
+
+    $node = Category::query()->where('name', 'プレミアムジン')->sole();
+    $brand = Brand::query()->where('name', 'ロンサカパ')->sole();
+    expect($second->json())->toBe($first->json())
+        ->and($second->json('data.id'))->toBe($node->id)
+        ->and(categoryAdminPathNames($node))->toBe(['洋酒', 'ジン', 'プレミアムジン'])
+        ->and($node->famous_brand_id)->toBe($brand->id)
+        ->and($brand->category_id)->toBe($node->id)
+        ->and(categoryAdminClosureRows())->toBe($closureRows)
+        ->and(Storage::disk('public')->allFiles())->toEqualCanonicalizing([$node->image, $brand->image])
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
+});
+
+it('TC-760-03: 同じ Idempotency-Key で中身(名前・親・銘柄・画像)の違う送信は 422 で、作らず、1 回目の応答も返さない', function (string $change) {
+    Storage::fake('public');
+    ['nodes' => $n] = categoryAdminTree();
+    $headers = [Idempotent::HEADER => CATEGORY_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+    $this->post('/api/admin/categories', categoryAdminMultipartInput($n, CATEGORY_ADMIN_PNG), $headers)->assertCreated();
+    $categories = Category::query()->count();
+    $brands = Brand::query()->count();
+    $closureRows = categoryAdminClosureRows();
+
+    [$png, $overrides] = match ($change) {
+        '名前' => [CATEGORY_ADMIN_PNG, ['name' => 'オールドトムジン']],
+        '親' => [CATEGORY_ADMIN_PNG, ['parent_id' => $n['ラム']->id]],
+        '銘柄' => [CATEGORY_ADMIN_PNG, ['brand_name' => 'ディプロマティコ']],
+        '画像' => [CATEGORY_ADMIN_PNG_OTHER, []],
+    };
+
+    $this->post('/api/admin/categories', categoryAdminMultipartInput($n, $png, $overrides), $headers)
+        ->assertUnprocessable()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER)
+        ->assertExactJson([
+            'message' => '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+            'errors' => ['idempotency_key' => ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。']],
+        ]);
+
+    expect(Category::query()->count())->toBe($categories)
+        ->and(Brand::query()->count())->toBe($brands)
+        ->and(categoryAdminClosureRows())->toBe($closureRows)
+        ->and(Storage::disk('public')->allFiles())->toHaveCount(2);
+})->with(['名前', '親', '銘柄', '画像']);
+
+it('TC-760-04: 検証に落ちた新規(名前が空)は記録を残さず、直して同じ Idempotency-Key で送ると作る', function () {
+    Storage::fake('public');
+    ['nodes' => $n] = categoryAdminTree();
+    $headers = [Idempotent::HEADER => CATEGORY_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+    $closureRows = categoryAdminClosureRows();
+
+    $this->post('/api/admin/categories', categoryAdminMultipartInput($n, CATEGORY_ADMIN_PNG, ['name' => '']), $headers)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('name');
+    expect(IdempotencyKey::query()->count())->toBe(0)
+        ->and(Category::query()->where('name', 'プレミアムジン')->exists())->toBeFalse()
+        ->and(categoryAdminClosureRows())->toBe($closureRows)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+
+    $this->post('/api/admin/categories', categoryAdminMultipartInput($n, CATEGORY_ADMIN_PNG), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(Category::query()->where('name', 'プレミアムジン')->count())->toBe(1)
+        ->and(Brand::query()->where('name', 'ロンサカパ')->count())->toBe(1)
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-760-05: OpenAPI では、ノードの新規に任意の Idempotency-Key ヘッダ(UUID)があり、更新には無い', function () {
+    $file = tempnam(sys_get_temp_dir(), 'openapi');
+    if ($file === false) {
+        throw new RuntimeException('一時ファイルを作れない');
+    }
+    try {
+        expect(Artisan::call('scramble:export', ['--path' => $file]))->toBe(0);
+        $document = json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
+    } finally {
+        @unlink($file);
+    }
+    $headers = function (string $path, string $method) use ($document): array {
+        $parameters = data_get($document, "paths.{$path}.{$method}.parameters", []);
+
+        return is_array($parameters)
+            ? array_values(array_filter($parameters, fn (mixed $parameter): bool => data_get($parameter, 'in') === 'header'))
+            : [];
+    };
+
+    $store = $headers('/admin/categories', 'post');
+    expect($store)->toHaveCount(1)
+        ->and(data_get($store[0], 'name'))->toBe('Idempotency-Key')
+        ->and(data_get($store[0], 'required', false))->toBeFalse()
+        ->and(data_get($store[0], 'schema'))->toBe(['type' => 'string', 'format' => 'uuid'])
+        ->and($headers('/admin/categories/{category}', 'put'))->toBe([]);
 });
