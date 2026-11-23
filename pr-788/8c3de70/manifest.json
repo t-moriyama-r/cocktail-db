@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "before": "44343d8cca0be173c44c156e6e2e62427c9a10b2",
+  "after": "8c3de704b52484c1934d5f9da3a31c1e62cc7768",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-778-01",
+        "TC-778-02"
+      ],
+      "note": "修正後は storage/logs に affiliates-collect-<日付>.log ができ、見出しの行の後に affiliates:collect の出力が残ること。修正前はファイルが無いこと",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-778-01",
+        "TC-778-02",
+        "TC-778-03",
+        "TC-778-04",
+        "TC-249-20",
+        "TC-249-21"
+      ],
+      "note": "修正後は TC-778-01〜04 と既存の TC-249-20・21 が通ること",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
