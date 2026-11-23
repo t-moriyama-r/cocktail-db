@@ -24,6 +24,10 @@
 // 値は capture.js の環境変数で渡す。ログイン中の画面(work/login.html)には URL を伏せ字の欄に入れるだけで、画面に出さない。
 // capture.js の出力(texts/ に書く文字)に URL が出ていたら落とし、エラーの文(ジョブのログ)からは URL を伏せる。
 // 撮っている capture.js(コミットを固定)は login.url の "${env:…}" を置き換えないので、置き換える fill で欄に入れて移る。
+//
+// steps のある画面は、撮る回(修正前・修正後 × 幅ごと・動画)ごとに、その側の DB を入れ直してから撮る(#802)。
+// steps で保存する画面(管理画面の新規など)は、前の回で保存した行が残ると、同じ値での 2 回目が一意の制約の 422 で落ちるため。
+// その側の 1 回目は、項目の先頭で入れたデータのまま撮る(入れ直しても同じなので省く)。steps の無い画面は DB を変えないので入れ直さない。
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -118,9 +122,16 @@ function plan(req, opt = {}) {
       // 修正前は直す前の不具合で 5xx のこともあるので見ない
       steps.push({ type: "probe", side: "after", path: item.path });
       const page = (name, extra) => ({ name, url: item.path, read: ["body"], actions, ...extra });
+      // steps のある画面は、その側で 2 回目からの撮る回の前に、その側の DB を入れ直す(#802)
+      const shot = { before: 0, after: 0 };
+      const reseed = (side) => {
+        if (actions.length > 0 && shot[side] > 0) steps.push({ type: "seed", seed: item.data.seed, side });
+        shot[side] += 1;
+      };
       for (const width of item.widths) {
         const wdir = path.join(dir, String(width));
         for (const side of SIDES) {
+          reseed(side);
           steps.push({
             type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}.txt`), ...login,
             config: { label: side, baseUrl: sideOf(opt, side).url, outDir: wdir, port: nextPort(), video: false,
@@ -138,6 +149,7 @@ function plan(req, opt = {}) {
       for (const width of item.video) {
         const vdir = path.join(dir, String(width), "video");
         for (const side of SIDES) {
+          reseed(side);
           steps.push({
             type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}-video.txt`), ...login,
             config: { label: side, baseUrl: sideOf(opt, side).url, outDir: vdir, port: nextPort(), video: true,
@@ -301,8 +313,9 @@ function runCommand(run, cwd) {
   return r;
 }
 
-function seed(opt, name) {
-  for (const side of SIDES) {
+// side を渡すと、その側だけを入れ直す(撮る回ごとの入れ直し。#802)。渡さなければ両側に入れる
+function seed(opt, name, only) {
+  for (const side of only ? [only] : SIDES) {
     const backend = path.join(opt[side].dir, "backend");
     // 修正前に無いシーダー(この PR で足したもの)は、修正前だけ E2eSeeder で入れる(manifest に残す)
     const use = side === "before" && !fs.existsSync(path.join(backend, "database", "seeders", `${name}.php`)) ? "E2eSeeder" : name;
@@ -358,7 +371,7 @@ function run(req, opt) {
     opt.seeds = {};
     console.error(`== ${item.id} (${item.cases.join(" ")})`);
     for (const step of item.steps) {
-      if (step.type === "seed") seed(opt, step.seed);
+      if (step.type === "seed") seed(opt, step.seed, step.side);
       else if (step.type === "probe") probe(opt, step);
       else if (step.type === "capture") capture(opt, step);
       else if (step.type === "compose") {

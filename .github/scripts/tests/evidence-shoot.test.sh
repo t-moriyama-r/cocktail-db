@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17・TC-768-03〜08・TC-781-01〜06)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
+# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17・TC-768-03〜08・TC-781-01〜07・TC-802-01〜03)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
 # 流す手順を出す)に渡して、撮る幅・動画・操作・リクエスト・出すファイルの名前を見る。撮影そのもの(Chrome・ffmpeg)は流さない。
 # 管理画面にログインして撮る(login: admin。#768)ところは、php・ffmpeg・curl・capture.js・compose.js を偽物にして run を流し、
 # ログインの URL を撮る回ごとに出すこと・設定ファイルや texts に残さないこと・エラーの文で伏せることを見る。
 # コマンドの結果(kind: command。#781)も同じ偽物で run を流し、出力の中の checkout の絶対パスを <repo> に置き換えることを見る。
+# steps のある画面で、撮る回ごとにその側の DB を入れ直すこと(#802)も、plan の手順と、偽物で流した run の順で見る。
 #
 # 使い方: .github/scripts/tests/evidence-shoot.test.sh
 
@@ -142,6 +143,28 @@ main() {
 		"$RC|$(paste -sd'#' "$WORK/run/texts/01-command-before.txt")|$(grep -cF '置き換えている' "$WORK/run/work/01-command/before.html")" \
 		'0|hello##(終了コード 0)|0'
 
+	# --- steps のある画面は、撮る回ごとにその側の DB を入れ直す(#802) ---
+
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /admin/skip-words' '    login: admin' '    widths: [375, 1440]' '    steps:' \
+		"      - fill: { target: 'role=textbox[name=\"語\"]', value: テスト }" "      - click: 'role=button[name=\"保存\"]'" "      - wait_for: 'text=保存しました'"
+	plan
+	expect TC-802-01 'steps のある画面は、項目の先頭で両側に入れた後、その側の 2 回目からの撮る回(幅ごと・動画)の前に、その側だけを入れ直す' \
+		"$RC|$(jq -c '[.items[0].steps[] | select(.type == "seed" or .type == "capture") | [.type, (.side // "both"), (.seed // .config.viewport.width), .config.video]]' "$WORK/out")" \
+		'0|[["seed","both","E2eSeeder",null],["capture","before",375,false],["capture","after",375,false],["seed","before","E2eSeeder",null],["capture","before",1440,false],["seed","after","E2eSeeder",null],["capture","after",1440,false],["seed","before","E2eSeeder",null],["capture","before",375,true],["seed","after","E2eSeeder",null],["capture","after",375,true],["seed","before","E2eSeeder",null],["capture","before",1440,true],["seed","after","E2eSeeder",null],["capture","after",1440,true]]'
+
+	fake_run
+	expect TC-802-02 '流すと、撮る回の直前にその側の checkout で migrate:fresh を流す(各側 1 回目は先頭の分)。ログインの URL は入れ直した後に出す' \
+		"$RC|$(grep -v '^login ' "$FAKE/capture.log" | paste -sd,)|$(grep -c '^seed before E2eSeeder$' "$FAKE/capture.log")|$(grep -c '^seed after E2eSeeder$' "$FAKE/capture.log")" \
+		"0|seed before E2eSeeder,seed after E2eSeeder,got-login before,got-login after,seed before E2eSeeder,got-login before,seed after E2eSeeder,got-login after,seed before E2eSeeder,got-login before,seed after E2eSeeder,got-login after,seed before E2eSeeder,got-login before,seed after E2eSeeder,got-login after|4|4"
+
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /' '    widths: [375, 1440]' \
+		'  - kind: api' '    cases: [TC-1-02]' '    request:' '      method: POST' '      path: /api/x' '      body: { a: 1 }' \
+		'  - kind: command' '    cases: [TC-1-03]' '    workdir: backend' '    run: echo hi'
+	plan
+	expect TC-802-03 'steps の無い画面・API・コマンドは、今までどおり項目の先頭で 1 回だけ入れる' \
+		"$RC|$(jq -c '[.items[] | [.kind, ([.steps[] | select(.type == "seed") | (.side // "both")])]]' "$WORK/out")" \
+		'0|[["screen",["both"]],["api",["both"]],["command",["both"]]]'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -171,7 +194,7 @@ fake_run() {
 	# shellcheck disable=SC2016 # 偽物の中身なので、ここでは展開しない
 	printf '%s\n' '#!/usr/bin/env bash' \
 		'case "$2" in' \
-		'  migrate:fresh) exit 0 ;;' \
+		'  migrate:fresh) echo "seed $(basename "$(dirname "$PWD")") ${5#--seeder=}" >>"$FAKE/capture.log" ;;' \
 		'  admin:login-link) echo "$PWD $APP_URL $3" >>"$FAKE/calls"; n=$(wc -l <"$FAKE/calls");' \
 		'    echo "${FAKE_LINK:-$APP_URL/admin/login-link/1?token=tok${n}secret0000&signature=sig${n}}" ;;' \
 		'  *) exit 1 ;;' \

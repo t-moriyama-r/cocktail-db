@@ -1,12 +1,15 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\IdempotencyKey;
 use App\Models\Paraphrase;
 use App\Models\User;
 use App\Services\CategoryTree;
 use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 
 // 管理 API の言い換え辞書(/api/admin/paraphrases。#316)。
 // 旧には保存の画面が無いので、追加・更新・削除と 422 は旧に無い。名前の解決は旧の serachFromWords を移したもので、
@@ -72,8 +75,8 @@ function paraphraseNodeRef(Category $node): array
 }
 
 /**
- * @param  array<string, mixed>  $overrides
- * @return array<string, mixed>
+ * @param  array<array-key, mixed>  $overrides  項目の名前 → 値(データセットから受けるので、鍵の型は絞らない)
+ * @return array<array-key, mixed>
  */
 function paraphraseInput(array $overrides = []): array
 {
@@ -332,3 +335,107 @@ it('TC-316-15: ログインしていなければ、言い換え辞書の API は
     '更新' => ['PUT', '/api/admin/paraphrases/{id}'],
     '削除' => ['DELETE', '/api/admin/paraphrases/{id}'],
 ]);
+
+// 言い換えの新規の冪等キー(#762。決まりは docs/decisions/admin-idempotency.md)。仕組み(ミドルウェア idempotent)そのものは
+// IdempotencyApiTest(#657)で確かめているので、ここでは言い換えの新規につないだことを確かめる。旧に冪等キーは無い(旧を動かして確かめてはいない)。
+
+const PARAPHRASE_IDEMPOTENCY_KEY = '3b9e6c1a-7d2f-4e8b-a5c0-91f4d6e2b7a8';
+
+it('TC-762-01: Idempotency-Key を付けなければ、同じ本文の 2 回目は今までどおり変換前の重なりの 422 で断り、記録を残さない', function () {
+    paraphraseTree();
+
+    $this->postJson('/api/admin/paraphrases', paraphraseInput())->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $this->postJson('/api/admin/paraphrases', paraphraseInput())
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('name');
+
+    expect(Paraphrase::query()->count())->toBe(1)
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+});
+
+it('TC-762-02: 同じ Idempotency-Key で再送すると、言い換えを 1 件だけ作り、1 回目と同じ応答を返す', function () {
+    paraphraseTree();
+    $headers = [Idempotent::HEADER => PARAPHRASE_IDEMPOTENCY_KEY];
+
+    $first = $this->postJson('/api/admin/paraphrases', paraphraseInput(['command' => 'hot', 'note' => 'ホットで']), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $second = $this->postJson('/api/admin/paraphrases', paraphraseInput(['command' => 'hot', 'note' => 'ホットで']), $headers)
+        ->assertCreated()
+        ->assertHeader(Idempotent::REPLAYED_HEADER, 'true');
+
+    $paraphrase = Paraphrase::query()->sole();
+    expect($second->json())->toBe($first->json())
+        ->and($second->json('data.id'))->toBe($paraphrase->id)
+        ->and($paraphrase->name)->toBe('カカオ・リキュール')
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-762-03: 同じ Idempotency-Key で中身(変換前・変換後・command)の違う送信は 422 で、作らず、1 回目の応答も返さない', function (array $overrides) {
+    paraphraseTree();
+    $headers = [Idempotent::HEADER => PARAPHRASE_IDEMPOTENCY_KEY];
+    $this->postJson('/api/admin/paraphrases', paraphraseInput(), $headers)->assertCreated();
+
+    $this->postJson('/api/admin/paraphrases', paraphraseInput($overrides), $headers)
+        ->assertUnprocessable()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER)
+        ->assertExactJson([
+            'message' => '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+            'errors' => ['idempotency_key' => ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。']],
+        ]);
+
+    expect(Paraphrase::query()->pluck('name')->all())->toBe(['カカオ・リキュール']);
+})->with([
+    '変換前' => [['name' => 'カカオ']],
+    '変換後' => [['converted' => 'コーヒー・リキュール']],
+    'command' => [['command' => 'hot']],
+]);
+
+it('TC-762-04: 検証に落ちた新規(変換後を解決できない)は記録を残さず、直して同じ Idempotency-Key で送ると作る', function () {
+    paraphraseTree();
+    $headers = [Idempotent::HEADER => PARAPHRASE_IDEMPOTENCY_KEY];
+
+    $this->postJson('/api/admin/paraphrases', paraphraseInput(['converted' => '無いノード']), $headers)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('converted');
+    expect(IdempotencyKey::query()->count())->toBe(0)
+        ->and(Paraphrase::query()->count())->toBe(0);
+
+    $this->postJson('/api/admin/paraphrases', paraphraseInput(), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(Paraphrase::query()->pluck('name')->all())->toBe(['カカオ・リキュール'])
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-762-09: OpenAPI では、言い換え・スキップ語の新規に任意の Idempotency-Key ヘッダ(UUID)があり、更新には無い', function () {
+    $file = tempnam(sys_get_temp_dir(), 'openapi');
+    if ($file === false) {
+        throw new RuntimeException('一時ファイルを作れない');
+    }
+    try {
+        expect(Artisan::call('scramble:export', ['--path' => $file]))->toBe(0);
+        $document = json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
+    } finally {
+        @unlink($file);
+    }
+    $headers = function (string $path, string $method) use ($document): array {
+        $parameters = data_get($document, "paths.{$path}.{$method}.parameters", []);
+
+        return is_array($parameters)
+            ? array_values(array_filter($parameters, fn (mixed $parameter): bool => data_get($parameter, 'in') === 'header'))
+            : [];
+    };
+
+    foreach (['/admin/paraphrases', '/admin/skip-words'] as $path) {
+        $store = $headers($path, 'post');
+        expect($store)->toHaveCount(1)
+            ->and(data_get($store[0], 'name'))->toBe('Idempotency-Key')
+            ->and(data_get($store[0], 'required', false))->toBeFalse()
+            ->and(data_get($store[0], 'schema'))->toBe(['type' => 'string', 'format' => 'uuid']);
+    }
+    expect($headers('/admin/paraphrases/{paraphrase}', 'put'))->toBe([])
+        ->and($headers('/admin/skip-words/{skipWord}', 'put'))->toBe([]);
+});
