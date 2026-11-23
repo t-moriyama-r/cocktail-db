@@ -16,6 +16,13 @@
 // 画面は、静止画を video: false で幅ごとに撮り(帯を重ねない)、動画は video の幅だけ別に録る(帯で修正前・修正後が分かるように)。
 // 静止画の幅と動画の幅で帯の有無が変わらないよう、静止画はすべて同じ撮り方にする。
 // 入れる値の "${env:名前}" は capture.js が環境変数に置き換えるので、頼むコメントから環境変数を画面に出させないよう、ここで断る。
+//
+// login: admin の画面(管理画面。#768)は、撮る回(修正前・修正後・幅ごと・動画)ごとに、その側の checkout で
+// php artisan admin:login-link を流して 1 回だけ使えるログインの URL を出し(APP_URL はその側のアプリ。署名にホストが入るため)、
+// capture.js の login で開いてから撮る。URL にはトークンが入るので、設定ファイルには "${env:EVIDENCE_LOGIN_URL}" とだけ書き、
+// 値は capture.js の環境変数で渡す。ログイン中の画面(work/login.html)には URL を伏せ字の欄に入れるだけで、画面に出さない。
+// capture.js の出力(texts/ に書く文字)に URL が出ていたら落とし、エラーの文(ジョブのログ)からは URL を伏せる。
+// 撮っている capture.js(コミットを固定)は login.url の "${env:…}" を置き換えないので、置き換える fill で欄に入れて移る。
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -25,6 +32,20 @@ const SIDES = ["before", "after"];
 const VIEWPORT_HEIGHT = 900;
 const GIF_SECONDS = 15;
 const GIF_WIDTH = 720;
+
+// login に書ける人と、その人で入るユーザーの email(E2eSeeder が作る。e2e/tests/admin-layout.spec.ts の issueLoginLink と同じ)
+const LOGINS = { admin: "e2e-admin@example.com" };
+const LOGIN_ENV = "EVIDENCE_LOGIN_URL";
+const LOGIN_MASK = "<ログインの URL>";
+// ログインの URL を伏せ字の欄に入れ、送ると移るだけの画面。URL そのものは持たない
+const LOGIN_PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>ログイン中</title></head>
+<body style="margin:0;padding:24px;font:16px sans-serif;color:#444">
+<form id="f" onsubmit="event.preventDefault(); location.assign(document.getElementById('u').value)">
+<p>管理画面にログインしています</p>
+<input id="u" type="password" autocomplete="off" style="opacity:0;width:1px;height:1px;border:0;padding:0">
+<button id="go" type="submit" style="opacity:0">ログイン</button>
+</form></body></html>
+`;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const ENV_REF = /\$\{env:/;
@@ -85,6 +106,13 @@ function plan(req, opt = {}) {
     };
     if (item.kind === "screen") {
       const actions = toActions(item.steps, where);
+      if (item.login !== undefined && !Object.hasOwn(LOGINS, item.login)) throw new Error(`${where}: 知らない login ${item.login}`);
+      const loginPage = path.join(work, "login.html");
+      // 撮る回ごとに足す。login は誰で入るか、config.login は capture.js がログインする手順(URL の値は持たない)
+      const login = item.login ? { login: item.login, loginPage } : {};
+      const loginConfig = item.login
+        ? { login: { url: `file://${loginPage}`, actions: [{ fill: ["#u", `\${env:${LOGIN_ENV}}`] }, { click: "#go" }], waitUrlNot: "file:" } }
+        : {};
       // 修正後の画面が 5xx を返すなら、エラーの画面を証跡として貼らずに撮れなかったことにする(#601)。
       // 修正前は直す前の不具合で 5xx のこともあるので見ない
       steps.push({ type: "probe", side: "after", path: item.path });
@@ -93,9 +121,9 @@ function plan(req, opt = {}) {
         const wdir = path.join(dir, String(width));
         for (const side of SIDES) {
           steps.push({
-            type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}.txt`),
+            type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}.txt`), ...login,
             config: { label: side, baseUrl: sideOf(opt, side).url, outDir: wdir, port: nextPort(), video: false,
-              viewport: { width, height: VIEWPORT_HEIGHT }, pages: [page("page", { fullPage: true })] },
+              viewport: { width, height: VIEWPORT_HEIGHT }, ...loginConfig, pages: [page("page", { fullPage: true })] },
           });
           steps.push({ type: "copy", src: path.join(wdir, `${side}_page.png`), dest: pub(`${id}-${width}-${side}.png`) });
         }
@@ -110,9 +138,9 @@ function plan(req, opt = {}) {
         const vdir = path.join(dir, String(width), "video");
         for (const side of SIDES) {
           steps.push({
-            type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}-video.txt`),
+            type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}-video.txt`), ...login,
             config: { label: side, baseUrl: sideOf(opt, side).url, outDir: vdir, port: nextPort(), video: true,
-              viewport: { width, height: VIEWPORT_HEIGHT },
+              viewport: { width, height: VIEWPORT_HEIGHT }, ...loginConfig,
               pages: [page("video", { title: `${title} ${item.path}`, caption: item.note || `${width}px で開いた画面` })] },
           });
           steps.push({ type: "video", src: path.join(vdir, `${side}.webm`), mp4: pub(`${id}-${width}-${side}.mp4`), gif: pub(`${id}-${width}-${side}.gif`) });
@@ -164,21 +192,51 @@ function plan(req, opt = {}) {
     } else {
       throw new Error(`${where}: 知らない kind ${item.kind}`);
     }
-    return { id, kind: item.kind, cases: item.cases, note: item.note || null, seed: item.data.seed, steps, files };
+    return { id, kind: item.kind, cases: item.cases, note: item.note || null, login: item.login || null, seed: item.data.seed, steps, files };
   });
   return { items };
 }
 
 // ---- 流す ----
 
+// secrets に渡した文字(ログインの URL・トークン)は、エラーの文に出さない(ジョブのログは公開)
+function mask(text, secrets = []) {
+  let t = String(text || "");
+  for (const x of secrets) if (x) t = t.split(x).join(LOGIN_MASK);
+  return t;
+}
+
+// シェルを介さずに流す(引数は配列のまま渡す)。頼むコメントの run をシェルで流すのは runCommand だけにする
 function sh(cmd, args, o = {}) {
-  const r = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...o });
+  const { secrets, ...spawnOpt } = o;
+  const r = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...spawnOpt, shell: false });
   if (r.error) throw r.error;
   if (r.status !== 0 && !o.allowFail) {
-    // 出力にランナーのパスが入りうるが、ここはジョブのログ(公開)なので、末尾だけを出す
-    throw new Error(`${cmd} ${args[0] || ""} が ${r.status} で終わった\n${String(r.stderr || "").slice(-2000)}`);
+    // 出力にランナーのパスが入りうるが、ここはジョブのログ(公開)なので、末尾だけを出す。伏せる文字は伏せてから切る
+    throw new Error(`${cmd} ${args[0] || ""} が ${r.status} で終わった\n${mask(r.stderr, secrets).slice(-2000)}`);
   }
   return r;
+}
+
+// その側のアプリに入る、1 回だけ使えるログインの URL を出す。URL と、伏せる文字(URL・クエリの値)を返す
+function issueLogin(opt, side, who) {
+  const base = opt[side].url;
+  const r = sh("php", ["artisan", "admin:login-link", LOGINS[who]], {
+    cwd: path.join(opt[side].dir, "backend"), env: { ...process.env, APP_URL: base },
+  });
+  const link = String(r.stdout).trim();
+  let url = null;
+  try {
+    url = new URL(link);
+  } catch {
+    url = null;
+  }
+  // 値は出さない(出した物が URL でなくても、トークンが入っているかもしれないため)
+  if (url === null || !link.startsWith(`${base}/`) || /\s/.test(link)) {
+    throw new Error(`${side} の admin:login-link が、${base} のログインの URL を出さなかった`);
+  }
+  const secrets = [link, ...[...url.searchParams.values()].filter((v) => v.length >= 8)];
+  return { link, secrets };
 }
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -198,6 +256,14 @@ function commandEnv() {
   const env = { TERM: "dumb", NO_COLOR: "1" };
   for (const k of keep) if (process.env[k] !== undefined) env[k] = process.env[k];
   return env;
+}
+
+// 頼むコメントの run(信頼する人・bot が書いたものだけ。docs/evidence-request.md)を、その側の checkout でシェルとして流す。
+// 失敗しても結果を撮るので、終了コードは呼ぶ側で書き出す。環境変数は commandEnv で絞る
+function runCommand(run, cwd) {
+  const r = spawnSync("bash", ["-c", `${run} 2>&1`], { cwd, env: commandEnv(), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (r.error) throw r.error;
+  return r;
 }
 
 function seed(opt, name) {
@@ -223,8 +289,21 @@ function capture(opt, step) {
   const cfgFile = path.join(step.config.outDir, `${step.config.label}-${step.config.port}.json`);
   fs.mkdirSync(step.config.outDir, { recursive: true });
   fs.writeFileSync(cfgFile, JSON.stringify(step.config, null, 2));
+  // ログインの URL は 1 回しか使えないので、撮る回ごとに出す。設定ファイルには書かず、環境変数で渡す
+  let env = process.env;
+  let secrets = [];
+  if (step.login) {
+    fs.mkdirSync(path.dirname(step.loginPage), { recursive: true });
+    fs.writeFileSync(step.loginPage, LOGIN_PAGE);
+    const issued = issueLogin(opt, step.side, step.login);
+    env = { ...process.env, [LOGIN_ENV]: issued.link };
+    secrets = issued.secrets;
+  }
   // playwright-core を opt.pw から探させる(capture.js は cwd から探す)
-  const r = sh("node", [path.join(opt.tools, "capture.js"), cfgFile], { cwd: opt.pw });
+  const r = sh("node", [path.join(opt.tools, "capture.js"), cfgFile], { cwd: opt.pw, env, secrets });
+  if (secrets.some((x) => String(r.stdout).includes(x))) {
+    throw new Error(`${step.side} の ${step.config.label} を撮った結果に、ログインの URL が出ていた(texts に書かずに止める)`);
+  }
   if (step.texts) {
     const res = JSON.parse(r.stdout);
     const read = res.results.filter((x) => x.read).map((x) => Object.values(x.read).join("\n")).join("\n");
@@ -263,7 +342,7 @@ function run(req, opt) {
         sh("node", args);
       } else if (step.type === "command") {
         fs.mkdirSync(path.dirname(step.out), { recursive: true });
-        const r = sh("bash", ["-c", `${step.run} 2>&1`], { cwd: path.join(opt[step.side].dir, step.workdir), env: commandEnv(), allowFail: true });
+        const r = runCommand(step.run, path.join(opt[step.side].dir, step.workdir));
         fs.writeFileSync(step.out, `${r.stdout}\n(終了コード ${r.status})\n`);
         fs.copyFileSync(step.out, step.texts);
       } else if (step.type === "text2html") text2html(step.src, step.out, step.title, step.workdir);

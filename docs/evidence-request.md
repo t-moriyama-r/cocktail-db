@@ -60,6 +60,9 @@ flowchart LR
 | `widths` | | 静止画を撮る幅の配列。省くと `[375, 768, 1024, 1440]`(`docs/design/style.md` の「証跡を撮る幅」)。書くときは、xs と lg に入る幅を必ず入れる。`.css` を変えず `.tsx` だけを変えた PR は `[375, 1440]` と書いて 2 幅にする。`.css` を変えた PR は sm・md も入れる(境目の 599/600px・959/960px を足すときも書く。#604) |
 | `video` | | 動画を撮る幅の配列。`widths` の中から選び、xs と lg の幅を 1 つ以上入れる。省くと `widths` のいちばん狭い幅と広い幅 |
 | `steps` | | 開いた後にする操作の配列(下)。省くと開いたところを撮る |
+| `login` | | 開く前にログインする人。書けるのは `admin`(`E2eSeeder` の管理者 `e2e-admin@example.com`)だけ。管理画面(`/admin` 以下)はログインしていないとログインの画面へ移るので、管理画面を撮るときに書く(#768)。省くとログインしない |
+
+`login: admin` の画面は、撮る回(修正前・修正後・幅ごと・動画)ごとに、その側の checkout で `php artisan admin:login-link e2e-admin@example.com` を流して、1 回だけ使えるログインの URL を出す(`APP_URL` はその側のアプリ。URL の署名にホストが入るため)。URL にはトークンが入るので、`evidence-shoot.js` は capture.js の設定ファイルに書かず環境変数で渡し、撮った画面の文字(`texts/`)に出ていたら置かずに落ち、エラーの文(ジョブのログ)では伏せる。`data.seed` を変えるときは、そのシーダーも `e2e-admin@example.com` の管理者を作るものにする(いなければ URL を出せずに落ちる)。
 
 `steps` の 1 つずつは「操作: 値」を 1 つだけ書く。何に対して(`click` などの値・`target`)は Playwright のロケーター(`role=button[name="検索"]`・`text=ジン` など)で書く。
 
@@ -180,6 +183,20 @@ items:
     cases: [TC-599-04]
     workdir: backend
     run: php artisan db:show --table=cocktails
+```
+
+管理画面にログインしてから、メニューを撮るとき(`.tsx` だけを変えた PR なので 2 幅):
+
+```evidence
+version: 1
+items:
+  - kind: screen
+    cases: [TC-753-01]
+    path: /admin
+    login: admin
+    widths: [375, 1440]
+    steps:
+      - wait_for: 'role=navigation[name="管理画面のメニュー"]'
 ```
 
 区切りの境目を変えた画面で、境目の両側も撮るとき(`widths` を書くと、既定の 4 つは足されない。4 つの幅も書く):
