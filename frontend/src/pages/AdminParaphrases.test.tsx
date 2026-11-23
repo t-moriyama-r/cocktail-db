@@ -572,3 +572,244 @@ describe('スキップ語', () => {
     expect(await within(skipWordSection()).findByText('該当するものがありません')).toBeInTheDocument()
   })
 })
+
+describe('足すときの冪等キー(#762)', () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+  const KEY_REJECTED =
+    '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度保存してください。'
+
+  /**
+   * BE の冪等キーの扱い(docs/decisions/admin-idempotency.md)をまねた、足す API(POST)。
+   * 成功した送信だけをキーごとに覚え、同じキー・同じ本文の再送には 1 回目の応答を `Idempotent-Replayed: true` を付けて返し、
+   * 同じキー・違う本文の再送は 422(errors.idempotency_key)で断る。loseResponses の回は、保存したうえで応答を失わせる。
+   * 保存した語は、一覧の API(listed)にも出す
+   */
+  const fakeStore = <T extends { name: string }>(
+    path: '/admin/paraphrases' | '/admin/skip-words',
+    toResource: (id: number, name: string) => T,
+    options: { loseResponses?: number[]; invalidNames?: string[] } = {},
+  ) => {
+    const created: string[] = []
+    const listed: T[] = []
+    const keys: (string | null)[] = []
+    const saved = new Map<string, string>()
+    mockApiHandler('post', path, async (request) => {
+      const attempt = keys.length + 1
+      const key = request.headers.get('Idempotency-Key')
+      keys.push(key)
+      const body = await request.text()
+      const { name } = JSON.parse(body) as { name: string }
+      if (key !== null && saved.has(key)) {
+        if (saved.get(key) !== body) {
+          return jsonResponse(
+            {
+              message: '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+              errors: { idempotency_key: ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。'] },
+            },
+            422,
+          )
+        }
+        const replayed = jsonResponse({ data: listed.find((item) => item.name === name) }, 201)
+        replayed.headers.set('Idempotent-Replayed', 'true')
+        return replayed
+      }
+      if (options.invalidNames?.includes(name)) {
+        return jsonResponse({ message: '入力に誤りがあります。', errors: { name: ['名前が正しくありません。'] } }, 422)
+      }
+      created.push(name)
+      const resource = toResource(100 + created.length, name)
+      listed.push(resource)
+      if (key !== null) saved.set(key, body)
+      if (options.loseResponses?.includes(attempt)) throw new TypeError('Failed to fetch')
+      return jsonResponse({ data: resource }, 201)
+    })
+    return { created, keys, listed }
+  }
+
+  const fakeParaphraseStore = (options?: Parameters<typeof fakeStore>[2]) => {
+    const store = fakeStore('/admin/paraphrases', (id, name) => paraphrase({ id, name }), options)
+    mockApiHandler('get', '/admin/paraphrases', () => jsonResponse(page(store.listed), 200))
+    return store
+  }
+
+  const fakeSkipWordStore = (options?: Parameters<typeof fakeStore>[2]) => {
+    const store = fakeStore('/admin/skip-words', (id, name): SkipWordResource => ({ id, name }), options)
+    mockApiHandler('get', '/admin/skip-words', () => jsonResponse({ data: store.listed }, 200))
+    return store
+  }
+
+  /** 言い換えのフォームに変換前・変換後を入れて保存する */
+  const saveParaphraseForm = (name: string) => {
+    typeInto(within(paraphraseForm()).getByRole('textbox', { name: '変換前' }), name)
+    typeInto(within(paraphraseForm()).getByRole('textbox', { name: '変換後' }), 'ジン')
+    fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '保存する' }))
+  }
+
+  /** スキップ語のフォームに語を入れて保存する */
+  const saveSkipWordForm = (name: string) => {
+    typeInto(within(skipWordForm()).getByRole('textbox', { name: 'スキップ語' }), name)
+    fireEvent.click(within(skipWordForm()).getByRole('button', { name: '保存する' }))
+  }
+
+  test('TC-762-10: 言い換えを足す送信に UUID の Idempotency-Key を付け、保存できた後に足す次の語は新しいキーで送る', async () => {
+    mockScreen()
+    const store = fakeParaphraseStore()
+    renderScreen()
+    await waitForTree()
+
+    saveParaphraseForm('じん')
+    expect(await within(paraphraseForm()).findByText('「じん」を保存しました')).toBeInTheDocument()
+    saveParaphraseForm('ぢん')
+    expect(await within(paraphraseForm()).findByText('「ぢん」を保存しました')).toBeInTheDocument()
+
+    expect(store.keys[0]).toMatch(UUID)
+    expect(store.keys[1]).toMatch(UUID)
+    expect(store.keys[1]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['じん', 'ぢん'])
+  })
+
+  test('TC-762-11: 言い換えの 1 回目の応答が失われて保存し直すと、同じキーで送り、語は 1 件だけできて保存できた知らせが出る', async () => {
+    mockScreen()
+    const store = fakeParaphraseStore({ loseResponses: [1] })
+    renderScreen()
+    await waitForTree()
+
+    saveParaphraseForm('じん')
+    expect(await within(paraphraseForm()).findByRole('alert')).toHaveTextContent('通信に失敗して保存できませんでした。')
+    fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '保存する' }))
+
+    expect(await within(paraphraseForm()).findByText('「じん」を保存しました')).toHaveAttribute('role', 'status')
+    expect(store.keys).toHaveLength(2)
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['じん'])
+    expect(await within(paraphraseSection()).findByRole('button', { name: 'じん' })).toBeInTheDocument()
+  })
+
+  test('TC-762-12: 言い換えが 422 で画面に残った後、入力を直して保存し直すと、同じキーで送って保存できる', async () => {
+    mockScreen()
+    const store = fakeParaphraseStore({ invalidNames: ['誤り'] })
+    renderScreen()
+    await waitForTree()
+
+    saveParaphraseForm('誤り')
+    expect(await within(paraphraseForm()).findByRole('alert')).toHaveTextContent('入力に誤りがあります。')
+    saveParaphraseForm('じん')
+
+    expect(await within(paraphraseForm()).findByText('「じん」を保存しました')).toBeInTheDocument()
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['じん'])
+  })
+
+  test('TC-762-13: 言い換えの応答が失われた後に入力を変えて保存し直し、キーを断られたら、前の送信が保存されているかもしれないことを出して一覧を読み直し、次は新しいキーで送る', async () => {
+    mockScreen()
+    const store = fakeParaphraseStore({ loseResponses: [1] })
+    renderScreen()
+    await waitForTree()
+
+    saveParaphraseForm('じん')
+    expect(await within(paraphraseForm()).findByRole('alert')).toHaveTextContent('通信に失敗して保存できませんでした。')
+    saveParaphraseForm('ぢん')
+
+    await waitFor(() => expect(within(paraphraseForm()).getByRole('alert')).toHaveTextContent(KEY_REJECTED))
+    expect(within(paraphraseForm()).getByRole('textbox', { name: '変換前' })).toHaveValue('ぢん')
+    // 前の送信で保存できていた語が、読み直した一覧に出る
+    expect(await within(paraphraseSection()).findByRole('button', { name: 'じん' })).toBeInTheDocument()
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['じん'])
+
+    fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '保存する' }))
+
+    expect(await within(paraphraseForm()).findByText('「ぢん」を保存しました')).toBeInTheDocument()
+    expect(store.keys[2]).toMatch(UUID)
+    expect(store.keys[2]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['じん', 'ぢん'])
+  })
+
+  test('TC-762-14: 言い換えを書き換える送信(PUT)には Idempotency-Key を付けない', async () => {
+    const stored = paraphrase({ id: 5, name: 'じん' })
+    mockScreen({ paraphrases: [stored] })
+    mockApi('put', '/admin/paraphrases/{paraphrase}', 200, { data: stored })
+    renderScreen()
+    await waitForTree()
+
+    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'じん' }))
+    fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '保存する' }))
+
+    expect(await within(paraphraseForm()).findByText('「じん」を保存しました')).toBeInTheDocument()
+    const [put] = sent('PUT', '/admin/paraphrases/5')
+    expect(put.headers.has('Idempotency-Key')).toBe(false)
+  })
+
+  test('TC-762-15: 言い換えの応答が失われた後、一覧の語を読み込んでから「新しく足す」で足すと、新しいキーで送る', async () => {
+    mockScreen()
+    const store = fakeParaphraseStore({ loseResponses: [1] })
+    store.listed.push(paraphrase({ id: 5, name: 'ジン(ドライ)' }))
+    renderScreen()
+    await waitForTree()
+
+    saveParaphraseForm('じん')
+    expect(await within(paraphraseForm()).findByRole('alert')).toHaveTextContent('通信に失敗して保存できませんでした。')
+    fireEvent.click(await within(paraphraseSection()).findByRole('button', { name: 'ジン(ドライ)' }))
+    fireEvent.click(within(paraphraseForm()).getByRole('button', { name: '新しく足す' }))
+    saveParaphraseForm('ぢん')
+
+    expect(await within(paraphraseForm()).findByText('「ぢん」を保存しました')).toBeInTheDocument()
+    expect(store.keys[1]).toMatch(UUID)
+    expect(store.keys[1]).not.toBe(store.keys[0])
+  })
+
+  test('TC-762-16: スキップ語を足す送信に UUID のキーを付け、1 回目の応答が失われて保存し直すと同じキーで送り、語は 1 件だけできる', async () => {
+    mockScreen()
+    const store = fakeSkipWordStore({ loseResponses: [1] })
+    renderScreen()
+    await screen.findByRole('region', { name: 'スキップ語' })
+
+    saveSkipWordForm('お好みで')
+    expect(await within(skipWordForm()).findByRole('alert')).toHaveTextContent('通信に失敗して保存できませんでした。')
+    fireEvent.click(within(skipWordForm()).getByRole('button', { name: '保存する' }))
+
+    expect(await within(skipWordForm()).findByText('「お好みで」を保存しました')).toHaveAttribute('role', 'status')
+    expect(store.keys[0]).toMatch(UUID)
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['お好みで'])
+    expect(await within(skipWordSection()).findByRole('button', { name: 'お好みで' })).toBeInTheDocument()
+  })
+
+  test('TC-762-17: スキップ語の応答が失われた後に語を変えて保存し直し、キーを断られたら、そのことを出して入力を残し、次は新しいキーで送る', async () => {
+    mockScreen()
+    const store = fakeSkipWordStore({ loseResponses: [1] })
+    renderScreen()
+    await screen.findByRole('region', { name: 'スキップ語' })
+
+    saveSkipWordForm('お好みで')
+    expect(await within(skipWordForm()).findByRole('alert')).toHaveTextContent('通信に失敗して保存できませんでした。')
+    saveSkipWordForm('適量')
+
+    await waitFor(() => expect(within(skipWordForm()).getByRole('alert')).toHaveTextContent(KEY_REJECTED))
+    expect(within(skipWordForm()).getByRole('textbox', { name: 'スキップ語' })).toHaveValue('適量')
+    expect(await within(skipWordSection()).findByRole('button', { name: 'お好みで' })).toBeInTheDocument()
+
+    fireEvent.click(within(skipWordForm()).getByRole('button', { name: '保存する' }))
+
+    expect(await within(skipWordForm()).findByText('「適量」を保存しました')).toBeInTheDocument()
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.keys[2]).toMatch(UUID)
+    expect(store.keys[2]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['お好みで', '適量'])
+  })
+
+  test('TC-762-18: スキップ語を書き換える送信(PUT)には Idempotency-Key を付けない', async () => {
+    mockScreen({ skipWords: [{ id: 1, name: '(適量)' }] })
+    mockApi('put', '/admin/skip-words/{skipWord}', 200, { data: { id: 1, name: '(適量)' } })
+    renderScreen()
+
+    fireEvent.click(
+      await within(await screen.findByRole('region', { name: 'スキップ語' })).findByRole('button', { name: '(適量)' }),
+    )
+    fireEvent.click(within(skipWordForm()).getByRole('button', { name: '保存する' }))
+
+    expect(await within(skipWordForm()).findByText('「(適量)」を保存しました')).toBeInTheDocument()
+    const [put] = sent('PUT', '/admin/skip-words/1')
+    expect(put.headers.has('Idempotency-Key')).toBe(false)
+  })
+})

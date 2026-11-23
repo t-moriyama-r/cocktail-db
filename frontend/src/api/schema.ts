@@ -3386,7 +3386,10 @@ export interface operations {
     "paraphrases.store": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 送信ごとの識別子(UUID)。同じ値の再送には、保存し直さずに最初に成功した応答を返す(docs/decisions/admin-idempotency.md) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3783,7 +3786,10 @@ export interface operations {
     "skip-words.store": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 送信ごとの識別子(UUID)。同じ値の再送には、保存し直さずに最初に成功した応答を返す(docs/decisions/admin-idempotency.md) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
