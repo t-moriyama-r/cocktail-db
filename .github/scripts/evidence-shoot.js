@@ -259,10 +259,17 @@ function maskRepo(text, dir) {
   let t = String(text);
   // 長いものから置き換える(片方がもう片方の前の部分のとき、短いほうで先に切らない)
   for (const d of [...new Set(dirs)].filter((x) => x && x !== "/").sort((a, b) => b.length - a.length)) {
-    const re = new RegExp(`${d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9._-])`, "g");
-    t = t.replace(re, () => {
+    // checkout 自身か、その下("/" で続く)のパスだけを置き換える。続く文字が区切り・終端でなければ別のディレクトリ(<checkout>+old・<checkout>日本語 など)
+    const stop = "\\s\"'`:;,()\\[\\]<>";
+    const re = new RegExp(`${d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(/[^${stop}]*)?(?![^${stop}])`, "g");
+    t = t.replace(re, (m, rest) => {
+      // ".." で checkout の外へ出るパスは置き換えない(置き換えると /home/ が消えて evidence-leak-check.sh をすり抜ける)
+      if (rest && rest.includes("..")) {
+        const n = path.posix.normalize(`${d}${rest}`);
+        if (n !== d && !n.startsWith(`${d}/`)) return m;
+      }
       count++;
-      return REPO_MARK;
+      return `${REPO_MARK}${rest || ""}`;
     });
   }
   return { text: t, count };

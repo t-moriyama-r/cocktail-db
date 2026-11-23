@@ -121,6 +121,14 @@ main() {
 		"$RC|$(head -1 "$WORK/run/texts/01-command-before.txt")" "0|old $FAKE/before-old/x"
 
 	# shellcheck disable=SC2016 # コマンドの中身なので、ここでは展開しない
+	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-04]' '    workdir: frontend' \
+		'    run: p=$(cd .. && pwd -P); echo "$p+old/x"; echo "$p日本語/x"; echo "$p/../out/x"; echo "$p/a/../b/x"'
+	fake_run
+	expect TC-781-07 '"+"・非ASCII が続く別のディレクトリと、".." で checkout の外へ出るパスは置き換えない。checkout の下で戻るだけなら置き換える' \
+		"$RC|$(sed -n '1,4p' "$WORK/run/texts/01-command-before.txt" | paste -sd'#' | sed "s#$FAKE#F#g")" \
+		'0|F/before+old/x#F/before日本語/x#F/before/../out/x#<repo>/a/../b/x'
+
+	# shellcheck disable=SC2016 # コマンドの中身なので、ここでは展開しない
 	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-06]' '    workdir: frontend' \
 		'    run: echo " RUN  v3.2.4 $(pwd -P)"; printf "cache /%s/%s/.npm\n" home runner'
 	fake_run
