@@ -538,6 +538,179 @@ describe('保存', () => {
   })
 })
 
+describe('新規の冪等キー(#789)', () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+  /**
+   * BE の冪等キーの扱い(docs/decisions/admin-idempotency.md)をまねた POST /api/admin/cocktails。
+   * 成功した送信だけをキーごとに覚え、同じキー・同じ中身(名前・下書きか)の再送には 1 回目の応答を `Idempotent-Replayed: true` を
+   * 付けて返し、同じキー・違う中身の再送は 422(errors.idempotency_key)で断る。loseResponses の回は、保存したうえで応答を失わせる
+   */
+  const fakeCocktailStore = (options: { loseResponses?: number[]; invalidNames?: string[] } = {}) => {
+    const created: string[] = []
+    const keys: (string | null)[] = []
+    const saved = new Map<string, string>()
+    mockApiHandler('post', '/admin/cocktails', async (request) => {
+      const attempt = keys.length + 1
+      const key = request.headers.get('Idempotency-Key')
+      keys.push(key)
+      const body = await request.formData()
+      const name = String(body.get('name'))
+      const content = `${name}/${String(body.get('is_draft'))}`
+      if (key !== null && saved.has(key)) {
+        if (saved.get(key) !== content) {
+          return jsonResponse(
+            {
+              message: '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+              errors: { idempotency_key: ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。'] },
+            },
+            422,
+          )
+        }
+        const replayed = jsonResponse(savedBody({ ...COCKTAIL, name }), 201)
+        replayed.headers.set('Idempotent-Replayed', 'true')
+        return replayed
+      }
+      if (options.invalidNames?.includes(name)) {
+        return jsonResponse({ message: '入力に誤りがあります。', errors: { name: ['名前が正しくありません。'] } }, 422)
+      }
+      created.push(name)
+      if (key !== null) saved.set(key, content)
+      if (options.loseResponses?.includes(attempt)) throw new TypeError('Failed to fetch')
+      return jsonResponse(savedBody({ ...COCKTAIL, name }), 201)
+    })
+    return { created, keys }
+  }
+
+  const openNewWithStore = async (options: Parameters<typeof fakeCocktailStore>[0] = {}) => {
+    await openNew()
+    mockDuplicates()
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    return fakeCocktailStore(options)
+  }
+
+  const fillName = (name: string) => fireEvent.change(screen.getByLabelText('名前'), { target: { value: name } })
+  const publish = () => fireEvent.click(screen.getByRole('button', { name: '公開する' }))
+  const saveDraft = () => fireEvent.click(screen.getByRole('button', { name: '下書きとして保存' }))
+
+  test('TC-789-01: 新規の送信に、UUID の Idempotency-Key ヘッダを付けて送る', async () => {
+    const store = await openNewWithStore()
+
+    fillName('モスコミュール')
+    publish()
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(store.keys).toHaveLength(1)
+    expect(store.keys[0]).toMatch(UUID)
+  })
+
+  test('TC-789-02: 1 回目の応答が失われて送り直すと、同じキーで送り、カクテルは 1 件だけできて一覧へ戻る', async () => {
+    const store = await openNewWithStore({ loseResponses: [1] })
+
+    fillName('モスコミュール')
+    publish()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+    expect(currentUrl()).toBe('/admin/cocktails/new')
+
+    publish()
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(store.keys).toHaveLength(2)
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['モスコミュール'])
+  })
+
+  test('TC-789-03: 422 で画面に残った後、入力を直して送り直すと、同じキーで送って保存できる', async () => {
+    const store = await openNewWithStore({ invalidNames: ['誤り'] })
+
+    fillName('誤り')
+    publish()
+    expect(await screen.findByRole('alert')).toHaveTextContent('入力を確かめてください')
+
+    fillName('モスコミュール')
+    publish()
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['モスコミュール'])
+  })
+
+  test('TC-789-04: 応答が失われた後に入力を変えて送り直し、キーを断られたら、前の送信が保存されているかもしれないことを出し、次は新しいキーで送る', async () => {
+    const store = await openNewWithStore({ loseResponses: [1] })
+
+    fillName('モスコミュール')
+    publish()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+
+    fillName('モスコミュール ジンジャー')
+    publish()
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。',
+      ),
+    )
+    expect(currentUrl()).toBe('/admin/cocktails/new')
+    expect(screen.getByLabelText('名前')).toHaveValue('モスコミュール ジンジャー')
+    expect(screen.getByRole('button', { name: '公開する' })).toBeEnabled()
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['モスコミュール'])
+
+    publish()
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(store.keys[2]).toMatch(UUID)
+    expect(store.keys[2]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['モスコミュール', 'モスコミュール ジンジャー'])
+  })
+
+  test('TC-789-05: 応答が失われた後に押すボタンを変えて(下書き → 公開)送り直しても同じキーで送り、断られたら前の送信のことを出す', async () => {
+    const store = await openNewWithStore({ loseResponses: [1] })
+
+    fillName('モスコミュール')
+    saveDraft()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+
+    publish()
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗した前の送信が、保存されているかもしれません。'))
+    expect(currentUrl()).toBe('/admin/cocktails/new')
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['モスコミュール'])
+  })
+
+  test('TC-789-06: 保存できた後に開き直した別の新規では、新しいキーで送る', async () => {
+    const store = await openNewWithStore()
+
+    fillName('モスコミュール')
+    publish()
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+
+    fireEvent.click(await screen.findByRole('link', { name: '新規' }))
+    await screen.findByRole('button', { name: '公開する' })
+    fillName('ジントニック')
+    publish()
+
+    await waitFor(() => expect(store.keys).toHaveLength(2))
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    expect(store.keys[1]).toMatch(UUID)
+    expect(store.keys[1]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['モスコミュール', 'ジントニック'])
+  })
+
+  test('TC-789-07: 更新の送信には Idempotency-Key ヘッダを付けない', async () => {
+    await openEdit()
+    mockApi('get', '/admin/cocktails', 200, emptyIndex())
+    captureSave('put', () => jsonResponse(savedBody(COCKTAIL), 200))
+
+    publish()
+
+    await waitFor(() => expect(currentUrl()).toBe('/admin/cocktails'))
+    const update = apiRequests().findLast((request) => request.url.endsWith('/api/admin/cocktails/7'))!
+    expect(update.method).toBe('POST')
+    expect(update.headers.has('Idempotency-Key')).toBe(false)
+  })
+})
+
 describe('別名', () => {
   const aliasSection = () => screen.getByRole('region', { name: '別名' })
   /** 別名の欄の値を、上から並べる */

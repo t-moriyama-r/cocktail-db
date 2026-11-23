@@ -183,6 +183,60 @@ test('TC-128-26: 新規の画面で材料を 2 行入れて「公開する」で
   await expect(await findInList(page, name, `E2E Ingredients ${RUN}`)).toBeVisible()
 })
 
+/** 1x1 の PNG(画像を付けて保存するのに使う。API は中身から画像の種類を確かめる) */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+
+test('TC-789-08: 新規の保存の応答が失われて送り直しても、カクテル(材料・別名・画像を含む)は 1 件だけできて一覧へ戻る', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  await page.goto('/admin/cocktails/new')
+  const name = `E2E の再送 ${RUN}`
+  const alias = `E2E の再送の別名 ${RUN}`
+  await fillBasics(page, name)
+  const aliases = page.getByRole('region', { name: '別名' })
+  await aliases.getByRole('button', { name: '別名を足す' }).click()
+  await aliases.getByLabel('別名 1', { exact: true }).fill(alias)
+  await page.getByLabel('画像', { exact: true }).setInputFiles({ name: 'retry.png', mimeType: 'image/png', buffer: PNG })
+  await pickNode(page, 1, 'ウォッカ')
+  await ingredientRow(page, 1).getByLabel('量').fill('45')
+  await pickNode(page, 2, 'ミント')
+  await ingredientRow(page, 2).getByLabel('量').fill('-')
+
+  // 1 回目の送信は BE まで届けて保存させ、応答だけを失わせる
+  const keys: (string | null)[] = []
+  await page.route('**/api/admin/cocktails', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    keys.push(await route.request().headerValue('Idempotency-Key'))
+    if (keys.length > 1) return route.continue()
+    await route.fetch()
+    await route.abort('failed')
+  })
+  created.push(name)
+  await page.getByRole('button', { name: '下書きとして保存' }).click()
+  await expect(page.getByRole('alert')).toContainText('通信に失敗しました')
+  await expect(page).toHaveURL(/\/admin\/cocktails\/new$/)
+
+  await page.getByRole('button', { name: '下書きとして保存' }).click()
+  await expect(page).toHaveURL(/\/admin\/cocktails\?status=draft$/)
+  await page.unrouteAll()
+
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(keys[1]).toBe(keys[0])
+  await expect(await findInList(page, name, `E2E Ingredients ${RUN}`)).toHaveCount(1)
+  // 1 件だけできたカクテルに、材料・別名・画像がそろって入っている
+  await openFromList(page, '/admin/cocktails?status=draft', name, `E2E Ingredients ${RUN}`)
+  await expect(ingredientRow(page, 1).getByText('ノード: ウォッカ', { exact: true })).toBeVisible()
+  await expect(ingredientRow(page, 1).getByLabel('量')).toHaveValue('45ml')
+  await expect(ingredientRow(page, 2).getByText('ノード: ミント', { exact: true })).toBeVisible()
+  await expect(ingredientRow(page, 3)).toHaveCount(0)
+  await expect(aliases.getByLabel('別名 1', { exact: true })).toHaveValue(alias)
+  await expect(aliases.getByLabel('別名 2', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('img', { name: 'カクテルの画像' })).toHaveAttribute('src', /\/storage\//)
+})
+
 test('TC-128-27: 新規の画面で材料を 1 行にして保存すると、API の件数のメッセージを材料の欄に出して画面に残る', async ({ page, baseURL }) => {
   await login(page, baseURL!)
   await page.goto('/admin/cocktails/new')

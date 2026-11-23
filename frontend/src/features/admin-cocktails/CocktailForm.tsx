@@ -3,6 +3,7 @@ import type { components, paths } from '../../api/schema'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { Field, FieldErrors, SelectField, TextAreaField, TextField, type SelectOption } from '../../components/AdminForm/AdminField'
+import { useIdempotencyKey } from '../../components/AdminForm/useIdempotencyKey'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
 import CocktailAliasesField from './CocktailAliasesField'
@@ -113,6 +114,10 @@ const NO_INGREDIENT_ERRORS: IngredientErrors = { section: [], rows: new Map() }
  * - 材料の行は、足す・消す・並べ替えるができる(#128)
  * - 別名は行を足す・消すができ、保存のときに欄の並びに置き換える(#83)。ほかのカクテルの名前・別名と同じ別名は保存したうえで、
  *   警告を onSaved に渡す(一覧へ戻った先に出す)
+ * - 新規の送信には冪等キー(`Idempotency-Key`)を付ける(docs/decisions/admin-idempotency.md。#789。持ち方は銘柄の新規と同じ。#758)。
+ *   保存できるまでの送り直しは、入力を直していても、押したボタンを変えても同じキーで送る(useIdempotencyKey)。応答が返らなかった送信が
+ *   保存済みで、入力を直して送り直したために BE がキーを断った(422 の `errors.idempotency_key`)ときは、前の送信が保存されているかも
+ *   しれないことを出し、次は新しいキーで送る
  */
 export default function CocktailForm({ cocktailId, initialValues, currentImage, categories, options, onSaved, onDeleted }: Props) {
   const [values, setValues] = useState(initialValues)
@@ -121,6 +126,7 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
   const [busy, setBusy] = useState<Busy>({ kind: 'idle' })
   const [failure, setFailure] = useState<Failure>({ kind: 'none' })
   const [preview, setPreview] = useState<string | null>(currentImage === null ? null : storageImageUrl(currentImage))
+  const idempotencyKey = useIdempotencyKey()
   const baseErrorId = useId()
   const duplicates = useCocktailDuplicates(values.name, values.nameEng, cocktailId)
 
@@ -198,7 +204,9 @@ export default function CocktailForm({ cocktailId, initialValues, currentImage, 
     setBusy({ kind: 'saving' })
     // 誤りの「材料 N 行目」は送った並びの位置なので、送ったときの行で結び付ける(待つ間に並べ替えても、送った行に付ける)
     const sentKeys = normalized.ingredients.map((row) => row.key)
-    const result = await saveCocktail(cocktailId, normalized, isDraft)
+    const result = await saveCocktail(cocktailId, normalized, isDraft, cocktailId === null ? idempotencyKey.current() : undefined)
+    // 保存できた・キーを断られたら、次の送信(別の保存)には新しいキーを付ける
+    if (result.kind === 'saved' || result.kind === 'key-rejected') idempotencyKey.reset()
     // 保存を待つ間に別の画面へ移っていたら、一覧へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -471,6 +479,9 @@ function saveFailureMessage(failure: SaveFailure): string {
   switch (failure.kind) {
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
+    case 'key-rejected':
+      // 通信に失敗した前の送信が、実は保存できていた。もう一度送ると別のカクテルとして保存するので、先に一覧で確かめてもらう(銘柄と同じ文。#758)
+      return '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。'
     case 'http-error':
       // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
       if (failure.status === 401) {
