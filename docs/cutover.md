@@ -1,6 +1,6 @@
 # 切り替えの手順書
 
-本番の旧サイト https://cocktail.trc-vlackhistory.net/ を、新アプリ(このリポジトリ)に切り替える手順と、手順ごとの戻し方(#138)。手順を流すスクリプト(`ops/cutover/`)と、ステージングでの通し稽古は #79 で行う。
+本番の旧サイト https://cocktail.trc-vlackhistory.net/ を、新アプリ(このリポジトリ)に切り替える手順と、手順ごとの戻し方(#138)。手順 2〜6 と 8 の curl は、スクリプト(`ops/cutover/`。#139)でまとめて流せる(下の「スクリプトで流す」)。ステージングでの通し稽古は #140 で行う。
 
 - サーバーの配置・デプロイ・Secret は `README.md`、バックアップのスクリプトは `docs/backup.md`、移行の扱いは `docs/migration-anomalies.md` にあり、ここでは繰り返さない
 - 接続先・ユーザー名・DB 名・絶対パスはこの文書にも書かない。`<user>`・`<host>`・`<旧アプリの .env>` のようなプレースホルダで書く
@@ -38,6 +38,27 @@ flowchart TD
 - 1〜6 のあいだ、利用者には旧サイトが見え続ける(読むだけ)。7 から新アプリが見える
 - 9 までは、旧アプリに戻せば旧サイトがそのまま動く(旧 DB・旧の画像・旧のドキュメントルートには書き込まないため)。9 の後に新アプリで書き込み(管理画面の保存・アフィリエイトの収集)が起きると、旧に戻したときにその分が失われる。戻すかどうかは、9 の前に決める
 - issue の並び(移行 → 検証 → 画像)と違い、画像を写してから確かめる。`legacy:verify` が、新 DB の画像の列が指すファイルが新アプリの `storage/app/public` にあるかも見るため(#35)
+
+## スクリプトで流す
+
+手順 2〜6 は `ops/cutover/migrate-data.sh`、8 の curl の確かめは `ops/cutover/smoke.sh` で流せる。1・7・9 は cPanel での作業と人の確かめなので、スクリプトには入れていない。使い方・手順の名前・終了コードは、それぞれのスクリプトの先頭にある。
+
+- どちらも何度流しても同じ結果になる。`migrate-data.sh` は、通った手順を「済み」として残し(既定は `~/cocktail-ops/cutover-state`)、流し直すと済みの手順を飛ばして、落ちた手順から続ける。新 DB のダンプ(4 の 1)は、移す前の 1 回だけ取る
+- 途中で失敗したら、その手順で止まり、済みの手順・止まった手順・続け方を出す。直してから同じコマンドを流す
+- 6 で失敗して、移行を直したものを出してから 4 から流し直すときは `--from migrate` を付ける。別の日に切り替えをやり直すときは `--restart` を付ける(済みの記録を外して 2 から流す)
+- 各手順の出力は、進み具合のディレクトリの `<手順>.log` にも残り、かかった秒数は `<手順>.done` に残る(手元の記録に写す)
+
+`--offsite` は B2 に送らないなら省ける(下の例では付けている)。スクリプトはデプロイでは配られないので、`ops/backup/`・`ops/migrate/`・`ops/cutover/` をそろえて `~/cocktail-ops/` に置く(`migrate-data.sh` は、隣の `backup/`・`migrate/` のスクリプトを呼ぶ)。`php artisan` に版の付いたコマンドを使うときは、環境変数 `PHP` で渡す(`README.md` の「サーバーの PHP の版」)。
+
+```bash
+scp -r ops/backup ops/migrate ops/cutover <user>@<host>:~/cocktail-ops/   # 手元のリポジトリから
+# 1 の後に、サーバーで
+bash ~/cocktail-ops/cutover/migrate-data.sh --old-env <旧アプリの .env> --old-storage <旧の画像のディレクトリ> \
+  --verify-db <user>_cocktail_verify --offsite $HOME/cocktail-ops/offsite.conf
+# 7 の後に
+bash ~/cocktail-ops/cutover/smoke.sh https://cocktail.trc-vlackhistory.net --legacy-category <旧のカテゴリの ID> \
+  --expect-count <旧サイトの「現在の登録数」>
+```
 
 ## 手順と戻し方
 

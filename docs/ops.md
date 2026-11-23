@@ -57,14 +57,21 @@ cd ~/<アプリ本体> && tail -n 20 storage/logs/schedule-run.log
 ```
 
 - `php artisan affiliates:collect --refresh --new` の行が、**登録した後の時刻**の DONE で出ていればよい。cron を登録し直したときは、前の DONE がログに残っているので、それを成功の判定に使わない。FAIL なら、Laravel のログ(`storage/logs/` の `laravel*.log`)の同じ時刻の例外を見る
-- DONE だけでは、Amazon・楽天の認証情報が設定されているかは分からない(無いと、警告を出して何も集めずに成功で終わり、その警告は scheduler から動かすとどこにも残らない)。登録の前後に一度、サーバーで手動で動かし、「認証情報が設定に無い」で始まる警告が出ないことを確かめる。警告は API に問い合わせる前に出る。設定済みの提供元には、少数の問い合わせが発生することがある
+- DONE だけでは、Amazon・楽天の認証情報が設定されているかは分からない(無いと、警告を出して何も集めずに成功で終わる。その警告は下の `affiliates-collect-<YYYY-MM-DD>.log` に残る)。登録の前後に一度、サーバーで手動で動かし、「認証情報が設定に無い」で始まる警告が出ないことを確かめる。警告は API に問い合わせる前に出る。設定済みの提供元には、少数の問い合わせが発生することがある
 
   ```bash
   cd ~/<アプリ本体> && php artisan affiliates:collect --new --limit=1
   ```
 
 - Amazon・楽天の上限・一時的な失敗は、コマンドの失敗にはならず、Laravel のログに warning(`affiliates:collect --refresh: …`・`affiliates:collect --new: …`)が出る。その回の残りは次の回にまわる
-- 収集の件数(「取り直した(Amazon): N 件(保存 …)」「探した: N 件(…)」)は、scheduler から動かすと今はどこにも残らない(scheduler が動かしたコマンドの出力は、既定で捨てられる)。ログに残すのは #778
+- 収集の件数(「取り直した(Amazon): N 件(保存 …)」「探した: N 件(…)」)と、商品ごとの行・警告は、日ごとのファイル `storage/logs/affiliates-collect-<YYYY-MM-DD>.log` に残る(scheduler が動かしたコマンドの出力は既定で捨てられるので、`backend/routes/console.php` でファイルに足していく指定をしている。#778)。回ごとに、動かした時刻の `[YYYY-MM-DD HH:MM:SS] affiliates:collect --refresh --new` の行が先に出る(ファイルの日付も時刻も、アプリの時刻帯の UTC。`config/app.php` の `timezone`)。登録した後の時刻の見出しの下に、件数の行が出ていればよい
+
+  ```bash
+  cd ~/<アプリ本体> && tail -n 40 "$(ls -t storage/logs/affiliates-collect-*.log | head -n 1)"   # いちばん新しい日のファイル
+  ```
+
+  - 1 回あたり、件数の行が 4 つ(Amazon・楽天の片方だけ設定していれば 3 つ)と、取り直した・探した商品ごとに 1 行(既定の件数で 15 行ほど)。1 日に 1 ファイルで、数百 KB ほど
+  - 日付が 14 日より前のファイルは、scheduler が動かすたびに消す(Laravel の `daily` のログと同じ日数)。人が消さなくてよい
 
 ### 止める
 

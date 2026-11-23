@@ -13,8 +13,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
-// 管理画面の保存の冪等キー(#657。決まりは docs/decisions/admin-idempotency.md)。今つないでいるのは銘柄の新規
-// (POST /api/admin/brands)だけ。旧に冪等キーは無い(旧は再送のたびに作る。旧を動かして確かめてはいない)。
+// 管理画面の保存の冪等キー(#657。決まりは docs/decisions/admin-idempotency.md)。仕組みは銘柄の新規
+// (POST /api/admin/brands)で確かめる。カクテルの新規(#759)・ノードの新規(#760)につないだことは、それぞれ
+// CocktailAdminApiTest・CategoryAdminApiTest で確かめる。
+// 旧に冪等キーは無い(旧は再送のたびに作る。旧を動かして確かめてはいない)。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
 
 uses(RefreshDatabase::class)->group('db');

@@ -678,6 +678,17 @@
                 "tags": [
                     "Category"
                 ],
+                "parameters": [
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "description": "\u9001\u4fe1\u3054\u3068\u306e\u8b58\u5225\u5b50(UUID)\u3002\u540c\u3058\u5024\u306e\u518d\u9001\u306b\u306f\u3001\u4fdd\u5b58\u3057\u76f4\u3055\u305a\u306b\u6700\u521d\u306b\u6210\u529f\u3057\u305f\u5fdc\u7b54\u3092\u8fd4\u3059(docs/decisions/admin-idempotency.md)",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -1149,6 +1160,17 @@
                 "summary": "\u30ab\u30af\u30c6\u30eb\u3092\u4f5c\u308b\u3002\u4e0b\u66f8\u304d\u304b\u516c\u958b\u304b\u306f is_draft \u3067\u6c7a\u3081\u308b(docs/decisions/admin-screens.md \u306e 1)\u3002\n\u5225\u540d\u304c\u307b\u304b\u306e\u30ab\u30af\u30c6\u30eb\u306e\u540d\u524d\u30fb\u5225\u540d\u3068\u540c\u3058\u306a\u3089\u3001\u4fdd\u5b58\u3057\u305f\u3046\u3048\u3067 warnings \u306b\u5165\u308c\u3066\u8fd4\u3059(#293)\u3002",
                 "tags": [
                     "Cocktail"
+                ],
+                "parameters": [
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "description": "\u9001\u4fe1\u3054\u3068\u306e\u8b58\u5225\u5b50(UUID)\u3002\u540c\u3058\u5024\u306e\u518d\u9001\u306b\u306f\u3001\u4fdd\u5b58\u3057\u76f4\u3055\u305a\u306b\u6700\u521d\u306b\u6210\u529f\u3057\u305f\u5fdc\u7b54\u3092\u8fd4\u3059(docs/decisions/admin-idempotency.md)",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
                 ],
                 "requestBody": {
                     "required": true,

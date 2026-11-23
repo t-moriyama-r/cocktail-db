@@ -133,3 +133,37 @@ test('TC-633-10: 新規の画面で、既にある銘柄の名前・英名を入
   await expect(name).not.toHaveAccessibleDescription('同じ名前が存在しています')
   await expect(nameEng).toHaveAccessibleDescription('同じ名前が存在しています')
 })
+
+test('TC-758-07: 新規の保存の応答が失われて送り直しても、銘柄は 1 件だけできて一覧へ戻る', async ({ page, baseURL }) => {
+  await login(page, baseURL!)
+  const name = `E2E の銘柄 retry ${Date.now()}`
+  await page.goto('/admin/brands/new')
+  await page.getByRole('list', { name: '所属' }).getByRole('radio', { name: 'ウォッカ' }).check()
+  await page.getByLabel('名前', { exact: true }).fill(name)
+  await page.getByLabel('英名').fill('E2E Brand retry')
+  await page.getByLabel('度数(%)').fill('40')
+  await page.getByLabel('説明').fill('E2E で作った銘柄')
+
+  // 1 回目の送信は BE まで届けて保存させ、応答だけを失わせる
+  const keys: (string | null)[] = []
+  await page.route('**/api/admin/brands', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    keys.push(await route.request().headerValue('Idempotency-Key'))
+    if (keys.length > 1) return route.continue()
+    await route.fetch()
+    await route.abort('failed')
+  })
+  await page.getByRole('button', { name: '送信' }).click()
+  await expect(page.getByRole('alert')).toContainText('通信に失敗しました')
+  await expect(page).toHaveURL(/\/admin\/brands\/new$/)
+
+  await page.getByRole('button', { name: '送信' }).click()
+  await expect(page).toHaveURL(/\/admin\/brands$/)
+  await page.unrouteAll()
+
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(keys[1]).toBe(keys[0])
+  await page.getByRole('searchbox', { name: '絞り込み' }).fill(name)
+  await expect(page.getByRole('link', { name: `${name}(E2E Brand retry)` })).toHaveCount(1)
+})
