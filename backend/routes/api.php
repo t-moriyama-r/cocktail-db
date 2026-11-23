@@ -91,7 +91,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
 
     // カクテルの基本情報(#291)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
-    Route::post('/cocktails', [CocktailController::class, 'store']);
+    // 新規は Idempotency-Key を付けた再送で 2 件目を作らない(#759。docs/decisions/admin-idempotency.md)
+    Route::post('/cocktails', [CocktailController::class, 'store'])->middleware('idempotent');
     Route::get('/cocktails/{cocktail}', [CocktailController::class, 'show'])->where('cocktail', '[0-9]{1,18}');
     Route::put('/cocktails/{cocktail}', [CocktailController::class, 'update'])->where('cocktail', '[0-9]{1,18}');
     // カクテルの削除(#130)。材料・別名も消える。説明文から参照されているカクテルは消さず 409(#579)
@@ -104,15 +105,18 @@ Route::prefix('admin')->middleware('admin')->group(function () {
 
     // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::get('/brands', [BrandController::class, 'index']);
-    Route::post('/brands', [BrandController::class, 'store']);
+    // 新規は Idempotency-Key を付けた再送で 2 件目を作らない(#657。docs/decisions/admin-idempotency.md)
+    Route::post('/brands', [BrandController::class, 'store'])->middleware('idempotent');
     // 名前・英名の重なりの問い合わせ(#632)。編集画面で入れたそばに警告を出すため。保存は止めない
     Route::get('/brands/duplicates', [BrandController::class, 'duplicates']);
     Route::get('/brands/{brand}', [BrandController::class, 'show'])->where('brand', '[0-9]{1,18}');
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
 
     // カテゴリ木のノード(#121)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る。
-    // 消せないノード(子・銘柄・材料・ベース・アフィリエイトのどれかがある)は消さず 409 で理由を返す
-    Route::apiResource('categories', CategoryController::class)->where(['category' => '[0-9]{1,18}']);
+    // 消せないノード(子・銘柄・材料・ベース・アフィリエイトのどれかがある)は消さず 409 で理由を返す。
+    // 新規は Idempotency-Key を付けた再送で 2 つ目を作らない(#760。docs/decisions/admin-idempotency.md)
+    Route::apiResource('categories', CategoryController::class)->where(['category' => '[0-9]{1,18}'])
+        ->middlewareFor('store', 'idempotent');
     // 名前・英名の重なりの問い合わせ(#673)。編集画面で入れたそばに警告を出すため。保存は止めない
     Route::get('/categories/duplicates', [CategoryController::class, 'duplicates']);
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# evidence-request.sh のテスト(TC-599-01〜)。頼むコメントの Markdown を渡して、出す JSON・エラーと終了コードを見る。
+# evidence-request.sh のテスト(TC-599-01〜・TC-604-15・TC-768-01〜02)。頼むコメントの Markdown を渡して、出す JSON・エラーと終了コードを見る。
 # docs/evidence-request.md の例も取り出して流し、文書とスクリプトがずれていないかを見る。
 #
 # 使い方: .github/scripts/tests/evidence-request.test.sh
@@ -33,7 +33,7 @@ main() {
 		run
 		[ "$RC" -eq 0 ] && ok=$((ok + 1))
 	done
-	expect TC-599-02 '文書の ```evidence の例(3 つ)は、どれも通る' "$ok/$n" "3/3"
+	expect TC-599-02 '文書の ```evidence の例(4 つ。#768 で管理画面の例を足した)は、どれも通る' "$ok/$n" "4/4"
 
 	# --- 既定の値 ---
 
@@ -110,7 +110,7 @@ main() {
 	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /' '    widht: [375]'
 	run
 	expect TC-599-17 '知らない項目(綴りの誤り)は落とす' "$(out)|$RC" \
-		'items[1](screen): 知らない項目 widht(使えるのは kind・cases・note・path・widths・steps・video・data)|1'
+		'items[1](screen): 知らない項目 widht(使えるのは kind・cases・note・path・widths・steps・video・login・data)|1'
 
 	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /' '    data: { seed: "Database; rm -rf" }'
 	run
@@ -149,6 +149,17 @@ main() {
 	run
 	expect TC-599-23 '知らない操作・fill の value が無い・goto のホストは落とし、正しい操作は通す' "$(out)|$RC" \
 		"$(printf '%s\n%s\n%s' 'items[1](screen).steps[1]: 知らない操作 tap(使えるのは goto・click・fill・select・press・hover・wait_for・scroll_to)' 'items[1](screen).steps[2]: value(入れる値)を書く' 'items[1](screen).steps[3]: / で始まるアプリの中のパスにする(ホストは書かない): //evil.example')|1"
+
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /admin' '    login: admin' '  - kind: screen' '    cases: [TC-1-02]' '    path: /'
+	run
+	expect TC-768-01 '画面の login: admin は通してそのまま出す。書かなければ login を足さない(ログインしない)' \
+		"$(jq -c '[.items[] | (.login // "なし")]' "$WORK/out")|$RC" '["admin","なし"]|0'
+
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /admin' '    login: root' '  - kind: screen' '    cases: [TC-1-02]' '    path: /admin' '    login: true' \
+		'  - kind: api' '    cases: [TC-1-03]' '    request: { method: GET, path: /api/admin/me }' '    login: admin'
+	run
+	expect TC-768-02 'login が admin でないもの・画面でない項目の login は落とす' "$(out)|$RC" \
+		"$(printf '%s\n%s\n%s' 'items[1](screen).login: admin のどれかにする(ログインしないなら書かない): "root"' 'items[2](screen).login: admin のどれかにする(ログインしないなら書かない): true' 'items[3](api): 知らない項目 login(使えるのは kind・cases・note・request・data)')|1"
 
 	# --- API ---
 

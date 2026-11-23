@@ -10,9 +10,10 @@
 #   test.yml の backend・frontend と同じ準備(PHP 8.5・MariaDB・Node)で作り直す。作り直すのは決まった手順で、判断ではないため(#455)。
 #   作り直した生成ファイルの集め方と push してよいかの決め方は、ai-review-loop.yml の regenerate・regen-push と共通(.github/scripts/generated-regen.sh。#495)。
 #   push は PR のコードを動かさない after が GITHUB_TOKEN で行い、作り直したことを目印のコメントに書く。作り直せなければ needs-local で手元に頼む(判断ではない)
-# - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、ボットの「@coderabbitai review」に
-#   CodeRabbit が応じないことがある(#227)ので、CI が付いていなければ pull_request の回を走らせ(.github/scripts/ci-rerun.sh)、ready の PR は代わりの Claude(ai-claude-review.yml)に
-#   いまのコミットをレビューさせる。新しく付いた needs-human・needs-manual は Slack に知らせ、状態のラベルを付け替える
+# - after: GITHUB_TOKEN で後を続ける。ボットの push では test.yml が起きない・承認待ちのまま走らないことがあり(#227・#365)、CI が付いていなければ pull_request の回を走らせる
+#   (.github/scripts/ci-rerun.sh)。ready の PR のいまのコミットのレビューは、ほかの再レビューと同じく .github/scripts/request-review.sh で、まずオーナーの PAT から CodeRabbit に頼み、
+#   上限・返事なし・依頼を書けないときだけ代わりの Claude(ai-claude-review.yml)に回す(ボットの「@coderabbitai review」には CodeRabbit が応じない。#227・#264)。
+#   新しく付いた needs-human・needs-manual は Slack に知らせ、状態のラベルを付け替える
 #
 # 起動: 1 時間ごと・develop への push(コンフリクトが出た直後。kick が workflow_dispatch で起こし直す)・自動マージの判定でコンフリクトが見つかったとき(ai-auto-merge.yml)・手動。
 # schedule が遅れた・落とされたときは、PR に動きがあれば、CI の終わりに patrol-kick.yml が前の回から 1 時間たったところで起こす(#269)。
@@ -21,7 +22,7 @@
 # 読ませる PR・issue の中身は、動かす前に書き出した信頼する人のものだけ(trusted-context.sh。コメントをその場で読める gh は渡さない。#498)
 #
 # 必要な secret: CLAUDE_CODE_OAUTH_TOKEN_<CLAUDE_ACCOUNT の値>(ai-review-loop.yml と同じ)。Claude の GitHub App をこのリポジトリに入れておく。
-# CODERABBIT_REQUEST_TOKEN(ci-rerun.sh が CI の回の無い PR を開き直すのに使う。ci-rerun.yml と同じ)
+# CODERABBIT_REQUEST_TOKEN(ci-rerun.sh が CI の回の無い PR を開き直すのと、request-review.sh が CodeRabbit にレビューを頼むのに使う。ci-rerun.yml・review-on-push.yml と同じ)
 name: コンフリクトを解消する
 # PR の番号を付けて起こした回は、名前の末尾に「#<番号>」を付ける。patrol-kick.sh は、これの付いた回を全 PR の見回りに数えない
 run-name: "${{ inputs.number && format('{0} #{1}', github.workflow, inputs.number) || github.workflow }}"
@@ -560,6 +561,8 @@ jobs:
         env:
           # ci-rerun.sh が、pull_request の回が無い PR を閉じて開き直す(オーナーの PAT。ci-rerun.yml と同じ)
           PR_REOPEN_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
+          # request-review.sh が、同じ PAT で「@coderabbitai review」を書く(ボットの依頼には CodeRabbit が応じない。#227)
+          CODERABBIT_REQUEST_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
         run: |
           pr=$(gh pr view "$PR" -R "$REPO" --json state,isDraft,headRefOid,labels)
           head=$(jq -r .headRefOid <<<"$pr")
@@ -577,12 +580,10 @@ jobs:
               sleep 15
             done
             MIN_AGE_MINUTES=0 bash .github/scripts/ci-rerun.sh "$REPO" "$PR" || echo "::warning::#$PR の CI を流し直せたか確かめられなかった(1 時間ごとの ci-rerun.yml が拾う)"
-            # ボットの「@coderabbitai review」には CodeRabbit が応じないことがある(#227)。いまのコミットは代わりの Claude にレビューさせる。
-            # draft は ready にするときにレビューを頼むので呼ばない。人の判断を待っている PR でも呼ばない
-            held=$(jq -r '[.labels[].name | select(IN("needs-human","needs-local","needs-manual","needs-decision"))] | join(",")' <<<"$pr")
-            if [ "$(jq -r .isDraft <<<"$pr")" = false ] && [ -z "$held" ]; then
-              gh workflow run ai-claude-review.yml -R "$REPO" -f number="$PR" -f reason=conflict-resolve
-            fi
+            # いまのコミットのレビューを、まずオーナーの PAT で CodeRabbit に頼む(上限・返事なし・依頼を書けないときだけ代わりの Claude。#264)。
+            # draft(ready にするときに頼む)・人や手元の番(needs-human・needs-local・needs-manual・needs-approval)の PR は request-review.sh が見送る。
+            # 頼めなくても、下の通知は続ける(2 時間ごとの ai-review-sweep.yml が拾う)
+            bash .github/scripts/request-review.sh "$REPO" "$PR" || echo "::warning::#$PR のレビューを頼めなかった(ai-review-sweep.yml が拾う)"
           elif [ "$head" != "$PICKED_HEAD" ]; then
             # この回の Claude Code ではない push(人の push など)で進んだ。その push で CI が動き、コンフリクトが残れば次の回が新しい head で試す
             echo "#$PR はこの回の解消ではない push で ${head:0:7} に進んだので、何もしない"

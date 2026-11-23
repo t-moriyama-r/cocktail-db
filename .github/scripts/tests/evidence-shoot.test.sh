@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
-# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
+# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17・TC-768-03〜07)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
 # 流す手順を出す)に渡して、撮る幅・動画・操作・リクエスト・出すファイルの名前を見る。撮影そのもの(Chrome・ffmpeg)は流さない。
+# 管理画面にログインして撮る(login: admin。#768)ところは、php・ffmpeg・curl・capture.js・compose.js を偽物にして run を流し、
+# ログインの URL を撮る回ごとに出すこと・設定ファイルや texts に残さないこと・エラーの文で伏せることを見る。
 #
 # 使い方: .github/scripts/tests/evidence-shoot.test.sh
 
@@ -61,6 +63,36 @@ main() {
 		"$(jq -c '[.items[] | [.kind, (.steps[0:2] | map(.type)), ([.steps[] | select(.type == "probe") | [.side, .path]])]]' "$WORK/out")" \
 		'[["command",["seed","command"],[]],["screen",["seed","probe"],[["after","/"]]]]'
 
+	# --- 管理画面にログインして撮る(#768) ---
+
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /admin' '    login: admin' '    widths: [375, 1440]' \
+		'  - kind: screen' '    cases: [TC-1-02]' '    path: /' '    widths: [375, 1440]'
+	plan
+	# shellcheck disable=SC2016 # ${env:…} はそのまま比べる
+	expect TC-768-03 'login: admin の画面は、撮る回(幅ごと・動画・修正前後)のすべてで、URL の値を持たない手順でログインする。書かない画面はログインしない' \
+		"$RC|$(jq -c '[.items[0].steps[] | select(.type == "capture") | [.login, .config.login]] | unique' "$WORK/out")|$(jq '[.items[0].steps[] | select(.type == "capture")] | length' "$WORK/out")|$(jq -c '[.items[1].steps[] | select(.type == "capture") | (.login // null), (.config.login // null)] | unique' "$WORK/out")" \
+		'0|[["admin",{"url":"file://<out>/work/login.html","actions":[{"fill":["#u","${env:EVIDENCE_LOGIN_URL}"]},{"click":"#go"}],"waitUrlNot":"file:"}]]|8|[null]'
+
+	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /admin' '    login: admin' '    widths: [375, 1440]'
+	fake_run
+	expect TC-768-04 '撮る回ごとに、その側の checkout で APP_URL をその側のアプリにして、E2E の管理者のログインの URL を 1 つずつ出し、capture.js に環境変数で渡す' \
+		"$RC|$(sort "$FAKE/calls" | uniq -c | awk '{print $1, $2, $3, $4}' | paste -sd,)|$(grep -c '^got-login ' "$FAKE/capture.log")|$(grep -c '^no-login ' "$FAKE/capture.log")" \
+		"0|4 $FAKE/after/backend http://127.0.0.1:8002 e2e-admin@example.com,4 $FAKE/before/backend http://127.0.0.1:8001 e2e-admin@example.com|8|0"
+	expect TC-768-05 'ログインの URL(トークン)は、設定ファイル・texts・撮った物のどこにも残らない' \
+		"$(grep -rlF -e 'tok' -e 'login-link' "$WORK/run" | wc -l)|$(ls "$WORK/run/texts" | wc -l)" '0|8'
+
+	FAKE_MODE=leak fake_run
+	expect TC-768-06 '撮った結果の文字にログインの URL が出ていたら、texts に書かずに落ち、エラーの文にも URL を出さない' \
+		"$RC|$(grep -cF 'ログインの URL が出ていた' "$WORK/err")|$(grep -cF -e 'tok' "$WORK/err")|$(find "$WORK/run/texts" -type f | wc -l)" '1|1|0|0'
+
+	FAKE_MODE=fail fake_run
+	expect TC-768-07 'capture.js が落ちてエラーの文に URL が入っていても、URL とトークンを伏せて出す' \
+		"$RC|$(grep -cF 'goto <ログインの URL> failed' "$WORK/err")|$(grep -cF -e 'tok' "$WORK/err")" '1|1|0'
+
+	FAKE_LINK='not a url' fake_run
+	expect TC-768-08 'admin:login-link がその側のアプリのログインの URL を出さなければ、出した文字を書かずに落ちる' \
+		"$RC|$(grep -cF 'before の admin:login-link が、http://127.0.0.1:8001 のログインの URL を出さなかった' "$WORK/err")|$(grep -cF 'not a url' "$WORK/err")" '1|1|0'
+
 	echo
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
@@ -79,6 +111,52 @@ block() {
 plan() {
 	RC=0
 	node "$SCRIPT" plan "$WORK/request.json" >"$WORK/out" 2>"$WORK/err" || RC=$?
+}
+
+# 偽の php・ffmpeg・curl・capture.js・compose.js で run を流す(#768)。アプリは起こさない。FAKE_MODE=leak は撮った結果に、fail はエラーの文に
+# 受け取ったログインの URL を出す。FAKE_LINK を渡すと admin:login-link がそれを出す
+fake_run() {
+	export FAKE="$WORK/fake"
+	rm -rf "$FAKE" "$WORK/run"
+	mkdir -p "$FAKE/bin" "$FAKE/tools" "$FAKE/before/backend" "$FAKE/after/backend"
+	# shellcheck disable=SC2016 # 偽物の中身なので、ここでは展開しない
+	printf '%s\n' '#!/usr/bin/env bash' \
+		'case "$2" in' \
+		'  migrate:fresh) exit 0 ;;' \
+		'  admin:login-link) echo "$PWD $APP_URL $3" >>"$FAKE/calls"; n=$(wc -l <"$FAKE/calls");' \
+		'    echo "${FAKE_LINK:-$APP_URL/admin/login-link/1?token=tok${n}secret0000&signature=sig${n}}" ;;' \
+		'  *) exit 1 ;;' \
+		'esac' >"$FAKE/bin/php"
+	printf '%s\n' '#!/usr/bin/env bash' 'for a; do last=$a; done' ': >"$last"' >"$FAKE/bin/ffmpeg"
+	# 撮る前の修正後の画面の確かめ(probe)は、アプリを起こさないので 200 を返す
+	printf '%s\n' '#!/usr/bin/env bash' 'printf 200' >"$FAKE/bin/curl"
+	chmod +x "$FAKE/bin/php" "$FAKE/bin/ffmpeg" "$FAKE/bin/curl"
+	cat >"$FAKE/tools/capture.js" <<'JS'
+const fs = require("fs");
+const path = require("path");
+const c = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const link = process.env.EVIDENCE_LOGIN_URL;
+fs.appendFileSync(path.join(process.env.FAKE, "capture.log"), `${link ? "got-login" : "no-login"} ${c.label}\n`);
+if (process.env.FAKE_MODE === "fail") {
+  console.error(`page.goto: net::ERR_FAILED\n  - goto ${link} failed`);
+  process.exit(1);
+}
+const name = c.pages[0].name;
+fs.writeFileSync(path.join(c.outDir, `${c.label}_${name}.png`), "");
+if (c.video) fs.writeFileSync(path.join(c.outDir, `${c.label}.webm`), "");
+const body = process.env.FAKE_MODE === "leak" ? `管理画面 ${link}` : "管理画面";
+console.log(JSON.stringify({ label: c.label, results: [{ name, url: `${c.baseUrl}/admin`, read: { body } }] }));
+JS
+	cat >"$FAKE/tools/compose.js" <<'JS'
+const fs = require("fs");
+const path = require("path");
+const c = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+fs.writeFileSync(path.join(c.outDir, `${c.name}_compare_${c.compare[0].name}.png`), "");
+JS
+	RC=0
+	PATH="$FAKE/bin:$PATH" node "$SCRIPT" run "$WORK/request.json" --out "$WORK/run" --tools "$FAKE/tools" --pw "$FAKE" \
+		--before-dir "$FAKE/before" --before-url http://127.0.0.1:8001 --after-dir "$FAKE/after" --after-url http://127.0.0.1:8002 \
+		>/dev/null 2>"$WORK/err" || RC=$?
 }
 
 expect() {

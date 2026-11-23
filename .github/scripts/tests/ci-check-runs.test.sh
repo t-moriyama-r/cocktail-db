@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ci-check-runs.sh のテスト(TC-367-01〜・TC-387-01〜)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
+# ci-check-runs.sh のテスト(TC-367-01〜・TC-387-01〜・TC-776-01〜)。gh を、決まった JSON を返す偽物に差し替えて流す。GitHub には触らない。
 # ai-auto-merge.yml と同じく、出た配列から「終わっていない」「失敗している」チェックの名前を出して確かめる。
 #
 # 使い方: .github/scripts/tests/ci-check-runs.test.sh
@@ -98,6 +98,11 @@ $(run rerun 7 in_progress null),$(run review 4 in_progress null),$(run resume 5 
 	check_fails TC-387-10 '待っている間にチェックを読めなくなったら失敗にする(途中の結果で判定しない)' check-runs.2 \
 		"[$(run backend 1 completed success),$(run 'Analyze (actions)' 10 in_progress null)]"
 
+	# head のワークフローの実行は、コメント・ラベルのたびに増え、一覧が引数 1 つの上限(128 KiB)を超える(#776)
+	check_large_runs TC-776-01 'ワークフローの実行の一覧が 128 KiB を超えても、チェックを出す' \
+		"[$(run backend 1 completed success),$(run label 2 in_progress null)]" \
+		'pending=|failed=|names=backend'
+
 	echo "passed: $PASSED, failed: $FAILED"
 	[ "$FAILED" -eq 0 ]
 }
@@ -151,8 +156,26 @@ prepare() {
 # ai-auto-merge.yml の判定と同じ jq で、終わっていない・失敗しているチェックと、残ったチェックの名前を出す。
 # 待つ間隔は 0 秒・上限は 2 回にして流す。期待値の末尾の |warning は待ちきれなかった警告が出ること、|nowait は待たなかったこと
 check() {
-	local id=$1 title=$2 checks=$3 expected=$4 later=${5:-} out actual
+	local id=$1 title=$2 checks=$3 expected=$4 later=${5:-}
 	prepare "$checks" "$later"
+	judge "$id" "$title" "$expected"
+}
+
+# check_large_runs <ID> <名前> <チェック> <期待値>: ワークフローの実行の一覧に、1 件 5 KB ほどの実行を 40 件足し、128 KiB を超えさせて流す。
+# 足した実行は push のイベントで、どのチェックの check suite とも結び付かないので、結果は足す前と変わらない
+check_large_runs() {
+	local id=$1 title=$2 checks=$3 expected=$4 pad
+	prepare "$checks"
+	pad=$(printf '%05000d' 0)
+	jq -c --arg pad "$pad" '.workflow_runs += [range(0; 40) | {path: ".github/workflows/x.yml", event: "push", check_suite_id: (1000 + .), pad: $pad}]' \
+		"$FAKE/runs.json" >"$FAKE/runs.large.json"
+	mv "$FAKE/runs.large.json" "$FAKE/runs.json"
+	judge "$id" "$title" "$expected"
+}
+
+# 用意した偽物の gh でスクリプトを流し、ai-auto-merge.yml の判定と同じ形にした結果を期待値と比べる
+judge() {
+	local id=$1 title=$2 expected=$3 out actual
 	if out=$(PATH="$FAKE:$PATH" FAKE_DIR="$FAKE" CI_CHECK_WAIT_INTERVAL=0 CI_CHECK_WAIT_TRIES=2 bash "$SCRIPT" o/r abc1234 2>"$FAKE/stderr"); then
 		actual="pending=$(jq -r '[.[] | select(.status != "completed") | .name] | join(",")' <<<"$out")"
 		actual+="|failed=$(jq -r '[.[] | select(.conclusion | IN("success","skipped","neutral") | not) | .name] | join(",")' <<<"$out")"

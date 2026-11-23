@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'rea
 import type { components } from '../../api/schema'
 import { Field, FieldErrors, TextAreaField, TextField } from '../../components/AdminForm/AdminField'
 import { useDuplicateWarning } from '../../components/AdminForm/useDuplicateWarning'
+import { useIdempotencyKey } from '../../components/AdminForm/useIdempotencyKey'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import type { CategoryTreeAppearance, CategoryTreeNode } from '../../components/CategoryTree/CategoryTree.types'
 import { storageImageUrl } from '../../utils/storageImageUrl'
@@ -48,6 +49,9 @@ const ALL_BRANDS = { key: 'all' } as const
  *
  * - 名前・英名は、値を変えて欄を離れたら重なりを問い合わせ(#632 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
  *   (旧の duplicate_check。#633)。知らせるだけで、送信は止めない(旧と同じ)
+ * - 新規の送信には冪等キー(`Idempotency-Key`)を付ける(docs/decisions/admin-idempotency.md。#758)。保存できるまでの送り直しは、
+ *   入力を直していても同じキーで送る(useIdempotencyKey)。応答が返らなかった送信が保存済みで、入力を直して送り直したために
+ *   BE がキーを断った(422 の `errors.idempotency_key`)ときは、前の送信が保存されているかもしれないことを出し、次は新しいキーで送る
  */
 export default function BrandForm({ brandId, initialValues, currentImage, categories, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
@@ -60,6 +64,7 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
   )
   const categoryErrorId = useId()
   const [save, setSave] = useState<SaveState>({ kind: 'idle' })
+  const idempotencyKey = useIdempotencyKey()
   const [preview, setPreview] = useState<string | null>(currentImage === null ? null : storageImageUrl(currentImage))
   const nodes = useMemo(() => categories.map(toCategoryTreeNode), [categories])
   const rootIds = useMemo(() => new Set(categories.map((root) => root.id)), [categories])
@@ -103,7 +108,9 @@ export default function BrandForm({ brandId, initialValues, currentImage, catego
     // 欄を離れずに Enter で送ったときも、英名を半角にして送る
     const normalized = { ...values, nameEng: toHalfWidthAlphanumeric(values.nameEng) }
     setValues(normalized)
-    const result = await saveBrand(brandId, normalized)
+    const result = await saveBrand(brandId, normalized, brandId === null ? idempotencyKey.current() : undefined)
+    // 保存できた・キーを断られたら、次の送信(別の保存)には新しいキーを付ける
+    if (result.kind === 'saved' || result.kind === 'key-rejected') idempotencyKey.reset()
     // 保存を待つ間に別の画面へ移っていたら、一覧へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -261,6 +268,9 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
   switch (failure.kind) {
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
+    case 'key-rejected':
+      // 通信に失敗した前の送信が、実は保存できていた。もう一度送ると別の銘柄として保存するので、先に一覧で確かめてもらう
+      return '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。'
     case 'http-error':
       // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
       if (failure.status === 401) {

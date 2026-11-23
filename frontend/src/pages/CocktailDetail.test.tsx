@@ -6,6 +6,7 @@ import type { components, paths } from '../api/schema'
 import { buildCocktailRow as row } from '../components/CocktailTable/buildCocktailRow'
 import type { CocktailDetailData } from '../features/cocktail-detail/CocktailDetail.types'
 import { buildCocktailDetail as detail, buildIngredient as ingredient } from '../features/cocktail-detail/buildCocktailDetail'
+import { SITE_TITLE } from '../components/SiteLayout/usePageTitle'
 import { apiRequests, jsonResponse, mockApi, mockApiHandler } from '../test/api'
 
 type CocktailList = paths['/cocktails/{cocktail}/same-name']['get']['responses'][200]['content']['application/json']
@@ -582,5 +583,58 @@ describe('カクテルの詳細の、材料ごとの商品の欄', () => {
     const section = await screen.findByRole('region', { name: '使われている材料' })
     const sameBase = screen.getByRole('region', { name: '同じベースのカクテル' })
     expect(sameBase.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('カクテルの詳細の、ブラウザのタイトル', () => {
+  test('TC-770-01: カクテルを読めたら、ブラウザのタイトルを「名前(英名) ｜ サイト名」にする', async () => {
+    await openDetail(detail({ id: 17, name: 'カウボーイ', name_eng: 'Cowboy' }))
+
+    await waitFor(() => expect(document.title).toBe(`カウボーイ(Cowboy) ｜ ${SITE_TITLE}`))
+  })
+
+  test.each([
+    ['null', null],
+    ['空の文字', ''],
+  ])('TC-770-02: 英名が %s のカクテルは、サーバーの <title> と同じく括弧を省いて「名前 ｜ サイト名」にする', async (_label, nameEng) => {
+    await openDetail(detail({ name: '名無し', name_eng: nameEng }))
+
+    await waitFor(() => expect(document.title).toBe(`名無し ｜ ${SITE_TITLE}`))
+  })
+
+  test('TC-770-03: 同じ名前のカクテルのリンクで別のカクテルの詳細へ移ると、タイトルもそのカクテルのものに変わる', async () => {
+    const cocktails = new Map([
+      [59, detail({ id: 59, name: 'マティーニ', name_eng: 'Martini' })],
+      [60, detail({ id: 60, name: 'ドライ・マティーニ', name_eng: 'Dry Martini' })],
+    ])
+    mockApiHandler('get', '/cocktails/{cocktail}', (request) => {
+      const cocktail = cocktails.get(Number(new URL(request.url).pathname.split('/').pop()))
+      return cocktail ? jsonResponse({ data: cocktail }, 200) : jsonResponse({ message: 'Not Found' }, 404)
+    })
+    mockApiHandler('get', '/cocktails/{cocktail}/same-name', (request) =>
+      jsonResponse(
+        new URL(request.url).pathname.endsWith('/59/same-name')
+          ? { data: [row({ id: 60, name: 'ドライ・マティーニ' })] }
+          : { data: [] },
+        200,
+      ),
+    )
+    mockApi('get', '/cocktails/{cocktail}/related', 200, { data: [] })
+    mockApi('get', '/cocktails/random', 200, { data: [] })
+    mockApiHandler('get', '/affiliates', NO_AFFILIATE)
+    render(
+      <MemoryRouter initialEntries={['/detail/cocktail/59']}>
+        <Routes>
+          <Route path="/detail/cocktail/:id" element={<CocktailDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(document.title).toBe(`マティーニ(Martini) ｜ ${SITE_TITLE}`))
+
+    const section = await screen.findByRole('region', { name: SAME_NAME })
+    fireEvent.click(within(section).getByRole('link', { name: 'ドライ・マティーニ' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'ドライ・マティーニ(Dry Martini)' })).toBeInTheDocument()
+    await waitFor(() => expect(document.title).toBe(`ドライ・マティーニ(Dry Martini) ｜ ${SITE_TITLE}`))
   })
 })

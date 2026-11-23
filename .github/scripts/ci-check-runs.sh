@@ -33,20 +33,22 @@ collect() {
 	local checks runs
 	checks=$(gh api --paginate --slurp "repos/$repo/commits/$head/check-runs?per_page=100" | jq '[.[].check_runs[]]') || return 1
 	runs=$(gh api --paginate --slurp "repos/$repo/actions/runs?head_sha=$head&per_page=100" | jq '[.[].workflow_runs[]]') || return 1
-	jq -c --argjson runs "$runs" --arg paths "$retrigger_paths" --arg apps "$retrigger_apps" '
+	# 実行 1 件は 13 KB ほどあり、コメント・ラベルのたびに増えるので、--argjson(引数。1 つ 128 KiB が上限)ではなく標準入力で渡す(#776)
+	printf '%s\n' "$checks" "$runs" | jq -c -n --arg paths "$retrigger_paths" --arg apps "$retrigger_apps" '
+		input as $checks | input as $runs
 		# 除くワークフローの実行の check suite の id
-		([$runs[] | select(.event | IN("pull_request_target", "pull_request_review", "pull_request_review_comment", "issue_comment", "workflow_run"))
+		| ([$runs[] | select(.event | IN("pull_request_target", "pull_request_review", "pull_request_review_comment", "issue_comment", "workflow_run"))
 			| .check_suite_id]) as $automation
 		| ($paths | split(" ") | map(select(. != ""))) as $paths
 		| ($apps | split(" ") | map(select(. != ""))) as $apps
 		| ([$runs[] | select(.path as $p | $paths | index($p)) | .check_suite_id]) as $retrigger
-		| [.[] | select(.name != "auto-merge" and ((.check_suite.id // null) as $id | $automation | index($id) | not))] as $kept
+		| [$checks[] | select(.name != "auto-merge" and ((.check_suite.id // null) as $id | $automation | index($id) | not))] as $kept
 		| def pending: .status != "completed";
 		  def retrigger: ((.check_suite.id // null) as $id | $retrigger | index($id)) or ((.app.slug // null) as $a | $apps | index($a));
 		{checks: $kept,
 			waiting: [$kept[] | select(pending and (retrigger | not)) | .name],
 			stop: ([$kept[] | select((pending and retrigger) or ((pending | not) and (.conclusion | IN("success", "skipped", "neutral") | not)))]
-				| length > 0)}' <<<"$checks"
+				| length > 0)}'
 }
 
 i=0

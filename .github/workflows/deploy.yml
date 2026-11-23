@@ -71,7 +71,7 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
             backend/ "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}:~/${APP_DIR}/"
 
-      - name: Prepare storage and cache config
+      - name: Prepare storage, migrate and cache config
         run: |
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.MIXHOST_SSH_USER }}@${{ secrets.MIXHOST_SSH_HOST }}" "
             set -e
@@ -80,6 +80,12 @@ jobs:
             # 画像を /storage/<ファイル名> で配信するためのリンク(public/storage → storage/app/public)。
             # 既にあれば作らずに 0 で終わる
             php artisan storage:link
+            # 本番の新 DB(.env の DB_*)にマイグレーションを流す(#77。deploy-env.yml と同じ)。旧サイトは旧 DB で動いているので、
+            # 切り替えの前は、利用者のいない新 DB の表を最新にするだけ。設定のキャッシュは rsync の --delete で消えているので、.env の値で流れる
+            php artisan migrate --force
+            # 設定のキャッシュ(bootstrap/cache/config.php)には .env の値が平文で入るので、ほかのユーザーに読ませない(deploy-env.yml と同じ。#782)。
+            # storage のディレクトリは Web サーバーが静的に配信するので、mkdir より後で絞る
+            umask 077
             php artisan optimize
           "
 

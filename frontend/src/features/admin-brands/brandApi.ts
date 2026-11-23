@@ -13,6 +13,11 @@ export type SaveBrandResult =
   | { kind: 'saved' }
   /** 422。項目ごとのメッセージ */
   | { kind: 'invalid'; errors: BrandFieldErrors }
+  /**
+   * 422 で、冪等キーを断られた(`errors.idempotency_key`)。同じキーの前の送信が保存済みで、今の送信と中身が違う
+   * (応答が返らなかった後に入力を直して送った)とき。docs/decisions/admin-idempotency.md の決まったこと 5
+   */
+  | { kind: 'key-rejected' }
   /** 422 以外のエラーの応答 */
   | { kind: 'http-error'; status: number }
   /** 応答が返らなかった */
@@ -56,12 +61,20 @@ export async function findBrandDuplicate(field: DuplicateField, value: string, b
   }
 }
 
-/** 銘柄を保存する。brandId が null なら新規(POST /api/admin/brands)、あれば更新(PUT /api/admin/brands/{id}) */
-export async function saveBrand(brandId: number | null, values: BrandFormValues): Promise<SaveBrandResult> {
+/**
+ * 銘柄を保存する。brandId が null なら新規(POST /api/admin/brands)、あれば更新(PUT /api/admin/brands/{id})。
+ * 新規は、idempotencyKey を `Idempotency-Key` ヘッダで送る(docs/decisions/admin-idempotency.md。#758。省くと付けない)。
+ * 同じキーの再送には BE が 1 回目の応答を返す(`Idempotent-Replayed: true`)ので、ふつうの成功と同じく saved にする。
+ * 更新は、同じ内容を送り直しても行が増えないので、キーを付けない
+ */
+export async function saveBrand(brandId: number | null, values: BrandFormValues, idempotencyKey?: string): Promise<SaveBrandResult> {
   try {
     const { response, error } =
       brandId === null
-        ? await api.POST('/admin/brands', { body: multipartBody(toBrandFormData(values, 'POST')) })
+        ? await api.POST('/admin/brands', {
+            params: { header: idempotencyKey === undefined ? undefined : { 'Idempotency-Key': idempotencyKey } },
+            body: multipartBody(toBrandFormData(values, 'POST')),
+          })
         : await api.PUT('/admin/brands/{brand}', {
             params: { path: { brand: brandId } },
             body: multipartBody(toBrandFormData(values, 'PUT')),
@@ -71,6 +84,7 @@ export async function saveBrand(brandId: number | null, values: BrandFormValues)
       return { kind: 'saved' }
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
+      if (error.errors.idempotency_key !== undefined) return { kind: 'key-rejected' }
       return { kind: 'invalid', errors: error.errors }
     }
     return { kind: 'http-error', status: response.status }

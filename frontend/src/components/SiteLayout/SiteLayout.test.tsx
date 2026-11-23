@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from '../../App'
+import type { paths } from '../../api/schema'
+import { buildCocktailRow } from '../CocktailTable/buildCocktailRow'
 import { buildCocktailDetail } from '../../features/cocktail-detail/buildCocktailDetail'
 import { mockApi } from '../../test/api'
 
@@ -11,6 +13,14 @@ const renderAt = (path: string) =>
       <App />
     </MemoryRouter>,
   )
+
+/** 名前検索(GET /api/search)の、どの種類にも当たらない応答 */
+const NO_HITS: paths['/search']['get']['responses'][200]['content']['application/json'] = {
+  cocktails: [],
+  nodes: [],
+  brands: [],
+  ingredient_matches: [],
+}
 
 const footer = () => within(screen.getByRole('contentinfo'))
 
@@ -88,9 +98,11 @@ describe('共通の枠(SiteLayout)', () => {
     await waitFor(() => expect(document.title).toBe(title))
   })
 
-  test.each([['/detail/cocktail/1']])(
+  // カクテルの詳細はページ名を渡すようにした(#770)ので、ページ名を渡さない画面には名前検索の結果を使う
+  test.each([[`/result/FromNameResult/${encodeURIComponent('ジン')}`]])(
     'TC-296-06: ページ名を渡さない画面 %s のタイトルはサイト名だけ',
     async (path) => {
+      mockApi('get', '/search', 200, NO_HITS)
       document.title = '前のタイトル'
       renderAt(path)
 
@@ -100,17 +112,23 @@ describe('共通の枠(SiteLayout)', () => {
   )
 
   test('TC-296-07: 画面を移るとタイトルが変わり、ページ名の無い画面ではサイト名だけに戻る', async () => {
-    // ヘッダーの登録数のリンク(ランダムウォーク)で、ページ名を渡さないカクテルの詳細へ移る。
-    // /cocktails/count は `{cocktail}` の差し替えより後に登録して先に当てる
-    mockApi('get', '/cocktails/count', 200, { count: 1 })
-    mockApi('get', '/random-walk', 200, { type: 'cocktail', id: 1 })
+    // ヘッダーの名前検索で、ページ名を渡さない名前検索の結果へ移る(カクテルの詳細はページ名を渡すようにした。#770)
+    mockApi('get', '/search', 200, { ...NO_HITS, cocktails: [{ ...buildCocktailRow({ id: 1 }), matched_alias: null }] })
     renderAt('/')
     await screen.findByRole('heading', { level: 1, name: '宅飲みカクテルデータベース' })
     await waitFor(() => expect(document.title).toBe('トップページ ｜ 宅飲みカクテルデータベース(RC)'))
 
-    fireEvent.click(await within(screen.getByRole('banner')).findByRole('link', { name: '現在の登録数：1' }))
+    vi.useFakeTimers()
+    fireEvent.change(within(screen.getByRole('banner')).getByRole('searchbox', { name: '名前から検索' }), {
+      target: { value: 'ジン' },
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    vi.useRealTimers()
+    fireEvent.click(await within(screen.getByRole('banner')).findByRole('button', { name: '1件ヒット' }))
 
-    await screen.findByRole('heading', { level: 1, name: 'マティーニ(Martini)' })
+    await screen.findByRole('heading', { level: 1, name: '結果' })
     await waitFor(() => expect(document.title).toBe('宅飲みカクテルデータベース(RC)'))
   })
 })

@@ -118,7 +118,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 2. FE をビルド
 3. `composer install --no-dev`
 4. rsync で `~/cocktail-db/` に送る(`.env`・`storage/`・`.well-known/` は除く)
-5. サーバーで `php artisan optimize`
+5. サーバーで `php artisan storage:link`・`php artisan migrate --force`・`php artisan optimize`(本番の新 DB の表を最新にする。#77)
 6. `/up` と `/api/hello` を叩いて確かめる
 
 GitHub 側に要る設定:
@@ -132,6 +132,8 @@ GitHub 側に要る設定:
 | Variable | `APP_URL` | `https://cocktail-next.trc-vlackhistory.net` |
 
 サーバーの `~/cocktail-db/.env` は初回に手で置いたもので、リポジトリには入れない。
+
+定期実行(Laravel の scheduler。アフィリエイトの収集など)は、デプロイでは動き出さない。サーバーの cron に `php artisan schedule:run` を毎分登録する。どの環境にいつ登録するかと手順は `docs/ops.md`。
 
 ## dev 環境・stg 環境
 
