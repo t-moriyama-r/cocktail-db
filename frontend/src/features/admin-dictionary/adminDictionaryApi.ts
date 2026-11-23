@@ -14,6 +14,11 @@ export type SaveResult =
   | { kind: 'saved'; data: DictionaryResource }
   /** 入力の誤り。画面は欄ごとに出し、画面を移らない(#284 の既定) */
   | { kind: 'invalid'; errors: FieldErrors }
+  /**
+   * 422 で、冪等キーを断られた(`errors.idempotency_key`)。同じキーの前の送信が保存済みで、今の送信と中身が違う
+   * (応答が返らなかった後に入力を直して送った)とき。docs/decisions/admin-idempotency.md の決まったこと 5
+   */
+  | { kind: 'key-rejected' }
   | RequestFailure
 
 export type DeleteResult =
@@ -34,8 +39,15 @@ export const fetchAdminDictionary = (id: number) =>
 
 /**
  * 用語を保存する。id が null なら新規(POST)、あれば更新(PUT。multipart なので client が POST と `_method=PUT` にする)。
+ * 新規は、idempotencyKey を `Idempotency-Key` ヘッダで送る(docs/decisions/admin-idempotency.md。#791。省くと付けない)。
+ * 同じキーの再送には BE が 1 回目の応答を返す(`Idempotent-Replayed: true`)ので、ふつうの成功と同じく saved にする。
+ * 更新は、同じ内容を送り直しても行が増えないので、キーを付けない
  */
-export async function saveDictionary(id: number | null, values: DictionaryFormValues): Promise<SaveResult> {
+export async function saveDictionary(
+  id: number | null,
+  values: DictionaryFormValues,
+  idempotencyKey?: string,
+): Promise<SaveResult> {
   const body = toSaveDictionaryBody(values)
   if (body === null) {
     return { kind: 'invalid', errors: CATEGORY_REQUIRED }
@@ -44,12 +56,17 @@ export async function saveDictionary(id: number | null, values: DictionaryFormVa
   try {
     const { data, error, response } =
       id === null
-        ? await api.POST('/admin/dictionaries', { body, bodySerializer })
+        ? await api.POST('/admin/dictionaries', {
+            params: { header: idempotencyKey === undefined ? undefined : { 'Idempotency-Key': idempotencyKey } },
+            body,
+            bodySerializer,
+          })
         : await api.PUT('/admin/dictionaries/{dictionary}', { params: { path: { dictionary: id } }, body, bodySerializer })
     if (data !== undefined) {
       return { kind: 'saved', data: data.data }
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
+      if (error.errors.idempotency_key !== undefined) return { kind: 'key-rejected' }
       return { kind: 'invalid', errors: error.errors }
     }
     return { kind: 'http-error', status: response.status }
