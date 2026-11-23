@@ -92,3 +92,42 @@ test('TC-67-28: スキップ語を足すと一覧に出て、消すと一覧か�
   await expect(form.getByText('「E2E のお好みで」を消しました')).toBeVisible()
   await expect(list.getByRole('button', { name: 'E2E のお好みで' })).toHaveCount(0)
 })
+
+test.describe('足すときの冪等キー(#762)', () => {
+  // 試行ごとに変わる名前にし(リトライで一意制約の 422 にならないよう)、後始末は失敗しても動く afterEach に置く(RC-18)
+  const word = `E2E のスキップ語 retry ${Date.now()}`
+
+  test.afterEach(async ({ page, baseURL }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await openScreen(page, baseURL!)
+    await removeLeftover(page, 'スキップ語のフォーム', 'スキップ語の一覧', word, word)
+  })
+
+  test('TC-762-19: スキップ語を足す保存の応答が失われて保存し直しても、語は 1 件だけできる', async ({ page, baseURL }) => {
+    await openScreen(page, baseURL!)
+    const form = page.getByRole('form', { name: 'スキップ語のフォーム' })
+    const list = page.getByRole('region', { name: 'スキップ語の一覧' })
+    await form.getByRole('textbox', { name: 'スキップ語' }).fill(word)
+
+    // 1 回目の送信は BE まで届けて保存させ、応答だけを失わせる
+    const keys: (string | null)[] = []
+    await page.route('**/api/admin/skip-words', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue()
+      keys.push(await route.request().headerValue('Idempotency-Key'))
+      if (keys.length > 1) return route.continue()
+      await route.fetch()
+      await route.abort('failed')
+    })
+    await form.getByRole('button', { name: '保存する' }).click()
+    await expect(form.getByRole('alert')).toContainText('通信に失敗して保存できませんでした')
+
+    await form.getByRole('button', { name: '保存する' }).click()
+    await expect(form.getByText(`「${word}」を保存しました`)).toBeVisible()
+    await page.unrouteAll()
+
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(keys[1]).toBe(keys[0])
+    await expect(list.getByRole('button', { name: word, exact: true })).toHaveCount(1)
+  })
+})
