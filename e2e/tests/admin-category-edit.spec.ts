@@ -327,6 +327,58 @@ test('TC-309-14: その場で作った銘柄が、ノードの直下の銘柄と
   await expect(page.getByLabel('リンクURL', { exact: true })).toHaveValue('https://example.com/e2e-brand')
 })
 
+test('TC-793-07: 新規の保存の応答が失われて送り直しても、ノード(その場で作る銘柄・画像を含む)は 1 つだけできてカテゴリ木へ戻る', async ({
+  page,
+  baseURL,
+}) => {
+  await login(page, baseURL!)
+  const stamp = Date.now()
+  const name = `E2E のノード retry ${stamp}`
+  const brandName = `E2E の銘柄 retry ${stamp}`
+  await page.goto('/admin/categories/new')
+  await page.getByRole('list', { name: '親' }).getByRole('radio', { name: 'ミント', exact: true }).check()
+  await page.getByLabel('名前', { exact: true }).fill(name)
+  await page.getByLabel('英名', { exact: true }).fill(`E2E Node retry ${stamp}`)
+  await page.getByLabel('説明', { exact: true }).fill('E2E で作ったノード')
+  await page.getByLabel('画像', { exact: true }).setInputFiles({ name: 'retry.png', mimeType: 'image/png', buffer: PNG })
+  await brandField(page, '名前').fill(brandName)
+  await brandField(page, '英名').fill(`E2E Retry Brand ${stamp}`)
+  await brandField(page, '度数(%)').fill('40')
+  await brandField(page, '説明').fill('E2E で作った有名な銘柄')
+
+  // 1 回目の送信は BE まで届けて保存させ、応答だけを失わせる
+  const keys: (string | null)[] = []
+  await page.route('**/api/admin/categories', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    keys.push(await route.request().headerValue('Idempotency-Key'))
+    if (keys.length > 1) return route.continue()
+    await route.fetch()
+    await route.abort('failed')
+  })
+  await page.getByRole('button', { name: '送信' }).click()
+  await expect(page.getByRole('alert')).toContainText('通信に失敗しました')
+  await expect(page).toHaveURL(/\/admin\/categories\/new$/)
+
+  await page.getByRole('button', { name: '送信' }).click()
+  await expect(page).toHaveURL(/\/admin\/categories$/)
+  await expect(page.getByRole('status').filter({ hasText: '保存しました' })).toHaveText(`「${name}」を保存しました`)
+  await page.unrouteAll()
+
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(keys[1]).toBe(keys[0])
+  // ミントの下に、同じ名前のノードが 1 つだけある
+  await page.getByRole('button', { name: 'ミントを開く', exact: true }).click()
+  await expect(page.getByRole('list', { name: 'カテゴリ木' }).getByRole('radio', { name, exact: true })).toHaveCount(1)
+  // 1 つだけできたノードに、その場で作った銘柄が 1 つだけ入り、画像も入っている
+  await openNode(page, name)
+  const brandLabel = `${brandName}(E2E Retry Brand ${stamp})`
+  const select = famousBrand(page).getByRole('combobox', { name: '有名な銘柄', exact: true })
+  await expect(select.getByRole('option')).toHaveText(['(新しく作成する)', brandLabel])
+  await expect(page.getByRole('region', { name: '登録されている銘柄の一覧' }).getByRole('link')).toHaveText([brandLabel])
+  await expect(nodeImage(page)).toHaveAttribute('src', /^\/storage\/.+\.png$/)
+})
+
 // その場で作る銘柄の名前・英名の重なりの知らせ(#723)。相手は本物の銘柄の重なりの問い合わせ(#632)。保存はしないので、ほかの E2E のデータは変わらない
 
 test('TC-723-09: ノードの新規の画面で、既にある銘柄の名前・英名を、その場で作る銘柄の欄に入れて離れると、それぞれの欄の下に知らせが出て、直すと消える', async ({

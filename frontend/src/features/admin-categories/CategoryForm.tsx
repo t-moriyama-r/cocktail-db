@@ -2,6 +2,7 @@ import { useId, useMemo, useState, type FormEvent } from 'react'
 import type { components } from '../../api/schema'
 import { Field, FieldErrors, TextAreaField, TextField } from '../../components/AdminForm/AdminField'
 import { useDuplicateWarning } from '../../components/AdminForm/useDuplicateWarning'
+import { useIdempotencyKey } from '../../components/AdminForm/useIdempotencyKey'
 import CategoryTree from '../../components/CategoryTree/CategoryTree'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { sanitizeDigits, toHalfWidthAlphanumeric } from '../admin-brands/brandFormValues'
@@ -85,6 +86,11 @@ const FIELDS_ON_FORM = new Set([
  *
  * 名前・英名は、値を変えて欄を離れたら同じ親の下の重なりを問い合わせ(#673 の API)、重なれば欄の下に「同じ名前が存在しています」を出す
  * (旧の duplicate_check。#674)。知らせるだけで送信は止めず、名前の重なりで保存を止めるのは保存の API の 422 に任せる。
+ *
+ * 新規の送信には冪等キー(`Idempotency-Key`)を付ける(docs/decisions/admin-idempotency.md。#793。持ち方は銘柄の新規と同じ。#758)。
+ * 保存できるまでの送り直しは、入力を直していても同じキーで送る(useIdempotencyKey)。応答が返らなかった送信が保存済みで、
+ * 入力を直して送り直したために BE がキーを断った(422 の `errors.idempotency_key`)ときは、前の送信が保存されているかもしれないことを出し、
+ * 次は新しいキーで送る
  */
 export default function CategoryForm({ nodeId, initialValues, famousBrand, currentImage, parent, onSaved }: Props) {
   const [values, setValues] = useState(initialValues)
@@ -108,6 +114,7 @@ export default function CategoryForm({ nodeId, initialValues, famousBrand, curre
   const [picked, setPicked] = useState<{ file: File; url: string | null } | null>(null)
   // 「画像を消す」を入れたときに、選んでいたファイルを欄からも外すため、ファイルの欄を作り直す
   const [fileInputKey, setFileInputKey] = useState(0)
+  const idempotencyKey = useIdempotencyKey()
 
   const set = <K extends keyof CategoryFormValues>(key: K, value: CategoryFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }))
@@ -154,7 +161,14 @@ export default function CategoryForm({ nodeId, initialValues, famousBrand, curre
       famous === null ? null : { ...famous, newBrand: { ...famous.newBrand, nameEng: toHalfWidthAlphanumeric(famous.newBrand.nameEng) } }
     setFamous(normalizedFamous)
     // 根には有名な銘柄を入れられないので、新規で「親なし」(根)を選んでいるときは欄の入力を送らない
-    const result = await saveCategory(nodeId, normalized, normalized.isRoot ? null : normalizedFamous)
+    const result = await saveCategory(
+      nodeId,
+      normalized,
+      normalized.isRoot ? null : normalizedFamous,
+      nodeId === null ? idempotencyKey.current() : undefined,
+    )
+    // 保存できた・キーを断られたら、次の送信(別の保存)には新しいキーを付ける
+    if (result.kind === 'saved' || result.kind === 'key-rejected') idempotencyKey.reset()
     // 保存を待つ間に別の画面へ移っていたら、カテゴリ木へ戻さない
     if (!mounted.current) return
     if (result.kind === 'saved') {
@@ -404,6 +418,9 @@ function failureMessage(failure: Exclude<SaveState, { kind: 'idle' | 'saving' }>
   switch (failure.kind) {
     case 'invalid':
       return '保存できませんでした。入力を確かめてください。'
+    case 'key-rejected':
+      // 通信に失敗した前の送信が、実は保存できていた。もう一度送ると別のノードとして保存しようとするので、先にカテゴリ木で確かめてもらう(文は銘柄と同じ。#758)
+      return '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。'
     case 'http-error':
       // ログインの期限が切れた後の保存は 401。何度送っても同じなので、ログインし直す手順を出す。開き直すと入力が消えるので、先に控えるよう書く(RC-17)
       if (failure.status === 401) {
