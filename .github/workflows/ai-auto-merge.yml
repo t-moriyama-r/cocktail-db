@@ -104,6 +104,7 @@ jobs:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       NUMBER: ${{ inputs.number || github.event.pull_request.number || github.event.issue.number }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
     steps:
       # 返信待ちのスレッドを数えるスクリプト。PR のコードではなく、動いているワークフローと同じ版を使う
       - uses: actions/checkout@v6
@@ -161,9 +162,10 @@ jobs:
           setting=$(base64 -d <<<"$content") || skip "ai-dev.yml を読めない"
           grep -Eq '^merge:[[:space:]]*auto([[:space:]]|#|$)' <<<"$setting" || human=".github/ai-dev.yml が merge: auto ではない"
 
-          # workflow_run では PR の番号が来ないことがあるので、コミットから探す
+          # workflow_run では PR の番号が来ないことがあるので、コミットから探す。昇格の PR(head が develop のマージコミット)は
+          # コミットから見つからないので、head のブランチの開いた PR で head が同じものも探す(workflow-run-pr.sh。#799)
           if [ -z "$NUMBER" ] && [ -n "$HEAD_SHA" ]; then
-            NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '[.[] | select(.state == "open")][0].number // empty')
+            NUMBER=$(bash .ai-dev/.github/scripts/workflow-run-pr.sh "$REPO" "$HEAD_SHA" "$HEAD_BRANCH")
           fi
           [ -n "$NUMBER" ] || skip "PR が見つからない"
           # 最後のステップ(状態のラベル)に渡す(workflow_run ではジョブの NUMBER が空)。この後で見送っても(skip で終わっても)、ラベルは出し直す
