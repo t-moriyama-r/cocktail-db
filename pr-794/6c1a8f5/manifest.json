@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "before": "7970e14e9b27da2f77d82c7a3e28ec5bae6939ae",
+  "after": "6c1a8f52be238c491dd79f9fdf97d5a067a8be07",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-760-08"
+      ],
+      "note": "修正前は 2 回目が名前の重なりの 422、修正後は 2 回目が Idempotent-Replayed=true で同じ data.id。どちらもノード 1 つ・閉包表の行 1 つ",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-760-01",
+        "TC-760-02",
+        "TC-760-03",
+        "TC-760-04",
+        "TC-760-05"
+      ],
+      "note": "修正前は TC-760 のテストが無いので 0 件、修正後は 8 件すべて通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
