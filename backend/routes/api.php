@@ -100,8 +100,11 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/cocktail-form-options', CocktailFormOptionsController::class);
     // カクテルの重複チェック(#129)。同じ名前のカクテルを材料の近い順に、同じレシピのカクテルを ID の順に返す
     Route::get('/cocktails/duplicates', CocktailDuplicateController::class);
-    Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}']);
-    Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}']);
+    // 言い換え辞書・スキップ語(#316)。新規は Idempotency-Key を付けた再送で 2 件目を作らない(#762。docs/decisions/admin-idempotency.md)
+    Route::apiResource('paraphrases', ParaphraseController::class)->where(['paraphrase' => '[0-9]{1,18}'])
+        ->middlewareFor('store', 'idempotent');
+    Route::apiResource('skip-words', SkipWordController::class)->except('show')->where(['skip_word' => '[0-9]{1,18}'])
+        ->middlewareFor('store', 'idempotent');
 
     // 銘柄(#314)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
     Route::get('/brands', [BrandController::class, 'index']);

@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
 // 管理画面の保存の冪等キー(#657。決まりは docs/decisions/admin-idempotency.md)。仕組みは銘柄の新規
-// (POST /api/admin/brands)で確かめる。カクテルの新規(#759)につないだことは CocktailAdminApiTest で確かめる。
+// (POST /api/admin/brands)で確かめる。カクテルの新規(#759)・言い換えとスキップ語の新規(#762)につないだことは、それぞれ
+// CocktailAdminApiTest・ParaphraseAdminApiTest と SkipWordAdminApiTest で確かめる。
 // 旧に冪等キーは無い(旧は再送のたびに作る。旧を動かして確かめてはいない)。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
 

@@ -2934,6 +2934,17 @@
                 "tags": [
                     "Paraphrase"
                 ],
+                "parameters": [
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "description": "\u9001\u4fe1\u3054\u3068\u306e\u8b58\u5225\u5b50(UUID)\u3002\u540c\u3058\u5024\u306e\u518d\u9001\u306b\u306f\u3001\u4fdd\u5b58\u3057\u76f4\u3055\u305a\u306b\u6700\u521d\u306b\u6210\u529f\u3057\u305f\u5fdc\u7b54\u3092\u8fd4\u3059(docs/decisions/admin-idempotency.md)",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3581,6 +3592,17 @@
                 "summary": "\u30b9\u30ad\u30c3\u30d7\u8a9e\u3092 1 \u8a9e\u8db3\u3059\u3002",
                 "tags": [
                     "SkipWord"
+                ],
+                "parameters": [
+                    {
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "description": "\u9001\u4fe1\u3054\u3068\u306e\u8b58\u5225\u5b50(UUID)\u3002\u540c\u3058\u5024\u306e\u518d\u9001\u306b\u306f\u3001\u4fdd\u5b58\u3057\u76f4\u3055\u305a\u306b\u6700\u521d\u306b\u6210\u529f\u3057\u305f\u5fdc\u7b54\u3092\u8fd4\u3059(docs/decisions/admin-idempotency.md)",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
                 ],
                 "requestBody": {
                     "required": true,
