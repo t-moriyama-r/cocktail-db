@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "before": "44343d8cca0be173c44c156e6e2e62427c9a10b2",
+  "after": "c1a0641e9f75b58007c70490839f9159ef62539d",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-761-09"
+      ],
+      "note": "修正前は 2 回目も新しい data.id で用語 2 件、修正後は 2 回目が Idempotent-Replayed=true で同じ data.id、用語 1 件",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-761-01",
+        "TC-761-02",
+        "TC-761-03",
+        "TC-761-04",
+        "TC-761-05",
+        "TC-761-06"
+      ],
+      "note": "修正前は TC-761 のテストが無いので 0 件、修正後は 8 件すべて通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
