@@ -1047,7 +1047,7 @@ it('TC-760-03: 同じ Idempotency-Key で中身(名前・親・銘柄・画像)�
         '名前' => [CATEGORY_ADMIN_PNG, ['name' => 'オールドトムジン']],
         '親' => [CATEGORY_ADMIN_PNG, ['parent_id' => $n['ラム']->id]],
         '銘柄' => [CATEGORY_ADMIN_PNG, ['brand_name' => 'ディプロマティコ']],
-        '画像' => [CATEGORY_ADMIN_PNG_OTHER, []],
+        default => [CATEGORY_ADMIN_PNG_OTHER, []],
     };
 
     $this->post('/api/admin/categories', categoryAdminMultipartInput($n, $png, $overrides), $headers)
