@@ -19,9 +19,6 @@
 8. OpenAPI には、`idempotent` を付けた経路に、任意のヘッダ `Idempotency-Key`(`format: uuid`)を出す(`App\OpenApi\IdempotencyKeyHeader`)。FE は生成した型で付ける
 9. 今つないでいるのは銘柄の新規(`POST /api/admin/brands`。BE は #657、FE の送信は #758)と、カクテルの新規(`POST /api/admin/cocktails`。材料・別名・画像も 1 組だけ作る。#759)と、ノードの新規(`POST /api/admin/categories`。その場で作る銘柄・画像も 1 組だけ作り、閉包表の行も増やさない。#760)。ほかの新規の保存と FE の送信は、下の「残り」の issue で扱う。更新(`PUT`)は、同じ内容を送り直しても行は増えないので、つながない
 10. 記録は、作ってから 7 日残す(#763 で決めた)。7 日より古い行は、scheduler(`backend/routes/console.php`)の `model:prune`(`IdempotencyKey` の `prunable`)が毎日 1 回(日本時間の 4:05)消し、消した後の同じキーの再送は新しい保存として扱う。管理者がタブを開いたまま日をまたぐことがあり、7 日でも行は数百ほどで小さいため。毎日 1 回なので、7 日を過ぎてから消すまでに最大 1 日ほど遅れる(そのあいだの再送は 1 回目の応答を返す)
-=======
-9. 今つないでいるのは銘柄の新規(`POST /api/admin/brands`。BE は #657、FE の送信は #758)と、カクテルの新規(`POST /api/admin/cocktails`。材料・別名・画像も 1 組だけ作る。#759)と、ノードの新規(`POST /api/admin/categories`。その場で作る銘柄・画像も 1 組だけ作り、閉包表の行も増やさない。#760)。ほかの新規の保存と FE の送信、古い記録の片付けは、下の「残り」の issue で扱う。更新(`PUT`)は、同じ内容を送り直しても行は増えないので、つながない
->>>>>>> 5a31021275c273b056c300acf3a788f803866923
 
 ## 残り
 
