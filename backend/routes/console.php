@@ -30,8 +30,7 @@ Schedule::command('affiliates:collect --refresh --new')
     ->withoutOverlapping(30)
     ->before(function () use ($collectLog, $collectKeepFrom) {
         foreach (File::glob(storage_path('logs/affiliates-collect-*.log')) as $path) {
-            $path = (string) $path;
-            if (preg_match('/affiliates-collect-(\d{4}-\d{2}-\d{2})\.log\z/', $path, $matches) === 1 && $matches[1] < $collectKeepFrom) {
+            if (is_string($path) && preg_match('/affiliates-collect-(\d{4}-\d{2}-\d{2})\.log\z/', $path, $matches) === 1 && $matches[1] < $collectKeepFrom) {
                 File::delete($path);
             }
         }
