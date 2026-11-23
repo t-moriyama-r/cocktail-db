@@ -1308,7 +1308,7 @@ it('TC-759-03: 同じ Idempotency-Key で中身(名前・材料・別名・画�
             [...cocktailAdminIngredient($f['nodes']['ソーダ'], '15'), 'is_optional' => 'true'],
         ]]],
         '別名' => [COCKTAIL_ADMIN_PNG, ['aliases' => ['ピーチウーロン']]],
-        '画像' => [COCKTAIL_ADMIN_PNG_OTHER, []],
+        default => [COCKTAIL_ADMIN_PNG_OTHER, []],
     };
 
     $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, $png, $overrides), $headers)
