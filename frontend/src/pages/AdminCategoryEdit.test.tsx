@@ -797,6 +797,163 @@ describe('新規', () => {
   })
 })
 
+describe('新規の冪等キー(#793)', () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+  const KEY_REJECTED =
+    '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。'
+
+  /**
+   * BE の冪等キーの扱い(docs/decisions/admin-idempotency.md)をまねた POST /api/admin/categories。
+   * 成功した送信だけをキーごとに覚え、同じキー・同じ中身(親・名前)の再送には 1 回目の応答を `Idempotent-Replayed: true` を
+   * 付けて返し、同じキー・違う中身の再送は 422(errors.idempotency_key)で断る。loseResponses の回は、保存したうえで応答を失わせる
+   */
+  const fakeCategoryStore = (options: { loseResponses?: number[]; invalidNames?: string[] } = {}) => {
+    const created: string[] = []
+    const keys: (string | null)[] = []
+    const savedContents = new Map<string, string>()
+    mockApiHandler('post', '/admin/categories', async (request) => {
+      const attempt = keys.length + 1
+      const key = request.headers.get('Idempotency-Key')
+      keys.push(key)
+      const body = await request.formData()
+      const name = String(body.get('name'))
+      const content = `${String(body.get('parent_id'))}/${name}`
+      if (key !== null && savedContents.has(key)) {
+        if (savedContents.get(key) !== content) {
+          return jsonResponse(
+            {
+              message: '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+              errors: { idempotency_key: ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。'] },
+            },
+            422,
+          )
+        }
+        const replayed = jsonResponse(saved({ ...GIN, id: 10, name }), 201)
+        replayed.headers.set('Idempotent-Replayed', 'true')
+        return replayed
+      }
+      if (options.invalidNames?.includes(name)) {
+        return jsonResponse({ message: '入力に誤りがあります。', errors: { name: ['名前が正しくありません。'] } }, 422)
+      }
+      created.push(name)
+      if (key !== null) savedContents.set(key, content)
+      if (options.loseResponses?.includes(attempt)) throw new TypeError('Failed to fetch')
+      return jsonResponse(saved({ ...GIN, id: 10, name }), 201)
+    })
+    return { created, keys }
+  }
+
+  const openNewWithStore = async (options: Parameters<typeof fakeCategoryStore>[0] = {}) => {
+    await openNew()
+    const store = fakeCategoryStore(options)
+    fireEvent.click(within(screen.getByRole('list', { name: '親' })).getByRole('radio', { name: 'ミント' }))
+    return store
+  }
+
+  const fillName = (name: string) => fireEvent.change(screen.getByLabelText('名前'), { target: { value: name } })
+
+  test('TC-793-01: 新規の送信に、UUID の Idempotency-Key ヘッダを付けて送る', async () => {
+    const store = await openNewWithStore()
+
+    fillName('レモン')
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「レモン」を保存しました')
+    expect(currentUrl()).toBe('/admin/categories')
+    expect(store.keys).toHaveLength(1)
+    expect(store.keys[0]).toMatch(UUID)
+  })
+
+  test('TC-793-02: 1 回目の応答が失われて送り直すと、同じキーで送り、ノードは 1 つだけできてカテゴリ木へ戻る', async () => {
+    const store = await openNewWithStore({ loseResponses: [1] })
+
+    fillName('レモン')
+    submit()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+    expect(currentUrl()).toBe('/admin/categories/new')
+
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「レモン」を保存しました')
+    expect(currentUrl()).toBe('/admin/categories')
+    expect(store.keys).toHaveLength(2)
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['レモン'])
+  })
+
+  test('TC-793-03: 422 で画面に残った後、入力を直して送り直すと、同じキーで送って保存できる', async () => {
+    const store = await openNewWithStore({ invalidNames: ['誤り'] })
+
+    fillName('誤り')
+    submit()
+    expect(await screen.findByRole('alert')).toHaveTextContent('入力を確かめてください')
+
+    fillName('レモン')
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「レモン」を保存しました')
+    expect(currentUrl()).toBe('/admin/categories')
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['レモン'])
+  })
+
+  test('TC-793-04: 応答が失われた後に入力を変えて送り直し、キーを断られたら、前の送信が保存されているかもしれないことを出し、次は新しいキーで送る', async () => {
+    const store = await openNewWithStore({ loseResponses: [1] })
+
+    fillName('レモン')
+    submit()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+
+    fillName('ライム')
+    submit()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(KEY_REJECTED))
+    expect(currentUrl()).toBe('/admin/categories/new')
+    expect(screen.getByLabelText('名前')).toHaveValue('ライム')
+    expect(screen.getByLabelText('名前')).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByRole('button', { name: '送信' })).toBeEnabled()
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['レモン'])
+
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ライム」を保存しました')
+    expect(store.keys[2]).toMatch(UUID)
+    expect(store.keys[2]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['レモン', 'ライム'])
+  })
+
+  test('TC-793-05: 保存できた後に開き直した別の新規では、新しいキーで送る', async () => {
+    const store = await openNewWithStore()
+
+    fillName('レモン')
+    submit()
+    expect(await screen.findByRole('status')).toHaveTextContent('「レモン」を保存しました')
+
+    fireEvent.click(screen.getByRole('link', { name: '新規' }))
+    fireEvent.click(within(await screen.findByRole('list', { name: '親' })).getByRole('radio', { name: 'ミント' }))
+    fillName('ライム')
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ライム」を保存しました')
+    expect(store.keys).toHaveLength(2)
+    expect(store.keys[1]).toMatch(UUID)
+    expect(store.keys[1]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['レモン', 'ライム'])
+  })
+
+  test('TC-793-06: 更新の送信には Idempotency-Key ヘッダを付けない', async () => {
+    await openEdit()
+    captureSave('put', () => jsonResponse(saved(GIN), 200))
+
+    submit()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('「ジン」を保存しました')
+    const update = apiRequests().findLast((request) => request.url.endsWith('/api/admin/categories/2'))!
+    expect(update.method).toBe('POST')
+    expect(update.headers.has('Idempotency-Key')).toBe(false)
+  })
+})
+
 describe('有名な銘柄', () => {
   /** 候補が 5 件のジン(ID の順。名前はカタカナ・英字の大文字・小文字を混ぜる)。今の有名な銘柄はビーフィーター */
   const GIN_WITH_CANDIDATES: CategoryResource = {

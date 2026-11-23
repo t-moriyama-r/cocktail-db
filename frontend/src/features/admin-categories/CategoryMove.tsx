@@ -142,6 +142,9 @@ function failureMessage(failure: Exclude<MoveState, { kind: 'idle' | 'moving' }>
   switch (failure.kind) {
     case 'invalid':
       return '移せませんでした。'
+    case 'key-rejected':
+      // 冪等キーは新規の送信にだけ付ける(#793)。付け替えは更新なのでキーを送らず、この応答は来ない
+      return '移せませんでした。'
     case 'http-error':
       return `移せませんでした(エラー ${failure.status})。時間をおいて、もう一度お試しください。`
     case 'network-error':
