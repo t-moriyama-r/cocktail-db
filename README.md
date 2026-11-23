@@ -118,7 +118,7 @@ php artisan test                      # MariaDB があるとき。DB_* を環境
 2. FE をビルド
 3. `composer install --no-dev`
 4. rsync で `~/cocktail-db/` に送る(`.env`・`storage/`・`.well-known/` は除く)
-5. サーバーで `php artisan optimize`
+5. サーバーで `php artisan storage:link`・`php artisan migrate --force`・`php artisan optimize`(本番の新 DB の表を最新にする。#77)
 6. `/up` と `/api/hello` を叩いて確かめる
 
 GitHub 側に要る設定:
