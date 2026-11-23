@@ -406,7 +406,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `response_body` | `longText` | ○ | その応答の本文。保存が終わるまで(コミットの前)だけ null |
 | `created_at`・`updated_at` | `timestamps()` | ○ | |
 
-インデックス: (`user_id`, `key`) に unique。古い行はまだ消さない(どれだけ残すかは別の issue で決める。[admin-idempotency.md](decisions/admin-idempotency.md) の「残り」)。
+インデックス: (`user_id`, `key`) に unique。行は作ってから 7 日残し、それより古い行は scheduler の `model:prune` が毎日消す(#763。[admin-idempotency.md](decisions/admin-idempotency.md) の 10)。
 
 ## 説明文の参照の記法
 
