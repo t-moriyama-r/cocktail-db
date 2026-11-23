@@ -4,7 +4,7 @@
 # reviewer は coderabbit のまま)、その依頼に CodeRabbit が上限のコメント(Review limit reached / Review rate limited)を
 # 返したときだけ起動して、PR の最新のコミットを 1 回レビューする。次の再レビューの依頼は、また CodeRabbit に出す。
 # 依頼に返事が無い・依頼を書けなかったときも、.github/scripts/request-review.sh が reason を付けて呼ぶ。
-# ボットの依頼に CodeRabbit が応じない(#227)ため、ボットが develop を取り込んだコミット(ai-conflict-resolve.yml)も、reason を付けて呼ばれてレビューする
+# ボットが develop を取り込んだコミット(ai-conflict-resolve.yml)も、同じく request-review.sh がまず CodeRabbit に頼み、動けないときだけ呼ぶ(#264)
 #
 # レビューは、Claude Code が書いた JSON を、後のジョブが GITHUB_TOKEN で PR のレビューとして付ける(github-actions[bot] の
 # レビューになる。本文と行ごとの指摘に目印 <!-- ai-dev:claude-review --> を付ける)。GITHUB_TOKEN で付けたレビューでは
@@ -26,7 +26,7 @@ on:
         description: PR の番号
         required: true
       reason:
-        description: 'CodeRabbit の代わりにレビューする理由(limited: 上限を返した / no-response: 依頼に返事が無い / request-failed: 依頼を書けなかった / conflict-resolve: ボットが develop を取り込んだコミット。ボットの依頼に CodeRabbit が応じないため)'
+        description: 'CodeRabbit の代わりにレビューする理由(limited: 上限を返した / no-response: 依頼に返事が無い / request-failed: 依頼を書けなかった)'
         required: false
         default: limited
 
@@ -64,8 +64,7 @@ jobs:
       OWNER: ${{ github.repository_owner }}
       PR: ${{ inputs.number || github.event.issue.number }}
       REASON_TEXT: >-
-        ${{ inputs.reason == 'conflict-resolve' && 'ボットが develop を取り込んでコンフリクトを解消したコミットで、ボットの依頼には CodeRabbit が応じない'
-          || inputs.reason == 'no-response' && 'CodeRabbit にレビューを頼んだが返事もレビューも無かった'
+        ${{ inputs.reason == 'no-response' && 'CodeRabbit にレビューを頼んだが返事もレビューも無かった'
           || inputs.reason == 'request-failed' && 'CodeRabbit にレビューを頼むコメントを書けなかった'
           || 'CodeRabbit がレビューの上限に達していた' }}
     steps:
@@ -175,8 +174,7 @@ jobs:
       PR: ${{ inputs.number || github.event.issue.number }}
       HEAD: ${{ needs.review.outputs.head }}
       REASON_TEXT: >-
-        ${{ inputs.reason == 'conflict-resolve' && 'ボットが develop を取り込んでコンフリクトを解消したコミットで、ボットの依頼には CodeRabbit が応じない'
-          || inputs.reason == 'no-response' && 'CodeRabbit にレビューを頼んだが返事もレビューも無かった'
+        ${{ inputs.reason == 'no-response' && 'CodeRabbit にレビューを頼んだが返事もレビューも無かった'
           || inputs.reason == 'request-failed' && 'CodeRabbit にレビューを頼むコメントを書けなかった'
           || 'CodeRabbit がレビューの上限に達していた' }}
     steps:
