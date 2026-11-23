@@ -280,13 +280,14 @@ expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0)
 
 ## RC-15: 通信の応答が返ったとき、画面が今もその対象かを確かめる
 
-追加: 2026-11-07 / 出た PR: [#636](https://github.com/t-moriyama-r/cocktail-db/pull/636)・[#638](https://github.com/t-moriyama-r/cocktail-db/pull/638)・[#645](https://github.com/t-moriyama-r/cocktail-db/pull/645)
+追加: 2026-11-07 / 出た PR: [#636](https://github.com/t-moriyama-r/cocktail-db/pull/636)・[#638](https://github.com/t-moriyama-r/cocktail-db/pull/638)・[#645](https://github.com/t-moriyama-r/cocktail-db/pull/645) / 書き足し: 2026-11-22(確かめた結果を、確かめに使った入力と組にして捨てる。出た PR: [#706](https://github.com/t-moriyama-r/cocktail-db/pull/706)・[#730](https://github.com/t-moriyama-r/cocktail-db/pull/730)。#749)
 
-保存・削除・画像の読み込み・変換の通信は、応答が返るまでに時間がかかる。そのあいだに利用者が別の行を選ぶ・別の画面へ移る・別の画像を選ぶと、遅れて返った応答が、今の画面に古い結果を当てる。入力が消える・前の語の誤りが次の語の欄に出る・作業の途中で一覧へ飛ばされる・古い画像のプレビューが出る、といった壊れ方をする。ふだんは通信が速いので気づきにくい。
+保存・削除・画像の読み込み・変換・重なりの問い合わせの通信は、応答が返るまでに時間がかかる。そのあいだに利用者が別の行を選ぶ・別の画面へ移る・別の画像を選ぶ・親を選び直すと、遅れて返った応答が、今の画面に古い結果を当てる。入力が消える・前の語の誤りが次の語の欄に出る・作業の途中で一覧へ飛ばされる・古い画像のプレビューが出る・前の親で問い合わせた知らせが出る、といった壊れ方をする。ふだんは通信が速いので気づきにくい。
 
 - 通信中に押せては困る操作(別の行を選ぶ・もう一度送る)は、`pending` の間は押せなくする
 - 応答を受けて画面を更新する前に、送ったときの対象(選んだ語・ファイル・画面そのもの)が今も同じかを確かめる。違えば何も更新しない。画面が外れた後は `navigate` や `setState` を呼ばない
 - 通信中に入力欄を直せる画面では、成功した応答で入力を空にする前に、送ったときの入力と今の入力が同じかを確かめる(違えば、直した入力を残す)。入力欄も `pending` の間は無効にする作りでもよい
+- 確かめた結果(重なりの知らせなど)と「確かめ済み」の印は、確かめに使った入力のすべて(欄の値と、比べる範囲を決める親など)と組にして持ち、どれかが変わったら捨てる。結果を親の ID と組にして持ち、今の親と一致すれば使う、という持ち方だと、親を A → B → A と選び直したときに、A で前に問い合わせた古い知らせがまた出て、名前の欄を値を変えずに離れ直しても問い合わせ直さない(そのあいだに A の下の行が変わっていても)。入力が変わるたびに進める番号と組にし、番号が違う結果・応答は使わない
 - 画面の外にも状態を持つもの(`localStorage` への保存など)は、`await` をはさんで「見る → 書く」をしない。書く直前にもう一度見る
 
 ```tsx
@@ -300,6 +301,22 @@ reader.onload = () => {
 }
 // 画面が外れたら、読み込み中でも結果を使わない(外れた後は setPreview を呼ばない)
 useEffect(() => () => { selectedFile.current = null }, [])
+```
+
+```ts
+// 悪い: 結果も問い合わせ済みの値も、親の ID(scope.key)と組にして持つだけ。親を A → B → A と戻すと、A で前に問い合わせた知らせがまた出て、
+// 値を変えずに欄を離れ直しても問い合わせ直さない(#706・#730。#738 で直す前の useDuplicateWarning)
+if (checked.current !== null && checked.current.key === key && checked.current.value === value) return
+// …
+const warning = result !== null && scope !== null && result.key === scope.key ? result.message : null
+
+// 良い: 範囲が変わるたびに番号を進め、結果と問い合わせ済みの値をその番号と組にして持つ。番号が違えば捨てたものとみなす(useDuplicateWarning)
+if (range.key !== scopeKey) setRange({ key: scopeKey, generation: range.generation + 1 })
+const generation = range.key === scopeKey ? range.generation : range.generation + 1
+// …
+if (checked.current !== null && checked.current.generation === generation && checked.current.value === value) return
+// …
+const warning = result !== null && scope !== null && result.generation === generation ? result.message : null
 ```
 
 ## RC-16: 入力を直したら、その欄の前の誤りを消す
@@ -370,13 +387,14 @@ test.afterEach(async ({ page }) => {
 })
 ```
 
-## RC-19: テストは、要素の種類・呼び出しの回数ではなく、役割と見える文字で確かめる
+## RC-19: テストは、要素の種類・並び順・呼び出しの回数ではなく、役割と見える文字で確かめる
 
-追加: 2026-11-07 / 出た PR: [#615](https://github.com/t-moriyama-r/cocktail-db/pull/615)・[#631](https://github.com/t-moriyama-r/cocktail-db/pull/631)・[#639](https://github.com/t-moriyama-r/cocktail-db/pull/639)
+追加: 2026-11-07 / 出た PR: [#615](https://github.com/t-moriyama-r/cocktail-db/pull/615)・[#631](https://github.com/t-moriyama-r/cocktail-db/pull/631)・[#639](https://github.com/t-moriyama-r/cocktail-db/pull/639) / 書き足し: 2026-11-22(並び順に依存しない。出た PR: [#668](https://github.com/t-moriyama-r/cocktail-db/pull/668)・[#725](https://github.com/t-moriyama-r/cocktail-db/pull/725)。#749)
 
-要素の種類(`p`・`tr`)・通信の回数を決め打ちするテストは、見た目も振る舞いも変わらない作り直し(見出しを `span` に変える・通信を 1 回にまとめる)で落ちる。振る舞いを変えないリファクタのたびにテストを直すことになり、リファクタの担保にならない。決まりそのものは `CLAUDE.md` の「モックの範囲と確かめる対象」にある。ここでは、指摘が繰り返し出た書き方を挙げる。
+要素の種類(`p`・`tr`)・並び順(DOM の中の順番・項目を足した順)・通信の回数を決め打ちするテストは、見た目も振る舞いも変わらない作り直し(見出しを `span` に変える・送る項目の順を入れ替える・通信を 1 回にまとめる)で落ちる。振る舞いを変えないリファクタのたびにテストを直すことになり、リファクタの担保にならない。並び順を前提にした確かめは、DOM の順と見た目の順が食い違うと、逆の配置で通ってしまうこともある。決まりそのものは `CLAUDE.md` の「モックの範囲と確かめる対象」にある。ここでは、指摘が繰り返し出た書き方を挙げる。
 
 - 要素は `getByRole`(役割と名前)か、見える文字・`aria-label` で探す。`querySelector('p')`・`locator('tbody tr')` のように、タグ名で探さない
+- 並びが仕様でないものは、並び順で確かめない。送る項目(`FormData`)・DOM の中の順番・項目を足した順は、作りを変えると変わる。項目は名前で取り出し(`form.get`)、要素は見出しの文字などで見分けてから比べる。添字(`[0]`)や分割代入(`const [a, b] = …`)で取らない。並び順そのものが仕様(一覧の並べ替えなど)のときだけ順で確かめ、テスト名にもそう書く
 - 通信の確かめ方は `CLAUDE.md` のとおり(ここには繰り返さない)
 - E2E で行を待つときも、役割(`getByRole('table', { name })` の中の `cell`)で待つ
 
@@ -386,4 +404,20 @@ rows.map((row) => row.querySelector('p')?.textContent)
 
 // 良い: 行に見える文字を、役割で見つけた要素から読む。aria-label は「アクセシブルな名前」を確かめるときだけ使う
 rows.map((row) => within(row).getByRole('cell', { name: /端末/ }).textContent)
+```
+
+```ts
+// 悪い: _method を先頭に置く作りを前提にしている。ほかの項目の後に足すと、送る中身が同じでも落ちる(#668)
+expect(entries(form)[0]).toEqual(['_method', 'PUT'])
+
+// 良い: 項目は名前で取り出す(cocktailFormValues.test.ts の TC-127-03)
+expect(form.get('_method')).toBe('PUT')
+
+// 悪い: 2 つの欄を DOM の順で取る。DOM の順と見た目の順が違うと、正しい配置で落ち、逆の配置で通る(#725)
+const [famousBox, childrenBox] = boxes
+
+// 良い: 欄は DOM の順ではなく、見出しの文字(aria-labelledby の先)で見分ける(category-detail.spec.ts の TC-105-18)
+// …evaluateAll の中で、欄ごとに見出しの文字を name として位置と一緒に返す
+const famousBox = boxes.find((box) => box.name === '有名な銘柄')
+const childrenBox = boxes.find((box) => box.name === '子のノード')
 ```

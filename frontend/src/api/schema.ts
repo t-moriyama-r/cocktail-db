@@ -1824,7 +1824,7 @@ export interface components {
             ingredients: {
                 /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
                 category_id: number;
-                /** @description 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19) */
+                /** @description 銘柄。決めない材料では空。銘柄があれば、銘柄の所属ノードは、材料のノードと同じか、その子孫にする(#19・#751) */
                 brand_id?: number | null;
                 /**
                  * @description 量。書式は確かめず、保存のときに整える(docs/decisions/admin-screens.md の決まったこと 4。旧と同じ)。
@@ -1987,7 +1987,7 @@ export interface components {
             ingredients?: {
                 /** @description 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153) */
                 category_id: number;
-                /** @description 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19) */
+                /** @description 銘柄。決めない材料では空。銘柄があれば、銘柄の所属ノードは、材料のノードと同じか、その子孫にする(#19・#751) */
                 brand_id?: number | null;
                 /**
                  * @description 量。書式は確かめず、保存のときに整える(docs/decisions/admin-screens.md の決まったこと 4。旧と同じ)。
@@ -2014,7 +2014,7 @@ export interface components {
              * @description 定義(SettingDefinitions)に無いキーは 422
              * @enum {string}
              */
-            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.application_id" | "rakuten.access_key" | "rakuten.affiliate_id";
+            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.application_id" | "rakuten.access_key" | "rakuten.affiliate_id" | "ga4.measurement_id";
             /** @description 省いたときに黙って .env に戻さないよう、欄は必須(null は送れる)。形は項目ごとの規則で確かめる */
             value: string | null;
         };

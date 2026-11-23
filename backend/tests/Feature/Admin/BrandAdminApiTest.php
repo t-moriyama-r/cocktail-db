@@ -485,6 +485,38 @@ it('TC-82-27: 所属を変えると、その銘柄を使うカクテルの recip
         ->and($withoutBrand->refresh()->recipe_signature)->toBe($before[1]);
 });
 
+it('TC-751-05: 所属を変えると、材料のノードが新しい所属と同じか祖先のままの行は書き換えず、外れた行だけをそろえる', function () {
+    ['nodes' => $n] = brandAdminTree();
+    $brand = Brand::factory()->create(['category_id' => $n['ホワイトラム']->id]);
+    // 材料のノードが所属と同じ行(ホワイトラム)と、移行の 62 行の形で所属の祖先の行(ラム)
+    $same = brandAdminCocktail([$brand]);
+    $migrated = Cocktail::factory()->create();
+    CocktailIngredient::factory()->create([
+        'cocktail_id' => $migrated->id, 'position' => 1, 'category_id' => $n['ラム']->id, 'brand_id' => $brand->id, 'is_optional' => false,
+    ]);
+    app(RecipeCounter::class)->recount([$migrated->id]);
+    app(RecipeSignature::class)->rewrite([$same->id, $migrated->id]);
+    $before = [$same->refresh()->recipe_signature, $migrated->refresh()->recipe_signature];
+    $input = fn (Category $category): array => brandAdminInput($category, ['name' => $brand->name, 'name_eng' => $brand->name_eng]);
+    $nodeOf = fn (Cocktail $cocktail): mixed => CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->value('category_id');
+
+    // ダークラムへ移す: ラムはダークラムの祖先のまま。ホワイトラムは外れる
+    $this->putJson("/api/admin/brands/{$brand->id}", $input($n['ダークラム']))->assertOk();
+
+    expect($nodeOf($same))->toBe($n['ダークラム']->id)
+        ->and($same->refresh()->recipe_signature)->not->toBe($before[0])
+        ->and($nodeOf($migrated))->toBe($n['ラム']->id)
+        ->and($migrated->refresh()->recipe_signature)->toBe($before[1])
+        ->and($migrated->recipe_count)->toBe(1);
+
+    // ジンへ移す: ラムも祖先でなくなるので、そろえる
+    $this->putJson("/api/admin/brands/{$brand->id}", $input($n['ジン']))->assertOk();
+
+    expect($nodeOf($same))->toBe($n['ジン']->id)
+        ->and($nodeOf($migrated))->toBe($n['ジン']->id)
+        ->and($migrated->refresh()->recipe_signature)->not->toBe($before[1]);
+});
+
 it('TC-314-17: 有名な銘柄は、そのノードの部分木の中へは移せ、外へ移すと 422 で理由を返す', function () {
     ['nodes' => $n, 'bacardi' => $bacardi] = brandAdminTree();
     $cocktail = brandAdminCocktail([$bacardi]);

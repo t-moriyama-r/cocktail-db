@@ -1169,3 +1169,55 @@ it('TC-720-03: 今の材料の組で度数を計算できなくても、材料�
         ->assertJsonPath('data.strength', 12.5);
     expect(CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->orderBy('position')->pluck('amount')->all())->toBe(['1tsp', '2dash']);
 });
+
+it('TC-751-01: 銘柄の所属が材料のノードの子孫なら保存でき、材料のノードは送ったまま。別の枝・祖先の銘柄は 422', function (string $node, string $brandNode, bool $ok) {
+    $f = cocktailAdminFixture();
+    $n = $f['nodes'];
+    // 孫の銘柄には、ホワイトラムの下にもう 1 段足す(木は CategoryTree で組む)
+    $n['熟成ホワイトラム'] = app(CategoryTree::class)->addNode(
+        $n['ホワイトラム'],
+        Category::factory()->make(['name' => '熟成ホワイトラム', 'name_search' => NameNormalizer::normalize('熟成ホワイトラム'), 'role' => null])->getAttributes(),
+    );
+    $brand = Brand::factory()->create(['category_id' => $n[$brandNode]->id, 'name' => '銘柄 X', 'volume' => 40.0]);
+
+    $response = $this->postJson('/api/admin/cocktails', cocktailAdminInput($f, ['ingredients' => [
+        cocktailAdminIngredient($n['ソーダ'], '15'),
+        ['category_id' => $n[$node]->id, 'brand_id' => $brand->id, 'amount' => '45', 'is_optional' => false],
+    ]]));
+
+    if (! $ok) {
+        $response->assertUnprocessable()->assertJsonValidationErrors([
+            'ingredients.1.category_id' => '銘柄「銘柄 X」を選んだ材料のノードは、銘柄の所属ノードか、その上のノードにしてください。',
+        ]);
+        expect(Cocktail::query()->count())->toBe(0);
+
+        return;
+    }
+    $response->assertCreated()
+        ->assertJsonPath('data.ingredients.1.category_id', $n[$node]->id)
+        ->assertJsonPath('data.ingredients.1.brand_id', $brand->id);
+})->with([
+    '子(ラムの材料にホワイトラムの銘柄)' => ['ラム', 'ホワイトラム', true],
+    '孫(ラムの材料に熟成ホワイトラムの銘柄)' => ['ラム', '熟成ホワイトラム', true],
+    '同じ(ホワイトラムの材料にホワイトラムの銘柄)' => ['ホワイトラム', 'ホワイトラム', true],
+    '別の枝(ジンの材料にホワイトラムの銘柄)' => ['ジン', 'ホワイトラム', false],
+    '祖先(ホワイトラムの材料にラムの銘柄)' => ['ホワイトラム', 'ラム', false],
+]);
+
+it('TC-751-02: 移行した形(材料のノードの子孫の銘柄)のカクテルは、材料をそのまま送って更新できる', function () {
+    $f = cocktailAdminFixture();
+    $n = $f['nodes'];
+    $brand = Brand::factory()->create(['category_id' => $n['ホワイトラム']->id, 'volume' => 40.0]);
+    $cocktail = Cocktail::factory()->create(['base_category_id' => $n['ラム']->id, 'method_id' => $f['methods'][0]->id]);
+    CocktailIngredient::factory()->create([
+        'cocktail_id' => $cocktail->id, 'category_id' => $n['ラム']->id, 'brand_id' => $brand->id, 'amount' => '45ml',
+        'position' => 1, 'is_optional' => false,
+    ]);
+
+    $this->putJson("/api/admin/cocktails/{$cocktail->id}", cocktailAdminInput($f, ['ingredients' => [
+        ['category_id' => $n['ラム']->id, 'brand_id' => $brand->id, 'amount' => '45', 'is_optional' => false],
+        cocktailAdminIngredient($n['ソーダ'], '15'),
+    ]]))->assertOk()
+        ->assertJsonPath('data.ingredients.0.category_id', $n['ラム']->id)
+        ->assertJsonPath('data.ingredients.0.brand_id', $brand->id);
+});

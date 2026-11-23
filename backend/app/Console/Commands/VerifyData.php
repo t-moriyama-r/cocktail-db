@@ -132,8 +132,8 @@ final class VerifyData extends Command
     }
 
     /**
-     * 材料が銘柄を持つときは、材料のノードを銘柄の所属ノードと同じにする(#19)。違うと、材料のノードで引く検索と、
-     * 銘柄の所属で引く銘柄の詳細で、そのカクテルが出る・出ないが食い違う。
+     * 材料が銘柄を持つときは、銘柄の所属ノードを、材料のノードと同じか、その子孫にする(#19・#751)。別の枝の銘柄だと、
+     * 材料のノードで引く検索と、銘柄の所属で引く銘柄の詳細で、そのカクテルが出る・出ないが食い違う。
      *
      * @return list<array{string, string, string}>
      */
@@ -143,7 +143,11 @@ final class VerifyData extends Command
             ->toBase()
             ->join('brands', 'brands.id', '=', 'cocktail_ingredients.brand_id')
             ->join('cocktails', 'cocktails.id', '=', 'cocktail_ingredients.cocktail_id')
-            ->whereColumn('cocktail_ingredients.category_id', '<>', 'brands.category_id')
+            // 材料のノードが銘柄の所属ノードの祖先(自分を含む。depth 0 の行)でない行
+            ->whereNotExists(fn (QueryBuilder $closure) => $closure
+                ->from('category_closures')
+                ->whereColumn('category_closures.ancestor_id', 'cocktail_ingredients.category_id')
+                ->whereColumn('category_closures.descendant_id', 'brands.category_id'))
             ->orderBy('cocktail_ingredients.cocktail_id')
             ->orderBy('cocktail_ingredients.position')
             ->get([

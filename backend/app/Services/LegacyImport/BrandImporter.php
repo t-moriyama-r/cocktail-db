@@ -14,6 +14,9 @@ use UnexpectedValueException;
  * 旧の銘柄はカテゴリとミドルの両方の列を持ち、ミドルの親とカテゴリが合わない行がある(docs/migration-anomalies.md の 4)。
  * #28 でミドルの親に合わせると決めたので、ミドルがあればカテゴリの列は見ずにミドルのノードに付ける。
  *
+ * 有名な銘柄にしているミドルの部分木の外にある銘柄(グリーン バナナ)は、そのミドルの下へ移す(#752。
+ * docs/migration-anomalies.md の 15)。
+ *
  * Eloquent を通さずに書くのは、作成・更新日時を旧の値(null を含む)のまま入れ、ノードの updated_at も動かさないため。
  */
 final class BrandImporter implements LegacyImporter
@@ -25,12 +28,35 @@ final class BrandImporter implements LegacyImporter
     /** カテゴリ木のノードを書いた新しい表 */
     private const NODE_TABLE = 'categories';
 
+    /** 移した後の件数とは別に出す、ミドルの下へ移した銘柄の数の名前 */
+    private const MOVED_TO_MIDDLE_COUNT = 'ミドルの下へ移した銘柄';
+
+    /**
+     * 旧の所属のまま移すと、有名な銘柄にしているミドルの部分木の外になる銘柄 => 移す先のミドル(どちらも旧 ID。#752)。
+     * 旧のミドル 58(グリーン)の有名な銘柄は銘柄 138(グリーン バナナ)だが、銘柄 138 はミドル 58 の親のカテゴリ 94
+     * (バナナ・リキュール)の直下にある。旧の画面は、ミドルの有名な銘柄に親のカテゴリの直下の銘柄も選べた
+     * (docs/decisions/strength.md の「旧との差分」)。
+     *
+     * 旧の行がまだその形(ミドルが無く、カテゴリが移す先のミドルの親)のときだけ移す。移行までに旧で直されていたら、
+     * 旧の所属のまま移す。
+     *
+     * @var array<int, int>
+     */
+    private const MOVED_TO_MIDDLE = [138 => 58];
+
     private LegacyCategoryNodes $nodes;
+
+    /** @var array<int, int> 移す先のミドルの旧 ID => その親のカテゴリの旧 ID(旧に無いミドルは入らない) */
+    private array $movedToMiddleParents = [];
+
+    private int $movedToMiddle = 0;
 
     public function import(): array
     {
         DB::transaction(function () {
             $this->nodes = LegacyCategoryNodes::load();
+            $this->movedToMiddleParents = self::middleParents(array_values(self::MOVED_TO_MIDDLE));
+            $this->movedToMiddle = 0;
 
             $brandIds = KeptIdCopier::copy(self::LEGACY_TABLE, self::NEW_TABLE, $this->brandAttrs(...));
 
@@ -39,7 +65,51 @@ final class BrandImporter implements LegacyImporter
             }
         });
 
-        return [self::NEW_TABLE => DB::table(self::NEW_TABLE)->count()];
+        return [
+            self::NEW_TABLE => DB::table(self::NEW_TABLE)->count(),
+            self::MOVED_TO_MIDDLE_COUNT => $this->movedToMiddle,
+        ];
+    }
+
+    /**
+     * 旧のミドルの親のカテゴリを読む。
+     *
+     * @param  list<int>  $middleIds
+     * @return array<int, int> ミドルの旧 ID => 親のカテゴリの旧 ID
+     */
+    private static function middleParents(array $middleIds): array
+    {
+        $table = LegacyCategoryNodes::LEGACY_MIDDLE;
+        $parents = [];
+        foreach (DB::connection('legacy')->table($table)->whereIn('id', $middleIds)->get(['id', 'parent']) as $row) {
+            $row = (array) $row;
+            $parents[LegacyRows::int($row, 'id', $table)] = LegacyRows::int($row, 'parent', $table);
+        }
+
+        return $parents;
+    }
+
+    /**
+     * 銘柄の所属するノード。ふだんは旧の行のカテゴリ・ミドルの列で引き、MOVED_TO_MIDDLE の銘柄は移す先のミドルにする。
+     *
+     * @param  array<mixed>  $row
+     */
+    private function brandNodeId(array $row, int $id): int
+    {
+        $context = self::LEGACY_TABLE." の id {$id}";
+        $middleId = self::MOVED_TO_MIDDLE[$id] ?? null;
+        if (
+            $middleId !== null
+            && LegacyRows::nullableId($row, 'middle_category', self::LEGACY_TABLE) === null
+            && isset($this->movedToMiddleParents[$middleId])
+            && $this->movedToMiddleParents[$middleId] === LegacyRows::int($row, 'category', self::LEGACY_TABLE)
+        ) {
+            $this->movedToMiddle++;
+
+            return $this->nodes->nodeId(LegacyCategoryNodes::LEGACY_MIDDLE, $middleId, $context);
+        }
+
+        return $this->nodes->forRow($row, self::LEGACY_TABLE, $context);
     }
 
     /**
@@ -54,7 +124,7 @@ final class BrandImporter implements LegacyImporter
 
         return [
             'id' => $id,
-            'category_id' => $this->nodes->forRow($row, self::LEGACY_TABLE, self::LEGACY_TABLE." の id {$id}"),
+            'category_id' => $this->brandNodeId($row, $id),
             'name' => $row['name'],
             'name_search' => $row['name_search'],
             'name_eng' => $row['name_eng'],

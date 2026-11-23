@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Http\Requests\Admin\Concerns\AdminFormInput;
 use App\Models\Brand;
+use App\Models\CategoryClosure;
 use App\Models\CocktailAlias;
 use App\Models\CocktailIngredient;
 use App\Models\DictionaryCategory;
@@ -104,7 +105,7 @@ class SaveCocktailRequest extends FormRequest
             ],
             // 材料のノード。どの深さのノードでもよいが、根(旧の種別)は選べない(#153)
             'ingredients.*.category_id' => ['required', 'integer', 'exists:categories,id', app(NotRootCategory::class)],
-            // 銘柄。決めない材料では空。銘柄があれば、ノードは銘柄の所属ノードにする(#19)
+            // 銘柄。決めない材料では空。銘柄があれば、銘柄の所属ノードは、材料のノードと同じか、その子孫にする(#19・#751)
             'ingredients.*.brand_id' => ['nullable', 'integer', 'exists:brands,id'],
             // 量。書式は確かめず、保存のときに整える(docs/decisions/admin-screens.md の決まったこと 4。旧と同じ)。
             // 整えた後の長さ(列の長さ)は保存のときに確かめる
@@ -196,7 +197,8 @@ class SaveCocktailRequest extends FormRequest
     }
 
     /**
-     * 銘柄のある材料の行で、ノードが銘柄の所属ノードかを確かめる(docs/schema.md の「材料が銘柄を持つときのノード」。#19)。
+     * 銘柄のある材料の行で、銘柄の所属ノードが、材料のノードと同じか、その子孫かを確かめる(docs/schema.md の
+     * 「材料が銘柄を持つときのノード」。#19・#751)。
      *
      * ノード・銘柄のどちらかにもう誤りがある行は見ない(無い ID などの誤りだけを返す)。
      */
@@ -224,12 +226,19 @@ class SaveCocktailRequest extends FormRequest
         }
 
         $brands = Brand::query()->whereKey(array_column($pairs, 1))->get()->keyBy('id');
+        // 材料のノードが銘柄の所属ノードの祖先(自分を含む。depth 0)になっている組を「祖先:子孫」で引く。閉包表は読むだけ
+        $within = CategoryClosure::query()
+            ->toBase()
+            ->whereIn('ancestor_id', array_column($pairs, 0))
+            ->whereIn('descendant_id', $brands->pluck('category_id')->all())
+            ->selectRaw("CONCAT(ancestor_id, ':', descendant_id) AS pair")
+            ->pluck('pair');
         foreach ($pairs as $index => [$categoryId, $brandId]) {
             $brand = $brands->get($brandId);
-            if ($brand !== null && $brand->category_id !== $categoryId) {
+            if ($brand !== null && ! $within->contains("{$categoryId}:{$brand->category_id}")) {
                 $validator->errors()->add(
                     "ingredients.{$index}.category_id",
-                    "銘柄「{$brand->name}」を選んだ材料のノードは、銘柄の所属ノードにしてください。",
+                    "銘柄「{$brand->name}」を選んだ材料のノードは、銘柄の所属ノードか、その上のノードにしてください。",
                 );
             }
         }

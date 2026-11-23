@@ -23,6 +23,7 @@ beforeEach(function () {
         'rakuten.application_id' => null,
         'rakuten.access_key' => null,
         'rakuten.affiliate_id' => null,
+        'ga4.measurement_id' => null,
     ]);
 });
 
@@ -42,15 +43,17 @@ function settingItem(mixed $json, string $key): array
     throw new RuntimeException("一覧に {$key} が無い");
 }
 
-it('TC-132-01: 一覧は、定義の 6 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
+// GA4 の測定 ID(#59)を足して 7 項目になった
+it('TC-132-01: 一覧は、定義の 7 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
     $response = $this->getJson('/api/admin/settings')->assertOk();
     $json = $response->json();
 
     expect($response->json('data.*.key'))->toBe([
         'amazon.credential_id', 'amazon.credential_secret', 'amazon.partner_tag',
         'rakuten.application_id', 'rakuten.access_key', 'rakuten.affiliate_id',
+        'ga4.measurement_id',
     ])
-        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false])
+        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false, false])
         ->and(settingItem($json, 'amazon.partner_tag'))->toBe([
             'key' => 'amazon.partner_tag',
             'label' => 'Amazon のパートナータグ',
@@ -255,4 +258,93 @@ it('TC-72-19: 楽天のアプリ ID・アクセスキーは秘密の項目で、
         ->and(settingItem($response->json(), 'rakuten.application_id'))->toMatchArray([
             'secret' => true, 'is_set' => true, 'value' => null, 'last_four' => '1234', 'source' => 'env',
         ]);
+});
+
+/**
+ * 環境変数(.env の行)を一時的に書き換え、config/settings.php を読み直してから $callback を動かす(#689)。
+ * .env に値の無い行があるときと同じく、env() が空の文字を返すようにするため。終わったら元に戻す。
+ *
+ * @param  array<string, string>  $values
+ */
+function withEnv(array $values, Closure $callback): void
+{
+    $saved = [];
+    foreach ($values as $name => $value) {
+        $saved[$name] = [
+            'server' => array_key_exists($name, $_SERVER) ? $_SERVER[$name] : null,
+            'hasServer' => array_key_exists($name, $_SERVER),
+            'env' => array_key_exists($name, $_ENV) ? $_ENV[$name] : null,
+            'hasEnv' => array_key_exists($name, $_ENV),
+            'getenv' => getenv($name),
+        ];
+        $_SERVER[$name] = $value;
+        $_ENV[$name] = $value;
+        putenv("{$name}={$value}");
+    }
+
+    try {
+        config()->set('settings', require base_path('config/settings.php'));
+        $callback();
+    } finally {
+        foreach ($saved as $name => $old) {
+            if ($old['hasServer']) {
+                $_SERVER[$name] = $old['server'];
+            } else {
+                unset($_SERVER[$name]);
+            }
+            if ($old['hasEnv']) {
+                $_ENV[$name] = $old['env'];
+            } else {
+                unset($_ENV[$name]);
+            }
+            putenv($old['getenv'] === false ? $name : "{$name}={$old['getenv']}");
+        }
+    }
+}
+
+// .env に値の無い行(`AMAZON_CREDENTIAL_ID=`)があるとき(#689)。旧には設定の画面も API も無い
+it('TC-689-01: .env の値が空の行なら、一覧はどの項目も未設定(is_set: false・source: null)として返す', function () {
+    withEnv([
+        'AMAZON_CREDENTIAL_ID' => '',
+        'AMAZON_CREDENTIAL_SECRET' => '',
+        'AMAZON_PARTNER_TAG' => '',
+        'RAKUTEN_APPLICATION_ID' => '',
+        'RAKUTEN_ACCESS_KEY' => '',
+        'RAKUTEN_AFFILIATE_ID' => '',
+        'GA4_MEASUREMENT_ID' => '',
+    ], function () {
+        // 前提: env() は値の無い行に空の文字を返す
+        expect(array_values(array_unique(array_map(fn (mixed $v): string => is_scalar($v) ? (string) $v : '', config()->array('settings')))))->toBe(['']);
+
+        $response = $this->getJson('/api/admin/settings')->assertOk();
+
+        expect($response->json('data.*.key'))->toHaveCount(7)
+            ->and($response->json('data.*.is_set'))->toBe(array_fill(0, 7, false))
+            ->and($response->json('data.*.value'))->toBe(array_fill(0, 7, null))
+            ->and($response->json('data.*.last_four'))->toBe(array_fill(0, 7, null))
+            ->and($response->json('data.*.source'))->toBe(array_fill(0, 7, null));
+    });
+});
+
+it('TC-689-02: .env の値が空の行でも、画面で保存した値があれば、その値を saved として返す', function () {
+    withEnv(['AMAZON_PARTNER_TAG' => '', 'AMAZON_CREDENTIAL_SECRET' => ''], function () {
+        app(Settings::class)->set('amazon.partner_tag', 'saved-tag-22', $this->admin);
+        app(Settings::class)->set('amazon.credential_secret', 'SECRET-plain-value-WXYZ', $this->admin);
+
+        $json = $this->getJson('/api/admin/settings')->assertOk()->json();
+
+        expect(settingItem($json, 'amazon.partner_tag'))->toMatchArray([
+            'is_set' => true, 'value' => 'saved-tag-22', 'source' => 'saved',
+        ])
+            ->and(settingItem($json, 'amazon.credential_secret'))->toMatchArray([
+                'is_set' => true, 'value' => null, 'last_four' => 'WXYZ', 'source' => 'saved',
+            ]);
+    });
+});
+
+it('TC-689-03: .env の値が「0」のような空でない文字なら、これまでどおり値あり(source: env)として返す', function () {
+    withEnv(['RAKUTEN_AFFILIATE_ID' => '0'], function () {
+        expect(settingItem($this->getJson('/api/admin/settings')->assertOk()->json(), 'rakuten.affiliate_id'))
+            ->toMatchArray(['is_set' => true, 'value' => '0', 'source' => 'env']);
+    });
 });

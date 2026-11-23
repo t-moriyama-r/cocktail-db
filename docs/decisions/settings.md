@@ -4,7 +4,7 @@
 
 ## 決まったこと
 
-1. 画面から変えられる項目は、コードの一覧 `App\Support\SettingDefinitions` で定義する(キー・名前・説明・秘密かどうか・検証の規則)。いまの項目は、コードが `Settings` から読んでいる 6 つ
+1. 画面から変えられる項目は、コードの一覧 `App\Support\SettingDefinitions` で定義する(キー・名前・説明・秘密かどうか・検証の規則)。いまの項目は、コードが `Settings` から読んでいる 7 つ
 
    | キー | 秘密 | 形 |
    |---|---|---|
@@ -14,10 +14,12 @@
    | `rakuten.application_id` | ○ | 空白を含まない ASCII、255 文字まで(#72) |
    | `rakuten.access_key` | ○ | 同上(#72) |
    | `rakuten.affiliate_id` | | `amazon.partner_tag` と同じ |
+   | `ga4.measurement_id` | | `G-` に英大文字と数字が続く、30 文字まで(HTML のタグに入る。#59。`docs/decisions/analytics.md`) |
 
    - Credential ID は OAuth の Client ID で、厳密には秘密ではないが、画面に出しても使い道が無いので秘密として扱う。パートナータグと楽天のアフィリエイト ID は公開のリンクに載る値なので、秘密にしない
    - 楽天のアプリ ID は、規約 第5条が他人に知られないよう管理するよう求めているので、アクセスキーと同じく秘密として扱う(#72。`docs/decisions/rakuten-client.md`)
-   - #69 の案にある GA4 の測定 ID・アフィリエイト収集の間隔は、読むコードがまだ無いので載せない。読むコードを作る issue で、`SettingDefinitions` と `config/settings.php` の両方に足す(キーがそろっていることはテストで確かめる)
+   - #69 の案にあるアフィリエイト収集の間隔は、読むコードがまだ無いので載せない。読むコードを作る issue で、`SettingDefinitions` と `config/settings.php` の両方に足す(キーがそろっていることはテストで確かめる)。GA4 の測定 ID は、読むコード(`App\Support\Ga4Tag`)を作った #59 で足した
+   - GA4 の測定 ID は、公開ページの HTML に出る値なので、秘密にしない
    - `APP_KEY`・DB の接続・`APP_URL` は載せない(#69 の 5)
 2. API(`openapi/openapi.json` に出る。どちらもログインが要る)
 
@@ -29,6 +31,7 @@
    - キーに `.` が入るので、キーは経路に載せず本文で受ける。定義に無いキーは 422(`errors.key`)
    - `value` は必須の欄(省くと 422)。`null` か空の文字を送ると、保存した値を消して `.env` の値に戻す(行は残し、変えた人と日時を記録する)
 3. 返す 1 項目の形: `key`・`label`・`description`・`secret`・`is_set`(値があるか)・`value`・`last_four`・`source`(`saved`: 画面で保存した値 / `env`: `.env` の値 / `null`: どちらにも無い)・`updated_at`・`updated_by`(`{id, name}`)
+   - `.env` の値が空の文字(`AMAZON_CREDENTIAL_ID=` のように値の無い行)は、値が無いものとして扱う(`is_set: false`・`source: null`。`Settings::get` も既定値を返す。#689)
 4. **秘密の項目は、値を平文で返さない**。`value` はいつも `null` で、`last_four` に末尾 4 文字だけを返す。`.env` から来た値でも同じ。値が 8 文字より短いときは、4 文字でも値のほとんどが分かるので、`last_four` も `null` にする(画面は `is_set` で「設定済み」だけを出す)。秘密でない項目は `value` に値を返し、`last_four` は `null`
 5. 変えた人と日時は、`settings` 表の行の `updated_by`・`updated_at`(最後に変えた 1 回分)。変えた履歴を 1 件ごとに残す表は、この issue では作らない(要るかは `docs/schema.md` の「settings」のとおり #69 で決める)
 

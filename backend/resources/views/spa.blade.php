@@ -21,6 +21,18 @@
     <meta name="twitter:title" content="{{ $social['title'] }}">
     <meta name="twitter:description" content="{{ $social['description'] }}">
     <meta name="twitter:image" content="{{ $social['image'] }}">
+{{-- アクセス解析(GA4。#59)。測定 ID が設定に無い・管理画面ではタグを出さない(Ga4Tag)。
+     画面の移動ごとの page_view は SPA が送るので、ここでは最初の page_view を送らない(send_page_view: false) --}}
+@php($ga4MeasurementId = app(\App\Support\Ga4Tag::class)->measurementIdFor(request()))
+@if ($ga4MeasurementId !== null)
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ $ga4MeasurementId }}"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', @json($ga4MeasurementId), { send_page_view: false });
+    </script>
+@endif
     {{ Vite::useBuildDirectory('spa')->withEntryPoints(['src/main.tsx']) }}
 </head>
 <body>

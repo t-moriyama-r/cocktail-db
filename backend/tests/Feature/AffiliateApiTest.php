@@ -494,3 +494,14 @@ it('TC-136-06: 認証情報が無くても、楽天と手で入れた値はそ�
         ->assertJsonPath('data.human.amazon_detail_url', 'https://www.amazon.co.jp/dp/B00000000H')
         ->assertJsonPath('data.human.amazon_search_url', 'https://www.amazon.co.jp/s?k=human');
 });
+
+// .env の値が空の行(#689)。Settings が値の無いものとして返しても、リンクの組み立ては「無い」ときと同じ
+it('TC-689-05: 楽天のアフィリエイトの ID が .env で空なら、期限切れの楽天の検索のリンクはアフィリエイトに包まない', function () {
+    config()->set('settings', [...AMAZON_CONFIGURED, 'rakuten.affiliate_id' => '']);
+    $affiliate = nodeAffiliate([...amazonValues(expiredAt()), ...rakutenValues(expiredAt())]);
+
+    getAffiliate($this, $affiliate)
+        ->assertOk()
+        ->assertJsonPath('data.amazon.search_url', 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3&tag=cocktail-22')
+        ->assertJsonPath('data.rakuten.search_url', 'https://search.rakuten.co.jp/search/mall/%E3%82%B8%E3%83%B3/510915/');
+});
