@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17・TC-768-03〜08・TC-802-01〜03)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
+# evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17・TC-768-03〜08・TC-781-01〜07・TC-802-01〜03)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
 # 流す手順を出す)に渡して、撮る幅・動画・操作・リクエスト・出すファイルの名前を見る。撮影そのもの(Chrome・ffmpeg)は流さない。
 # 管理画面にログインして撮る(login: admin。#768)ところは、php・ffmpeg・curl・capture.js・compose.js を偽物にして run を流し、
 # ログインの URL を撮る回ごとに出すこと・設定ファイルや texts に残さないこと・エラーの文で伏せることを見る。
+# コマンドの結果(kind: command。#781)も同じ偽物で run を流し、出力の中の checkout の絶対パスを <repo> に置き換えることを見る。
 # steps のある画面で、撮る回ごとにその側の DB を入れ直すこと(#802)も、plan の手順と、偽物で流した run の順で見る。
 #
 # 使い方: .github/scripts/tests/evidence-shoot.test.sh
@@ -94,6 +95,54 @@ main() {
 	expect TC-768-08 'admin:login-link がその側のアプリのログインの URL を出さなければ、出した文字を書かずに落ちる' \
 		"$RC|$(grep -cF 'before の admin:login-link が、http://127.0.0.1:8001 のログインの URL を出さなかった' "$WORK/err")|$(grep -cF 'not a url' "$WORK/err")" '1|1|0'
 
+	# --- コマンドの出力に出る checkout の絶対パスを <repo> に置き換える(#781) ---
+
+	# shellcheck disable=SC2016 # コマンドの中身なので、ここでは展開しない
+	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-05]' '    workdir: frontend' \
+		'    run: echo " RUN  v3.2.4 $(pwd -P)"; echo "spec $(pwd -P)/src/a.test.ts"'
+	fake_run
+	expect TC-781-01 'Vitest の RUN の行などに出た、そのコマンドを流した checkout(修正前・修正後)の絶対パスを <repo> に置き換えて texts に書き、evidence-leak-check.sh を通る' \
+		"$RC|$(head -2 "$WORK/run/texts/01-command-before.txt" | paste -sd'#')|$(head -2 "$WORK/run/texts/01-command-after.txt" | paste -sd'#')|$(leak_check)" \
+		'0| RUN  v3.2.4 <repo>/frontend#spec <repo>/frontend/src/a.test.ts| RUN  v3.2.4 <repo>/frontend#spec <repo>/frontend/src/a.test.ts|0'
+	expect TC-781-02 '置き換えたときは、撮る画面(text2html)に置き換えたことを 1 行で書き、画面にも checkout の絶対パスを残さない' \
+		"$(grep -cF '<p>出力の中の checkout の絶対パスは &lt;repo&gt; に置き換えている</p>' "$WORK/run/work/01-command/before.html" "$WORK/run/work/01-command/after.html" | cut -d: -f2 | paste -sd,)|$(grep -lF -e "$FAKE/before" -e "$FAKE/after" "$WORK/run/work/01-command/before.html" "$WORK/run/work/01-command/after.html" | wc -l)" \
+		'1,1|0'
+
+	ln -s "$FAKE/after" "$WORK/after-link"
+	FAKE_AFTER_DIR="$WORK/after-link" fake_run
+	expect TC-781-03 '--after-dir がシンボリックリンクでも、コマンドが出す実のパスを <repo> に置き換える' \
+		"$RC|$(head -1 "$WORK/run/texts/01-command-after.txt")" '0| RUN  v3.2.4 <repo>/frontend'
+	rm -f "$WORK/after-link"
+
+	# shellcheck disable=SC2016 # コマンドの中身なので、ここでは展開しない
+	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-05]' '    workdir: frontend' \
+		'    run: echo "old $(cd .. && pwd -P)-old/x"'
+	fake_run
+	expect TC-781-04 'checkout の名前の後ろに文字が続く別のディレクトリ(<checkout>-old)は置き換えない' \
+		"$RC|$(head -1 "$WORK/run/texts/01-command-before.txt")" "0|old $FAKE/before-old/x"
+
+	# shellcheck disable=SC2016 # コマンドの中身なので、ここでは展開しない
+	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-04]' '    workdir: frontend' \
+		'    run: p=$(cd .. && pwd -P); echo "$p+old/x"; echo "$p日本語/x"; echo "$p/../out/x"; echo "$p/a/../b/x"'
+	fake_run
+	expect TC-781-07 '"+"・非ASCII が続く別のディレクトリと、".." で checkout の外へ出るパスは置き換えない。checkout の下で戻るだけなら置き換える' \
+		"$RC|$(sed -n '1,4p' "$WORK/run/texts/01-command-before.txt" | paste -sd'#' | sed "s#$FAKE#F#g")" \
+		'0|F/before+old/x#F/before日本語/x#F/before/../out/x#<repo>/a/../b/x'
+
+	# shellcheck disable=SC2016 # コマンドの中身なので、ここでは展開しない
+	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-06]' '    workdir: frontend' \
+		'    run: echo " RUN  v3.2.4 $(pwd -P)"; printf "cache /%s/%s/.npm\n" home runner'
+	fake_run
+	expect TC-781-05 'checkout の外の絶対パス(ホームなど)は置き換えず、evidence-leak-check.sh が今までどおり落とす' \
+		"$RC|$(grep -c '^cache /[h]ome/[a-z]*/\.npm$' "$WORK/run/texts/01-command-after.txt")|$(head -1 "$WORK/run/texts/01-command-after.txt")|$(leak_check)" \
+		'0|1| RUN  v3.2.4 <repo>/frontend|1'
+
+	block 'version: 1' 'items:' '  - kind: command' '    cases: [TC-1-07]' '    run: echo hello'
+	fake_run
+	expect TC-781-06 '出力に checkout の絶対パスが無ければ、出力はそのままで、置き換えたことの 1 行も書かない' \
+		"$RC|$(paste -sd'#' "$WORK/run/texts/01-command-before.txt")|$(grep -cF '置き換えている' "$WORK/run/work/01-command/before.html")" \
+		'0|hello##(終了コード 0)|0'
+
 	# --- steps のある画面は、撮る回ごとにその側の DB を入れ直す(#802) ---
 
 	block 'version: 1' 'items:' '  - kind: screen' '    cases: [TC-1-01]' '    path: /admin/skip-words' '    login: admin' '    widths: [375, 1440]' '    steps:' \
@@ -136,12 +185,12 @@ plan() {
 	node "$SCRIPT" plan "$WORK/request.json" >"$WORK/out" 2>"$WORK/err" || RC=$?
 }
 
-# 偽の php・ffmpeg・curl・capture.js・compose.js で run を流す(#768)。アプリは起こさない。FAKE_MODE=leak は撮った結果に、fail はエラーの文に
-# 受け取ったログインの URL を出す。FAKE_LINK を渡すと admin:login-link がそれを出す
+# 偽の php・ffmpeg・curl・capture.js・compose.js で run を流す(#768。コマンドの出力の置き換えも見る。#781)。アプリは起こさない。FAKE_MODE=leak は撮った結果に、fail はエラーの文に
+# 受け取ったログインの URL を出す。FAKE_LINK を渡すと admin:login-link がそれを出す。FAKE_AFTER_DIR を渡すと、修正後の checkout をそこにする
 fake_run() {
 	export FAKE="$WORK/fake"
 	rm -rf "$FAKE" "$WORK/run"
-	mkdir -p "$FAKE/bin" "$FAKE/tools" "$FAKE/before/backend" "$FAKE/after/backend"
+	mkdir -p "$FAKE/bin" "$FAKE/tools" "$FAKE/before/backend" "$FAKE/after/backend" "$FAKE/before/frontend" "$FAKE/after/frontend"
 	# shellcheck disable=SC2016 # 偽物の中身なので、ここでは展開しない
 	printf '%s\n' '#!/usr/bin/env bash' \
 		'case "$2" in' \
@@ -178,8 +227,15 @@ fs.writeFileSync(path.join(c.outDir, `${c.name}_compare_${c.compare[0].name}.png
 JS
 	RC=0
 	PATH="$FAKE/bin:$PATH" node "$SCRIPT" run "$WORK/request.json" --out "$WORK/run" --tools "$FAKE/tools" --pw "$FAKE" \
-		--before-dir "$FAKE/before" --before-url http://127.0.0.1:8001 --after-dir "$FAKE/after" --after-url http://127.0.0.1:8002 \
+		--before-dir "$FAKE/before" --before-url http://127.0.0.1:8001 --after-dir "${FAKE_AFTER_DIR:-$FAKE/after}" --after-url http://127.0.0.1:8002 \
 		>/dev/null 2>"$WORK/err" || RC=$?
+}
+
+# 撮った文字に、ランナーのパス・置き場所(ここでは一時ディレクトリ)が出ていないかを evidence-leak-check.sh で見て、終了コードを出す(#781)
+leak_check() {
+	local rc=0
+	EVIDENCE_LEAK_WORDS=$WORK bash "$HERE/../evidence-leak-check.sh" "$WORK/run/texts" "$WORK/run/publish" 2>/dev/null || rc=$?
+	echo "$rc"
 }
 
 expect() {

@@ -269,3 +269,81 @@ it('TC-657-12: OpenAPI では、銘柄の新規に任意の Idempotency-Key ヘ�
         ->and(data_get($store[0], 'schema'))->toBe(['type' => 'string', 'format' => 'uuid'])
         ->and($headers('/admin/brands/{brand}', 'put'))->toBe([]);
 });
+
+// 古い記録の片付け(#763。docs/decisions/admin-idempotency.md の 10)。記録は 7 日残し、それより古い行を model:prune で消す。
+
+/** 古い記録を消す(scheduler が毎日流すのと同じコマンド) */
+function pruneIdempotencyKeys(): void
+{
+    expect(Artisan::call('model:prune', ['--model' => [IdempotencyKey::class]]))->toBe(0);
+}
+
+it('TC-763-01: 作ってから 7 日より古い記録は消え、7 日ちょうど・それより新しい記録は残る', function () {
+    $userId = auth()->id();
+    $now = '2026-11-20 12:00:00';
+    $rows = [
+        '30 日前' => ['2026-10-21 12:00:00', '00000000-0000-4000-8000-000000000001'],
+        '7 日と 1 秒前' => ['2026-11-13 11:59:59', '00000000-0000-4000-8000-000000000002'],
+        '7 日ちょうど前' => ['2026-11-13 12:00:00', '00000000-0000-4000-8000-000000000003'],
+        '6 日と 23 時間 59 分 59 秒前' => ['2026-11-13 12:00:01', '00000000-0000-4000-8000-000000000004'],
+        '今' => [$now, '00000000-0000-4000-8000-000000000005'],
+    ];
+    foreach ($rows as [$createdAt, $key]) {
+        $this->travelTo($createdAt);
+        IdempotencyKey::query()->create([
+            'user_id' => $userId,
+            'key' => $key,
+            'fingerprint' => str_repeat('a', 64),
+            'response_status' => 201,
+            'response_content_type' => 'application/json',
+            'response_body' => '{}',
+        ]);
+    }
+
+    $this->travelTo($now);
+    pruneIdempotencyKeys();
+
+    expect(IdempotencyKey::query()->orderBy('key')->pluck('key')->all())->toBe([
+        $rows['7 日ちょうど前'][1],
+        $rows['6 日と 23 時間 59 分 59 秒前'][1],
+        $rows['今'][1],
+    ]);
+});
+
+it('TC-763-02: 古い記録を消した後は、同じ Idempotency-Key の再送を新しい保存として扱い、2 件目を作る', function () {
+    $category = idempotencyCategory();
+    $headers = [Idempotent::HEADER => IDEMPOTENCY_KEY];
+
+    $this->travelTo('2026-11-01 12:00:00');
+    $first = $this->postJson('/api/admin/brands', idempotencyBrandInput($category), $headers)->assertCreated();
+
+    $this->travelTo('2026-11-08 12:00:01');
+    pruneIdempotencyKeys();
+    expect(IdempotencyKey::query()->count())->toBe(0);
+
+    $second = $this->postJson('/api/admin/brands', idempotencyBrandInput($category), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(Brand::query()->where('name', 'ハバナクラブ')->count())->toBe(2)
+        ->and($second->json('data.id'))->not->toBe($first->json('data.id'))
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-763-03: 7 日たっていない記録は消さず、同じ Idempotency-Key の再送は 1 回目の応答を返す', function () {
+    $category = idempotencyCategory();
+    $headers = [Idempotent::HEADER => IDEMPOTENCY_KEY];
+
+    $this->travelTo('2026-11-01 12:00:00');
+    $first = $this->postJson('/api/admin/brands', idempotencyBrandInput($category), $headers)->assertCreated();
+
+    $this->travelTo('2026-11-08 12:00:00');
+    pruneIdempotencyKeys();
+
+    $second = $this->postJson('/api/admin/brands', idempotencyBrandInput($category), $headers)
+        ->assertCreated()
+        ->assertHeader(Idempotent::REPLAYED_HEADER, 'true');
+
+    expect($second->json())->toBe($first->json())
+        ->and(Brand::query()->where('name', 'ハバナクラブ')->count())->toBe(1);
+});

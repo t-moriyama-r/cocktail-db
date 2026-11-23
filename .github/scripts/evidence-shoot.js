@@ -10,7 +10,8 @@
 //
 // 出力先の中:
 //   publish/  … evidence ブランチに置くものだけ(<連番 2 桁>-<kind>[-<幅>]-<before|after|compare>.<png|mp4|gif> と manifest.json)
-//   texts/    … 画面・応答・コマンドの結果に出た文字。evidence-leak-check.sh で、ランナーのパス・ホスト名が出ていないかを見る
+//   texts/    … 画面・応答・コマンドの結果に出た文字。evidence-leak-check.sh で、ランナーのパス・ホスト名が出ていないかを見る。
+//               コマンドの結果は、そのコマンドを流した checkout の絶対パスを <repo> に置き換えてから書く(#781)
 //   work/     … 撮影の途中のもの(設定ファイルなど。ランナーの絶対パスが入るので、publish に入れない)
 //
 // 画面は、静止画を video: false で幅ごとに撮り(帯を重ねない)、動画は video の幅だけ別に録る(帯で修正前・修正後が分かるように)。
@@ -253,13 +254,47 @@ function issueLogin(opt, side, who) {
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function text2html(src, out, title, workdir) {
+const REPO_MARK = "<repo>";
+const REPO_NOTE = `出力の中の checkout の絶対パスは ${REPO_MARK} に置き換えている`;
+
+// コマンドの出力に出る、そのコマンドを流した checkout の絶対パス(Vitest の RUN の行など)を <repo> に置き換える(#781)。
+// 渡したパスと、シンボリックリンクをたどった実のパスの両方を見る。名前の続く別のディレクトリ(<checkout>-old など)は置き換えない。
+// checkout の外の絶対パス(ホームなど)は残すので、evidence-leak-check.sh が今までどおり落とす。置き換えた数も返す
+function maskRepo(text, dir) {
+  const dirs = [dir];
+  try {
+    dirs.push(fs.realpathSync(dir));
+  } catch {
+    // 実のパスを取れなくても、渡したパスだけで置き換える
+  }
+  let count = 0;
+  let t = String(text);
+  // 長いものから置き換える(片方がもう片方の前の部分のとき、短いほうで先に切らない)
+  for (const d of [...new Set(dirs)].filter((x) => x && x !== "/").sort((a, b) => b.length - a.length)) {
+    // checkout 自身か、その下("/" で続く)のパスだけを置き換える。続く文字が区切り・終端でなければ別のディレクトリ(<checkout>+old・<checkout>日本語 など)
+    const stop = "\\s\"'`:;,()\\[\\]<>";
+    const re = new RegExp(`${d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(/[^${stop}]*)?(?![^${stop}])`, "g");
+    t = t.replace(re, (m, rest) => {
+      // ".." で checkout の外へ出るパスは置き換えない(置き換えると /home/ が消えて evidence-leak-check.sh をすり抜ける)
+      if (rest && rest.includes("..")) {
+        const n = path.posix.normalize(`${d}${rest}`);
+        if (n !== d && !n.startsWith(`${d}/`)) return m;
+      }
+      count++;
+      return `${REPO_MARK}${rest || ""}`;
+    });
+  }
+  return { text: t, count };
+}
+
+function text2html(src, out, title, workdir, masked) {
   const text = fs.readFileSync(src, "utf8");
+  const note = masked ? `<p>${esc(REPO_NOTE)}</p>` : "";
   fs.writeFileSync(out, `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
 body { margin: 0; padding: 24px; background: #f5f5f5; font: 14px/1.6 "Noto Sans CJK JP",sans-serif; color: #222; }
 h1 { font-size: 16px; margin: 0 0 4px; } p { margin: 0 0 12px; color: #757575; }
 pre { margin: 0; padding: 12px 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; font: 13px/1.6 monospace; white-space: pre-wrap; word-break: break-all; }
-</style></head><body><h1>${esc(title)}</h1><p>workdir: ${esc(workdir)}</p><pre>${esc(text)}</pre></body></html>\n`);
+</style></head><body><h1>${esc(title)}</h1><p>workdir: ${esc(workdir)}</p>${note}<pre>${esc(text)}</pre></body></html>\n`);
 }
 
 // コマンドに渡す環境変数。ジョブの環境(GITHUB_* など)をそのまま渡さず、動かすのに要るものだけにする
@@ -330,6 +365,8 @@ function run(req, opt) {
   fs.mkdirSync(path.join(opt.out, "publish"), { recursive: true });
   fs.mkdirSync(path.join(opt.out, "texts"), { recursive: true });
   const manifest = { version: 1, before: opt.beforeSha || null, after: opt.afterSha || null, items: [] };
+  // command の出力ごとに、checkout のパスを <repo> に置き換えたか(text2html が 1 行書くため)
+  const masked = {};
   for (const item of p.items) {
     opt.seeds = {};
     console.error(`== ${item.id} (${item.cases.join(" ")})`);
@@ -356,9 +393,11 @@ function run(req, opt) {
       } else if (step.type === "command") {
         fs.mkdirSync(path.dirname(step.out), { recursive: true });
         const r = runCommand(step.run, path.join(opt[step.side].dir, step.workdir));
-        fs.writeFileSync(step.out, `${r.stdout}\n(終了コード ${r.status})\n`);
+        const m = maskRepo(r.stdout, opt[step.side].dir);
+        masked[step.out] = m.count > 0;
+        fs.writeFileSync(step.out, `${m.text}\n(終了コード ${r.status})\n`);
         fs.copyFileSync(step.out, step.texts);
-      } else if (step.type === "text2html") text2html(step.src, step.out, step.title, step.workdir);
+      } else if (step.type === "text2html") text2html(step.src, step.out, step.title, step.workdir, masked[step.src]);
       else if (step.type === "video") {
         sh("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", step.src, "-c:v", "libx264", "-pix_fmt", "yuv420p",
           "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-movflags", "+faststart", "-threads", "1", "-an", step.mp4]);
