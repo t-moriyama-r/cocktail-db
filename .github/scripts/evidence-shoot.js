@@ -206,9 +206,10 @@ function mask(text, secrets = []) {
   return t;
 }
 
+// シェルを介さずに流す(引数は配列のまま渡す)。頼むコメントの run をシェルで流すのは runCommand だけにする
 function sh(cmd, args, o = {}) {
   const { secrets, ...spawnOpt } = o;
-  const r = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...spawnOpt });
+  const r = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...spawnOpt, shell: false });
   if (r.error) throw r.error;
   if (r.status !== 0 && !o.allowFail) {
     // 出力にランナーのパスが入りうるが、ここはジョブのログ(公開)なので、末尾だけを出す。伏せる文字は伏せてから切る
@@ -255,6 +256,14 @@ function commandEnv() {
   const env = { TERM: "dumb", NO_COLOR: "1" };
   for (const k of keep) if (process.env[k] !== undefined) env[k] = process.env[k];
   return env;
+}
+
+// 頼むコメントの run(信頼する人・bot が書いたものだけ。docs/evidence-request.md)を、その側の checkout でシェルとして流す。
+// 失敗しても結果を撮るので、終了コードは呼ぶ側で書き出す。環境変数は commandEnv で絞る
+function runCommand(run, cwd) {
+  const r = spawnSync("bash", ["-c", `${run} 2>&1`], { cwd, env: commandEnv(), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (r.error) throw r.error;
+  return r;
 }
 
 function seed(opt, name) {
@@ -333,7 +342,7 @@ function run(req, opt) {
         sh("node", args);
       } else if (step.type === "command") {
         fs.mkdirSync(path.dirname(step.out), { recursive: true });
-        const r = sh("bash", ["-c", `${step.run} 2>&1`], { cwd: path.join(opt[step.side].dir, step.workdir), env: commandEnv(), allowFail: true });
+        const r = runCommand(step.run, path.join(opt[step.side].dir, step.workdir));
         fs.writeFileSync(step.out, `${r.stdout}\n(終了コード ${r.status})\n`);
         fs.copyFileSync(step.out, step.texts);
       } else if (step.type === "text2html") text2html(step.src, step.out, step.title, step.workdir);

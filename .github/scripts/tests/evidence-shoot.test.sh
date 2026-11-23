@@ -2,7 +2,7 @@
 #
 # evidence-shoot.js のテスト(TC-600-16〜21・TC-601-17・TC-768-03〜07)。頼むコメントを evidence-request.sh で読んだ JSON を、plan(何も動かさずに
 # 流す手順を出す)に渡して、撮る幅・動画・操作・リクエスト・出すファイルの名前を見る。撮影そのもの(Chrome・ffmpeg)は流さない。
-# 管理画面にログインして撮る(login: admin。#768)ところは、php・ffmpeg・capture.js・compose.js を偽物にして run を流し、
+# 管理画面にログインして撮る(login: admin。#768)ところは、php・ffmpeg・curl・capture.js・compose.js を偽物にして run を流し、
 # ログインの URL を撮る回ごとに出すこと・設定ファイルや texts に残さないこと・エラーの文で伏せることを見る。
 #
 # 使い方: .github/scripts/tests/evidence-shoot.test.sh
@@ -113,7 +113,7 @@ plan() {
 	node "$SCRIPT" plan "$WORK/request.json" >"$WORK/out" 2>"$WORK/err" || RC=$?
 }
 
-# 偽の php・ffmpeg・capture.js・compose.js で run を流す(#768)。FAKE_MODE=leak は撮った結果に、fail はエラーの文に
+# 偽の php・ffmpeg・curl・capture.js・compose.js で run を流す(#768)。アプリは起こさない。FAKE_MODE=leak は撮った結果に、fail はエラーの文に
 # 受け取ったログインの URL を出す。FAKE_LINK を渡すと admin:login-link がそれを出す
 fake_run() {
 	export FAKE="$WORK/fake"
@@ -128,7 +128,9 @@ fake_run() {
 		'  *) exit 1 ;;' \
 		'esac' >"$FAKE/bin/php"
 	printf '%s\n' '#!/usr/bin/env bash' 'for a; do last=$a; done' ': >"$last"' >"$FAKE/bin/ffmpeg"
-	chmod +x "$FAKE/bin/php" "$FAKE/bin/ffmpeg"
+	# 撮る前の修正後の画面の確かめ(probe)は、アプリを起こさないので 200 を返す
+	printf '%s\n' '#!/usr/bin/env bash' 'printf 200' >"$FAKE/bin/curl"
+	chmod +x "$FAKE/bin/php" "$FAKE/bin/ffmpeg" "$FAKE/bin/curl"
 	cat >"$FAKE/tools/capture.js" <<'JS'
 const fs = require("fs");
 const path = require("path");
