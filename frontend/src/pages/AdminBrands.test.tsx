@@ -365,6 +365,160 @@ describe('新規', () => {
   })
 })
 
+describe('新規の冪等キー(#758)', () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+  /**
+   * BE の冪等キーの扱い(docs/decisions/admin-idempotency.md)をまねた POST /api/admin/brands。
+   * 成功した送信だけをキーごとに覚え、同じキー・同じ名前の再送には 1 回目の応答を `Idempotent-Replayed: true` を付けて返し、
+   * 同じキー・違う名前の再送は 422(errors.idempotency_key)で断る。loseResponse の回は、保存したうえで応答を失わせる
+   */
+  const fakeBrandStore = (options: { loseResponses?: number[]; invalidNames?: string[] } = {}) => {
+    const created: string[] = []
+    const keys: (string | null)[] = []
+    const saved = new Map<string, string>()
+    mockApiHandler('post', '/admin/brands', async (request) => {
+      const attempt = keys.length + 1
+      const key = request.headers.get('Idempotency-Key')
+      keys.push(key)
+      const name = String((await request.formData()).get('name'))
+      if (key !== null && saved.has(key)) {
+        if (saved.get(key) !== name) {
+          return jsonResponse(
+            {
+              message: '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+              errors: { idempotency_key: ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。'] },
+            },
+            422,
+          )
+        }
+        const replayed = jsonResponse(savedBody({ ...BRAND, name }), 201)
+        replayed.headers.set('Idempotent-Replayed', 'true')
+        return replayed
+      }
+      if (options.invalidNames?.includes(name)) {
+        return jsonResponse({ message: '入力に誤りがあります。', errors: { name: ['名前が正しくありません。'] } }, 422)
+      }
+      created.push(name)
+      if (key !== null) saved.set(key, name)
+      if (options.loseResponses?.includes(attempt)) throw new TypeError('Failed to fetch')
+      return jsonResponse(savedBody({ ...BRAND, name }), 201)
+    })
+    return { created, keys }
+  }
+
+  const fillName = async (name: string) => fireEvent.change(await screen.findByLabelText('名前'), { target: { value: name } })
+  const send = () => fireEvent.click(screen.getByRole('button', { name: '送信' }))
+
+  test('TC-758-01: 新規の送信に、UUID の Idempotency-Key ヘッダを付けて送る', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    const store = fakeBrandStore()
+    renderAt('/admin/brands/new')
+
+    await fillName('ビーフィーター')
+    send()
+
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    expect(store.keys).toHaveLength(1)
+    expect(store.keys[0]).toMatch(UUID)
+  })
+
+  test('TC-758-02: 1 回目の応答が失われて送り直すと、同じキーで送り、銘柄は 1 件だけできて一覧へ戻る', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    const store = fakeBrandStore({ loseResponses: [1] })
+    renderAt('/admin/brands/new')
+
+    await fillName('ビーフィーター')
+    send()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+    expect(currentUrl()).toBe('/admin/brands/new')
+
+    send()
+
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    expect(currentUrl()).toBe('/admin/brands')
+    expect(store.keys).toHaveLength(2)
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['ビーフィーター'])
+  })
+
+  test('TC-758-03: 422 で画面に残った後、入力を直して送り直すと、同じキーで送って保存できる', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    const store = fakeBrandStore({ invalidNames: ['誤り'] })
+    renderAt('/admin/brands/new')
+
+    await fillName('誤り')
+    send()
+    expect(await screen.findByRole('alert')).toHaveTextContent('入力を確かめてください')
+
+    await fillName('ビーフィーター')
+    send()
+
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['ビーフィーター'])
+  })
+
+  test('TC-758-04: 応答が失われた後に入力を変えて送り直し、キーを断られたら、前の送信が保存されているかもしれないことを出し、次は新しいキーで送る', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    const store = fakeBrandStore({ loseResponses: [1] })
+    renderAt('/admin/brands/new')
+
+    await fillName('ビーフィーター')
+    send()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('通信に失敗しました'))
+
+    await fillName('ビーフィーター ロンドン')
+    send()
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。',
+      ),
+    )
+    expect(currentUrl()).toBe('/admin/brands/new')
+    expect(screen.getByLabelText('名前')).toHaveValue('ビーフィーター ロンドン')
+    expect(store.keys[1]).toBe(store.keys[0])
+    expect(store.created).toEqual(['ビーフィーター'])
+
+    send()
+
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    expect(store.keys[2]).toMatch(UUID)
+    expect(store.keys[2]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['ビーフィーター', 'ビーフィーター ロンドン'])
+  })
+
+  test('TC-758-05: 保存できた後に開き直した別の新規では、新しいキーで送る', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    const store = fakeBrandStore()
+    renderAt('/admin/brands/new')
+
+    await fillName('ビーフィーター')
+    send()
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: '新規' }))
+    await fillName('タンカレー')
+    send()
+
+    await waitFor(() => expect(store.keys).toHaveLength(2))
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    expect(store.keys[1]).toMatch(UUID)
+    expect(store.keys[1]).not.toBe(store.keys[0])
+    expect(store.created).toEqual(['ビーフィーター', 'タンカレー'])
+  })
+})
+
 describe('編集', () => {
   test('TC-64-17: 開いた銘柄の値を欄に出し、今の所属と画像を出す', async () => {
     loggedIn()
@@ -426,6 +580,21 @@ describe('編集', () => {
     expect(body.get('is_like')).toBe('0')
     // 画像を選んでいなければ送らない(今の画像のまま)
     expect(body.has('image')).toBe(false)
+  })
+
+  test('TC-758-06: 更新の送信には Idempotency-Key ヘッダを付けない', async () => {
+    loggedIn()
+    mockTree()
+    mockBrandIndex([])
+    mockApi('get', '/admin/brands/{brand}', 200, { data: BRAND })
+    captureSave('put', () => jsonResponse(savedBody(BRAND), 200))
+    renderAt('/admin/brands/7')
+
+    fireEvent.click(await screen.findByRole('button', { name: '送信' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: '銘柄' })).toBeInTheDocument()
+    const update = apiRequests().find((request) => request.method === 'POST' && request.url.endsWith('/admin/brands/7'))!
+    expect(update.headers.has('Idempotency-Key')).toBe(false)
   })
 
   test('TC-64-19: 有名な銘柄を部分木の外へ移そうとして 422 になったら、理由を所属の欄に出して画面に残る', async () => {
