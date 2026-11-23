@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\IdempotencyKey;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -19,3 +20,10 @@ if ($interval === false) {
 Schedule::command('affiliates:collect --refresh --new')
     ->cron("*/{$interval} * * * *")
     ->withoutOverlapping(30);
+
+// 管理画面の保存の冪等キーの記録(idempotency_keys)は 7 日残し、それより古い行を毎日 1 回消す(#763。
+// docs/decisions/admin-idempotency.md の 10)。毎日 1 回なので、7 日を過ぎてから消すまでに最大 1 日ほど遅れる。
+// 時刻はアプリの時刻(UTC)の 19:05(日本時間の 4:05)。管理画面を使わない夜中にし、10 分ごとの affiliates:collect と
+// 同じ分にならないよう 5 分にした。
+Schedule::command('model:prune', ['--model' => [IdempotencyKey::class]])
+    ->dailyAt('19:05');
