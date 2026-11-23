@@ -75,8 +75,8 @@ function paraphraseNodeRef(Category $node): array
 }
 
 /**
- * @param  array<string, mixed>  $overrides
- * @return array<string, mixed>
+ * @param  array<array-key, mixed>  $overrides  項目の名前 → 値(データセットから受けるので、鍵の型は絞らない)
+ * @return array<array-key, mixed>
  */
 function paraphraseInput(array $overrides = []): array
 {
