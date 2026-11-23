@@ -15,7 +15,7 @@
 | 環境 | 登録するとき |
 |---|---|
 | stg | 今(#779 で登録して確かめる) |
-| 本番 | 切り替え(#79)の手順の中。旧アプリの cron を止めた後に登録する。それより前には登録しない |
+| 本番 | 切り替え(#79)の手順の中。旧アプリの cron を止め、旧の収集が終わったこと(止めたときに動いていた回が最後まで流れたこと)を確かめてから登録する。それより前には登録しない |
 | dev | 登録しない |
 
 - 新アプリの scheduler が書くのは、その環境の `.env` の DB(新 DB)だけ。旧 DB には書かない
@@ -55,7 +55,13 @@
 cd ~/<アプリ本体> && tail -n 20 storage/logs/schedule-run.log
 ```
 
-- `php artisan affiliates:collect --refresh --new` の行が DONE で出ていればよい。FAIL なら、Laravel のログ(`storage/logs/` の `laravel*.log`)の同じ時刻の例外を見る
+- `php artisan affiliates:collect --refresh --new` の行が、**登録した後の時刻**の DONE で出ていればよい。cron を登録し直したときは、前の DONE がログに残っているので、それを成功の判定に使わない。FAIL なら、Laravel のログ(`storage/logs/` の `laravel*.log`)の同じ時刻の例外を見る
+- DONE だけでは、Amazon・楽天の認証情報が設定されているかは分からない(無いと、警告を出して何も集めずに成功で終わり、その警告は scheduler から動かすとどこにも残らない)。登録の前後に一度、サーバーで手動で動かし、「認証情報が設定に無い」で始まる警告が出ないことを確かめる。警告は API に問い合わせる前に出る。設定済みの提供元には、少数の問い合わせが発生することがある
+
+  ```bash
+  cd ~/<アプリ本体> && php artisan affiliates:collect --new --limit=1
+  ```
+
 - Amazon・楽天の上限・一時的な失敗は、コマンドの失敗にはならず、Laravel のログに warning(`affiliates:collect --refresh: …`・`affiliates:collect --new: …`)が出る。その回の残りは次の回にまわる
 - 収集の件数(「取り直した(Amazon): N 件(保存 …)」「探した: N 件(…)」)は、scheduler から動かすと今はどこにも残らない(scheduler が動かしたコマンドの出力は、既定で捨てられる)。ログに残すのは #778
 
