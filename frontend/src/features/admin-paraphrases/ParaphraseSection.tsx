@@ -1,10 +1,12 @@
 import { useId, useState, type FormEvent } from 'react'
 import type { components } from '../../api/schema'
 import AdminList, { type AdminListQuery } from '../../components/AdminList/AdminList'
+import { useIdempotencyKey } from '../../components/AdminForm/useIdempotencyKey'
 import FontAwesomeIcon from '../../components/CocktailTable/FontAwesomeIcon'
 import {
   deleteParaphrase,
   failureMessage,
+  KEY_REJECTED_MESSAGE,
   loadParaphrases,
   saveParaphrase,
   type FieldErrors,
@@ -36,6 +38,9 @@ const COMMAND_OPTIONS: readonly { value: FormValues['command']; label: string }[
  * - フォームは、変換前・command・note・変換後・ミドル。変換後は木から選ぶ(ParaphraseTargetPicker)か、手で名前を入れる
  * - 旧に無い保存・削除を足す。保存に失敗したら欄ごとに誤りを出し、入力を残す。削除は確かめてから消す
  *   (docs/decisions/admin-screens.md の既定)
+ * - 足すときの送信には冪等キー(`Idempotency-Key`)を付ける(docs/decisions/admin-idempotency.md。#762)。保存できるまでの送り直しは、
+ *   入力を直していても同じキーで送る(useIdempotencyKey)。保存できた・キーを断られた・フォームを空にした・語を読み込んだら、
+ *   次の送信は新しいキーにする。キーを断られたら、前の送信が保存されているかもしれないことを出し、一覧を読み直す
  */
 export default function ParaphraseSection() {
   // 編集している語(ID と、読み込んだときの変換前)。新しく足すときは null
@@ -45,6 +50,7 @@ export default function ParaphraseSection() {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [message, setMessage] = useState<Message>(null)
   const [pending, setPending] = useState(false)
+  const idempotencyKey = useIdempotencyKey()
   // 一覧の API を呼ぶ関数。保存・削除の後は、同じ中身の別の関数に替えて一覧を読み直させる(AdminList は load が変わると呼び直す)
   const [load, setLoad] = useState(() => loadParaphrases)
   const reloadList = () => setLoad(() => (query: AdminListQuery) => loadParaphrases(query))
@@ -63,6 +69,8 @@ export default function ParaphraseSection() {
     setValues(EMPTY_VALUES)
     setPicked(null)
     setErrors({})
+    // 次に足す語は別の保存なので、新しいキーで送る
+    idempotencyKey.reset()
   }
 
   const edit = (paraphrase: ParaphraseResource) => {
@@ -77,16 +85,23 @@ export default function ParaphraseSection() {
     setPicked(pickedTargetOf(paraphrase))
     setErrors({})
     setMessage(null)
+    // 足しかけの語から離れたので、次に足すときは新しいキーで送る
+    idempotencyKey.reset()
   }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setPending(true)
-    const result = await saveParaphrase(editing?.id ?? null, toBody(values))
+    const result = await saveParaphrase(editing?.id ?? null, toBody(values), editing === null ? idempotencyKey.current() : undefined)
     setPending(false)
     if (result.kind === 'saved') {
       resetForm()
       setMessage({ kind: 'notice', text: `「${result.data.name}」を保存しました` })
+      reloadList()
+    } else if (result.kind === 'key-rejected') {
+      // 前の送信が保存できていたかもしれない。入力は残し、一覧を読み直して確かめられるようにする。次は新しいキーで送る
+      idempotencyKey.reset()
+      setMessage({ kind: 'error', text: KEY_REJECTED_MESSAGE })
       reloadList()
     } else if (result.kind === 'invalid') {
       setErrors(result.errors)
