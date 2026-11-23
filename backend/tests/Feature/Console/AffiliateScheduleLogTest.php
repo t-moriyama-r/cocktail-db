@@ -80,6 +80,18 @@ function runAffiliateLogEvent(Event $event): void
     expect($event->exitCode)->toBe(0);
 }
 
+/**
+ * ログのファイルを行に分けて返す。最後の要素は、最後の改行の後ろ(改行で終わっていれば '')。
+ * 見出しの行(routes/console.php)もコマンドの出力(Symfony Console の writeln)も、改行は PHP_EOL で、
+ * Windows では \r\n・Linux では \n になる。どちらの改行でも同じ行に分ける(#805)。
+ *
+ * @return list<string>
+ */
+function affiliateScheduleLogLines(string $path): array
+{
+    return preg_split('/\r?\n/', File::get($path)) ?: [];
+}
+
 it('TC-778-01: scheduler から動かした回の件数の行が、その日のログのファイルに、動かした時刻の見出しの後に残る', function () {
     // 対象の行が無いこと(あれば Amazon・楽天に問い合わせてしまう)
     expect(Brand::query()->count() + Category::query()->count() + Affiliate::query()->count())->toBe(0);
@@ -87,13 +99,14 @@ it('TC-778-01: scheduler から動かした回の件数の行が、その日の�
 
     runAffiliateLogEvent(scheduleAffiliateLogEvent());
 
-    $lines = file(storage_path('logs/affiliates-collect-2026-11-23.log'), FILE_IGNORE_NEW_LINES);
+    $lines = affiliateScheduleLogLines(storage_path('logs/affiliates-collect-2026-11-23.log'));
     expect($lines)->toBe([
         '[2026-11-23 12:00:00] affiliates:collect --refresh --new',
         '取り直した(Amazon): 0 件(保存 0・ID を消した 0(うち行を消した 0)・失敗 0・次の回にまわした 0)',
         '取り直した(楽天): 0 件(保存 0・ID を消した 0(うち行を消した 0)・失敗 0・次の回にまわした 0)',
         '探した: 0 件(保存 0・行ができていた 0・失敗 0・次の回にまわした 0)',
         '探し直した: 0 件(保存 0・行が変わっていた 0・次の回にまわした 0)',
+        '', // 最後の行も改行で終わる
     ]);
 });
 
@@ -105,12 +118,12 @@ it('TC-778-02: 同じ日の 2 回目は、前の回の行を消さずに後ろ�
 
     runAffiliateLogEvent(scheduleAffiliateLogEvent());
 
-    $lines = file($path, FILE_IGNORE_NEW_LINES) ?: [];
+    $lines = affiliateScheduleLogLines($path);
     expect(array_slice($lines, 0, 3))->toBe([
         '[2026-11-23 11:50:00] affiliates:collect --refresh --new',
         '前の回の行',
         '[2026-11-23 12:00:00] affiliates:collect --refresh --new',
-    ])->and($lines)->toHaveCount(7);
+    ])->and($lines)->toHaveCount(8); // 7 行と、最後の改行の後ろの ''
 });
 
 it('TC-778-03: ファイルは日ごとに分け、日付の変わった後の回は新しい日のファイルに足す', function () {
@@ -141,5 +154,8 @@ it('TC-778-04: 動かす前に、日付が 14 日より前のファイルを消�
         'affiliates-collect-old.log',
         'laravel.log',
         'schedule-run.log',
-    ])->and(File::get("{$logs}/affiliates-collect-2026-11-23.log"))->toBe("[2026-11-23 12:00:00] affiliates:collect --refresh --new\n");
+    ])->and(affiliateScheduleLogLines("{$logs}/affiliates-collect-2026-11-23.log"))->toBe([
+        '[2026-11-23 12:00:00] affiliates:collect --refresh --new',
+        '', // 見出しの行は改行で終わる(コマンドの出力は次の行から始まる)
+    ]);
 });
