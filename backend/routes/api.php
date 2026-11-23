@@ -116,8 +116,10 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->where('brand', '[0-9]{1,18}');
 
     // カテゴリ木のノード(#121)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る。
-    // 消せないノード(子・銘柄・材料・ベース・アフィリエイトのどれかがある)は消さず 409 で理由を返す
-    Route::apiResource('categories', CategoryController::class)->where(['category' => '[0-9]{1,18}']);
+    // 消せないノード(子・銘柄・材料・ベース・アフィリエイトのどれかがある)は消さず 409 で理由を返す。
+    // 新規は Idempotency-Key を付けた再送で 2 つ目を作らない(#760。docs/decisions/admin-idempotency.md)
+    Route::apiResource('categories', CategoryController::class)->where(['category' => '[0-9]{1,18}'])
+        ->middlewareFor('store', 'idempotent');
     // 名前・英名の重なりの問い合わせ(#673)。編集画面で入れたそばに警告を出すため。保存は止めない
     Route::get('/categories/duplicates', [CategoryController::class, 'duplicates']);
 

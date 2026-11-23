@@ -141,6 +141,8 @@ test('TC-758-07: 新規の保存の応答が失われて送り直しても、銘
   await page.getByRole('list', { name: '所属' }).getByRole('radio', { name: 'ウォッカ' }).check()
   await page.getByLabel('名前', { exact: true }).fill(name)
   await page.getByLabel('英名').fill('E2E Brand retry')
+  await page.getByLabel('度数(%)').fill('40')
+  await page.getByLabel('説明').fill('E2E で作った銘柄')
 
   // 1 回目の送信は BE まで届けて保存させ、応答だけを失わせる
   const keys: (string | null)[] = []
