@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "before": "5a31021275c273b056c300acf3a788f803866923",
+  "after": "948f51394ee28c6fcfee76cc4b022ca51cccd4f2",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-796-01",
+        "TC-796-05"
+      ],
+      "note": "修正前は DB_CONNECTION=sqlite、修正後は DB_CONNECTION=mariadb と、手元の Docker を指すプレースホルダ(秘密・実在の接続先が無いこと)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-796-02",
+        "TC-796-03"
+      ],
+      "note": "修正前は既定の接続が sqlite。修正後は mariadb で、migrate が通り、GET /up が 200",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
