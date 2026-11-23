@@ -10,6 +10,15 @@ export function cocktailTitle({ name, name_eng }: Pick<CocktailDetailData, 'name
 }
 
 /**
+ * ブラウザのタイトルのページ名「〈名前〉(〈英名〉)」(旧 Detail/CocktailDetail.vue の head)。
+ * サーバーが返す HTML の `<title>`(BE の PageTitle::forDetail)と同じく、英名が空(null・空の文字)なら括弧を省く
+ * (#111 の旧との差分。見出しの cocktailTitle とは英名が空のときだけ違う)
+ */
+export function cocktailPageName({ name, name_eng }: Pick<CocktailDetailData, 'name' | 'name_eng'>): string {
+  return name_eng ? `${name}(${name_eng})` : name
+}
+
+/**
  * おすすめ度を ★ の数で出す。評価の無いカクテル(null)と 0 は「未評価」(旧の `"★".repeat(rate) || "未評価"`)。
  * 一覧の表(rateStars)は同じ場合に「-」を出していて、旧でも詳細と一覧で出し方が違う
  */

@@ -30,6 +30,14 @@ test('TC-108-22: シーダーのカクテルを開くと、見出し・欄・グ
   await expect(page.getByRole('region', { name: 'Note' })).toContainText('ライムを添える。')
 })
 
+test('TC-770-04: 詳細の画面が開いた後も、ブラウザのタイトルは「名前(英名) ｜ サイト名」のまま(サイト名だけにならない)', async ({ page }) => {
+  await page.goto(PATH)
+  // サーバーの HTML の <title> は初めから同じなので、画面が描かれてから確かめる
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ジントニック(Gin and Tonic)')
+
+  await expect(page).toHaveTitle('ジントニック(Gin and Tonic) ｜ 宅飲みカクテルデータベース(RC)')
+})
+
 test('TC-108-23: 材料の銘柄のリンクで銘柄の詳細へ移る', async ({ page }) => {
   await page.goto(PATH)
 
