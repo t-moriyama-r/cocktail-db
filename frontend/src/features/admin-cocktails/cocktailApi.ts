@@ -30,6 +30,11 @@ export type SaveCocktailResult =
   | { kind: 'saved'; name: string; warnings: readonly CocktailAliasWarning[] }
   /** 422。項目ごとのメッセージ */
   | { kind: 'invalid'; errors: CocktailFieldErrors }
+  /**
+   * 422 で、冪等キーを断られた(`errors.idempotency_key`)。同じキーの前の送信が保存済みで、今の送信と中身が違う
+   * (応答が返らなかった後に入力を直して送った)とき。docs/decisions/admin-idempotency.md の決まったこと 5
+   */
+  | { kind: 'key-rejected' }
   | Failure
 
 /** 削除を断られた理由(409。ほかの説明文から参照されている。#579) */
@@ -62,17 +67,24 @@ const sendAsPost: Middleware = {
 
 /**
  * カクテルを保存する。cocktailId が null なら新規(POST /api/admin/cocktails)、あれば更新(PUT /api/admin/cocktails/{id})。
- * isDraft は押したボタン(「下書きとして保存」なら true、「公開する」なら false)
+ * isDraft は押したボタン(「下書きとして保存」なら true、「公開する」なら false)。
+ * 新規は、idempotencyKey を `Idempotency-Key` ヘッダで送る(docs/decisions/admin-idempotency.md。#789。省くと付けない)。
+ * 同じキーの再送には BE が 1 回目の応答を返す(`Idempotent-Replayed: true`)ので、ふつうの成功と同じく saved にする。
+ * 更新は、同じ内容を送り直しても行が増えないので、キーを付けない(銘柄の保存と同じ。#758)
  */
 export async function saveCocktail(
   cocktailId: number | null,
   values: CocktailFormValues,
   isDraft: boolean,
+  idempotencyKey?: string,
 ): Promise<SaveCocktailResult> {
   try {
     const { data, response, error } =
       cocktailId === null
-        ? await api.POST('/admin/cocktails', { body: multipartBody(toCocktailFormData(values, 'POST', isDraft)) })
+        ? await api.POST('/admin/cocktails', {
+            params: { header: idempotencyKey === undefined ? undefined : { 'Idempotency-Key': idempotencyKey } },
+            body: multipartBody(toCocktailFormData(values, 'POST', isDraft)),
+          })
         : await api.PUT('/admin/cocktails/{cocktail}', {
             params: { path: { cocktail: cocktailId } },
             body: multipartBody(toCocktailFormData(values, 'PUT', isDraft)),
@@ -86,6 +98,7 @@ export async function saveCocktail(
       }
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
+      if (error.errors.idempotency_key !== undefined) return { kind: 'key-rejected' }
       return { kind: 'invalid', errors: error.errors }
     }
     return { kind: 'http-error', status: response.status }
