@@ -2,6 +2,7 @@ import CreditedImage from '../../components/CreditedImage/CreditedImage'
 import Description from '../../components/Description/Description'
 import FontAwesomeIcon from '../../components/CocktailTable/FontAwesomeIcon'
 import RandomCocktails from '../../components/RandomCocktails/RandomCocktails'
+import { usePageTitle } from '../../components/SiteLayout/usePageTitle'
 import YouTubeEmbed from '../../components/YouTubeEmbed/YouTubeEmbed'
 import CocktailAliases from './CocktailAliases'
 import CocktailDataList from './CocktailDataList'
@@ -11,7 +12,7 @@ import CocktailNotice from './CocktailNotice'
 import IngredientAffiliates from './IngredientAffiliates'
 import IngredientTable from './IngredientTable'
 import SameNameCocktails from './SameNameCocktails'
-import { cocktailTitle } from './cocktailDetailLabels'
+import { cocktailPageName, cocktailTitle } from './cocktailDetailLabels'
 
 type Props = {
   cocktail: CocktailDetailData
@@ -27,6 +28,8 @@ type Props = {
  * いちばん下に、材料ごとの商品の欄(#110)を並べる。
  */
 export default function CocktailDetailView({ cocktail }: Props) {
+  // 旧と同じく、ブラウザのタイトルも「名前(英名)」にする。読み込み中・404 の画面のタイトルは ApiView の側が決める
+  usePageTitle(cocktailPageName(cocktail))
   const hasNote = !!cocktail.note && cocktail.note.length > 0
   return (
     <main className={styles.page}>
