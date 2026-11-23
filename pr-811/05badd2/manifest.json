@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "before": "1489b23e025a24a7be0647b03f48a73bf5dca805",
+  "after": "05badd2e6a5831d73057fa17e32f01f37c045826",
+  "items": [
+    {
+      "id": "01-screen",
+      "kind": "screen",
+      "cases": [
+        "TC-791-01"
+      ],
+      "note": "一覧へ移って保存したことが出る(見た目は修正前と同じ)。修正後は新規の POST に Idempotency-Key ヘッダが付く",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-screen-375-before.png",
+        "01-screen-375-after.png",
+        "01-screen-375-compare.png",
+        "01-screen-1440-before.png",
+        "01-screen-1440-after.png",
+        "01-screen-1440-compare.png",
+        "01-screen-375-before.mp4",
+        "01-screen-375-before.gif",
+        "01-screen-375-after.mp4",
+        "01-screen-375-after.gif",
+        "01-screen-1440-before.mp4",
+        "01-screen-1440-before.gif",
+        "01-screen-1440-after.mp4",
+        "01-screen-1440-after.gif"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-791-01",
+        "TC-791-02",
+        "TC-791-03",
+        "TC-791-04",
+        "TC-791-05",
+        "TC-791-06"
+      ],
+      "note": "修正前は TC-791 のテストが無い。修正後は 6 件が通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
