@@ -1308,7 +1308,7 @@ it('TC-759-03: 同じ Idempotency-Key で中身(名前・材料・別名・画�
             [...cocktailAdminIngredient($f['nodes']['ソーダ'], '15'), 'is_optional' => 'true'],
         ]]],
         '別名' => [COCKTAIL_ADMIN_PNG, ['aliases' => ['ピーチウーロン']]],
-        '画像' => [COCKTAIL_ADMIN_PNG_OTHER, []],
+        default => [COCKTAIL_ADMIN_PNG_OTHER, []],
     };
 
     $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, $png, $overrides), $headers)
@@ -1345,6 +1345,23 @@ it('TC-759-04: 検証に落ちた新規(材料 1 件)は記録を残さず、直
         ->and(CocktailIngredient::query()->count())->toBe(2)
         ->and(IdempotencyKey::query()->count())->toBe(1);
 });
+
+it('TC-759-09: Idempotency-Key が UUID でない・空なら 422 で、カクテルを作らない', function (string $key, string $message) {
+    $f = cocktailAdminFixture();
+
+    $this->postJson('/api/admin/cocktails', cocktailAdminInput($f), [Idempotent::HEADER => $key])
+        ->assertUnprocessable()
+        ->assertExactJson([
+            'message' => $message,
+            'errors' => ['idempotency_key' => [$message]],
+        ]);
+
+    expect(Cocktail::query()->count())->toBe(0)
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+})->with([
+    'UUID の形でない' => ['not-a-uuid', '冪等キー(Idempotency-Key)は正しい UUID にしてください。'],
+    '空' => ['', '冪等キー(Idempotency-Key)を入力してください。'],
+]);
 
 it('TC-759-05: OpenAPI では、カクテルの新規に任意の Idempotency-Key ヘッダ(UUID)があり、更新には無い', function () {
     $file = tempnam(sys_get_temp_dir(), 'openapi');
