@@ -91,7 +91,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('/cocktails/{cocktail}/preview', CocktailPreviewController::class)->where('cocktail', '[0-9]{1,18}');
 
     // カクテルの基本情報(#291)。画像を上げる更新は multipart になるので、POST に _method=PUT を付けて送る
-    Route::post('/cocktails', [CocktailController::class, 'store']);
+    // 新規は Idempotency-Key を付けた再送で 2 件目を作らない(#759。docs/decisions/admin-idempotency.md)
+    Route::post('/cocktails', [CocktailController::class, 'store'])->middleware('idempotent');
     Route::get('/cocktails/{cocktail}', [CocktailController::class, 'show'])->where('cocktail', '[0-9]{1,18}');
     Route::put('/cocktails/{cocktail}', [CocktailController::class, 'update'])->where('cocktail', '[0-9]{1,18}');
     // カクテルの削除(#130)。材料・別名も消える。説明文から参照されているカクテルは消さず 409(#579)

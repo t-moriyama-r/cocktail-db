@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Cocktail;
@@ -8,6 +9,7 @@ use App\Models\CocktailIngredient;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
 use App\Models\Ice;
+use App\Models\IdempotencyKey;
 use App\Models\Method;
 use App\Models\User;
 use App\Services\CategoryTree;
@@ -17,6 +19,7 @@ use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
 // 管理 API のカクテルの基本情報の取得・新規・更新と、フォームの選択肢(#291)、材料の保存(#292)。旧の
@@ -1220,4 +1223,152 @@ it('TC-751-02: 移行した形(材料のノードの子孫の銘柄)のカクテ
     ]]))->assertOk()
         ->assertJsonPath('data.ingredients.0.category_id', $n['ラム']->id)
         ->assertJsonPath('data.ingredients.0.brand_id', $brand->id);
+});
+
+// カクテルの新規の冪等キー(#759。決まりは docs/decisions/admin-idempotency.md)。仕組み(ミドルウェア idempotent)そのものは
+// IdempotencyApiTest(#657)で確かめているので、ここではカクテルの新規につないだこと(材料・別名・画像を含む multipart の再送で
+// 1 組だけ作ること)を確かめる。旧に冪等キーは無い(旧の DetailEditController@cocktail は送られるたびに作る。旧を動かして確かめてはいない)。
+
+/** 色だけ違う 1x1 の PNG(中身の違う画像の再送を確かめるため) */
+const COCKTAIL_ADMIN_PNG_OTHER = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+
+const COCKTAIL_ADMIN_IDEMPOTENCY_KEY = '3c9e1f7a-5b2d-4e8a-9f06-1d4b7c2e8a53';
+
+/**
+ * 材料・別名・画像を含む、画面と同じ multipart の新規の入力(真偽値は文字列で送る)。画像は送るたびに作り直す。
+ *
+ * @param  array{nodes: array<string, Category>, methods: list<Method>}  $f
+ * @param  array<array-key, mixed>  $overrides
+ * @return array<array-key, mixed>
+ */
+function cocktailAdminMultipartInput(array $f, string $png, array $overrides = []): array
+{
+    $path = tempnam(sys_get_temp_dir(), 'cocktail-image-') ?: throw new RuntimeException('一時ファイルを作れない');
+    file_put_contents($path, base64_decode($png, true));
+
+    return cocktailAdminInput($f, [
+        'name' => 'レゲエパンチ',
+        'is_major' => 'true',
+        'is_draft' => 'false',
+        'ingredients' => [
+            [...cocktailAdminIngredient($f['nodes']['ジン'], '45'), 'is_optional' => 'false'],
+            [...cocktailAdminIngredient($f['nodes']['ソーダ'], '15'), 'is_optional' => 'true'],
+        ],
+        'aliases' => ['ピーチウーロン', 'ピーチ烏龍'],
+        'image' => new UploadedFile($path, 'a.png', null, null, true),
+        ...$overrides,
+    ]);
+}
+
+it('TC-759-01: Idempotency-Key を付けなければ、同じ本文を 2 回送ると 2 件作る(今までどおり)', function () {
+    $f = cocktailAdminFixture();
+
+    $this->postJson('/api/admin/cocktails', cocktailAdminInput($f))->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $this->postJson('/api/admin/cocktails', cocktailAdminInput($f))->assertCreated();
+
+    expect(Cocktail::query()->where('name', 'ダイキリ')->count())->toBe(2)
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+});
+
+it('TC-759-02: 材料・別名・画像つき(multipart)を同じ Idempotency-Key で再送すると、カクテル・材料・別名・画像のファイルを 1 組だけ作り、1 回目と同じ応答を返す', function () {
+    Storage::fake('public');
+    $f = cocktailAdminFixture();
+    $headers = [Idempotent::HEADER => COCKTAIL_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+
+    $first = $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, COCKTAIL_ADMIN_PNG), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $second = $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, COCKTAIL_ADMIN_PNG), $headers)
+        ->assertCreated()
+        ->assertHeader(Idempotent::REPLAYED_HEADER, 'true')
+        ->assertHeader('Content-Type', 'application/json');
+
+    $cocktail = Cocktail::query()->sole();
+    expect($second->json())->toBe($first->json())
+        ->and($second->json('data.id'))->toBe($cocktail->id)
+        ->and(CocktailIngredient::query()->where('cocktail_id', $cocktail->id)->orderBy('position')->pluck('amount')->all())->toBe(['45ml', '15ml'])
+        ->and(CocktailIngredient::query()->count())->toBe(2)
+        ->and(array_column(storedAliases($cocktail), 0))->toBe(['ピーチウーロン', 'ピーチ烏龍'])
+        ->and(CocktailAlias::query()->count())->toBe(2)
+        ->and(Storage::disk('public')->allFiles())->toBe([$cocktail->image])
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-759-03: 同じ Idempotency-Key で中身(名前・材料・別名・画像)の違う送信は 422 で、作らず、1 回目の応答も返さない', function (string $change) {
+    Storage::fake('public');
+    $f = cocktailAdminFixture();
+    $headers = [Idempotent::HEADER => COCKTAIL_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+    $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, COCKTAIL_ADMIN_PNG), $headers)->assertCreated();
+
+    [$png, $overrides] = match ($change) {
+        '名前' => [COCKTAIL_ADMIN_PNG, ['name' => 'ファジーネーブル']],
+        '材料' => [COCKTAIL_ADMIN_PNG, ['ingredients' => [
+            [...cocktailAdminIngredient($f['nodes']['ジン'], '30'), 'is_optional' => 'false'],
+            [...cocktailAdminIngredient($f['nodes']['ソーダ'], '15'), 'is_optional' => 'true'],
+        ]]],
+        '別名' => [COCKTAIL_ADMIN_PNG, ['aliases' => ['ピーチウーロン']]],
+        '画像' => [COCKTAIL_ADMIN_PNG_OTHER, []],
+    };
+
+    $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, $png, $overrides), $headers)
+        ->assertUnprocessable()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER)
+        ->assertExactJson([
+            'message' => '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+            'errors' => ['idempotency_key' => ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。']],
+        ]);
+
+    expect(Cocktail::query()->count())->toBe(1)
+        ->and(CocktailIngredient::query()->count())->toBe(2)
+        ->and(CocktailAlias::query()->count())->toBe(2)
+        ->and(Storage::disk('public')->allFiles())->toHaveCount(1);
+})->with(['名前', '材料', '別名', '画像']);
+
+it('TC-759-04: 検証に落ちた新規(材料 1 件)は記録を残さず、直して同じ Idempotency-Key で送ると作る', function () {
+    Storage::fake('public');
+    $f = cocktailAdminFixture();
+    $headers = [Idempotent::HEADER => COCKTAIL_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+
+    $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, COCKTAIL_ADMIN_PNG, ['ingredients' => [
+        [...cocktailAdminIngredient($f['nodes']['ジン'], '45'), 'is_optional' => 'false'],
+    ]]), $headers)->assertUnprocessable()->assertJsonValidationErrors('ingredients');
+    expect(IdempotencyKey::query()->count())->toBe(0)
+        ->and(Cocktail::query()->count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+
+    $this->post('/api/admin/cocktails', cocktailAdminMultipartInput($f, COCKTAIL_ADMIN_PNG), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(Cocktail::query()->count())->toBe(1)
+        ->and(CocktailIngredient::query()->count())->toBe(2)
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-759-05: OpenAPI では、カクテルの新規に任意の Idempotency-Key ヘッダ(UUID)があり、更新には無い', function () {
+    $file = tempnam(sys_get_temp_dir(), 'openapi');
+    if ($file === false) {
+        throw new RuntimeException('一時ファイルを作れない');
+    }
+    try {
+        expect(Artisan::call('scramble:export', ['--path' => $file]))->toBe(0);
+        $document = json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
+    } finally {
+        @unlink($file);
+    }
+    $headers = function (string $path, string $method) use ($document): array {
+        $parameters = data_get($document, "paths.{$path}.{$method}.parameters", []);
+
+        return is_array($parameters)
+            ? array_values(array_filter($parameters, fn (mixed $parameter): bool => data_get($parameter, 'in') === 'header'))
+            : [];
+    };
+
+    $store = $headers('/admin/cocktails', 'post');
+    expect($store)->toHaveCount(1)
+        ->and(data_get($store[0], 'name'))->toBe('Idempotency-Key')
+        ->and(data_get($store[0], 'required', false))->toBeFalse()
+        ->and(data_get($store[0], 'schema'))->toBe(['type' => 'string', 'format' => 'uuid'])
+        ->and($headers('/admin/cocktails/{cocktail}', 'put'))->toBe([]);
 });
