@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Http\Requests\CocktailSearchRequest;
+use App\OpenApi\IdempotencyKeyHeader;
 use App\OpenApi\PasskeyCredentialResponse;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\Operation;
@@ -36,6 +37,9 @@ class AppServiceProvider extends ServiceProvider
 
         // パスキーの完了の本文の credential.response を、string[] ではなくオブジェクトにする(#608)
         Scramble::configure()->withDocumentTransformers(PasskeyCredentialResponse::class);
+
+        // 冪等キーを受ける保存の経路に、Idempotency-Key ヘッダを出す(#657)
+        Scramble::configure()->withOperationTransformers(IdempotencyKeyHeader::class);
 
         // 条件検索の本文は、mode によって category_ids か category_groups のどちらかが要る(条件付きの必須だけ)ので、
         // Scramble は本文を任意と判断する。本文が無いと必ず 422 になるので、OpenAPI では必須にする(#164)
