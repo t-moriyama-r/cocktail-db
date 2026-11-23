@@ -14,7 +14,8 @@
 6. キーが UUID の形でない・空なら、保存せず 422 で返す(`errors.idempotency_key`)
 7. 同じキーの送信が同時に来たときは、後のほうが、先の保存の終わりを待ってから(DB の一意の制約の行ロック)、先が成功すれば先の応答を返し、先が失敗すれば自分で保存する
 8. OpenAPI には、`idempotent` を付けた経路に、任意のヘッダ `Idempotency-Key`(`format: uuid`)を出す(`App\OpenApi\IdempotencyKeyHeader`)。FE は生成した型で付ける
-9. 今つないでいるのは銘柄の新規(`POST /api/admin/brands`)だけ。ほかの新規の保存と FE の送信、古い記録の片付けは、下の「残り」の issue で扱う。更新(`PUT`)は、同じ内容を送り直しても行は増えないので、つながない
+9. 今つないでいるのは銘柄の新規(`POST /api/admin/brands`)だけ。ほかの新規の保存と FE の送信は、下の「残り」の issue で扱う。更新(`PUT`)は、同じ内容を送り直しても行は増えないので、つながない
+10. 記録は、作ってから 7 日残す(#763 で決めた)。7 日より古い行は、scheduler(`backend/routes/console.php`)の `model:prune`(`IdempotencyKey` の `prunable`)が毎日 1 回(日本時間の 4:05)消し、消した後の同じキーの再送は新しい保存として扱う。管理者がタブを開いたまま日をまたぐことがあり、7 日でも行は数百ほどで小さいため。毎日 1 回なので、7 日を過ぎてから消すまでに最大 1 日ほど遅れる(そのあいだの再送は 1 回目の応答を返す)
 
 ## 残り
 
@@ -25,7 +26,7 @@
 - ノードの新規(`POST /api/admin/categories`)につなぐ: #760
 - 用語辞典の新規(`POST /api/admin/dictionaries`)につなぐ: #761
 - 言い換え・スキップ語の新規(`POST /api/admin/paraphrases`・`POST /api/admin/skip-words`)につなぐ: #762
-- 古い記録を消す(どれだけ残すかを決める): #763
+- 古い記録を消す(どれだけ残すかを決める): #763(7 日。決まったこと 10)
 
 ## 旧との差分
 

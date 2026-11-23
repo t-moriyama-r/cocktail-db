@@ -4,11 +4,12 @@
 
 ## 定期実行(scheduler)の cron
 
-新アプリの定期実行は、Laravel の scheduler にまとめて登録してある(`backend/routes/console.php`。`php artisan schedule:list` で一覧が出る)。サーバーの cron からは、`php artisan schedule:run` を毎分 1 回呼ぶだけにし、何をいつ動かすかは scheduler が決める。今の登録は次の 1 つ。
+新アプリの定期実行は、Laravel の scheduler にまとめて登録してある(`backend/routes/console.php`。`php artisan schedule:list` で一覧が出る)。サーバーの cron からは、`php artisan schedule:run` を毎分 1 回呼ぶだけにし、何をいつ動かすかは scheduler が決める。今の登録は次の 2 つ。
 
 | コマンド | 間隔 | 決めたところ |
 |---|---|---|
 | `affiliates:collect --refresh --new`(アフィリエイトの商品の取り直しと、新しく探す) | 10 分ごと(`.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`。前の回が終わっていなければ重ねて流さない) | `docs/decisions/affiliate-freshness.md` の 5・#249 |
+| `model:prune --model=App\Models\IdempotencyKey`(管理画面の保存の冪等キーの記録のうち、7 日より古いものを消す) | 毎日 19:05(アプリの時刻の UTC。日本時間の 4:05) | `docs/decisions/admin-idempotency.md` の 10・#763 |
 
 ### どの環境に登録するか
 
@@ -30,7 +31,7 @@
    cd ~/<アプリ本体> && php artisan schedule:list
    ```
 
-   `php artisan affiliates:collect --refresh --new` が `*/10 * * * *`(`.env` で間隔を変えていれば、その間隔)で出ればよい。
+   `php artisan affiliates:collect --refresh --new` が `*/10 * * * *`(`.env` で間隔を変えていれば、その間隔)で、`php artisan model:prune`(`IdempotencyKey`)が `5 19 * * *` で出ればよい。
 
 2. cPanel の「Cron ジョブ」に 1 つ登録する。時刻は分・時・日・月・曜日をすべて `*`(毎分)にし、コマンドに次を入れる。失敗を知らせるメールアドレスは、画面の上の「Cron の電子メール」に入れる(`docs/backup.md` の「サーバーに入れる」の 5 と同じ。`MAILTO=`・`PATH=` の行は書けないので、`PATH` はコマンドの先頭に付ける)
 
@@ -42,7 +43,7 @@
 
    - `cd` してから動かす。`php` は今いるディレクトリで版が決まり、アプリ本体(`public_html` の外)ではデプロイが流す `php artisan` と同じ、サーバー全体の既定の版になる(`README.md` の「サーバーの PHP の版」)。CLI の版を変えるときは、デプロイのワークフローと一緒にこのコマンドの `php` も版の付いたコマンドにする
    - cron の `PATH` は短いことがあるので、`php` のある場所を先頭に付ける。サーバーで `command -v php` を見て、その場所が `PATH=` に入っているかを確かめる
-   - `--whisper` を付けると、動かすものが無い分(10 分のうち 9 回)は何も書かない。ログに残るのは、動かした回の「`affiliates:collect --refresh --new` を動かした・DONE か FAIL か」の数行だけで、1 日に 150 回ほど
+   - `--whisper` を付けると、動かすものが無い分(10 分のうち 9 回)は何も書かない。ログに残るのは、動かした回の「`affiliates:collect --refresh --new`・`model:prune` を動かした・DONE か FAIL か」の数行だけで、1 日に 150 回ほど
    - `storage/` はデプロイで消えない(`README.md` の「サーバー上の配置」)ので、ログは残り続ける。年に一度ほど消せばよい
    - コマンドが失敗しても、`schedule:run` は終了コード 0 で終わるので、cron のメールは来ない。失敗はログの FAIL の行と、Laravel のログ(`storage/logs/` の `laravel*.log`)の例外で見る。メールが来るのは、`schedule:run` そのものが動かなかったとき(`php` が見つからない、など)だけ
    - cron のコマンドの中の `%` は改行の意味になる。足すときは `\%` にする(上のコマンドには無い)
