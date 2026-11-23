@@ -133,6 +133,8 @@ GitHub 側に要る設定:
 
 サーバーの `~/cocktail-db/.env` は初回に手で置いたもので、リポジトリには入れない。
 
+定期実行(Laravel の scheduler。アフィリエイトの収集など)は、デプロイでは動き出さない。サーバーの cron に `php artisan schedule:run` を毎分登録する。どの環境にいつ登録するかと手順は `docs/ops.md`。
+
 ## dev 環境・stg 環境
 
 Basic 認証で閉じた確認用の環境が 2 つある。中身は `.github/workflows/deploy-env.yml` で、環境ごとに別のディレクトリ・DB を使う(`develop` の migration が `staging` の DB を先に進めないように)。
