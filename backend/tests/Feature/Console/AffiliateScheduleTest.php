@@ -33,7 +33,7 @@ it('TC-249-20: php artisan schedule:list に、affiliates:collect --refresh --ne
     $exitCode = Artisan::call('schedule:list');
 
     expect($exitCode)->toBe(0)
-        ->and(Artisan::output())->toMatch('/\*\/10 \* \* \* \*\s+php artisan affiliates:collect --refresh --new/');
+        ->and(Artisan::output())->toMatch('/\*\/10\s+\*\s+\*\s+\*\s+\*\s+php artisan affiliates:collect --refresh --new/');
 });
 
 it('TC-249-21: 間隔は設定から読み、1〜59 の整数でなければ既定の 10 分にする。前の回が終わっていなければ重ねて流さない', function (mixed $interval, string $expression) {
