@@ -50,6 +50,8 @@ DEFAULT_SEED = "E2eSeeder"
 KINDS = %w[screen api command].freeze
 METHODS = %w[GET POST PUT PATCH DELETE].freeze
 STEP_ACTIONS = %w[goto click fill select press hover wait_for scroll_to].freeze
+# 画面を開く前にログインする人(evidence-shoot.js が admin:login-link で入る。#768)。admin は E2eSeeder の管理者
+LOGINS = %w[admin].freeze
 # 秘密を書かないよう、頼むコメントに書かせないヘッダー
 SECRET_HEADERS = %w[authorization cookie proxy-authorization x-xsrf-token x-csrf-token].freeze
 
@@ -199,8 +201,11 @@ def check_item(i, item)
   out = item.dup
   case kind
   when "screen"
-    check_keys(where, item, %w[kind cases note path widths steps video data])
+    check_keys(where, item, %w[kind cases note path widths steps video login data])
     check_path("#{where}.path", item["path"])
+    if item.key?("login") && !LOGINS.include?(item["login"])
+      err("#{where}.login: #{LOGINS.join('・')} のどれかにする(ログインしないなら書かない): #{item['login'].inspect}")
+    end
     out["widths"] = check_widths("#{where}.widths", item["widths"])
     out["video"] = check_video("#{where}.video", item["video"], out["widths"])
     out["steps"] = check_steps("#{where}.steps", item["steps"])
