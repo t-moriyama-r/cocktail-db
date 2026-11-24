@@ -1,6 +1,6 @@
 # 切り替えの手順書
 
-本番の旧サイト https://cocktail.trc-vlackhistory.net/ を、新アプリ(このリポジトリ)に切り替える手順と、手順ごとの戻し方(#138)。手順 2〜6 と 8 の curl は、スクリプト(`ops/cutover/`。#139)でまとめて流せる(下の「スクリプトで流す」)。ステージングでの通し稽古は #140 で行う。
+本番の旧サイト https://cocktail.trc-vlackhistory.net/ を、新アプリ(このリポジトリ)に切り替える手順と、手順ごとの戻し方(#138)。手順 2〜6 と 8 の curl は、スクリプト(`ops/cutover/`。#139)でまとめて流せる(下の「スクリプトで流す」)。ステージングでの通し稽古は #140 で行う。切り替えた後に旧に戻すときの手順は `docs/rollback.md`(#80)。
 
 - サーバーの配置・デプロイ・Secret は `README.md`、バックアップのスクリプトは `docs/backup.md`、移行の扱いは `docs/migration-anomalies.md` にあり、ここでは繰り返さない
 - 接続先・ユーザー名・DB 名・絶対パスはこの文書にも書かない。`<user>`・`<host>`・`<旧アプリの .env>` のようなプレースホルダで書く
@@ -155,13 +155,13 @@ php artisan legacy:verify-images   # 旧 DB の画像の列が指すファイル
 
 旧のドメイン(`cocktail.trc-vlackhistory.net`)で、新アプリの `public/` を配信するようにする。旧のドキュメントルート(旧の `index.php` とビルド済みの画面)は消さずに残す(戻すため)。
 
-1. cPanel の「ドメイン」で、`cocktail.trc-vlackhistory.net` のドキュメントルートを、今の `~/public_html/cocktail_html` から、新アプリの `public`(`~/public_html/cocktail-db/public`。`cocktail-next` と同じ形)に変える。旧のディレクトリには触らない。SSH から cPanel の API で変えられるかは確かめていない(#79 のスクリプトに入れられるかは #79 で確かめる)。変えられなければ画面で変える
+1. cPanel の「ドメイン」で、`cocktail.trc-vlackhistory.net` のドキュメントルートを、今の `~/public_html/cocktail_html` から、新アプリの `public`(`~/public_html/cocktail-db/public`。`cocktail-next` と同じ形)に変える。旧のディレクトリには触らない。SSH の `uapi` の `SubDomain changedocroot` でも変えられる(#80 で stg で確かめた。使い方は `docs/rollback.md` の 1)。変えてから配信が変わるまで 30 秒ほどかかる
 2. 新アプリの `.env` の `APP_URL` を旧サイトの URL にし(末尾の `/` を付けずに https://cocktail.trc-vlackhistory.net とする)、`php artisan optimize` で設定を読み直す。`APP_URL` は、ログインの URL(`admin:login-link`)・パスキー(`docs/decisions/passkey.md`)・OGP・sitemap・画像の URL に使う
 3. GitHub の Variable `APP_URL`(`deploy.yml` の Smoke test が叩く)も同じ値にする
 4. Web の PHP の版は、ドキュメントルートから上へたどった `.htaccess` で決まる(`README.md` の「サーバーの PHP の版」)。切り替えた先で 8.5 になっているかを、`README.md` の同じ節の確かめ方で見る
 
 - 失敗したとき(500・旧の画面が出る): 下の戻し方で旧に戻し、原因を調べる
-- 戻し方: ドキュメントルートを `~/public_html/cocktail_html` に戻す(設定を戻すだけ)。`APP_URL`(`.env` と Variable)を前の値に戻して `php artisan optimize`。9 の前なら、1 の戻し方(cron の登録し直し・管理画面の利用)で旧サイトが元どおりに動く
+- 戻し方: ドキュメントルートを `~/public_html/cocktail_html` に戻す(設定を戻すだけ。旧に戻す手順の全体は `docs/rollback.md`)。`APP_URL`(`.env` と Variable)を前の値に戻して `php artisan optimize`。9 の前なら、1 の戻し方(cron の登録し直し・管理画面の利用)で旧サイトが元どおりに動く
 
 ### 8. スモーク
 
