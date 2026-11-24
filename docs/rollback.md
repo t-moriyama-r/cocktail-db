@@ -103,8 +103,11 @@ flowchart TD
 
   ```bash
   # 旧の DB で `SELECT id FROM t_dictionary ORDER BY id`、新の DB で `SELECT id FROM dictionaries ORDER BY id` を流し、
-  # 結果を old-ids.txt・new-ids.txt に書き出してから、新に無い ID を出す
-  comm -23 old-ids.txt new-ids.txt
+  # 結果を old-ids.txt・new-ids.txt に書き出してから、新に無い ID を出す。
+  # comm は文字列順の並びを前提にする(SQL の ORDER BY は数値順で、2 と 10 の並びが食い違う)ので、両方を sort してから渡す
+  LC_ALL=C sort old-ids.txt > old.sorted
+  LC_ALL=C sort new-ids.txt > new.sorted
+  LC_ALL=C comm -23 old.sorted new.sorted
   ```
 
 ## 5. 旧の cron と管理画面を戻す
