@@ -53,7 +53,7 @@ flowchart TD
 
 切り替えの手順 7 の 2・3 で旧サイトの URL にした `APP_URL` を、前の値に戻す。前の値は、新アプリが切り替えの前に動いていた `cocktail-next` の URL で、末尾の `/` を付けずに https://cocktail-next.trc-vlackhistory.net とする。新アプリは `cocktail-next` で動き続け、`APP_URL` をログインの URL・パスキー・OGP・sitemap・画像の URL に使うため。
 
-1. 新アプリの `.env` の `APP_URL` を前の値にし、`php artisan optimize` で設定を読み直す
+1. 新アプリの `.env` の `APP_URL` を前の値にし、`cd ~/cocktail-db && php artisan optimize` で設定を読み直す(SSH の開始ディレクトリでは `artisan` が見つからない)
 2. GitHub の Variable `APP_URL`(`deploy.yml` の Smoke test が叩く)も同じ値にする
 3. 切り替えの手順 10 で `cocktail-next.trc-vlackhistory.net` を旧のドメインへ 301 で転送していたら、その転送を外す
 
@@ -64,6 +64,7 @@ flowchart TD
 1. `crontab -e`(か cPanel の「Cron ジョブ」)で、新アプリの `schedule:run` の行を消す
 2. バックアップの cron(切り替えの手順 9 の 2 で新アプリに向け直した 2 行)を、旧アプリに向け直す。`daily-backup.sh` に渡す `.env` を旧アプリの `.env` に戻し、旧のための `--storage-dir <旧の画像のディレクトリ>` を付け直す
 3. `crontab -l` で、新の `schedule:run` の行が無く、バックアップの 2 行が旧アプリを向いていることを確かめる
+4. 行を消した時点で動いていた `affiliates:collect --refresh --new` の回が終わったことを確かめる。行を消しても、起動済みの収集は止まらないため。`docs/ops.md` と同じく、新アプリの `storage/logs/schedule-run.log` で、行を消す前に始まった回の `DONE` か `FAIL` の行が出ていることを見る。出ていなければ待ってから、5 に進む(重なると、Amazon・楽天の上限を 2 つの収集が分け合う)
 
 ## 4. 新に入った変更を洗い出す
 
@@ -98,6 +99,13 @@ flowchart TD
 
 - 旧の管理画面で入れ直すときは、4 で出した一覧と、4 の 1 で取った新 DB のダンプを見ながら入れる。新の ID は旧と同じとは限らない(`legacy_id_maps` で対応する)
 - 新で消した行は、旧には残っている。消したままにしたいなら、旧の管理画面で消し直す
+- 用語辞典の削除は、`legacy:verify` の ID の対応の検査(`t_dictionary` は対象に無い)にも、日時の検索(消した行は見つからない)にも出ない。用語は新旧で ID が同じ(`copyKeepingIds`)なので、旧の `t_dictionary` の ID のうち、新の `dictionaries` に無いものを比べて探す。旧と新の DB は別なので、それぞれで ID を書き出して突き合わせる
+
+  ```bash
+  # 旧の DB で `SELECT id FROM t_dictionary ORDER BY id`、新の DB で `SELECT id FROM dictionaries ORDER BY id` を流し、
+  # 結果を old-ids.txt・new-ids.txt に書き出してから、新に無い ID を出す
+  comm -23 old-ids.txt new-ids.txt
+  ```
 
 ## 5. 旧の cron と管理画面を戻す
 
@@ -120,7 +128,8 @@ stg(`cocktail-stg.trc-vlackhistory.net`)で、旧に戻す 1 の操作(ドキュ
 
 - 変える前と後で `uapi DomainInfo domains_data` を突き合わせ、変わったのが stg のドキュメントルートだけ(本番・dev・`cocktail-next` はそのまま)であることを確かめた。練習のあいだ、本番は 200 を返し続けた
 - stg の `public` はアプリ本体の `public` へのシンボリックリンクで、Basic 認証と PHP の版は、ドキュメントルートから上へたどった `.htaccess` で決まる(`README.md` の「サーバーの PHP の版」)。戻した後のドキュメントルートの値が、変える前と一字一句同じ(リンクの先に置き換わっていない)こと、`/up` が 401 と `WWW-Authenticate` を返すことを確かめた
-- 練習しなかったもの
+- 上の秒数は、1(配信先を変える)だけの計測。戻すのにかかる全体の時間は、2〜5 を練習していないので測っていない(`#80` の受け入れ条件は、配信先を変える時間の記録として満たし、全体は未計測と issue に書く)
+- 練習しなかったもの(2・3・4・5 のすべて)
   - 2(`APP_URL`): `.env` の書き換えと `php artisan optimize` だけで、配信の切り替えとは別に効く。stg の `.env` はデプロイのたびに Secret から作り直されるので、書き換えても練習の後に残らない
   - 3・5(cron): 旧アプリの cron は本番にしか無く、切り替えの前の今は止めていないので、戻す対象が無い。stg の `schedule:run`(#779)を止めると、stg の収集が止まるだけで、旧に戻す練習にはならない
   - 4(洗い出し): `legacy:verify` は、切り替えの通し稽古(#140)の手順 6 で stg でも流して通っている。stg の新 DB には、切り替えの後に管理画面で保存したものに当たる変更が無いので、食い違いが出たときの形は確かめていない
