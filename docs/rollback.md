@@ -30,13 +30,16 @@ flowchart TD
 
 旧のドメイン(`cocktail.trc-vlackhistory.net`)のドキュメントルートを、新アプリの `public`(`~/public_html/cocktail-db/public`)から、旧の `~/public_html/cocktail_html` に戻す。新アプリのディレクトリには触らない(もう一度切り替えるときに使う)。
 
-- cPanel の「ドメイン」で、`cocktail.trc-vlackhistory.net` のドキュメントルートを `public_html/cocktail_html` に変える(切り替えと同じ方法。#773)
-- SSH からも変えられる。`uapi` の `SubDomain changedocroot` で、ドメインはサブドメインの名前そのまま、ドキュメントルートはホームからの相対で渡す(先頭に `/` を付けると断られる)。stg で確かめた(下の「stg での練習」)
+ドメインのドキュメントルートの設定を変える(切り替えと同じく、旧のディレクトリには触らない。#773)。SSH からでも、cPanel の画面からでも変えられる。
+
+- SSH: `uapi` の `SubDomain changedocroot` で、ドメインはサブドメインの名前そのまま、ドキュメントルートはホームからの相対で渡す(先頭に `/` を付けると断られる)。stg で確かめた(下の「stg での練習」)
 
   ```bash
   uapi SubDomain changedocroot domain=cocktail.trc-vlackhistory.net docroot=public_html/cocktail_html
   uapi DomainInfo domains_data   # 変わったのが cocktail.trc-vlackhistory.net の documentroot だけか
   ```
+
+- 画面: cPanel の「ドメイン」で、`cocktail.trc-vlackhistory.net` のドキュメントルートを `public_html/cocktail_html` に変える
 
 - 確かめる: 30 秒ほどで旧の画面に変わる(stg の練習では、変え始めてから 26〜28 秒)。旧の画面かどうかは、トップの HTML で見分ける(旧は Vue の `id="app"`、新は React の `id="root"` と `/spa/` の読み込み)。ブラウザはキャッシュで前の画面を出すことがあるので、curl で見る
 
