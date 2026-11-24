@@ -1,6 +1,6 @@
 # 切り替えの手順書
 
-本番の旧サイト https://cocktail.trc-vlackhistory.net/ を、新アプリ(このリポジトリ)に切り替える手順と、手順ごとの戻し方(#138)。手順 2〜6 と 8 の curl は、スクリプト(`ops/cutover/`。#139)でまとめて流せる(下の「スクリプトで流す」)。ステージングでの通し稽古は #140 で行う。切り替えた後に旧に戻すときの手順は `docs/rollback.md`(#80)。
+本番の旧サイト https://cocktail.trc-vlackhistory.net/ を、新アプリ(このリポジトリ)に切り替える手順と、手順ごとの戻し方(#138)。手順 2〜6 と 8 の curl は、スクリプト(`ops/cutover/`。#139)でまとめて流せる(下の「スクリプトで流す」)。ステージングでの通し稽古は #140 で済ませた(手順 2〜6 が通った。かかった時間などの結果は #140 のコメント)。切り替えた後に旧に戻すときの手順は `docs/rollback.md`(#80)。
 
 - サーバーの配置・デプロイ・Secret は `README.md`、バックアップのスクリプトは `docs/backup.md`、移行の扱いは `docs/migration-anomalies.md` にあり、ここでは繰り返さない
 - 接続先・ユーザー名・DB 名・絶対パスはこの文書にも書かない。`<user>`・`<host>`・`<旧アプリの .env>` のようなプレースホルダで書く
@@ -18,7 +18,7 @@
 | 旧 URL の 301(カテゴリ・ミドル・旧の管理画面・旧のログイン・SNS カード)が入っている | #78・#58 ほか(`backend/routes/web.php`) | `develop` の E2E が緑 |
 | バックアップのスクリプトがサーバーにあり、旧アプリの DB と画像を毎日取っている | `docs/backup.md` | `backup-logs/daily-backup.log` の最後が「終わった」 |
 | 復元の確かめに使う、空の DB(例: `<user>_cocktail_verify`)がある | `docs/backup.md` の「サーバーに入れる」の 4 | — |
-| 新アプリの scheduler を cron から呼ぶ手順がある | #75(まだ無い。無いあいだは、下の 9 を流せない) | — |
+| 新アプリの scheduler を cron から呼ぶ手順がある | `docs/ops.md` の「定期実行(scheduler)の cron」(#75) | stg で登録して、収集の結果がログに出た(#779) |
 
 ## 流れ
 
@@ -69,11 +69,11 @@ bash ~/cocktail-ops/cutover/smoke.sh https://cocktail.trc-vlackhistory.net --leg
 旧アプリで DB と画像を書き換えるのは、管理画面(ログインした管理者の操作)と、毎分のアフィリエイトの収集(旧の `routes/console.php` の scheduler。サーバーの cron から呼ばれている)だけ。両方を止める。
 
 1. 管理画面で編集しない。止め方は取り決めだけにする(管理者は 1 人で、切り替えをするのもその人なので、旧のサーバーは触らない)。注意: うっかり保存すると、3 の復元の確かめでは食い違いとして気づけるが、4 の `legacy:import` は旧 DB をその場で読むので、6〜7 のあいだの保存は新に移らず、気づけない。6 から 7 のあいだも編集しない
-2. cPanel の「Cron ジョブ」で、旧アプリの `schedule:run` の行を消す(消す前に、行の中身を手元の記録に写す。戻すときに同じ行を登録し直す)
+2. SSH で `crontab -e` を開き、旧アプリの `schedule:run` の行の先頭に `#` を付けて止める。行は消さない(戻すときは `#` を外す。行を消すのは、切り替えの数週間後の片付け(#81)。`docs/ops.md` の「定期実行(scheduler)の cron」)。止める前に、行の中身を手元の記録に写しておく
 3. 1 分待ってから、旧 DB の `affiliates` の更新日時がそれより後に増えていないことを見る
 
 - 失敗したとき(cron が見つからない・止まらない): 2 に進まない。cron の行を探し直す
-- 戻し方: 写しておいた cron の行を登録し直し、管理画面の利用を戻す
+- 戻し方: 2 で付けた旧の cron の行の `#` を外し、管理画面の利用を戻す
 
 ### 2. 最終のダンプと画像を取る
 
@@ -161,7 +161,7 @@ php artisan legacy:verify-images   # 旧 DB の画像の列が指すファイル
 4. Web の PHP の版は、ドキュメントルートから上へたどった `.htaccess` で決まる(`README.md` の「サーバーの PHP の版」)。切り替えた先で 8.5 になっているかを、`README.md` の同じ節の確かめ方で見る
 
 - 失敗したとき(500・旧の画面が出る): 下の戻し方で旧に戻し、原因を調べる
-- 戻し方: ドキュメントルートを `~/public_html/cocktail_html` に戻す(設定を戻すだけ。旧に戻す手順の全体は `docs/rollback.md`)。`APP_URL`(`.env` と Variable)を前の値に戻して `php artisan optimize`。9 の前なら、1 の戻し方(cron の登録し直し・管理画面の利用)で旧サイトが元どおりに動く
+- 戻し方: ドキュメントルートを `~/public_html/cocktail_html` に戻す(設定を戻すだけ。旧に戻す手順の全体は `docs/rollback.md`)。`APP_URL`(`.env` と Variable)を前の値に戻して `php artisan optimize`。9 の前なら、1 の戻し方(旧の cron の `#` を外す・管理画面の利用)で旧サイトが元どおりに動く
 
 ### 8. スモーク
 
@@ -184,7 +184,7 @@ curl -si "$APP/api/cocktails/count"                                   # 件数�
 
 ここから新アプリが書き込む。旧に戻すと、ここからの書き込みは失われる。
 
-1. 新アプリの scheduler(`affiliates:collect --refresh --new`。`backend/routes/console.php`)を cron から呼ぶ。登録の手順は #75 で書く(まだ無い)。旧の cron(1 で消した)と同時に動かさない(同じアフィリエイトを 2 つが書かないように。#75)
+1. 新アプリの scheduler(`affiliates:collect --refresh --new`。`backend/routes/console.php`)を cron から呼ぶ。登録と確かめ方は `docs/ops.md` の「定期実行(scheduler)の cron」の「登録する」「確かめる」(#75)。旧の cron(1 で止めた)と同時に動かさない(同じアフィリエイトを 2 つが書かないように。#75)
 2. バックアップの cron(`docs/backup.md` の「サーバーに入れる」の 5)を、新アプリに向け直す。2 行とも `daily-backup.sh` に渡す `.env` を新アプリの `.env` にし、旧のために付けていた `--storage-dir` を外す(新アプリの画像は `.env` のあるディレクトリの `storage/app/public` にある)。`--verify-restore` の DB を新アプリの DB ユーザーで使えるよう、cPanel で権限を付ける
 3. 次の日に、`backup-logs/daily-backup.log` の最後が「終わった」で、新 DB のダンプ(`<新 DB 名>-<日時>.sql.gz`)ができていることを確かめる。アフィリエイトの収集の結果が `storage/logs/laravel.log` に出ていることも見る
 
@@ -194,6 +194,7 @@ curl -si "$APP/api/cocktails/count"                                   # 件数�
 ### 10. 後片付け
 
 - 旧のドキュメントルート・旧アプリ・旧 DB は消さない。消す時期は今は決めず、切り替えの後に別の issue で決める
+- 1 で止めた(先頭に `#` を付けた)旧の cron の行も、ここでは消さない。消すのは、切り替えの数週間後の片付け(#81。`docs/ops.md` の「定期実行(scheduler)の cron」)
 - 切り替えた後の `cocktail-next.trc-vlackhistory.net` は、旧のドメインへ 301 で転送する(残すと同じ中身が 2 つのドメインに出る。消すと共有したリンクが開けなくなる)
 - `README.md` の「公開先」・Variable `APP_URL` の値・「サーバー上の配置」を、切り替えた後の形に直す(別の PR)
 - 手元の記録(各手順の出力・かかった時間)のうち、公開してよいもの(件数・時間)を #79 に残す。ホスト名・ユーザー名・DB 名・絶対パスは書かない
