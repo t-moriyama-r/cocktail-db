@@ -184,7 +184,7 @@ curl -si "$APP/api/cocktails/count"                                   # 件数�
 
 ここから新アプリが書き込む。旧に戻すと、ここからの書き込みは失われる。
 
-1. 新アプリの scheduler(`affiliates:collect --refresh --new`。`backend/routes/console.php`)を cron から呼ぶ。登録と確かめ方は `docs/ops.md` の「定期実行(scheduler)の cron」の「登録する」「確かめる」(#75)。旧の cron(1 で止めた)と同時に動かさない(同じアフィリエイトを 2 つが書かないように。#75)
+1. 新アプリの scheduler(`affiliates:collect --refresh --new`。`backend/routes/console.php`)を cron から呼ぶ。本番でいつ登録するかは `docs/ops.md` の「定期実行(scheduler)の cron」の「どの環境に登録するか」、登録と確かめ方は同じ節の「登録する」「確かめる」(#75)。旧の cron(1 で止め、1 の 3 で収集が終わったことを確かめた)と同時に動かさない(同じアフィリエイトを 2 つが書かないように。#75)
 2. バックアップの cron(`docs/backup.md` の「サーバーに入れる」の 5)を、新アプリに向け直す。2 行とも `daily-backup.sh` に渡す `.env` を新アプリの `.env` にし、旧のために付けていた `--storage-dir` を外す(新アプリの画像は `.env` のあるディレクトリの `storage/app/public` にある)。`--verify-restore` の DB を新アプリの DB ユーザーで使えるよう、cPanel で権限を付ける
 3. 次の日に、`backup-logs/daily-backup.log` の最後が「終わった」で、新 DB のダンプ(`<新 DB 名>-<日時>.sql.gz`)ができていることを確かめる。アフィリエイトの収集の結果が `storage/logs/laravel.log` に出ていることも見る
 
