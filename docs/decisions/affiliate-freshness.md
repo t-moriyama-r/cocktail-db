@@ -85,7 +85,7 @@
 
 ### 5. 取り直す間隔と 1 回の件数の目安
 
-画面を開いたときに API は呼ばない。取り直すのは定期の処理(#249)だけで、`last_viewed_at`(#250)の新しい順に取り直す。間隔と件数は設定(`config/affiliates.php`。`.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`・`AFFILIATES_REFRESH_LIMIT`・`AFFILIATES_NEW_LIMIT`)から読み(#249)、既定値を次にする。定期実行は、楽天の 1 秒に 1 回を守るため、取り直し → 新しく探すの順に 1 つのコマンド(`affiliates:collect --refresh --new`)で流す。
+画面を開いたときに API は呼ばない。取り直すのは定期の処理(#249)だけで、`last_viewed_at`(#250)の新しい順に取り直す。間隔と件数は設定から読み(#249)、既定値を次にする。設定は管理画面で変えられ(#826。`docs/decisions/settings.md`)、画面で保存した値が無ければ `.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`・`AFFILIATES_REFRESH_LIMIT`・`AFFILIATES_NEW_LIMIT`(`config/settings.php`)を使う。定期実行は、楽天の 1 秒に 1 回を守るため、取り直し → 新しく探すの順に 1 つのコマンド(`affiliates:collect --refresh --new`)で流す。
 
 | | 既定値 |
 |---|---|

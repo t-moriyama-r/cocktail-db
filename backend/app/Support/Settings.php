@@ -85,8 +85,10 @@ final class Settings
      * .env の値が空の文字(`AMAZON_CREDENTIAL_ID=` のように値の無い行)なら、値が無いものとして null を返す(#689)。
      * env() は値の無い行に空の文字を返すので、そのままだと管理 API が「値あり」「.env の値」として返してしまうため。
      * 保存した値(stored())が空の文字のときは、これまでどおり空の文字を返す(TC-131-06)。
+     *
+     * DB を読まないので、設定の表を読めないとき(DB に繋がらない)にも使える(AffiliateCollectSettings。#826)。
      */
-    private function fromEnv(string $key): ?string
+    public function fromEnv(string $key): ?string
     {
         $values = config('settings');
         $value = is_array($values) ? ($values[$key] ?? null) : null;

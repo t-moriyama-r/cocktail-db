@@ -27,4 +27,10 @@ return [
 
     // アクセス解析(GA4)の測定 ID(App\Support\Ga4Tag。docs/decisions/analytics.md)。本番だけに入れる
     'ga4.measurement_id' => env('GA4_MEASUREMENT_ID'),
+
+    // アフィリエイトの商品の収集(affiliates:collect)の間隔(分)と 1 回の件数(App\Services\Affiliate\AffiliateCollectSettings。#826)。
+    // どちらにも値が無ければ、既定値(10 分・10 件・5 件。docs/decisions/affiliate-freshness.md の 5)を使う
+    'affiliates.interval_minutes' => env('AFFILIATES_COLLECT_INTERVAL_MINUTES'),
+    'affiliates.refresh_limit' => env('AFFILIATES_REFRESH_LIMIT'),
+    'affiliates.new_limit' => env('AFFILIATES_NEW_LIMIT'),
 ];

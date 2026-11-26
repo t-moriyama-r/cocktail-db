@@ -8,7 +8,7 @@
 
 | コマンド | 間隔 | 決めたところ |
 |---|---|---|
-| `affiliates:collect --refresh --new`(アフィリエイトの商品の取り直しと、新しく探す) | 10 分ごと(`.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`。前の回が終わっていなければ重ねて流さない) | `docs/decisions/affiliate-freshness.md` の 5・#249 |
+| `affiliates:collect --refresh --new`(アフィリエイトの商品の取り直しと、新しく探す) | 10 分ごと(管理画面の設定の「アフィリエイトの収集の間隔(分)」、画面で保存していなければ `.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`。#826。前の回が終わっていなければ重ねて流さない) | `docs/decisions/affiliate-freshness.md` の 5・#249 |
 | `model:prune --model=App\Models\IdempotencyKey`(管理画面の保存の冪等キーの記録のうち、7 日より古いものを消す) | 毎日 19:05(アプリの時刻の UTC。日本時間の 4:05) | `docs/decisions/admin-idempotency.md` の 10・#763 |
 
 ### どの環境に登録するか

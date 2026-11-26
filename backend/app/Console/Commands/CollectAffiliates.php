@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\AffiliateNotFoundReason;
 use App\Services\Affiliate\AffiliateCollector;
+use App\Services\Affiliate\AffiliateCollectSettings;
 use App\Services\Affiliate\AffiliateRefresher;
 use App\Services\Affiliate\AmazonClient;
 use App\Services\Affiliate\CollectOutcome;
@@ -22,18 +23,18 @@ use Illuminate\Support\Sleep;
  *
  * 両方を指定すると、--refresh → --new の順に流す。楽天は 1 秒に 1 回までで、別のプロセスとのあいだは揃えない
  * (docs/decisions/rakuten-client.md の 6)ので、定期実行(routes/console.php)は両方を 1 つのコマンドで流し、
- * あいだに 1 秒空ける。--limit を省いた件数は config/affiliates.php から読む。
+ * あいだに 1 秒空ける。--limit を省いた件数は管理画面の設定(画面で保存した値、無ければ .env の値。AffiliateCollectSettings。#826)から読む。
  */
 final class CollectAffiliates extends Command
 {
     protected $signature = 'affiliates:collect
         {--refresh : 期限が近い・切れた行を、最近見られたものから商品の ID で取り直す}
         {--new : まだ商品の行が無いノード・銘柄と、ID の無い提供元(探してから 7 日たったもの)を、名前で探して保存する}
-        {--limit= : 1 回の件数。--refresh は Amazon・楽天それぞれの件数(既定は設定の affiliates.refresh_limit・affiliates.new_limit)}';
+        {--limit= : 1 回の件数。--refresh は Amazon・楽天それぞれの件数(既定は管理画面の設定の affiliates.refresh_limit・affiliates.new_limit)}';
 
     protected $description = 'アフィリエイトの商品を Amazon・楽天から集める(--refresh: ID で取り直す、--new: まだ行の無いノード・銘柄と ID の無い提供元を名前で探す)';
 
-    public function handle(AffiliateCollector $collector, AffiliateRefresher $refresher, AmazonClient $amazon, RakutenClient $rakuten): int
+    public function handle(AffiliateCollector $collector, AffiliateRefresher $refresher, AmazonClient $amazon, RakutenClient $rakuten, AffiliateCollectSettings $settings): int
     {
         $refresh = (bool) $this->option('refresh');
         $new = (bool) $this->option('new');
@@ -43,8 +44,8 @@ final class CollectAffiliates extends Command
             return self::INVALID;
         }
 
-        $refreshLimit = $refresh ? $this->limit('affiliates.refresh_limit', AffiliateRefresher::DEFAULT_LIMIT) : null;
-        $newLimit = $new ? $this->limit('affiliates.new_limit', AffiliateCollector::DEFAULT_NEW_LIMIT) : null;
+        $refreshLimit = $refresh ? $this->limit($settings->limit(AffiliateCollectSettings::SETTING_REFRESH_LIMIT, AffiliateRefresher::DEFAULT_LIMIT)) : null;
+        $newLimit = $new ? $this->limit($settings->limit(AffiliateCollectSettings::SETTING_NEW_LIMIT, AffiliateCollector::DEFAULT_NEW_LIMIT)) : null;
         if (($refresh && $refreshLimit === null) || ($new && $newLimit === null)) {
             $this->error('--limit は 1 以上の整数で指定する(省いたときは、設定の件数を確かめる)');
 
@@ -128,12 +129,9 @@ final class CollectAffiliates extends Command
     /**
      * --limit の値。省いたら設定の値を使う。どちらも 1 以上の整数でなければ null。
      */
-    private function limit(string $configKey, int $default): ?int
+    private function limit(string $configured): ?int
     {
-        $value = $this->option('limit') ?? config($configKey, $default);
-        if (is_int($value)) {
-            $value = (string) $value;
-        }
+        $value = $this->option('limit') ?? $configured;
         if (! is_string($value) || preg_match('/\A[1-9][0-9]{0,5}\z/', $value) !== 1) {
             return null;
         }

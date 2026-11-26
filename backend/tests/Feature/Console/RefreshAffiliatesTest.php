@@ -4,6 +4,7 @@ use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Services\CategoryTree;
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -532,7 +533,7 @@ it('TC-249-10: Amazon は 10 件ごとに GetItems を 1 回呼び、あいだ�
 
 it('TC-249-11: --limit を省くと設定の件数(既定は Amazon・楽天それぞれ 10 件)まで取り直す', function (?int $configured, int $expected) {
     if ($configured !== null) {
-        config()->set('affiliates.refresh_limit', $configured);
+        config()->set('settings', array_merge(config()->array('settings'), ['affiliates.refresh_limit' => $configured]));
     }
     $amazon = [];
     $rakuten = [];
@@ -683,7 +684,7 @@ it('TC-249-18: --refresh と --new を一緒に指定すると、取り直し �
 
 it('TC-249-19: --refresh・--new のどちらも無い・件数が 1 以上の整数でないときは、問い合わせずに止める', function (array $options, ?string $configured, string $message) {
     if ($configured !== null) {
-        config()->set('affiliates.refresh_limit', $configured);
+        config()->set('settings', array_merge(config()->array('settings'), ['affiliates.refresh_limit' => $configured]));
     }
     refreshRow([...refreshOldAmazon('B000TEST01'), ...refreshOldRakuten('example-shop:10000001')]);
     refreshFake();
@@ -774,4 +775,45 @@ it('TC-696-12: 取り直しで時間を置いても通らない失敗(楽天の 
     $stored = $recovered->fresh();
     expect($stored?->rakuten_price)->toBe(2480)
         ->and($stored?->rakuten_not_found_reason)->toBeNull();
+});
+
+// 管理画面の設定で保存した件数(#826。docs/decisions/settings.md)。旧には設定の画面が無い(旧に無い)
+it('TC-826-06: --limit を省くと、画面で保存した件数(.env の値より優先)まで取り直す。--limit を付ければ、そちらを使う', function (array $options, int $expected) {
+    config()->set('settings', array_merge(config()->array('settings'), ['affiliates.refresh_limit' => '7']));
+    app(Settings::class)->set('affiliates.refresh_limit', '3');
+    $amazon = [];
+    $rakuten = [];
+    for ($i = 1; $i <= 12; $i++) {
+        $asin = sprintf('B000ITEM%02d', $i);
+        $code = sprintf('example-shop:%08d', $i);
+        $amazon[$asin] = 1000 + $i;
+        $rakuten[$code] = refreshRakutenItem($code, 2000 + $i);
+        refreshRow([...refreshOldAmazon($asin), ...refreshOldRakuten($code)], "N{$i}");
+    }
+    refreshFake($amazon, $rakuten);
+
+    refreshCommand($this, ['--refresh' => true, ...$options])->assertSuccessful();
+
+    expect(Affiliate::query()->where('amazon_fetched_at', '>=', REFRESH_NOW)->count())->toBe($expected)
+        ->and(Affiliate::query()->where('rakuten_fetched_at', '>=', REFRESH_NOW)->count())->toBe($expected);
+})->with([
+    '--limit なし' => [[], 3],
+    '--limit=5' => [['--limit' => '5'], 5],
+]);
+
+it('TC-826-07: 画面で保存した件数を消す(null)と、.env の件数まで取り直す', function () {
+    config()->set('settings', array_merge(config()->array('settings'), ['affiliates.refresh_limit' => '2']));
+    app(Settings::class)->set('affiliates.refresh_limit', '3');
+    app(Settings::class)->set('affiliates.refresh_limit', null);
+    $amazon = [];
+    for ($i = 1; $i <= 5; $i++) {
+        $asin = sprintf('B000ITEM%02d', $i);
+        $amazon[$asin] = 1000 + $i;
+        refreshRow(refreshOldAmazon($asin), "N{$i}");
+    }
+    refreshFake($amazon);
+
+    refreshCommand($this, ['--refresh' => true])->assertSuccessful();
+
+    expect(Affiliate::query()->where('amazon_fetched_at', '>=', REFRESH_NOW)->count())->toBe(2);
 });
