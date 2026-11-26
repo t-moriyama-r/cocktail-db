@@ -409,5 +409,5 @@ it('TC-826-03: 範囲の外・整数でない値は 422 で、メッセージは
     '取り直す件数: 101' => ['affiliates.refresh_limit', '101'],
     '新しく探す件数: 0' => ['affiliates.new_limit', '0'],
     '新しく探す件数: 101' => ['affiliates.new_limit', '101'],
-    '新しく探す件数: 全角' => ['affiliates.new_limit', '5'],
+    '新しく探す件数: 全角' => ['affiliates.new_limit', '５'],
 ]);

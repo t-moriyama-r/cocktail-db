@@ -22,7 +22,7 @@ beforeEach(function () {
  */
 function nextScheduledCollectExpression(): string
 {
-    $schedule = new Schedule;
+    $schedule = new Schedule(config('app.timezone'));
     // 読み直した分だけを見るよう、空の Schedule に差し替えてから読む
     ScheduleFacade::swap($schedule);
     require base_path('routes/console.php');
