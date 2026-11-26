@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "before": "ecbd8938798fa8e86a08bcf1d5bb11d622028aae",
+  "after": "ef61ccb1162467204ef219d9b0d519a2a94f3d0a",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-819-01",
+        "TC-819-02",
+        "TC-819-03",
+        "TC-819-04",
+        "TC-819-05",
+        "TC-819-06",
+        "TC-819-07",
+        "TC-819-08",
+        "TC-819-09"
+      ],
+      "note": "修正前は該当するテストが無い。修正後は 9 件が通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-819-04"
+      ],
+      "note": "修正前は legacy:count-anomalies が無く、修正後は一覧に出る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    },
+    {
+      "id": "03-command",
+      "kind": "command",
+      "cases": [
+        "TC-819-10",
+        "TC-819-11",
+        "TC-819-12",
+        "TC-819-13"
+      ],
+      "note": "修正前は 18 件、修正後は recount の 4 件を足した 22 件が通る",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "03-command-before.png",
+        "03-command-after.png",
+        "03-command-compare.png"
+      ]
+    }
+  ]
+}
