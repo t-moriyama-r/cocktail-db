@@ -2,6 +2,7 @@
 
 // 旧の管理画面の一覧・編集の URL(#626)。旧のブックマークから来た管理者を、新の同じ画面へ 302 で移す。
 // 決めたことと旧と挙動を変えたところは docs/decisions/legacy-admin-urls.md。
+// カテゴリ・ミドルの編集・新規の URL(#817)は、旧 ID から新 ID を DB で引くので LegacyAdminCategoryUrlRedirectTest(db グループ)。
 // 移した先でログインを確かめること(未ログインならログインの画面へ移る)は e2e/tests/legacy-admin-urls.spec.ts
 
 beforeEach(function () {
@@ -64,10 +65,6 @@ it('TC-626-05: 新の画面がまだ無い・移さないと決めた旧の URL 
         ->assertOk()
         ->assertSee('<div id="root"></div>', false);
 })->with([
-    'カテゴリの編集' => '/admin/edit/Category/1',
-    'カテゴリの新規' => '/admin/edit/Category/',
-    'ミドルの編集' => '/admin/edit/Middle/1',
-    'ミドルの新規' => '/admin/edit/Middle/',
     '言い換え' => '/admin/autoinput/paraphrase',
     'オートインプット' => '/admin/autoinput/exe',
     'オートインプットの次' => '/admin/autoinput/next',

@@ -1,6 +1,6 @@
 # 旧の管理画面の一覧・編集の URL の扱い
 
-#626 で決めたこと。新の管理画面は URL を変えた(旧 `/admin/list/Cocktail` → 新 `/admin/cocktails` など。#119・#123・#64・#66・#126)。旧の URL をブックマークしている管理者が、切り替えの後に開いても迷わないよう、新に同じ画面があるものは新の URL へ移す。旧のログインの URL(#117。`docs/decisions/legacy-login-urls.md`)と同じ扱いにする。
+#626 で決めたこと。カテゴリ・ミドルの編集の URL は #817 で足した。新の管理画面は URL を変えた(旧 `/admin/list/Cocktail` → 新 `/admin/cocktails` など。#119・#123・#64・#66・#126)。旧の URL をブックマークしている管理者が、切り替えの後に開いても迷わないよう、新に同じ画面があるものは新の URL へ移す。旧のログインの URL(#117。`docs/decisions/legacy-login-urls.md`)と同じ扱いにする。
 
 ## 決まったこと
 
@@ -20,6 +20,8 @@
    | `/admin/edit/Dictionary/{ID}` | `/admin/dictionaries/{ID}`(用語辞典も旧の ID のまま) |
    | `/admin/edit/Cocktail/`(新規) | `/admin/cocktails/new`(#127) |
    | `/admin/edit/Cocktail/{ID}` | `/admin/cocktails/{ID}`(カクテルも旧の ID のまま。#127) |
+   | `/admin/edit/Category/`・`/admin/edit/Middle/`(新規) | `/admin/categories/new`(ノードの新規のフォーム。#308・#817) |
+   | `/admin/edit/Category/{旧ID}`・`/admin/edit/Middle/{旧ID}` | `/admin/categories/{新ID}`(ノードの編集フォーム。ノードは ID を振り直したので、旧 ID から新 ID を `legacy_id_maps`(`m_category`・`m_middle` → `categories`)で引く。#78 の旧の詳細の URL の転送と同じ引き方。対応の無い旧 ID は移さない。#817) |
 
 2. 移すだけで、ほかのことはしない。ログインの確かめは移った先の画面がする(未ログインなら、移った先の URL を持たせてログインの画面へ移る。`docs/decisions/admin-layout.md` の 5)。付いてきたクエリは移った先に持ち越さない(下書きの一覧の `?status=draft` は行き先の一部なので付ける)
 3. 受けるのは GET だけ。ほかのメソッドは 405。状態コードは #117 と同じく 302(301 はブラウザが覚えてしまい、後で行き先を変えられなくなるため)
@@ -28,7 +30,6 @@
 
    | 旧の URL | 移す issue | メモ |
    |---|---|---|
-   | `/admin/edit/Category/{ID}`・`/admin/edit/Middle/{ID}`・`/admin/edit/Category/`・`/admin/edit/Middle/`(新規) | #308(ノードの編集フォーム) | ノードは ID を振り直したので、旧 ID から新 ID を `legacy_id_maps`(`m_category`・`m_middle` → `categories`)で引く。#78 の旧の詳細の URL の転送と同じ引き方 |
    | `/admin/autoinput/paraphrase` | #67(言い換え・スキップ語の画面) | |
 
 6. 旧のオートインプット(`/admin/autoinput/exe`・`/admin/autoinput/next`)は移さない(404 のまま)。新には引き継がない機能で、移す先の画面が無い(#68・`docs/decisions/admin-layout.md` の 3)
@@ -39,8 +40,10 @@
 
 - 決まったこと 1 の旧の URL への GET: 旧はサーバーが SPA の HTML を 200 で返し、画面がその URL のまま一覧・編集の画面を出した(未ログインならログインの画面へ移した) → 新は新の URL へ 302 で移し、画面は移った先の URL で出す
 - `/admin/list/Category`・`/admin/list/Middle`: 旧はカテゴリ・ミドルの別々の一覧を出した → 新はどちらもカテゴリ木(`/admin/categories`)へ移す
+- `/admin/edit/Category/{旧ID}`・`/admin/edit/Middle/{旧ID}`: 旧は URL の旧 ID のカテゴリ・ミドルの編集の画面を出した → 新は旧 ID から引いた新 ID のノードの編集フォーム(`/admin/categories/{新ID}`)へ 302 で移す。対応の無い旧 ID は移さず、管理画面の 404 の画面を出す(#817)
+- `/admin/edit/Middle/`(新規): 旧はミドルの新規の画面を出した → 新はカテゴリとミドルを分けないノードの新規のフォーム(`/admin/categories/new`)へ 302 で移す(#817)
 - 大文字小文字の違う旧の URL(`/admin/list/brand` など): 旧は画面のルーター(vue-router)が大文字小文字を区別せず、同じ画面を出した → 新は移さず、管理画面の 404 の画面を出す(旧の画面のリンクの綴りだけを移す。決まったこと 4)
-- 決まったこと 5・6 の旧の URL: 旧は編集・言い換え・オートインプットの画面を出した → 新は(今は)管理画面の 404 の画面を出す。5 は画面の issue が入ったときに移す
+- 決まったこと 5・6 の旧の URL: 旧は言い換え・オートインプットの画面を出した → 新は(今は)管理画面の 404 の画面を出す。5 は画面の issue が入ったときに移す
 
 ## 旧ソースで確かめた事実
 
