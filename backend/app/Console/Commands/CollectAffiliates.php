@@ -132,7 +132,7 @@ final class CollectAffiliates extends Command
     private function limit(string $configured): ?int
     {
         $value = $this->option('limit') ?? $configured;
-        if (! is_string($value) || preg_match('/\A[1-9][0-9]{0,5}\z/', $value) !== 1) {
+        if (preg_match('/\A[1-9][0-9]{0,5}\z/', $value) !== 1) {
             return null;
         }
 
