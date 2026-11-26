@@ -60,17 +60,22 @@ npm run dev
 | 文字 `--color-text` | `#212121` |
 | 薄い文字 `--color-text-muted` | `#616161` |
 | リンク `--color-link` | `#337ab7` |
+| リンクに乗せたとき `--color-link-hover` | `#23527c`(旧の `Header/header.vue`・`index.vue` の、乗せたときのリンクの色と同じ。全体の `a:hover` と、リンクに見せた部品の乗せたときの色) |
 | 差し色(検索のボタン) `--color-accent` | `#e91e63` |
+| 差し色などの上の文字 `--color-on-accent` | `#ffffff`(旧の `Header/header.vue` の検索のボタンの文字 `#fff` と同じ。`--color-accent` の上で 4.35:1。検索・保存などのボタンや、`--color-danger` の上の文字) |
 | ヘッダーの地 `--color-header-bg` | `#99ddff` |
+| ヘッダーの文字 `--color-header-text` | `#1a4f7a`(旧はリンクと同じ `#337ab7` だが、ヘッダーの地で 3.07:1 のため 4.5:1 を満たすよう濃くした(5.79:1)。#294。ヘッダーの題名・文字) |
 | 線 `--color-border` | `#bbddff` |
 | 表の縞 `--color-row-alt` | `#f5faff` |
 | 見出しの線 `--color-heading-line` | `#4499ff`(左 5px・下 2px) |
 | 評価の星 `--color-rate` | `#a15c00`(旧は `#f9a825` だが白地でコントラストが足りず濃くした) |
+| フッターの地 `--color-footer-bg` | `#f5f5f5`(旧の `mainView.vue` の `v-footer` の地(Vuetify の明るい配色の既定)と同じ。フッターの地) |
 | 文字の大きさ `--font-size-base` | 15px |
 | 行の高さ `--line-height` | 1.6 |
 | 余白の倍率 `--space-scale` | 1 |
 | 角の丸み `--radius` | 2px |
 | ヘッダーの高さ `--header-height` | 40px |
+| ヘッダーの影 `--header-shadow` | `0 10px 3px rgb(0 0 0 / 10%)`(旧の `Header/header.vue` の `drop-shadow(0px 10px 3px rgba(0,0,0,0.1))` と同じ。ヘッダーの下の影) |
 
 試作の後に、部品を作るときに `frontend/src/styles/tokens.css` へ足したトークン(試作の `design-proposals/tokens.css` には無い):
 
@@ -82,12 +87,14 @@ npm run dev
 | 押せないボタンの地 `--color-disabled-bg` | `#e0e0e0`(文字は `--color-text-muted` で 4.69:1) | ヘッダーの名前検索のボタンで、入力が空・検索中・0 件・サーバーエラーのとき(#99) |
 | 誤りの地 `--color-danger` | `#c62828`(文字は `--color-on-accent` で 5.62:1) | ヘッダーの名前検索のボタンで、禁止文字を含むときの「Error」(#99) |
 | カテゴリの詳細の欄の線 `--color-famous-line`・`--color-children-line` | `#006699`・`#ff6600`(旧の `Detail/CategoryDetail.vue` の有名な銘柄・ミドルカテゴリの欄と同じ。線だけで文字には使わない) | カテゴリの詳細の、有名な銘柄と子のノードの欄の線(#105) |
+| カテゴリの詳細の一覧の欄の線 `--color-category-brands-line`・`--color-category-cocktails-line` | `#ff6600`・`#3399ff`(旧の `Detail/CategoryDetail.vue` の `belong_brand_container`・`using_cocktail_container` と同じ。線だけで文字には使わない) | カテゴリの詳細の、登録されている銘柄の一覧の欄と、これを使ったカクテルの欄の左の線(#106) |
 | 詳細の欄の線 `--color-detail-data-line`・`--color-detail-recipe-line`・`--color-detail-note-line` | `#006699`・`#ff6600`・`#98d4d6`(旧の `Detail/CocktailDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | カクテルの詳細の、ベースなどの欄の左の線・材料の欄の左の線・Note の上の線(#108) |
 | 詳細の関連の欄の線 `--color-detail-same-name-line`・`--color-detail-similar-line`・`--color-detail-same-base-line` | `#fae125`・`#3399ff`・`#1f0d85`(旧の `Detail/CocktailDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | カクテルの詳細の、同じ名前のカクテルの欄(旧に無い別名・同じレシピの欄も同じ線)・材料が似たカクテルの欄・同じベースのカクテルの欄の左の線(#109) |
 | 区切りの文字 `--color-section-label` | `#1177ff`(旧と同じ。白地で 4.11:1 で、4.5:1 に届かない) | カクテルの詳細の、960px 未満で説明文の上に出す「§Description§」(#108) |
 | モーダルの後ろ `--color-overlay` | `rgb(33 33 33 / 46%)`(旧の Vuetify の v-overlay と同じ色と濃さ) | ヘッダーの条件検索のモーダル(#99) |
 | 用語辞典の分類の見出しの線 `--color-dictionary-category-line` | `#006699`(旧の `Dictionary/index.vue` と同じ。旧でもほかの見出しの線 `#4499FF` と違った) | 用語辞典の一覧の、分類の見出しの左と下の線(#56) |
 | 用語辞典のカクテルの欄の線 `--color-dictionary-method-line`・`--color-dictionary-glass-line` | `#3399ff`・`#1f0d85`(旧の `Dictionary/detail.vue` と同じ。飾りの線で、文字には使わない) | 用語辞典の詳細の「これを使ったカクテル」の左の線。技法とグラスで色を分ける(#56) |
+| 銘柄の詳細の線 `--color-brand-data-line`・`--color-brand-using-line`・`--color-brand-same-node-line`・`--color-brand-parent-subtree-line` | `#006699`・`#3399ff`・`#20b2aa`・`#9400d3`(旧の `Detail/BrandDetail.vue` と同じ。文字ではない線なので 4.5:1 の対象外) | 銘柄の詳細の、Data の見出しの右の線と、これを使ったカクテル・同じノードの銘柄・親ノードの配下の銘柄の欄の左の線(#54) |
 | 商品の欄 `--color-affiliate-border`・`--color-affiliate-price`・`--color-amazon`・`--color-rakuten`・`--color-affiliate-lower` | `#dfdfdf`・`#ff0000`・`#f79901`・`#bf0000`・`#ffff00`(旧の `Detail/component/AffiliateContainer.vue` と同じ。価格の赤は白地で 4.0:1、Amazon のボタンの地は白い文字で 2.2:1 で、4.5:1 に届かない。旧と同じ) | 商品の欄(#303)の枠の線・本体の価格の文字・「Amazonで探す」「楽天で探す」のボタンの地・楽天のボタンの安い方の価格の文字 |
 
 案 A の色は旧の画面から取った(ヘッダーの水色 `#99DDFF`・リンクの青 `#337ab7`・見出しの線 `#4499FF`・区切りの線 `#BBDDFF`)。
