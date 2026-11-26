@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "before": "98370521b49907a674bfaf50473b55dfb23c5dce",
+  "after": "fb57c8ffee5955ba6dc2e200952dc91f79a9d086",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-827-01",
+        "TC-827-02",
+        "TC-827-03",
+        "TC-827-04",
+        "TC-827-05"
+      ],
+      "note": "修正前は TC-248-08 が通り TC-827 は無い。修正後は TC-827-01〜05 が通り TC-248-08 は無い",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-827-01",
+        "TC-827-02",
+        "TC-827-03",
+        "TC-827-04",
+        "TC-827-05"
+      ],
+      "note": "変えたテストのファイルすべてが通ること(修正前後とも失敗が無いこと)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    }
+  ]
+}
