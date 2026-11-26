@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\CategoryRole;
 use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Services\CategoryTree;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Testing\TestResponse;
@@ -504,4 +506,28 @@ it('TC-689-05: 楽天のアフィリエイトの ID が .env で空なら、期�
         ->assertOk()
         ->assertJsonPath('data.amazon.search_url', 'https://www.amazon.co.jp/s?k=%E3%82%B8%E3%83%B3&tag=cocktail-22')
         ->assertJsonPath('data.rakuten.search_url', 'https://search.rakuten.co.jp/search/mall/%E3%82%B8%E3%83%B3/510915/');
+});
+
+it('TC-827-05: 期限切れの楽天の検索結果のリンクは、洋酒の材料には 510915 を付け、洋酒でない材料(ソフトドリンクの部分木のノードと銘柄)には付けない', function () {
+    $tree = app(CategoryTree::class);
+    $liquorRoot = $tree->addNode(null, Category::factory()->make(['name' => '洋酒の根'])->getAttributes());
+    $liquorNode = $tree->addNode($liquorRoot, Category::factory()->make(['name' => 'ジン'])->getAttributes());
+    $softRoot = $tree->addNode(null, Category::factory()->make(['name' => 'ソフトドリンクの根', 'role' => CategoryRole::SoftDrink])->getAttributes());
+    $softNode = $tree->addNode($softRoot, Category::factory()->make(['name' => 'ソーダ'])->getAttributes());
+    $softMiddle = $tree->addNode($softNode, Category::factory()->make(['name' => 'クラブ・ソーダ'])->getAttributes());
+    $softBrand = Brand::factory()->create(['category_id' => $softMiddle->id, 'name' => 'サンプル ソーダ']);
+    foreach ([$liquorNode, $softNode] as $node) {
+        Affiliate::factory()->create(['category_id' => $node->id, ...rakutenValues(expiredAt())]);
+    }
+    Affiliate::factory()->create(['category_id' => $softMiddle->id, 'brand_id' => $softBrand->id, ...rakutenValues(expiredAt())]);
+
+    $this->getJson("/api/affiliates?category_id={$liquorNode->id}")
+        ->assertOk()
+        ->assertJsonPath('data.rakuten.search_url', 'https://search.rakuten.co.jp/search/mall/'.rawurlencode('ジン').'/510915/');
+    $this->getJson("/api/affiliates?category_id={$softNode->id}")
+        ->assertOk()
+        ->assertJsonPath('data.rakuten.search_url', 'https://search.rakuten.co.jp/search/mall/'.rawurlencode('ソーダ').'/');
+    $this->getJson("/api/affiliates?category_id={$softMiddle->id}&brand_id={$softBrand->id}")
+        ->assertOk()
+        ->assertJsonPath('data.rakuten.search_url', 'https://search.rakuten.co.jp/search/mall/'.rawurlencode('サンプル ソーダ').'/');
 });
