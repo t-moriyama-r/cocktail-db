@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\CategoryRole;
 use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
@@ -774,4 +775,22 @@ it('TC-696-12: 取り直しで時間を置いても通らない失敗(楽天の 
     $stored = $recovered->fresh();
     expect($stored?->rakuten_price)->toBe(2480)
         ->and($stored?->rakuten_not_found_reason)->toBeNull();
+});
+
+it('TC-827-04: 取り直しで組み立てる楽天の検索結果のリンクは、洋酒でない材料(その他の部分木にぶら下がる銘柄)ではジャンルを付けない', function () {
+    $tree = app(CategoryTree::class);
+    $root = $tree->addNode(null, Category::factory()->make(['name' => 'その他の根', 'role' => CategoryRole::Other])->getAttributes());
+    $node = $tree->addNode($root, Category::factory()->make(['name' => 'コンソメ'])->getAttributes());
+    $brand = Brand::factory()->for($node, 'category')->create(['name' => 'サンプル コンソメ']);
+    $affiliate = Affiliate::factory()->create([
+        'category_id' => $node->id,
+        'brand_id' => $brand->id,
+        ...refreshOldRakuten('example-shop:10000001'),
+    ]);
+    refreshFake([], ['example-shop:10000001' => refreshRakutenItem('example-shop:10000001', 2480)]);
+
+    refreshCommand($this, ['--refresh' => true])->assertSuccessful();
+
+    expect($affiliate->refresh()->rakuten_search_url)->toBe('https://hb.afl.rakuten.co.jp/hgc/g00test0.example0.g00test0.example1/?pc='
+        .rawurlencode('https://search.rakuten.co.jp/search/mall/').urlencode('サンプル コンソメ').rawurlencode('/'));
 });

@@ -231,7 +231,7 @@ final class AffiliateRefresher
                     'rakuten_price' => $item->price,
                     'rakuten_image_url' => $item->imageUrl,
                     'rakuten_detail_url' => $item->detailUrl,
-                    'rakuten_search_url' => $this->searchUrls->rakuten(self::name($row)),
+                    'rakuten_search_url' => $this->searchUrls->rakuten(self::name($row), $row->category),
                     'rakuten_fetched_at' => now(),
                     'rakuten_not_found_reason' => null,
                 ]);

@@ -39,10 +39,11 @@ use Illuminate\Support\Sleep;
  * - 並びは旧と同じく銘柄 → ノードの順、それぞれ ID の順
  * - 検索の語はノード・銘柄の名前。Amazon は食料品(GroceryAndGourmetFood)で探した先頭の 1 件で、価格の無い商品なら
  *   見つからない扱い。楽天は探した先頭の 1 件
- * - 楽天はいつもジャンル「ビール・洋酒」で絞る。旧は「洋酒ではない」ノードで絞らないつもりのコードだったが、判定と
- *   引数の渡し方の 2 か所の誤りで、本番ではいつも絞っていた(docs/decisions/category-root-role.md の「洋酒ではない
- *   (kind 4 以上)は、本番では効いていない」)。絞らないと検索結果が旧と変わり、その差分はまだ決まっていないので、
- *   旧に合わせる
+ * - 楽天は、洋酒の材料ではジャンル「ビール・洋酒」で絞り、洋酒でない材料(根の役割がソフトドリンク・その他の部分木の
+ *   ノードと、そこにぶら下がる銘柄)では絞らない(AffiliateSearchUrls::rakutenGenreId。#827)。旧は「洋酒ではない」
+ *   ノードで絞らないつもりのコードだったが、判定と引数の渡し方の 2 か所の誤りで、本番ではいつも絞っていた
+ *   (docs/decisions/category-root-role.md の「洋酒ではない(kind 4 以上)は、本番では効いていない」)。旧との差分で、
+ *   旧のコードが意図していた動きに戻す(docs/decisions/rakuten-client.md の「旧との差分」)
  * - どちらでも見つからなくても、空の行を作る
  *
  * 失敗の扱い:
@@ -298,7 +299,7 @@ final class AffiliateCollector
     {
         try {
             $amazon = $target->searchAmazon ? $this->researchProvider(fn () => $this->searchAmazon($target->name), 'amazon') : [];
-            $rakuten = $target->searchRakuten ? $this->researchProvider(fn () => $this->searchRakuten($target->name), 'rakuten') : [];
+            $rakuten = $target->searchRakuten ? $this->researchProvider(fn () => $this->searchRakuten($target), 'rakuten') : [];
         } catch (AmazonRetryLaterException|RakutenRetryLaterException $e) {
             Log::warning('affiliates:collect --new: 上限・一時的な失敗のため、この回を終える', ['target' => $target->describe(), 'error' => $e->getMessage()]);
 
@@ -360,7 +361,7 @@ final class AffiliateCollector
     {
         try {
             $amazon = $amazonConfigured ? $this->searchAmazon($target->name) : [];
-            $rakuten = $rakutenConfigured ? $this->searchRakuten($target->name) : [];
+            $rakuten = $rakutenConfigured ? $this->searchRakuten($target) : [];
         } catch (AmazonRetryLaterException|RakutenRetryLaterException $e) {
             Log::warning('affiliates:collect --new: 上限・一時的な失敗のため、この回を終える', ['target' => $target->describe(), 'error' => $e->getMessage()]);
 
@@ -504,15 +505,22 @@ final class AffiliateCollector
      * 旧(RakutenFactory::generateFromWord)と同じく、先頭の 1 件を使う。検索結果のページへのリンクも旧と同じく、API の
      * 値ではなく名前から組み立てる。
      *
+     * 絞るジャンルは、ノード(銘柄なら、ぶら下がるノード。CollectTarget::$categoryId)で決める。洋酒でない材料では
+     * 絞らない(AffiliateSearchUrls::rakutenGenreId。#827)。探す前にノードが消されていたら、旧と同じくジャンルで
+     * 絞って探す(その件は保存しない。collectOne の targetExists。行のあるノードは affiliates の外部キーで消せない)。
+     *
      * @return array<string, mixed> 保存する楽天の列と、探した時刻・見つからなかった理由(#696)。見つからなければ、
      *                              楽天の ID と値を空にし、理由を入れる
      *
      * @throws RakutenRetryLaterException
      * @throws RakutenApiException
      */
-    private function searchRakuten(string $name): array
+    private function searchRakuten(CollectTarget $target): array
     {
-        $item = $this->rakuten->searchItems($name, RakutenClient::LIQUOR_GENRE_ID)[0] ?? null;
+        $name = $target->name;
+        $node = Category::query()->find($target->categoryId);
+        $genreId = $node !== null ? $this->searchUrls->rakutenGenreId($node) : RakutenClient::LIQUOR_GENRE_ID;
+        $item = $this->rakuten->searchItems($name, $genreId)[0] ?? null;
         if ($item === null) {
             return [
                 ...array_fill_keys(Affiliate::RAKUTEN_COLUMNS, null),
@@ -527,7 +535,8 @@ final class AffiliateCollector
             'rakuten_price' => $item->price,
             'rakuten_image_url' => $item->imageUrl,
             'rakuten_detail_url' => $item->detailUrl,
-            'rakuten_search_url' => $this->searchUrls->rakuten($name),
+            // 探しているあいだにノードが消されたときは、保存しないので、リンクは空でよい
+            'rakuten_search_url' => $node !== null ? $this->searchUrls->rakuten($name, $node) : null,
             'rakuten_fetched_at' => now(),
             'rakuten_searched_at' => now(),
             'rakuten_not_found_reason' => null,
