@@ -10,6 +10,7 @@ use App\Models\CocktailIngredient;
 use App\Services\CategoryNotDeletableException;
 use App\Services\CategoryTree;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 
 // CategoryTree::deleteLeaf(葉の削除。#91。消せない条件は docs/schema.md の「カテゴリを消すとき」)を、MariaDB の閉包表で確かめる。
 // 木は CategoryTree::addNode だけで組み、閉包表に行を直接入れない(CLAUDE.md)。
@@ -93,7 +94,7 @@ function deleteLeafRefusedBlockers(Category $node): array
     throw new RuntimeException('deleteLeaf が CategoryNotDeletableException を投げなかった');
 }
 
-it('TC-91-01: 子・銘柄・材料・ベース・アフィリエイトのどれも無い葉は消え、閉包表からは葉を指す行だけが消える', function () {
+it('TC-91-01: 子・銘柄・材料・ベース・アフィリエイトのどれも無い葉は消え、閉包表からは葉を指す行だけが消え、tree:verify が通る', function () {
     $nodes = deleteLeafTree();
     $leafId = $nodes['葉']->id;
     $rowsBefore = deleteLeafClosureRows();
@@ -106,6 +107,7 @@ it('TC-91-01: 子・銘柄・材料・ベース・アフィリエイトのどれ
             fn (array $row): bool => $row[0] !== $leafId && $row[1] !== $leafId,
         )))
         ->and(count($rowsBefore) - count(deleteLeafClosureRows()))->toBe(3); // 自分・親・根からの 3 行
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
 });
 
 it('TC-91-02〜06: 消せない理由が 1 つだけあると消せず、その理由だけを返し、ノードも閉包表も変わらない', function (CategoryDeleteBlocker $blocker) {
