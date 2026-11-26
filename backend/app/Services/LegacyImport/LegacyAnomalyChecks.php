@@ -115,7 +115,7 @@ final class LegacyAnomalyChecks
                       GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
                                    ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
                     FROM t_cocktails c JOIN t_recipies r ON r.cocktail_id = c.id
-                    GROUP BY c.id
+                    GROUP BY c.id, c.name
                   ) sig
                   GROUP BY s HAVING COUNT(DISTINCT name) > 1
                 ) g
@@ -139,7 +139,7 @@ final class LegacyAnomalyChecks
                       GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
                                    ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
                     FROM t_cocktails c JOIN t_recipies r ON r.cocktail_id = c.id
-                    GROUP BY c.id
+                    GROUP BY c.id, c.name
                   ) sig
                   GROUP BY s, name HAVING COUNT(*) > 1
                 ) g
