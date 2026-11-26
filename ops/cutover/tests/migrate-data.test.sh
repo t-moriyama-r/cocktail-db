@@ -4,7 +4,8 @@
 #
 #   bash ops/cutover/tests/migrate-data.test.sh
 #
-# migrate-data.sh は ../backup/daily-backup.sh・../backup/dump-db.sh・../migrate/copy-storage.sh と php artisan を呼ぶ。
+# migrate-data.sh は ../backup/daily-backup.sh・../backup/dump-db.sh・../migrate/copy-storage.sh と php artisan を呼ぶ
+# (legacy:count-anomalies・migrate・legacy:import・legacy:verify・legacy:verify-images)。
 # 一時ディレクトリに ops/ の形で migrate-data.sh と本物の copy-storage.sh を写し、daily-backup.sh・dump-db.sh と
 # PHP(環境変数 PHP で差し替える)を、呼ばれた順と引数を書き残して決めた終了コードを返す偽物にして流す。
 
@@ -18,7 +19,7 @@ OPS=$WORK/ops
 FAILED=0
 PASSED=0
 
-ALL_CALLS="backup dump-new migrate import verify verify-images"
+ALL_CALLS="backup recount dump-new migrate import verify verify-images"
 
 run_tests() {
   setup_ops
@@ -34,6 +35,9 @@ run_tests() {
   tc_restart
   tc_from
   tc_dump_new_failure
+  tc_recount_different_stops
+  tc_recount_accepted
+  tc_recount_failure
   tc_usage_errors
   tc_no_process_substitution
 
@@ -52,7 +56,7 @@ tc_all_steps() {
   [[ -f $c/new/storage/app/public/a.jpg ]] || ok=0
   grep -q 'すべての手順が済んだ' "$c/out.log" || ok=0
   local s
-  for s in backup dump-new migrate import copy-storage verify; do
+  for s in backup recount dump-new migrate import copy-storage verify; do
     [[ -f $c/state/$s.done ]] || ok=0
     grep -q '^seconds=[0-9]' "$c/state/$s.done" || ok=0
   done
@@ -61,6 +65,8 @@ tc_all_steps() {
   grep -qx "dump=$c/backups/db/app-20261123-030000.sql.gz" "$c/state/dump-new.done" || ok=0
   # migrate は --force を付け、artisan は新アプリのディレクトリで流す
   grep -qx "migrate --force --no-interaction @$c/new" "$c/php.log" || ok=0
+  # 数え直しは、新アプリの artisan で旧 DB(LEGACY_DB_*)に流す
+  grep -qx "legacy:count-anomalies --no-interaction @$c/new" "$c/php.log" || ok=0
   check "TC-139-01: 手順 2〜6 を順に流し、すべて済むと 0 で終わる(済みの記録とかかった秒数が残る)" "$ok"
 }
 
@@ -74,7 +80,7 @@ tc_rerun_skips_done() {
   status=$?
   [[ $status -eq 0 ]] || ok=0
   [[ -z $(calls "$c") ]] || ok=0
-  [[ $(grep -c '済み(.*)。飛ばす' "$c/out.log") -eq 6 ]] || ok=0
+  [[ $(grep -c '済み(.*)。飛ばす' "$c/out.log") -eq 7 ]] || ok=0
   [[ $(cat "$c/state/dump-new.done") == "$before" ]] || ok=0
   check "TC-139-02: すべて済んだ後に流し直すと、どの手順も流さずに 0 で終わる(新 DB のダンプを取り直さない)" "$ok"
 }
@@ -85,10 +91,10 @@ tc_failure_stops_and_resumes() {
   FAKE_IMPORT_STATUS=1 run_migrate "$c"
   status=$?
   [[ $status -eq 1 ]] || ok=0
-  [[ $(calls "$c") == "backup dump-new migrate import" ]] || ok=0
+  [[ $(calls "$c") == "backup recount dump-new migrate import" ]] || ok=0
   [[ ! -e $c/new/storage/app/public/a.jpg ]] || ok=0
   grep -q '\[import\] で止まった(終了コード 1)' "$c/out.log" || ok=0
-  grep -q '済みの手順: backup dump-new migrate$' "$c/out.log" || ok=0
+  grep -q '済みの手順: backup recount dump-new migrate$' "$c/out.log" || ok=0
   grep -q '止まった手順: import' "$c/out.log" || ok=0
   grep -q 'import から続ける' "$c/out.log" || ok=0
   [[ ! -e $c/state/import.done && ! -e $c/state/import.done.tmp ]] || ok=0
@@ -101,7 +107,7 @@ tc_failure_stops_and_resumes() {
   [[ $status -eq 0 ]] || ok=0
   [[ $(calls "$c") == "import verify verify-images" ]] || ok=0
   [[ -f $c/new/storage/app/public/a.jpg ]] || ok=0
-  check "TC-139-04: 直して流し直すと、止まった手順から続ける(済みの backup・dump-new・migrate は流さない)" "$ok"
+  check "TC-139-04: 直して流し直すと、止まった手順から続ける(済みの backup・recount・dump-new・migrate は流さない)" "$ok"
 }
 
 tc_backup_failure_stops() {
@@ -136,7 +142,7 @@ tc_copy_conflict_stops() {
   run_migrate "$c"
   status=$?
   [[ $status -eq 2 ]] || ok=0
-  [[ $(calls "$c") == "backup dump-new migrate import" ]] || ok=0
+  [[ $(calls "$c") == "backup recount dump-new migrate import" ]] || ok=0
   [[ $(cat "$c/new/storage/app/public/a.jpg") == other ]] || ok=0
   grep -q '\[copy-storage\] で止まった(終了コード 2)' "$c/out.log" || ok=0
   grep -q 'どちらを残すかを決めてから' "$c/out.log" || ok=0
@@ -158,7 +164,7 @@ tc_verify_failure() {
   FAKE_VERIFY_STATUS=1 run_migrate "$c"
   status=$?
   [[ $status -eq 2 ]] || ok=0
-  [[ $(calls "$c") == "backup dump-new migrate import verify" ]] || ok=0
+  [[ $(calls "$c") == "backup recount dump-new migrate import verify" ]] || ok=0
   grep -q '7 に進まない' "$c/out.log" || ok=0
   [[ ! -e $c/state/verify.done ]] || ok=0
   check "TC-139-09: legacy:verify が通らなければ、2 で止まる" "$ok"
@@ -229,7 +235,7 @@ tc_from() {
   status=$?
   [[ $status -eq 0 ]] || ok=0
   [[ $(calls "$c") == "migrate import verify verify-images" ]] || ok=0
-  [[ -f $c/state/backup.done && -f $c/state/dump-new.done ]] || ok=0
+  [[ -f $c/state/backup.done && -f $c/state/recount.done && -f $c/state/dump-new.done ]] || ok=0
   check "TC-139-15: --from migrate を付けると、migrate から後ろだけを流し直す(新 DB のダンプは取り直さない)" "$ok"
 }
 
@@ -239,10 +245,61 @@ tc_dump_new_failure() {
   FAKE_DUMP_STATUS=1 run_migrate "$c"
   status=$?
   [[ $status -eq 1 ]] || ok=0
-  [[ $(calls "$c") == "backup dump-new" ]] || ok=0
+  [[ $(calls "$c") == "backup recount dump-new" ]] || ok=0
   grep -q 'BACKUP_DIR があるかを見る' "$c/out.log" || ok=0
-  grep -q '済みの手順: backup$' "$c/out.log" || ok=0
+  grep -q '済みの手順: backup recount$' "$c/out.log" || ok=0
   check "TC-139-16: 新 DB のダンプが取れなければ、移さずに止まる" "$ok"
+}
+
+tc_recount_different_stops() {
+  local c status ok=1
+  c=$(new_case)
+  FAKE_RECOUNT_STATUS=2 run_migrate "$c"
+  status=$?
+  [[ $status -eq 2 ]] || ok=0
+  [[ $(calls "$c") == "backup recount" ]] || ok=0
+  grep -q '\[recount\] で止まった(終了コード 2)' "$c/out.log" || ok=0
+  grep -q 'docs/cutover.md の 3 の 2 の基準で' "$c/out.log" || ok=0
+  grep -q -- '--accept-recount を付けて流し直す' "$c/out.log" || ok=0
+  grep -q 'docs/migration-anomalies.md の件数と違う: 1 件' "$c/state/recount.log" || ok=0
+  [[ ! -e $c/state/recount.done ]] || ok=0
+  check "TC-819-10: 数え直しが文書と違えば(legacy:count-anomalies が 2)、2 で止まり、新 DB に触らない(違ったものは recount.log に残る)" "$ok"
+
+  ok=1
+  : >"$c/calls.log"
+  run_migrate "$c"
+  status=$?
+  [[ $status -eq 0 ]] || ok=0
+  [[ $(calls "$c") == "recount dump-new migrate import verify verify-images" ]] || ok=0
+  ! grep -q '^accepted=' "$c/state/recount.done" || ok=0
+  check "TC-819-11: 旧で直して文書と合うようになってから流し直すと、数え直しから続ける(backup は流さない)" "$ok"
+}
+
+tc_recount_accepted() {
+  local c status ok=1
+  c=$(new_case)
+  FAKE_RECOUNT_STATUS=2 run_migrate "$c"
+  : >"$c/calls.log"
+  FAKE_RECOUNT_STATUS=2 run_migrate "$c" --accept-recount
+  status=$?
+  [[ $status -eq 0 ]] || ok=0
+  [[ $(calls "$c") == "recount dump-new migrate import verify verify-images" ]] || ok=0
+  ! grep -q '前に流したときと引数が違う' "$c/out.log" || ok=0
+  grep -q -- '--accept-recount が付いているので進む' "$c/out.log" || ok=0
+  grep -qx 'accepted=1' "$c/state/recount.done" || ok=0
+  check "TC-819-12: 進めると決めて --accept-recount を付けて流し直すと、違う件数のまま進み、進めたことが済みの記録に残る" "$ok"
+}
+
+tc_recount_failure() {
+  local c status ok=1
+  c=$(new_case)
+  FAKE_RECOUNT_STATUS=1 run_migrate "$c" --accept-recount
+  status=$?
+  [[ $status -eq 1 ]] || ok=0
+  [[ $(calls "$c") == "backup recount" ]] || ok=0
+  grep -q 'LEGACY_DB_\* で旧 DB を読めるかを見る' "$c/out.log" || ok=0
+  [[ ! -e $c/state/recount.done ]] || ok=0
+  check "TC-819-13: 数え直しの SQL を流せなければ(legacy:count-anomalies が 1)、--accept-recount を付けていても止まる" "$ok"
 }
 
 tc_usage_errors() {
@@ -309,6 +366,11 @@ case $1 in
   migrate) echo migrate >>"$FAKE_CALLS"; exit "${FAKE_MIGRATE_STATUS:-0}" ;;
   legacy:import) echo import >>"$FAKE_CALLS"; echo 'misc:'; exit "${FAKE_IMPORT_STATUS:-0}" ;;
   legacy:verify) echo verify >>"$FAKE_CALLS"; exit "${FAKE_VERIFY_STATUS:-0}" ;;
+  legacy:count-anomalies)
+    echo recount >>"$FAKE_CALLS"
+    [[ ${FAKE_RECOUNT_STATUS:-0} -ne 2 ]] || echo 'docs/migration-anomalies.md の件数と違う: 1 件(15)'
+    exit "${FAKE_RECOUNT_STATUS:-0}"
+    ;;
   legacy:verify-images)
     echo verify-images >>"$FAKE_CALLS"
     echo 'found: 3'

@@ -5,16 +5,21 @@
 #   ops/cutover/migrate-data.sh --old-env <旧アプリの .env> --old-storage <旧の画像のディレクトリ>
 #                               --verify-db <復元を確かめる空の DB> [--new-app <新アプリのディレクトリ>]
 #                               [--offsite <送り先の設定ファイル>] [--state-dir <進み具合を残すディレクトリ>]
-#                               [--from <手順>] [--restart]
+#                               [--from <手順>] [--restart] [--accept-recount]
 #
 #   --new-app     新アプリのディレクトリ(省くと ~/cocktail-db)。.env と storage/app/public はこの下のものを使う
 #   --offsite     手順 2 の組を B2 にも送る(daily-backup.sh の --offsite)
 #   --state-dir   進み具合を残すディレクトリ(省くと ~/cocktail-ops/cutover-state)
 #   --from        この手順と、その後ろの手順を「済み」から外して流し直す(例: 移行を直して 4 から流し直すときは --from migrate)
 #   --restart     「済み」をすべて外し、手順 2 から流す(別の日に切り替えをやり直すとき)
+#   --accept-recount
+#                 recount で文書と違う件数が出ても進む。違ったものを docs/cutover.md の 3 の 2 の基準で見て、
+#                 進めると決めたときだけ付けて流し直す(前と違う引数とは見なさない)
 #
 # 手順(この順に流す。名前は --from に渡すもの):
-#   backup        2・3  旧アプリの .env で daily-backup.sh を流し、ダンプを --verify-db に戻して旧 DB と比べる
+#   backup        2・3.1  旧アプリの .env で daily-backup.sh を流し、ダンプを --verify-db に戻して旧 DB と比べる
+#   recount       3.2   php artisan legacy:count-anomalies。旧 DB で docs/migration-anomalies.md の SQL を流して
+#                       数え直し、文書の件数と比べる。違えば止まる(--accept-recount を付けると進む)
 #   dump-new      4.1   新 DB の今の中身を dump-db.sh で取っておく(戻すとき用)
 #   migrate       4.2   php artisan migrate --force
 #   import        4.2   php artisan legacy:import
@@ -38,18 +43,19 @@
 # 終了コード:
 #   0  すべての手順が済んだ(前に済んでいたものを含む)
 #   1  引数・設定のエラー、前と違う引数、または手順が失敗した(中で呼んだものが 1 を返した)
-#   2  手順 6 の確かめが通らなかった・中身の違う同じ名前の画像があった(人が見て決める)
+#   2  手順 3.2 の数え直しが文書と違った・手順 6 の確かめが通らなかった・中身の違う同じ名前の画像があった(人が見て決める)
 #   ほか  失敗した手順で中から返った終了コード
 #
 # 手順 1(書き込みを止める)・7(ドキュメントルートの切り替え)・9(新の cron)は cPanel での人の作業なので、ここでは流さない。
 
 set -uo pipefail
 
-STEPS=(backup dump-new migrate import copy-storage verify)
+STEPS=(backup recount dump-new migrate import copy-storage verify)
 
 migrate_data() {
   local old_env='' old_storage='' verify_db='' new_app="$HOME/cocktail-db" offsite='' state_dir="$HOME/cocktail-ops/cutover-state"
   local from='' restart=0
+  ACCEPT_RECOUNT=0
   while [[ $# -gt 0 ]]; do
     case $1 in
       --old-env) require_value "$@"; old_env=$2; shift 2 ;;
@@ -60,6 +66,7 @@ migrate_data() {
       --state-dir) require_value "$@"; state_dir=$2; shift 2 ;;
       --from) require_value "$@"; from=$2; shift 2 ;;
       --restart) restart=1; shift ;;
+      --accept-recount) ACCEPT_RECOUNT=1; shift ;;
       *) usage ;;
     esac
   done
@@ -145,6 +152,24 @@ step_backup() {
   write_state backup check "$check" || return 1
   write_state backup missing "$missing" || return 1
   log "[backup] 旧のダンプ: $dump / 旧から欠けていた画像(missing): $missing"
+}
+
+step_recount() {
+  local status=0
+  run_logged recount artisan legacy:count-anomalies --no-interaction || status=$?
+  ((status != 0)) || return 0
+  if ((status != 2)); then
+    log "[recount] legacy:count-anomalies が終了コード $status で終わった。新アプリの .env の LEGACY_DB_* で旧 DB を読めるかを見る"
+    return "$status"
+  fi
+  if ((ACCEPT_RECOUNT)); then
+    write_state recount accepted 1 || return 1
+    log "[recount] docs/migration-anomalies.md の件数と違うが、--accept-recount が付いているので進む(違ったものは recount.log)"
+    return 0
+  fi
+  log "[recount] docs/migration-anomalies.md の件数と違う。docs/cutover.md の 3 の 2 の基準で、進めるか止めるかを決める"
+  log "[recount] 進めるなら、同じコマンドに --accept-recount を付けて流し直す。止めるなら 1 の戻し方をする"
+  return 2
 }
 
 step_dump_new() {
