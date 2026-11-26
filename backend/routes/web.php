@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\AdminLoginLinkController;
-use App\Http\Controllers\LegacyAdminCategoryUrlController;
 use App\Http\Controllers\DetailPageController;
+use App\Http\Controllers\LegacyAdminCategoryUrlController;
 use App\Http\Controllers\LegacyCardUrlController;
 use App\Http\Controllers\LegacyCategoryUrlController;
 use App\Http\Controllers\SitemapController;
