@@ -2,6 +2,7 @@
 
 use App\Services\LegacyImport\LegacyAnomalyCheck;
 use App\Services\LegacyImport\LegacyAnomalyChecks;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\PendingCommand;
 use Tests\Support\LegacyFixture;
@@ -131,13 +132,15 @@ it('TC-819-04: 旧 DB ですべての SQL が流れ、文書と違うものを�
 
     // LegacyFixture は、消えたカクテル 99 の材料の行 2 行と、カクテル 2 の同じ材料の組 2 組(量も同じものが 1 組)を持つ。
     // 4(銘柄のミドルの親とカテゴリが合わない)は銘柄 4 の 1 件で、文書と同じ数になる
-    countLegacyAnomalies($this)
-        ->expectsOutputToContain('rows_=2, cocktails=1')
-        ->expectsOutputToContain('groups_=2, rows_=4, same_amount_groups=1')
-        ->expectsOutputToContain('合う')
-        ->expectsOutputToContain('docs/migration-anomalies.md の件数と違う: '.(count(LegacyAnomalyChecks::all()) - 1).' 件')
-        ->expectsOutputToContain('docs/cutover.md の 3 の 2 の基準で決める')
-        ->assertExitCode(2);
+    $exit = Artisan::call('legacy:count-anomalies');
+    $output = Artisan::output();
+
+    expect($exit)->toBe(2, $output)
+        ->and($output)->toContain('rows_=2, cocktails=1')
+        ->and($output)->toContain('groups_=2, rows_=4, same_amount_groups=1')
+        ->and($output)->toContain('合う')
+        ->and($output)->toContain('docs/migration-anomalies.md の件数と違う: '.(count(LegacyAnomalyChecks::all()) - 1).' 件')
+        ->and($output)->toContain('docs/cutover.md の 3 の 2 の基準で決める');
 })->group('db');
 
 it('TC-819-05: 旧 DB で SQL を流せなければ 1 で終わる', function () {

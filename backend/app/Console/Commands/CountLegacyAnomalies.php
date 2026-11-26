@@ -30,9 +30,11 @@ final class CountLegacyAnomalies extends Command
         $connection = DB::connection('legacy');
         $rows = [];
         $different = [];
+        $section = '(SET の文)';
         try {
             $connection->statement(LegacyAnomalyChecks::PRELUDE);
             foreach (LegacyAnomalyChecks::all() as $check) {
+                $section = $check->section;
                 $result = $check->run($connection);
                 $rows[] = [
                     $check->section,
@@ -46,7 +48,7 @@ final class CountLegacyAnomalies extends Command
                 }
             }
         } catch (QueryException $e) {
-            $this->error('旧 DB で SQL を流せなかった: '.$e->getMessage());
+            $this->error("旧 DB で SQL を流せなかった(節 {$section}): ".$e->getMessage());
 
             return self::FAILURE;
         }
