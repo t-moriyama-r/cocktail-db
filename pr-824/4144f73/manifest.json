@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "before": "ecbd8938798fa8e86a08bcf1d5bb11d622028aae",
+  "after": "4144f7316f33f1c0b435ed4536342f6c46b48b79",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-818-01",
+        "TC-818-05"
+      ],
+      "note": "いまのコードで 3 つとも通り、終了コード 0",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    },
+    {
+      "id": "02-command",
+      "kind": "command",
+      "cases": [
+        "TC-818-02"
+      ],
+      "note": "構文の段(php -l)で落ちる",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "02-command-before.png",
+        "02-command-after.png",
+        "02-command-compare.png"
+      ]
+    },
+    {
+      "id": "03-command",
+      "kind": "command",
+      "cases": [
+        "TC-818-03"
+      ],
+      "note": "構文の段は通り、書式の段(pint --test)で落ちる",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "03-command-before.png",
+        "03-command-after.png",
+        "03-command-compare.png"
+      ]
+    },
+    {
+      "id": "04-command",
+      "kind": "command",
+      "cases": [
+        "TC-818-04"
+      ],
+      "note": "構文・書式の段は通り、型の段(phpstan analyse)で落ちる",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "04-command-before.png",
+        "04-command-after.png",
+        "04-command-compare.png"
+      ]
+    }
+  ]
+}
