@@ -15,22 +15,7 @@ FE(`frontend/`)の画面のスタイルの書き方と、見た目の基準(色�
 | `breakpoints.ts` | 幅の区切りの値(下の「幅の区切り」)と、メディアクエリの文字列を作る `mediaUp`・`mediaDown`。JS で幅を見るときに使う |
 
 - 画面ごとのスタイルは `*.module.css` に書き、色・余白・文字の大きさは数値ではなく `tokens.css` の変数を使う
-- 試作(`src/design-proposals/`)は、見た目を決めるときに使った見本。変数を `src/design-proposals/tokens.css` に別に持っていて、`styles/` の土台は読まない。画面の実装は試作の変数を使わない
-
-## 試作の画面の開き方
-
-見た目を決めるときに使った試作の画面(`frontend/design.html` → `frontend/src/design-proposals/`)は、開発サーバーだけで開ける。本番のビルド(`vite.config.ts` の `build.rollupOptions.input` は `src/main.tsx` だけ)には入らない。
-
-```bash
-cd frontend
-npm run dev
-# http://localhost:5173/spa/design.html?proposal=a&screen=top
-#   proposal: a(案 A。決まった見た目)
-#   screen:   top(トップ)・detail(カクテル詳細)・result(条件検索の結果の表)
-#   bar=0 を付けると上の切り替えの帯を消す(スクリーンショット用)
-```
-
-試作は見本のデータ(`sampleData.ts`)を出すだけで、API は呼ばない。試作のコードには、選ばなかった案も比べたときのまま残っている。画面の実装は、それに従わない。
+- 見た目を決めるときに使った #294 の試作の画面は、案 A に決まり、試作で見比べたトップ・カクテル詳細・条件検索の結果の表が `styles/` の土台で実装されたので、消した(#831)
 
 ## 方式の候補
 
@@ -77,7 +62,7 @@ npm run dev
 | ヘッダーの高さ `--header-height` | 40px |
 | ヘッダーの影 `--header-shadow` | `0 10px 3px rgb(0 0 0 / 10%)`(旧の `Header/header.vue` の `drop-shadow(0px 10px 3px rgba(0,0,0,0.1))` と同じ。ヘッダーの下の影) |
 
-試作の後に、部品を作るときに `frontend/src/styles/tokens.css` へ足したトークン(試作の `design-proposals/tokens.css` には無い):
+試作の後に、部品を作るときに `frontend/src/styles/tokens.css` へ足したトークン(#294 の試作には無かったもの):
 
 | トークン | 値 | 使うところ |
 |---|---|---|
@@ -110,7 +95,7 @@ npm run dev
 
 旧(Vuetify)の区切りをそのまま使う(旧の `components/mq.scss`)。値は `frontend/src/styles/breakpoints.ts` にまとめている。CSS 変数はメディアクエリに使えないので、各 `*.module.css` には数値で書く(以上は `min-width: 600px`・`960px`・`1264px`、未満は `max-width: 599px`・`959px`・`1263px`)。ほかの値を書くと `breakpoints.test.ts` が落ちる。例外は、カクテルの一覧の表のベースの列(#298)と、銘柄の一覧の表の所属するノードの段(#299)を 700px 未満で隠す `max-width: 699px` と、商品の欄(#303)を 768px 以上で画像の右に題名・ボタンを並べる `min-width: 768px` だけ(旧と同じ見た目にするため。テストに許す値として、ファイルごとに書いてある)。
 
-| 名前 | 幅 | 変わるもの(試作) | 証跡を撮る幅 |
+| 名前 | 幅 | 変わるもの(#294 の試作) | 証跡を撮る幅 |
 |---|---|---|---|
 | xs | 〜599px | 表を 2 段(名前の段と数値の段)に組み替える。英名・ベースの列は出さない。ヘッダーの登録数を出さない | 375px |
 | sm | 600px〜 | 表を普通の表で出す。トップの副題を出す | 768px |
