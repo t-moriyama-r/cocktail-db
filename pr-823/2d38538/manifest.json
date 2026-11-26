@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "before": "ecbd8938798fa8e86a08bcf1d5bb11d622028aae",
+  "after": "2d385386b520bbbdf0f261ddc422c2104f971f27",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-817-01",
+        "TC-817-02",
+        "TC-817-03",
+        "TC-817-04",
+        "TC-817-06"
+      ],
+      "note": "旧カテゴリ 3・旧ミドル 7 を、いちばん小さい ID のノードに対応させてから送る。行ごとに「メソッド パス -> 状態 Location」を出す",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    }
+  ]
+}
