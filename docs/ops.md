@@ -8,7 +8,7 @@
 
 | コマンド | 間隔 | 決めたところ |
 |---|---|---|
-| `affiliates:collect --refresh --new`(アフィリエイトの商品の取り直しと、新しく探す) | 10 分ごと(`.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`。前の回が終わっていなければ重ねて流さない) | `docs/decisions/affiliate-freshness.md` の 5・#249 |
+| `affiliates:collect --refresh --new`(アフィリエイトの商品の取り直しと、新しく探す) | 10 分ごと(管理画面の設定の「アフィリエイトの収集の間隔(分)」、画面で保存していなければ `.env` の `AFFILIATES_COLLECT_INTERVAL_MINUTES`。#826。前の回が終わっていなければ重ねて流さない) | `docs/decisions/affiliate-freshness.md` の 5・#249 |
 | `model:prune --model=App\Models\IdempotencyKey`(管理画面の保存の冪等キーの記録のうち、7 日より古いものを消す) | 毎日 19:05(アプリの時刻の UTC。日本時間の 4:05) | `docs/decisions/admin-idempotency.md` の 10・#763 |
 
 ### どの環境に登録するか
@@ -31,7 +31,7 @@
    cd ~/<アプリ本体> && php artisan schedule:list
    ```
 
-   `php artisan affiliates:collect --refresh --new` が `*/10 * * * *`(`.env` で間隔を変えていれば、その間隔)で、`php artisan model:prune`(`IdempotencyKey`)が `5 19 * * *` で出ればよい。
+   `php artisan affiliates:collect --refresh --new` が `*/<間隔> * * * *` で出る。`<間隔>` は、管理画面の設定で保存した値、無ければ `.env` の値、どちらも無ければ 10。`php artisan model:prune`(`IdempotencyKey`)は `5 19 * * *` で出ればよい。
 
 2. cPanel の「Cron ジョブ」に 1 つ登録する。時刻は分・時・日・月・曜日をすべて `*`(毎分)にし、コマンドに次を入れる。失敗を知らせるメールアドレスは、画面の上の「Cron の電子メール」に入れる(`docs/backup.md` の「サーバーに入れる」の 5 と同じ。`MAILTO=`・`PATH=` の行は書けないので、`PATH` はコマンドの先頭に付ける)
 
@@ -50,7 +50,7 @@
 
 ### 確かめる
 
-登録してから 10 分ほど待って、サーバーで次を見る。
+登録してから、`schedule:list` に出た次回の予定の時刻(間隔の分。既定は 10 分)まで待って、サーバーで次を見る。
 
 ```bash
 cd ~/<アプリ本体> && tail -n 20 storage/logs/schedule-run.log

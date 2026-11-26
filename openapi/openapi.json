@@ -7935,7 +7935,10 @@
                             "rakuten.application_id",
                             "rakuten.access_key",
                             "rakuten.affiliate_id",
-                            "ga4.measurement_id"
+                            "ga4.measurement_id",
+                            "affiliates.interval_minutes",
+                            "affiliates.refresh_limit",
+                            "affiliates.new_limit"
                         ]
                     },
                     "value": {

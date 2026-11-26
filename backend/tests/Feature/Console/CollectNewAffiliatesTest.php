@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Services\Affiliate\AffiliateCollector;
 use App\Services\CategoryTree;
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
@@ -715,3 +716,21 @@ it('TC-695-09: ノード・銘柄を消すと、その失敗の記録も消え�
 
     expect(AffiliateCollectFailure::query()->count())->toBe(0);
 });
+
+// 管理画面の設定で保存した件数(#826。docs/decisions/settings.md)。旧には設定の画面が無い(旧に無い)
+it('TC-826-08: --limit を省くと、画面で保存した件数まで探す。画面で保存していなければ .env の件数まで探す', function (?string $saved, int $expected) {
+    config()->set('settings', array_merge(config()->array('settings'), ['affiliates.new_limit' => '4']));
+    if ($saved !== null) {
+        app(Settings::class)->set('affiliates.new_limit', $saved);
+    }
+    $node = collectTree()['node'];
+    Brand::factory()->count(6)->for($node, 'category')->create();
+    collectFake();
+
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    expect(Affiliate::query()->count())->toBe($expected);
+})->with([
+    '画面で 2 件' => ['2', 2],
+    '画面で保存していない' => [null, 4],
+]);

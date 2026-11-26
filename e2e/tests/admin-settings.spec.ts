@@ -94,3 +94,53 @@ test('TC-133-19: 画面から変えられない設定(APP_KEY など)の説明�
   await expect(fixed).toContainText('APP_URL')
   await expect(fixed).toContainText('DB の接続')
 })
+
+// アフィリエイトの収集の間隔・1 回の件数(#826)。保存した値は、ほかの E2E・リトライに残さないよう、失敗しても .env の値に戻す(RC-18)
+const COLLECT_SETTINGS = [
+  { key: 'affiliates.interval_minutes', label: 'アフィリエイトの収集の間隔(分)', value: '15' },
+  { key: 'affiliates.refresh_limit', label: 'アフィリエイトの 1 回に取り直す件数', value: '20' },
+  { key: 'affiliates.new_limit', label: 'アフィリエイトの 1 回に新しく探す件数', value: '8' },
+] as const
+
+test.describe('アフィリエイトの収集の設定', () => {
+  test.afterEach(async ({ page }) => {
+    // 画面を開けずに落ちた回は、CSRF のトークンが無いので戻せない(保存もしていない)
+    if (!page.url().includes('/admin/settings')) return
+    for (const { key } of COLLECT_SETTINGS) await resetSetting(page, key)
+  })
+
+  test('TC-826-10: 収集の間隔・取り直す件数・新しく探す件数の 3 項目が出て、保存すると開き直しても保存した値が出る', async ({ page, baseURL }) => {
+    await openSettings(page, baseURL!)
+
+    for (const { label, value } of COLLECT_SETTINGS) {
+      const section = page.getByRole('region', { name: label })
+      await expect(section).toBeVisible()
+      await section.getByLabel('値').fill(value)
+      await section.getByRole('button', { name: '保存' }).click()
+      await expect(section.getByRole('status')).toHaveText('保存しました。')
+    }
+
+    await page.reload()
+    for (const { label, value } of COLLECT_SETTINGS) {
+      const section = page.getByRole('region', { name: label })
+      await expect(section.getByLabel('値')).toHaveValue(value)
+      await expect(section.getByText('この画面で保存した値', { exact: true })).toBeVisible()
+      await expect(section.getByText(/^E2E の管理者\(/)).toBeVisible()
+    }
+  })
+
+  test('TC-826-11: 間隔に範囲の外の値(60)を入れると、その項目の下にメッセージが出て、保存されない', async ({ page, baseURL }) => {
+    await openSettings(page, baseURL!)
+    const label = 'アフィリエイトの収集の間隔(分)'
+    const section = page.getByRole('region', { name: label })
+    const before = await section.getByLabel('値').inputValue()
+
+    await section.getByLabel('値').fill('60')
+    await section.getByRole('button', { name: '保存' }).click()
+
+    await expect(section.getByRole('alert')).toContainText('この値は保存できません。')
+    await expect(section.getByLabel('値')).toHaveAttribute('aria-invalid', 'true')
+    await page.reload()
+    await expect(page.getByRole('region', { name: label }).getByLabel('値')).toHaveValue(before)
+  })
+})

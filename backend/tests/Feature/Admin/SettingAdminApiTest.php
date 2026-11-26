@@ -24,6 +24,9 @@ beforeEach(function () {
         'rakuten.access_key' => null,
         'rakuten.affiliate_id' => null,
         'ga4.measurement_id' => null,
+        'affiliates.interval_minutes' => null,
+        'affiliates.refresh_limit' => null,
+        'affiliates.new_limit' => null,
     ]);
 });
 
@@ -43,8 +46,8 @@ function settingItem(mixed $json, string $key): array
     throw new RuntimeException("一覧に {$key} が無い");
 }
 
-// GA4 の測定 ID(#59)を足して 7 項目になった
-it('TC-132-01: 一覧は、定義の 7 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
+// GA4 の測定 ID(#59)を足して 7 項目、アフィリエイトの収集の間隔・件数(#826)を足して 10 項目になった
+it('TC-132-01: 一覧は、定義の 10 項目を定義の順で返し、どこにも値が無ければ未設定として返す', function () {
     $response = $this->getJson('/api/admin/settings')->assertOk();
     $json = $response->json();
 
@@ -52,8 +55,9 @@ it('TC-132-01: 一覧は、定義の 7 項目を定義の順で返し、どこ�
         'amazon.credential_id', 'amazon.credential_secret', 'amazon.partner_tag',
         'rakuten.application_id', 'rakuten.access_key', 'rakuten.affiliate_id',
         'ga4.measurement_id',
+        'affiliates.interval_minutes', 'affiliates.refresh_limit', 'affiliates.new_limit',
     ])
-        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false, false])
+        ->and($response->json('data.*.secret'))->toBe([true, true, false, true, true, false, false, false, false, false])
         ->and(settingItem($json, 'amazon.partner_tag'))->toBe([
             'key' => 'amazon.partner_tag',
             'label' => 'Amazon のパートナータグ',
@@ -312,17 +316,20 @@ it('TC-689-01: .env の値が空の行なら、一覧はどの項目も未設定
         'RAKUTEN_ACCESS_KEY' => '',
         'RAKUTEN_AFFILIATE_ID' => '',
         'GA4_MEASUREMENT_ID' => '',
+        'AFFILIATES_COLLECT_INTERVAL_MINUTES' => '',
+        'AFFILIATES_REFRESH_LIMIT' => '',
+        'AFFILIATES_NEW_LIMIT' => '',
     ], function () {
         // 前提: env() は値の無い行に空の文字を返す
         expect(array_values(array_unique(array_map(fn (mixed $v): string => is_scalar($v) ? (string) $v : '', config()->array('settings')))))->toBe(['']);
 
         $response = $this->getJson('/api/admin/settings')->assertOk();
 
-        expect($response->json('data.*.key'))->toHaveCount(7)
-            ->and($response->json('data.*.is_set'))->toBe(array_fill(0, 7, false))
-            ->and($response->json('data.*.value'))->toBe(array_fill(0, 7, null))
-            ->and($response->json('data.*.last_four'))->toBe(array_fill(0, 7, null))
-            ->and($response->json('data.*.source'))->toBe(array_fill(0, 7, null));
+        expect($response->json('data.*.key'))->toHaveCount(10)
+            ->and($response->json('data.*.is_set'))->toBe(array_fill(0, 10, false))
+            ->and($response->json('data.*.value'))->toBe(array_fill(0, 10, null))
+            ->and($response->json('data.*.last_four'))->toBe(array_fill(0, 10, null))
+            ->and($response->json('data.*.source'))->toBe(array_fill(0, 10, null));
     });
 });
 
@@ -348,3 +355,59 @@ it('TC-689-03: .env の値が「0」のような空でない文字なら、こ�
             ->toMatchArray(['is_set' => true, 'value' => '0', 'source' => 'env']);
     });
 });
+
+// アフィリエイトの収集の間隔・1 回の件数(#826。docs/decisions/settings.md)。旧には設定の画面が無い(旧に無い)
+it('TC-826-01: 収集の間隔・取り直す件数・新しく探す件数は、秘密でない項目として一覧に出て、.env の値を出どころ付きで返す', function () {
+    config()->set('settings', array_merge(config()->array('settings'), ['affiliates.interval_minutes' => '20']));
+
+    $json = $this->getJson('/api/admin/settings')->assertOk()->json();
+
+    expect(settingItem($json, 'affiliates.interval_minutes'))->toMatchArray([
+        'label' => 'アフィリエイトの収集の間隔(分)', 'secret' => false, 'is_set' => true, 'value' => '20', 'last_four' => null, 'source' => 'env',
+    ])
+        ->and(settingItem($json, 'affiliates.refresh_limit'))->toMatchArray([
+            'label' => 'アフィリエイトの 1 回に取り直す件数', 'secret' => false, 'is_set' => false, 'value' => null, 'source' => null,
+        ])
+        ->and(settingItem($json, 'affiliates.new_limit'))->toMatchArray([
+            'label' => 'アフィリエイトの 1 回に新しく探す件数', 'secret' => false, 'is_set' => false, 'value' => null, 'source' => null,
+        ]);
+});
+
+it('TC-826-02: 範囲の中の値は保存でき、一覧に画面で保存した値として出て、最後に変えた人が残る', function (string $key, string $value) {
+    $this->putJson('/api/admin/settings', ['key' => $key, 'value' => $value])
+        ->assertOk()
+        ->assertJsonPath('data.value', $value)
+        ->assertJsonPath('data.source', 'saved')
+        ->assertJsonPath('data.updated_by.id', $this->admin->id);
+
+    expect(app(Settings::class)->get($key))->toBe($value);
+})->with([
+    '間隔: 1' => ['affiliates.interval_minutes', '1'],
+    '間隔: 59' => ['affiliates.interval_minutes', '59'],
+    '取り直す件数: 1' => ['affiliates.refresh_limit', '1'],
+    '取り直す件数: 100' => ['affiliates.refresh_limit', '100'],
+    '新しく探す件数: 1' => ['affiliates.new_limit', '1'],
+    '新しく探す件数: 100' => ['affiliates.new_limit', '100'],
+]);
+
+it('TC-826-03: 範囲の外・整数でない値は 422 で、メッセージは 1 つだけ出て、行は増えない', function (string $key, string $value) {
+    $response = $this->putJson('/api/admin/settings', ['key' => $key, 'value' => $value])
+        ->assertUnprocessable()
+        ->assertOnlyJsonValidationErrors(['value']);
+
+    expect($response->json('errors.value'))->toHaveCount(1)
+        ->and(Setting::query()->count())->toBe(0);
+})->with([
+    '間隔: 0' => ['affiliates.interval_minutes', '0'],
+    '間隔: 60' => ['affiliates.interval_minutes', '60'],
+    '間隔: -5' => ['affiliates.interval_minutes', '-5'],
+    '間隔: 小数' => ['affiliates.interval_minutes', '1.5'],
+    '間隔: 文字' => ['affiliates.interval_minutes', 'abc'],
+    '間隔: 先頭に +' => ['affiliates.interval_minutes', '+5'],
+    '間隔: 先頭に 0' => ['affiliates.interval_minutes', '05'],
+    '取り直す件数: 0' => ['affiliates.refresh_limit', '0'],
+    '取り直す件数: 101' => ['affiliates.refresh_limit', '101'],
+    '新しく探す件数: 0' => ['affiliates.new_limit', '0'],
+    '新しく探す件数: 101' => ['affiliates.new_limit', '101'],
+    '新しく探す件数: 全角' => ['affiliates.new_limit', '５'],
+]);
