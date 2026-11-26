@@ -28,6 +28,8 @@ $collectKeepFrom = $collectDate->copy()->subDays(13)->toDateString();
 Schedule::command('affiliates:collect --refresh --new')
     ->cron("*/{$interval} * * * *")
     ->withoutOverlapping(30)
+    // 既定の排他の名前には cron 式が入る。実行中に画面で間隔を変えても重ねて流さないよう、間隔に依存しない固定の名前にする
+    ->createMutexNameUsing('affiliates-collect-refresh-new')
     ->before(function () use ($collectLog, $collectKeepFrom) {
         foreach (File::glob(storage_path('logs/affiliates-collect-*.log')) as $path) {
             if (is_string($path) && preg_match('/affiliates-collect-(\d{4}-\d{2}-\d{2})\.log\z/', $path, $matches) === 1 && $matches[1] < $collectKeepFrom) {

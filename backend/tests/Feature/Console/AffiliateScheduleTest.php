@@ -51,3 +51,7 @@ it('TC-249-21: 間隔は設定から読み、1〜59 の整数でなければ既�
     'abc' => ['abc', '*/10 * * * *'],
     '無い' => [null, '*/10 * * * *'],
 ]);
+
+it('TC-826-12: 排他の名前は間隔に依存せず、画面で間隔を変えても実行中の収集に重ねて流さない', function () {
+    expect(scheduleAffiliateEvent(10)->mutexName())->toBe(scheduleAffiliateEvent(1)->mutexName());
+});
