@@ -40,6 +40,7 @@ cd backend
 php artisan test --exclude-group=db   # 手元に MariaDB が無いとき。DB を使うテストを飛ばす
 php artisan test                      # MariaDB があるとき(DB_* を環境変数で渡す)。CI はこちら
 vendor/bin/pint                       # コード整形(Laravel Pint)
+composer lint                         # CI の backend-lint ジョブと同じ構文・書式・型のチェック(php -l・pint --test・phpstan。新しいファイルは git add してから)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
