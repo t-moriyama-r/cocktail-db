@@ -102,7 +102,10 @@ $rakuten=RakutenFactory::generateFromWord($word,$is_not_liqueur);
 1. `Category::find(...)` はモデルを返し、モデルの `value()` は Eloquent の `Model::__call` で**新しいクエリ**に渡される(Laravel 13 の `Model::__call` も最後は `forwardCallTo($this->newQuery(), ...)`)。そのため `select kind from m_category limit 1` になり、探したカテゴリではなく表の先頭の行の `kind` を読む。旧システムを手元で動かし、kind 4・5 のカテゴリで `value("kind")` が 1 を返し、`$is_not_liqueur` が false になることと、そのときのクエリを確かめた(手元で動くのは Laravel 6 の BE。この行は `laravel13/` と同じ)
 2. `laravel13/app/Classes/Factory/RakutenFactory.php` の `generateFromWord(string $name)` は引数を 1 つしか受け取らず、`generateURL($name)` を `$is_not_liqueur` の既定値 false で呼ぶ。渡した値は捨てられる
 
-結果として、本番の楽天の検索は、種別によらず**いつもジャンル `510915` で絞っている**(`generateURL` は `$is_not_liqueur` が false のときにジャンルを付ける)。ここで決めた「洋酒ではない」の判定(根の role が `soft_drink` か `other`)を楽天の検索に使うと、ソフトドリンク・その他の検索結果が旧と変わる。楽天の検索でこの判定を使うか(旧と変わることを意図した差分とするか、旧に合わせていつも絞るか)は、楽天の検索を作る issue(#72・#73)で決める。#72 は呼ぶ側に任せ、呼ぶ側の #248(`affiliates:collect --new`)は、差分が決まっていないので旧に合わせていつも絞る。
+結果として、本番の楽天の検索は、種別によらず**いつもジャンル `510915` で絞っている**(`generateURL` は `$is_not_liqueur` が false のときにジャンルを付ける)。ここで決めた「洋酒ではない」の判定(根の role が `soft_drink` か `other`)を楽天の検索に使うと、ソフトドリンク・その他の検索結果が旧と変わる。楽天の検索でこの判定を使うか(旧と変わることを意図した差分とするか、旧に合わせていつも絞るか)は、#73 で 2026-11-26 にオーナーが決め、#827 で入れた。**判定を使い、洋酒でない材料ではジャンルで絞らない**(旧のコードが意図していた動きに戻す)。名前での検索(`affiliates:collect --new`。#248)も、検索結果のページへのリンク(`AffiliateSearchUrls::rakuten`)も、同じ分け方にする。銘柄は、ぶら下がるノードで判定する。
+
+- 根拠: 本番の旧データ(2026-11-22 のダンプ)で、いつも絞っていた旧の結果を数えた。ソフトドリンクは 107 行中 67 行、その他は 55 行中 49 行に楽天の商品が付いていた。そこから 24 件を無作為に見ると、材料そのものの商品だったのは 3 件ほど。残りは名前の似たワイン・ビール・チューハイだった(#827)
+- 旧との差分は `docs/decisions/rakuten-client.md` の「旧との差分」にある(楽天の商品の検索の行)
 
 ### 判定ではなく、種別で分けて見せているもの
 

@@ -20,6 +20,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * - Amazon の認証情報かパートナータグが設定に無いあいだ(AmazonClient::isConfigured() が偽)は、Creators API を
  *   使えないので、Amazon の値は期限内でも返さず、名前から組み立てた検索結果のリンクだけを返す(#136)。商品が
  *   一度も見つかっていなくても返す
+ * - 楽天の検索結果のリンクは、洋酒でない材料(ノード。銘柄なら、ぶら下がるノード)ではジャンルで絞らない(#827。
+ *   AffiliateSearchUrls::rakutenGenreId)
  * - human: 手で入れた値。期限なしで返す
  *
  * @property Affiliate $resource
@@ -60,7 +62,7 @@ class AffiliateResource extends JsonResource
             'detail_url' => $rakutenFresh ? $affiliate->rakuten_detail_url : null,
             'search_url' => $rakutenFresh
                 ? $affiliate->rakuten_search_url
-                : ($rakutenFound ? $searchUrls->rakuten($name) : null),
+                : ($rakutenFound ? $searchUrls->rakuten($name, $affiliate->category) : null),
             'fetched_at' => $rakutenFresh ? $affiliate->rakuten_fetched_at : null,
         ];
 

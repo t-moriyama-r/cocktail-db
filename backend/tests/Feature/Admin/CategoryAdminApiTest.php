@@ -270,7 +270,7 @@ it('TC-121-03: 取得は、親・パンくず・役割・有名な銘柄の候�
     $this->getJson('/api/admin/categories/999999')->assertNotFound();
 });
 
-it('TC-121-04: 洋酒の部分木の新規は、その場で作った銘柄を直下の銘柄と有名な銘柄にし、201 で返す', function () {
+it('TC-121-04: 洋酒の部分木の新規は、その場で作った銘柄を直下の銘柄と有名な銘柄にし、201 で返し、tree:verify が通る', function () {
     ['nodes' => $n] = categoryAdminTree();
     $n['ホワイトラム']->update(['sort_order' => 7]);
     $n['ダークラム']->update(['sort_order' => 3]);
@@ -315,6 +315,7 @@ it('TC-121-04: 洋酒の部分木の新規は、その場で作った銘柄を�
         ->and((float) $brand->volume)->toBe(40.0);
     $response->assertJsonPath('data.famous_brand_id', $brand->id)
         ->assertJsonPath('data.brands', [['id' => $brand->id, 'name' => 'ロンサカパ', 'name_eng' => 'Ron Zacapa']]);
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
 });
 
 it('TC-121-05: 必須の項目が無いと 422 で、保存しない', function (string $field, mixed $value) {
@@ -649,7 +650,7 @@ it('TC-121-21: 説明の名前で書いた記法の名前が見つからない�
         ->assertJsonValidationErrors(['description']);
 });
 
-it('TC-121-22: 子・銘柄・材料・ベース・アフィリエイトの無い葉は消せ、画像のファイルも消える', function () {
+it('TC-121-22: 子・銘柄・材料・ベース・アフィリエイトの無い葉は消せ、画像のファイルも消え、tree:verify が通る', function () {
     Storage::fake('public');
     ['nodes' => $n] = categoryAdminTree();
     Storage::disk('public')->put('sugar.png', (string) base64_decode(CATEGORY_ADMIN_PNG, true));
@@ -661,6 +662,7 @@ it('TC-121-22: 子・銘柄・材料・ベース・アフィリエイトの無�
         ->and(CategoryClosure::query()->where('descendant_id', $n['砂糖']->id)->exists())->toBeFalse()
         ->and(categoryAdminPathNames($n['その他']))->toBe(['その他']);
     Storage::disk('public')->assertMissing('sugar.png');
+    expect(Artisan::call('tree:verify'))->toBe(0, Artisan::output());
 });
 
 it('TC-121-23: 消せないノードは 409 で、理由をすべて決まった順に返し、消さない', function (string $codes) {
