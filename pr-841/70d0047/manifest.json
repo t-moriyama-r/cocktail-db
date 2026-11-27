@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "before": "d1d2c2e44be788a3a470f62144fe414ca499a8f8",
+  "after": "70d00479d5e14593053b2dfe5bc20a5655eeb005",
+  "items": [
+    {
+      "id": "01-command",
+      "kind": "command",
+      "cases": [
+        "TC-840-01",
+        "TC-840-02"
+      ],
+      "note": "修正前は key:generate・schedule:list とも MissingAppKeyException で終了コード 1。修正後はどちらも終了コード 0 で、schedule:list の affiliates:collect は保存した 15 ではなく .env の間隔(無ければ */10)",
+      "seed": {
+        "before": "E2eSeeder",
+        "after": "E2eSeeder"
+      },
+      "files": [
+        "01-command-before.png",
+        "01-command-after.png",
+        "01-command-compare.png"
+      ]
+    }
+  ]
+}
