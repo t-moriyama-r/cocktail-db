@@ -54,6 +54,12 @@
             "@php artisan config:clear --ansi @no_additional_args",
             "@php artisan test"
         ],
+        "lint": [
+            "Composer\\Config::disableProcessTimeout",
+            "bash -o pipefail -c 'git ls-files -z \"*.php\" \":!:*.blade.php\" | xargs -0 -n1 php -l -d display_errors=1'",
+            "@php vendor/bin/pint --test",
+            "@php vendor/bin/phpstan analyse --memory-limit=1G --no-progress"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
@@ -72,6 +78,9 @@
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
+    },
+    "scripts-descriptions": {
+        "lint": "CI の backend-lint ジョブと同じ、構文(php -l)・書式(Pint)・型(PHPStan)のチェックを流す"
     },
     "extra": {
         "laravel": {

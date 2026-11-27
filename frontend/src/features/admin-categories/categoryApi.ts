@@ -20,6 +20,11 @@ export type SaveCategoryResult =
   | { kind: 'saved'; warnings: readonly CategorySaveWarning[] }
   /** 422。項目ごとのメッセージ */
   | { kind: 'invalid'; errors: CategoryFieldErrors }
+  /**
+   * 422 で、冪等キーを断られた(`errors.idempotency_key`)。同じキーの前の送信が保存済みで、今の送信と中身が違う
+   * (応答が返らなかった後に入力を直して送った)とき。docs/decisions/admin-idempotency.md の決まったこと 5
+   */
+  | { kind: 'key-rejected' }
   /** 422 以外のエラーの応答 */
   | { kind: 'http-error'; status: number }
   /** 応答が返らなかった */
@@ -72,12 +77,16 @@ export async function findCategoryDuplicate(
 
 /**
  * ノードを保存する。nodeId が null なら新規(POST /api/admin/categories)、あれば更新(PUT /api/admin/categories/{id})。
- * famousBrand は有名な銘柄の欄の入力で、根(欄を出さない)なら null にして送らない(API は根に有名な銘柄を入れさせない)
+ * famousBrand は有名な銘柄の欄の入力で、根(欄を出さない)なら null にして送らない(API は根に有名な銘柄を入れさせない)。
+ * 新規は、idempotencyKey を `Idempotency-Key` ヘッダで送る(docs/decisions/admin-idempotency.md。#793。省くと付けない)。
+ * 同じキーの再送には BE が 1 回目の応答を返す(`Idempotent-Replayed: true`)ので、ふつうの成功と同じく saved にする。
+ * 更新は、同じ内容を送り直しても行が増えないので、キーを付けない(銘柄の保存と同じ。#758)
  */
 export async function saveCategory(
   nodeId: number | null,
   values: CategoryFormValues,
   famousBrand: FamousBrandValues | null,
+  idempotencyKey?: string,
 ): Promise<SaveCategoryResult> {
   const body = (method: 'POST' | 'PUT') => {
     const form = toCategoryFormData(values, method)
@@ -89,7 +98,10 @@ export async function saveCategory(
   try {
     const { data, response, error } =
       nodeId === null
-        ? await api.POST('/admin/categories', { body: body('POST') })
+        ? await api.POST('/admin/categories', {
+            params: { header: idempotencyKey === undefined ? undefined : { 'Idempotency-Key': idempotencyKey } },
+            body: body('POST'),
+          })
         : await api.PUT('/admin/categories/{category}', {
             params: { path: { category: nodeId } },
             body: body('PUT'),
@@ -103,6 +115,7 @@ export async function saveCategory(
       return { kind: 'saved', warnings }
     }
     if (response.status === 422 && error !== undefined && 'errors' in error) {
+      if (error.errors.idempotency_key !== undefined) return { kind: 'key-rejected' }
       return { kind: 'invalid', errors: error.errors }
     }
     return { kind: 'http-error', status: response.status }

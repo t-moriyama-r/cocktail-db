@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Encryption\MissingAppKeyException;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -24,8 +25,10 @@ final class Settings
      *
      * 保存した値が null の項目は、画面で値を消した(.env の値に戻した)ものとして .env を見る。
      *
-     * 保存した値を復号できないとき(APP_KEY を変えた、など)は、保存した値が無いものとして .env を見る。
+     * 保存した値を復号できないとき(APP_KEY を変えた・APP_KEY が空、など)は、保存した値が無いものとして .env を見る。
      * 設定の 1 項目が読めないだけで画面の表示ごと落とさないため。読めなかったことはログに残す。
+     * APP_KEY が空のときも同じにするのは、routes/console.php が artisan のどのコマンドでも設定を読むので、
+     * 復号の失敗で落とすと、キーを作る key:generate まで落ちるため(#840)。
      */
     public function get(string $key, ?string $default = null): ?string
     {
@@ -69,7 +72,7 @@ final class Settings
         try {
             // value は encrypted のキャストで、読んだときに復号される
             $value = $setting->getAttribute('value');
-        } catch (DecryptException) {
+        } catch (DecryptException|MissingAppKeyException) {
             Log::warning('設定の値を復号できないので、.env の値を使う', ['key' => $key]);
 
             return null;
@@ -85,8 +88,10 @@ final class Settings
      * .env の値が空の文字(`AMAZON_CREDENTIAL_ID=` のように値の無い行)なら、値が無いものとして null を返す(#689)。
      * env() は値の無い行に空の文字を返すので、そのままだと管理 API が「値あり」「.env の値」として返してしまうため。
      * 保存した値(stored())が空の文字のときは、これまでどおり空の文字を返す(TC-131-06)。
+     *
+     * DB を読まないので、設定の表を読めないとき(DB に繋がらない)にも使える(AffiliateCollectSettings。#826)。
      */
-    private function fromEnv(string $key): ?string
+    public function fromEnv(string $key): ?string
     {
         $values = config('settings');
         $value = is_array($values) ? ($values[$key] ?? null) : null;

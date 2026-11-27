@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import type { components } from '../../api/schema'
+import { useIdempotencyKey } from '../../components/AdminForm/useIdempotencyKey'
 import { ADMIN_DICTIONARIES_PATH } from '../../components/AdminLayout/adminPaths'
 import { storageImageUrl } from '../../utils/storageImageUrl'
 import { termLabel } from '../dictionary/termLabel'
@@ -45,6 +46,7 @@ type SubmitState =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'invalid'; errors: FieldErrors }
+  | { kind: 'key-rejected' }
   | RequestFailure
 
 type DeleteState = { kind: 'idle' } | { kind: 'pending' } | Exclude<DeleteResult, { kind: 'deleted' }>
@@ -56,6 +58,10 @@ type DeleteState = { kind: 'idle' } | { kind: 'pending' } | Exclude<DeleteResult
  * - 保存に失敗したら、欄ごとに誤りを出し、画面を移らない。入力は残す(#284 の既定)
  * - 保存できたら一覧へ移り、保存したことを一覧に出す
  * - 削除は確かめてから消す。消せない(グラスに使われている など)ときは、API が返す理由をそのまま出して残す(#315)
+ * - 新規の送信には冪等キー(`Idempotency-Key`)を付ける(docs/decisions/admin-idempotency.md。#791。持ち方は銘柄の新規と同じ。#758)。
+ *   保存できるまでの送り直しは、入力を直していても同じキーで送る(useIdempotencyKey)。応答が返らなかった送信が保存済みで、
+ *   入力を直して送り直したために BE がキーを断った(422 の `errors.idempotency_key`)ときは、前の送信が保存されているかもしれないことを出し、
+ *   次は新しいキーで送る
  */
 export default function DictionaryForm({ categories, dictionary }: Props) {
   const navigate = useNavigate()
@@ -65,6 +71,7 @@ export default function DictionaryForm({ categories, dictionary }: Props) {
   )
   const [submit, setSubmit] = useState<SubmitState>({ kind: 'idle' })
   const [deletion, setDeletion] = useState<DeleteState>({ kind: 'idle' })
+  const idempotencyKey = useIdempotencyKey()
   const errors = submit.kind === 'invalid' ? submit.errors : {}
   const busy = submit.kind === 'pending' || deletion.kind === 'pending'
 
@@ -77,7 +84,10 @@ export default function DictionaryForm({ categories, dictionary }: Props) {
     event.preventDefault()
     setSubmit({ kind: 'pending' })
     setDeletion({ kind: 'idle' })
-    const result = await saveDictionary(dictionary?.id ?? null, values)
+    const id = dictionary?.id ?? null
+    const result = await saveDictionary(id, values, id === null ? idempotencyKey.current() : undefined)
+    // 保存できた・キーを断られたら、次の送信(別の保存)には新しいキーを付ける
+    if (result.kind === 'saved' || result.kind === 'key-rejected') idempotencyKey.reset()
     if (result.kind === 'saved') {
       done({ notice: `「${termLabel(result.data)}」を保存しました。` })
       return
@@ -305,10 +315,15 @@ function FieldError({ id, messages }: { id: string; messages: string[] | undefin
 }
 
 function submitErrorMessage(state: Exclude<SubmitState, { kind: 'idle' | 'pending' }>): string {
-  if (state.kind === 'invalid') {
-    return '保存できませんでした。入力を確かめてください。'
+  switch (state.kind) {
+    case 'invalid':
+      return '保存できませんでした。入力を確かめてください。'
+    case 'key-rejected':
+      // 通信に失敗した前の送信が、実は保存できていた。もう一度送ると別の用語として保存するので、先に一覧で確かめてもらう
+      return '保存できませんでした。通信に失敗した前の送信が、保存されているかもしれません。一覧で確かめてから、要るときだけもう一度送信してください。'
+    default:
+      return failureMessage('保存', state)
   }
-  return failureMessage('保存', state)
 }
 
 function failureMessage(action: '保存' | '削除', failure: RequestFailure): string {

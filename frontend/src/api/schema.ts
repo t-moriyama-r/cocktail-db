@@ -2014,7 +2014,7 @@ export interface components {
              * @description 定義(SettingDefinitions)に無いキーは 422
              * @enum {string}
              */
-            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.application_id" | "rakuten.access_key" | "rakuten.affiliate_id" | "ga4.measurement_id";
+            key: "amazon.credential_id" | "amazon.credential_secret" | "amazon.partner_tag" | "rakuten.application_id" | "rakuten.access_key" | "rakuten.affiliate_id" | "ga4.measurement_id" | "affiliates.interval_minutes" | "affiliates.refresh_limit" | "affiliates.new_limit";
             /** @description 省いたときに黙って .env に戻さないよう、欄は必須(null は送れる)。形は項目ごとの規則で確かめる */
             value: string | null;
         };
@@ -3071,7 +3071,10 @@ export interface operations {
     "dictionaries.store": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 送信ごとの識別子(UUID)。同じ値の再送には、保存し直さずに最初に成功した応答を返す(docs/decisions/admin-idempotency.md) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3386,7 +3389,10 @@ export interface operations {
     "paraphrases.store": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 送信ごとの識別子(UUID)。同じ値の再送には、保存し直さずに最初に成功した応答を返す(docs/decisions/admin-idempotency.md) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3783,7 +3789,10 @@ export interface operations {
     "skip-words.store": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 送信ごとの識別子(UUID)。同じ値の再送には、保存し直さずに最初に成功した応答を返す(docs/decisions/admin-idempotency.md) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };

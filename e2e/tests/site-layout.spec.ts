@@ -106,9 +106,27 @@ test('TC-296-11: ブラウザの「戻る」で戻っても、一番上から出
   expect(await scrollY(page)).toBe(0)
 })
 
+/**
+ * トップの、後から読み込む欄(新作動画・3 つの一覧・条件検索のフォーム)が、どれも読み終わるのを待つ(#808)。
+ * 読み終わる前に下までスクロールすると、見えている位置より上の欄(「読み込み中…」から 7 件の表になる一覧など)が後から伸び、
+ * ブラウザのスクロールの位置の調整(scroll anchoring)で scrollY が伸びた分だけ動く。リンクを押す前後で測った値がずれて落ちていた。
+ * 一覧の行の数は E2eSeeder のトップのデータ(top.spec.ts の TC-50-13 と同じ 7 件)
+ */
+const waitForTopContents = async (page: Page) => {
+  await expect(page.getByRole('region', { name: '新作動画' }).getByRole('heading', { level: 2 })).toBeVisible()
+  for (const title of ['★最近更新されたカクテル', '★おすすめカクテル', '★気まぐれセレクト']) {
+    const table = page.getByRole('region', { name: title }).getByRole('table')
+    await expect(table.getByRole('row').filter({ has: page.getByRole('cell') })).toHaveCount(7)
+  }
+  await expect(page.getByRole('region', { name: 'カクテル検索' }).getByRole('heading', { name: 'カクテル検索' })).toBeVisible()
+  // 欄を足しても待ち漏れが無いよう、本文に読み込み中の表示が残っていないことも確かめる
+  await expect(page.getByRole('main').getByRole('status')).toHaveCount(0)
+}
+
 test('TC-296-12: いま開いている URL へのリンクを押しても、スクロールの位置は変えない', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('宅飲みカクテルデータベース')
+  await waitForTopContents(page)
   await scrollToBottomOfTallPage(page)
   const before = await scrollY(page)
 

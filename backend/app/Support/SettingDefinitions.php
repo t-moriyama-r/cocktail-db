@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Services\Affiliate\AffiliateCollector;
+use App\Services\Affiliate\AffiliateCollectSettings;
+use App\Services\Affiliate\AffiliateRefresher;
 use App\Services\Affiliate\AffiliateSearchUrls;
 use App\Services\Affiliate\AmazonClient;
 use App\Services\Affiliate\RakutenClient;
@@ -22,6 +25,17 @@ final class SettingDefinitions
 
     /** リンクの URL に入る ID の形。英数字と「.」「_」「-」だけ */
     private const LINK_ID_RULES = ['regex:/\A[0-9A-Za-z._-]+\z/', 'max:100'];
+
+    /**
+     * 1 以上 $max 以下の整数の形(#826)。数字だけを受け、「+5」「05」「5.0」・前後の空白は通さない
+     * (affiliates:collect の --limit と同じ形にする)。範囲の外の値で形の誤りまで重ねて出さないよう、最初の誤りで止める。
+     *
+     * @return list<string>
+     */
+    private static function integerRules(int $max): array
+    {
+        return ['bail', 'integer', 'between:1,'.$max, 'regex:/\A[1-9][0-9]*\z/'];
+    }
 
     /**
      * 画面に並べる順。
@@ -79,6 +93,39 @@ final class SettingDefinitions
                 'アクセス解析(Google アナリティクス 4)の測定 ID(「G-」で始まる)。値があるときだけ、公開ページに計測のタグを入れる。dev・stg のアクセスを混ぜないよう、本番だけに入れる',
                 false,
                 ['regex:'.Ga4Tag::MEASUREMENT_ID_PATTERN, 'max:'.Ga4Tag::MEASUREMENT_ID_MAX_LENGTH],
+            ),
+            new SettingDefinition(
+                AffiliateCollectSettings::SETTING_INTERVAL_MINUTES,
+                'アフィリエイトの収集の間隔(分)',
+                sprintf(
+                    'Amazon・楽天の商品を取り直し、新しく探す定期の処理を流す間隔。1〜%d の整数。変えると、次の定期実行から効く。空にすると .env の値に戻し、.env にも無ければ %d 分',
+                    AffiliateCollectSettings::MAX_INTERVAL_MINUTES,
+                    AffiliateCollectSettings::DEFAULT_INTERVAL_MINUTES,
+                ),
+                false,
+                self::integerRules(AffiliateCollectSettings::MAX_INTERVAL_MINUTES),
+            ),
+            new SettingDefinition(
+                AffiliateCollectSettings::SETTING_REFRESH_LIMIT,
+                'アフィリエイトの 1 回に取り直す件数',
+                sprintf(
+                    '定期の処理が 1 回に取り直す商品の件数(Amazon・楽天それぞれ)。1〜%d の整数。空にすると .env の値に戻し、.env にも無ければ %d 件',
+                    AffiliateCollectSettings::MAX_LIMIT,
+                    AffiliateRefresher::DEFAULT_LIMIT,
+                ),
+                false,
+                self::integerRules(AffiliateCollectSettings::MAX_LIMIT),
+            ),
+            new SettingDefinition(
+                AffiliateCollectSettings::SETTING_NEW_LIMIT,
+                'アフィリエイトの 1 回に新しく探す件数',
+                sprintf(
+                    '定期の処理が 1 回に名前で探すノード・銘柄の件数。1〜%d の整数。空にすると .env の値に戻し、.env にも無ければ %d 件',
+                    AffiliateCollectSettings::MAX_LIMIT,
+                    AffiliateCollector::DEFAULT_NEW_LIMIT,
+                ),
+                false,
+                self::integerRules(AffiliateCollectSettings::MAX_LIMIT),
             ),
         ];
 

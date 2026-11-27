@@ -231,7 +231,7 @@ SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
       GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
                    ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
     FROM t_cocktails c JOIN t_recipies r ON r.cocktail_id = c.id
-    GROUP BY c.id
+    GROUP BY c.id, c.name
   ) sig
   GROUP BY s HAVING COUNT(DISTINCT name) > 1
 ) g;
@@ -295,7 +295,7 @@ SELECT COUNT(*) AS groups_, SUM(n) AS cocktails FROM (
       GROUP_CONCAT(CONCAT_WS(':', r.category, IFNULL(r.middle_category, '-'), IFNULL(r.brand, '-'), IFNULL(r.amount, '-'), r.is_optional)
                    ORDER BY r.category, r.middle_category, r.brand, r.amount, r.is_optional SEPARATOR ',') AS s
     FROM t_cocktails c JOIN t_recipies r ON r.cocktail_id = c.id
-    GROUP BY c.id
+    GROUP BY c.id, c.name
   ) sig
   GROUP BY s, name HAVING COUNT(*) > 1
 ) g;
@@ -384,6 +384,9 @@ WHERE (b.middle_category IS NULL OR b.middle_category = 0) AND b.category = mi.p
 ## 移行の直前にやること
 
 本番の旧 DB で、この文書の SQL をすべて流して数え直す。件数が変わっていたら、この文書を直し、増えたものの扱いが今のままでよいかを確かめる(#31 の前に行う)。
+
+- 切り替えの日は、書き込みを止めた後・新 DB に移す前に、`php artisan legacy:count-anomalies` で流す(`docs/cutover.md` の 3 の 2。#819)。この文書の旧 DB の SQL(10 の「新しい DB」の SQL を除く)を流し、件数を文書と比べる。件数が違ったときに移すか止めるかの基準も、`docs/cutover.md` の 3 の 2 にある
+- `legacy:count-anomalies` の SQL と件数は、この文書を写したもの(`backend/app/Services/LegacyImport/LegacyAnomalyChecks.php`)。この文書の SQL を変えた・足した、件数を直したときは、同じ PR で `LegacyAnomalyChecks` も直す(テスト `CountLegacyAnomaliesTest` が、SQL が同じ組で同じ順か、件数が SQL の前のコメントにあるかを確かめる)
 
 - 14 の SQL(説明文の壊れた記法と、無いカクテルを指す記法)も流す。A〜F の行のほかに出たものは、移行で `@`・`＠` を取り除いて移す(止まらない)ので、扱いがそれでよいかを人が見て 14 に足す。A〜F の行が出なくなった・形が変わったものは、移行で `直す前の文が違い、壊れた記法(A〜E)を直さなかった説明文` に出るので、直し方を足すかを決める
 - 15 の SQL も流す。銘柄 138 のほかに出たものは移行で移さない(`data:verify` の「有名な銘柄が部分木の外」で落ちる)ので、扱いを人が決めて 15 に足す

@@ -26,7 +26,7 @@ flowchart LR
 - **起こし方**: PR に `needs-local` が付いたとき(`pull_request_target` の `labeled`)と、PR の番号での `workflow_dispatch`。`GITHUB_TOKEN` で付けたラベルではワークフローが起きないので、Actions の中から頼んだときは `workflow_dispatch` で起こす。`ai-review-loop.yml`・`ai-draft-sweep.yml` では、Claude Code を動かさない後ろのジョブ(`actions: write` を持つのはこのジョブだけ。RC-02)が、この回に `needs-local` が付き、いちばん新しい頼むコメントが `kind=evidence` の PR で起こす(`evidence-kick.sh`。決め方はラベルで起きた回と同じ `evidence-target.sh --labeled`。#686)
 - **撮らない PR**(`evidence-target.sh`): 開いていない PR・フォークからの PR・昇格の PR(`staging`・`release` 向け)。ラベルで起きた回は、いまも `needs-local` が付いていて、信頼する人・bot のいちばん新しい手元に頼むコメント(`<!-- ai-dev:needs-local kind=… -->`)が `kind=evidence` のときだけ撮る(`push`・`other` の頼みでは撮らない)
 - **信頼しない人の書き込み**: 撮る前に `untrusted-hold.sh` で、PR と閉じる issue に、オーナー・コラボレーター・決まった bot 以外の人が書いたものが無いかを見る。あれば撮らず、URL を並べたコメントと `needs-human` を付ける(CLAUDE.md の手順 8。撮る側はブロックの `run` をシェルで流すため)。確かめるための読み取り(PR・閉じる issue・コメント)に失敗したとき(`untrusted-hold.sh` の終わりのコード 3)も撮らず、下の「撮れなかったとき」と同じく、`needs-local` を残して読めなかったことをコメントする(#688)
-- **撮るもの**: 信頼する人が書いたいちばん新しい頼むコメント(`evidence-pick.sh`)のブロック。修正前(PR の向き先のブランチの今の先頭か `before`)と修正後(PR の head か `after`)を `APP_DEBUG=false` で起こして撮る。画面は、撮る前に修正後の画面の HTTP の状態を見て、5xx なら撮らない
+- **撮るもの**: 信頼する人が書いたいちばん新しい頼むコメント(`evidence-pick.sh`)のブロック。修正前(PR の向き先のブランチの今の先頭か `before`)と修正後(PR の head か `after`)を `APP_DEBUG=false` で起こして撮る。データは項目ごとに入れ、`steps` のある画面は撮る回ごとに入れ直す(下の `kind: screen`)。画面は、撮る前に修正後の画面の HTTP の状態を見て、5xx なら撮らない
 - **置き場所**: 証跡だけの孤立したブランチ `evidence`(保護しない)の `pr-<番号>/<修正後の短い SHA>/`。ファイルの名前は `<連番 2 桁>-<kind>[-<幅>]-<before|after|compare>.<png|mp4|gif>` と `manifest.json`。同じ SHA で撮り直すと、そのディレクトリを入れ替える。撮った画面・応答・コマンドの結果にランナーのパス・ホスト名が出ていたら、置かずに落ちる(`evidence-leak-check.sh`・`evidence-publish.sh`)
 - **貼り方**(`evidence-report.sh`): 本文の「## 証跡」の見出しのすぐ下に、`<!-- ai-dev:evidence-capture start -->` 〜 `<!-- ai-dev:evidence-capture end -->` の塊を入れる(撮り直したら塊を入れ替える。見出しが無ければ末尾に足す)。塊には、項目ごとの比較画像(`raw.githubusercontent.com` の `evidence` ブランチの URL の `<img>`)・修正前後の静止画・mp4 へのリンク・GIF・撮った幅(`<数字>px`)を書く(`evidence-gate.sh` が数える形)。貼ったら `needs-local` を外し、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:local-done kind=evidence -->` のコメントに、撮った回と `evidence-gate.sh` の結果を書く
 - **撮れなかったとき**(信頼の確認で読めなかった・指定が無い・形の誤り・アプリの起動やデータの投入の失敗・修正後の画面がエラー・置けなかった): `needs-local` を残し(外されていれば付け直し)、先頭が `<!-- ai-dev:agent --> <!-- ai-dev:needs-local kind=evidence -->` のコメントに、どこで止まったかと撮った回の URL を書く。手元の見回りがそれを拾って撮る
@@ -64,6 +64,8 @@ flowchart LR
 
 `login: admin` の画面は、撮る回(修正前・修正後・幅ごと・動画)ごとに、その側の checkout で `php artisan admin:login-link e2e-admin@example.com` を流して、1 回だけ使えるログインの URL を出す(`APP_URL` はその側のアプリ。URL の署名にホストが入るため)。URL にはトークンが入るので、`evidence-shoot.js` は capture.js の設定ファイルに書かず環境変数で渡し、撮った画面の文字(`texts/`)に出ていたら置かずに落ち、エラーの文(ジョブのログ)では伏せる。`data.seed` を変えるときは、そのシーダーも `e2e-admin@example.com` の管理者を作るものにする(いなければ URL を出せずに落ちる)。
 
+データ(`data.seed`)は、項目の先頭で修正前・修正後の DB に入れる。`steps` のある画面は、そのうえで、撮る回(修正前・修正後 × 幅ごと・動画)ごとに、撮る前にその側の DB を入れ直す(その側の 1 回目は先頭で入れたまま撮る。#802)。前の回で保存した行は次の回に残らないので、`steps` に、同じ値で保存して「保存しました」を待つ手順(管理画面の新規など)を書いてよい。入れ直しは 1 回あたり数秒(`E2eSeeder` で 2〜4 秒)で、2 幅・動画 2 幅なら 1 項目で 6 回増える。`steps` の無い画面は DB を変えないので入れ直さない。
+
 `steps` の 1 つずつは「操作: 値」を 1 つだけ書く。何に対して(`click` などの値・`target`)は Playwright のロケーター(`role=button[name="検索"]`・`text=ジン` など)で書く。
 
 | 操作 | 値 |
@@ -96,6 +98,8 @@ API にも出ない変更(マイグレーション・モデル・サービスの
 |---|---|---|
 | `run` | ○ | 流すコマンド |
 | `workdir` | | 流すディレクトリ(リポジトリの中の相対パス。`/` で始めない・`..` を使わない)。省くとリポジトリの直下 |
+
+出力の中の、そのコマンドを流した checkout(修正前・修正後)の絶対パスは、`<repo>` に置き換えてから撮る(Vitest の `RUN` の行など。#781)。置き換えたときは、撮った画像に置き換えたことを 1 行で書く。checkout の外の絶対パス(ホームなど)・ホスト名は置き換えないので、出ていれば今までどおり置かずに落ちる(`evidence-leak-check.sh`)。
 
 **`run` は任意のシェルとして流れうる。`evidence-request.sh` は中身を絞らない(絶対パスの検査しかしない)ので、撮る側は、信頼する人・bot のコメント(`untrusted-comments.sh` で外したもの)のブロックだけを流す。** 秘密の値(`$TOKEN`・`~/.env` など)を読むコマンドは書かない。
 

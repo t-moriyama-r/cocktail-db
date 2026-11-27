@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminLoginLinkController;
 use App\Http\Controllers\DetailPageController;
+use App\Http\Controllers\LegacyAdminCategoryUrlController;
 use App\Http\Controllers\LegacyCardUrlController;
 use App\Http\Controllers\LegacyCategoryUrlController;
 use App\Http\Controllers\SitemapController;
@@ -53,7 +54,7 @@ Route::get('/robots.txt', [SitemapController::class, 'robots']);
 
 // 旧の管理画面の一覧・編集の URL は、ブックマークから来た管理者を、新の同じ画面へ移す(#626)。
 // #117 と同じく GET だけを受けて 302 で移し、クエリは持ち越さない。ログインの確かめは移った先の画面がする。
-// 新の画面がまだ無いもの(カテゴリ・ミドルの編集、言い換え)はここに無く、下の SPA へ渡すルートが 404 の画面を出す。
+// 新の画面がまだ無いもの(言い換え)と移さないと決めたもの(オートインプット)はここに無く、下の SPA へ渡すルートが 404 の画面を出す。
 // 決めたことと旧と変えたところは docs/decisions/legacy-admin-urls.md
 foreach ([
     'admin/list/Category' => '/admin/categories',
@@ -65,6 +66,8 @@ foreach ([
     'admin/edit/Brand' => '/admin/brands/new',
     'admin/edit/Dictionary' => '/admin/dictionaries/new',
     'admin/edit/Cocktail' => '/admin/cocktails/new',
+    'admin/edit/Category' => '/admin/categories/new',
+    'admin/edit/Middle' => '/admin/categories/new',
 ] as $legacyAdminUrl => $destination) {
     Route::get($legacyAdminUrl, RedirectController::class)
         ->defaults('destination', $destination)
@@ -77,6 +80,12 @@ foreach (['admin/edit/Brand/{id}' => '/admin/brands/{id}', 'admin/edit/Dictionar
         ->defaults('destination', $destination)
         ->defaults('status', 302);
 }
+
+// カテゴリ・ミドルはカテゴリ木に移したときに ID を振り直したので、旧 ID から新 ID を legacy_id_maps で引いて
+// ノードの編集フォームへ移す(#817。#78 と同じ引き方)。対応の無い ID は移さず SPA の HTML を返す(画面は 404 の画面)。
+// 数字でない ID はここで受けず、下の SPA へ渡すルートに任せる
+Route::get('admin/edit/Category/{id}', [LegacyAdminCategoryUrlController::class, 'category'])->whereNumber('id');
+Route::get('admin/edit/Middle/{id}', [LegacyAdminCategoryUrlController::class, 'middle'])->whereNumber('id');
 
 // API 以外のパスはすべて SPA に渡し、画面の出し分けは React 側のルーターに任せる
 Route::view('/{any?}', 'spa')->where('any', '^(?!api(/|$)|up$).*');

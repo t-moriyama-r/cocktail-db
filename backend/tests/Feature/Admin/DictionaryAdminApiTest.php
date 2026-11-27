@@ -1,15 +1,18 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use App\Models\Category;
 use App\Models\Cocktail;
 use App\Models\Dictionary;
 use App\Models\DictionaryCategory;
+use App\Models\IdempotencyKey;
 use App\Models\Method;
 use App\Models\User;
 use App\Services\CategoryTree;
 use App\Support\NameNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
 // 管理 API の用語辞典の一覧・取得・新規・更新・削除(#315)。旧は用語の保存を止めていた(旧 routes/web.php の
@@ -57,10 +60,10 @@ function dictionaryAdminInput(DictionaryCategory $category, array $overrides = [
 /**
  * 中身が PNG の、上げるファイル。
  */
-function dictionaryAdminPng(): UploadedFile
+function dictionaryAdminPng(string $png = DICTIONARY_ADMIN_PNG): UploadedFile
 {
     $path = tempnam(sys_get_temp_dir(), 'dictionary-image-') ?: throw new RuntimeException('一時ファイルを作れない');
-    file_put_contents($path, base64_decode(DICTIONARY_ADMIN_PNG, true));
+    file_put_contents($path, base64_decode($png, true));
 
     return new UploadedFile($path, 'a.png', null, null, true);
 }
@@ -329,3 +332,137 @@ it('TC-315-15: カクテルのグラス・技法の用語として参照され�
         ['code' => 'method', 'message' => '技法を説明する用語になっています'],
     ]],
 ]);
+
+// 用語辞典の新規の冪等キー(#761。決まりは docs/decisions/admin-idempotency.md)。仕組み(ミドルウェア idempotent)そのものは
+// IdempotencyApiTest(#657)で確かめているので、ここでは用語辞典の新規につないだこと(画像つきの再送で 1 件・ファイル 1 つだけ
+// 作ること)と、更新にはつないでいないことを確かめる。旧に冪等キーは無い(旧は用語の保存を止めていた。旧を動かして確かめてはいない)。
+
+/** 色だけ違う 1x1 の PNG(中身の違う画像の再送を確かめるため) */
+const DICTIONARY_ADMIN_PNG_OTHER = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+
+const DICTIONARY_ADMIN_IDEMPOTENCY_KEY = '5e2b7c91-3a4d-4f6e-8b1c-9d0a2f3e4b57';
+
+/**
+ * 画像つき(multipart)の、画面と同じ新規の入力。画像は送るたびに作り直す。
+ *
+ * @param  array<array-key, mixed>  $overrides
+ * @return array<array-key, mixed>
+ */
+function dictionaryAdminMultipartInput(DictionaryCategory $category, string $png = DICTIONARY_ADMIN_PNG, array $overrides = []): array
+{
+    return dictionaryAdminInput($category, ['image' => dictionaryAdminPng($png), 'image_txt' => '出典', ...$overrides]);
+}
+
+it('TC-761-01: Idempotency-Key を付けなければ、同じ本文を 2 回送ると 2 件作る(今までどおり)', function () {
+    $this->postJson('/api/admin/dictionaries', dictionaryAdminInput($this->category))->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $this->postJson('/api/admin/dictionaries', dictionaryAdminInput($this->category))->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(Dictionary::query()->where('name', 'シェイク')->count())->toBe(2)
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+});
+
+it('TC-761-02: 画像つき(multipart)を同じ Idempotency-Key で再送すると、用語と画像のファイルを 1 つだけ作り、1 回目と同じ応答を返す', function () {
+    Storage::fake('public');
+    $headers = [Idempotent::HEADER => DICTIONARY_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+
+    $first = $this->post('/api/admin/dictionaries', dictionaryAdminMultipartInput($this->category), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $second = $this->post('/api/admin/dictionaries', dictionaryAdminMultipartInput($this->category), $headers)
+        ->assertCreated()
+        ->assertHeader(Idempotent::REPLAYED_HEADER, 'true')
+        ->assertHeader('Content-Type', 'application/json');
+
+    $term = Dictionary::query()->sole();
+    expect($second->json())->toBe($first->json())
+        ->and($second->json('data.id'))->toBe($term->id)
+        ->and($term->image)->not->toBeNull()
+        ->and(Storage::disk('public')->allFiles())->toBe([$term->image])
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-761-03: 同じ Idempotency-Key で中身(名前・画像)の違う送信は 422 で、作らず、1 回目の応答も返さない', function (string $png, array $overrides) {
+    Storage::fake('public');
+    $headers = [Idempotent::HEADER => DICTIONARY_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+    $this->post('/api/admin/dictionaries', dictionaryAdminMultipartInput($this->category), $headers)->assertCreated();
+
+    $this->post('/api/admin/dictionaries', dictionaryAdminMultipartInput($this->category, $png, $overrides), $headers)
+        ->assertUnprocessable()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER)
+        ->assertExactJson([
+            'message' => '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+            'errors' => ['idempotency_key' => ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。']],
+        ]);
+
+    expect(Dictionary::query()->pluck('name')->all())->toBe(['シェイク'])
+        ->and(Storage::disk('public')->allFiles())->toHaveCount(1)
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+})->with([
+    '名前' => [DICTIONARY_ADMIN_PNG, ['name' => 'ステア']],
+    '画像' => [DICTIONARY_ADMIN_PNG_OTHER, []],
+]);
+
+it('TC-761-04: 検証に落ちた新規(名前が空)は記録もファイルも残さず、直して同じ Idempotency-Key で送ると作る', function () {
+    Storage::fake('public');
+    $headers = [Idempotent::HEADER => DICTIONARY_ADMIN_IDEMPOTENCY_KEY, 'Accept' => 'application/json'];
+
+    $this->post('/api/admin/dictionaries', dictionaryAdminMultipartInput($this->category, overrides: ['name' => '']), $headers)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('name');
+    expect(IdempotencyKey::query()->count())->toBe(0)
+        ->and(Dictionary::query()->count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+
+    $this->post('/api/admin/dictionaries', dictionaryAdminMultipartInput($this->category), $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(Dictionary::query()->count())->toBe(1)
+        ->and(Storage::disk('public')->allFiles())->toHaveCount(1)
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-761-05: 更新にはつながず、Idempotency-Key を付けても(UUID でなくても)今までどおり書き換えて、記録を残さない', function (string $key) {
+    $term = dictionaryAdminTerm($this->category, 'ステア');
+
+    $this->putJson("/api/admin/dictionaries/{$term->id}", dictionaryAdminInput($this->category, ['name' => 'ステアー']), [Idempotent::HEADER => $key])
+        ->assertOk()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER)
+        ->assertJsonPath('data.name', 'ステアー');
+
+    expect($term->refresh()->name)->toBe('ステアー')
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+})->with([
+    'UUID' => [DICTIONARY_ADMIN_IDEMPOTENCY_KEY],
+    'UUID でない' => ['abc'],
+]);
+
+it('TC-761-06: OpenAPI では、用語辞典の新規に任意の Idempotency-Key ヘッダ(UUID)があり、一覧・更新には無い', function () {
+    $file = tempnam(sys_get_temp_dir(), 'openapi');
+    if ($file === false) {
+        throw new RuntimeException('一時ファイルを作れない');
+    }
+    try {
+        expect(Artisan::call('scramble:export', ['--path' => $file]))->toBe(0);
+        $document = json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
+    } finally {
+        @unlink($file);
+    }
+    $headers = function (string $path, string $method) use ($document): array {
+        $parameters = data_get($document, "paths.{$path}.{$method}.parameters", []);
+
+        return is_array($parameters)
+            ? array_values(array_filter($parameters, fn (mixed $parameter): bool => data_get($parameter, 'in') === 'header'))
+            : [];
+    };
+
+    $store = $headers('/admin/dictionaries', 'post');
+    expect($store)->toHaveCount(1)
+        ->and(data_get($store[0], 'name'))->toBe('Idempotency-Key')
+        ->and(data_get($store[0], 'required', false))->toBeFalse()
+        ->and(data_get($store[0], 'schema'))->toBe(['type' => 'string', 'format' => 'uuid'])
+        ->and($headers('/admin/dictionaries', 'get'))->toBe([])
+        ->and($headers('/admin/dictionaries/{dictionary}', 'put'))->toBe([]);
+});

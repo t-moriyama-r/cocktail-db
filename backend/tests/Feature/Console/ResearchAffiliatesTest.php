@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AffiliateNotFoundReason;
+use App\Enums\CategoryRole;
 use App\Models\Affiliate;
 use App\Models\Brand;
 use App\Models\Category;
@@ -383,4 +384,34 @@ it('TC-696-21: 探し直す提供元があるときは、新規の対象が上�
         ->expectsOutputToContain('探した: 1 件(保存 1')
         ->expectsOutputToContain('探し直した: 1 件(保存 1')
         ->assertSuccessful();
+});
+
+it('TC-827-03: 探し直しでも、楽天は洋酒の材料をジャンル「ビール・洋酒」で絞り、洋酒でない材料(ソフトドリンクの部分木)は絞らずに探す', function () {
+    $tree = app(CategoryTree::class);
+    $liquorRoot = $tree->addNode(null, Category::factory()->make(['name' => '洋酒の根'])->getAttributes());
+    $liquorNode = $tree->addNode($liquorRoot, Category::factory()->make(['name' => 'ジン'])->getAttributes());
+    $softRoot = $tree->addNode(null, Category::factory()->make(['name' => 'ソフトドリンクの根', 'role' => CategoryRole::SoftDrink])->getAttributes());
+    $softNode = $tree->addNode($softRoot, Category::factory()->make(['name' => 'バター'])->getAttributes());
+    $liquor = Affiliate::factory()->create(['category_id' => $liquorNode->id, 'last_viewed_at' => now()->subHour()]);
+    $soft = Affiliate::factory()->create(['category_id' => $softNode->id, 'last_viewed_at' => now()->subHours(2)]);
+    researchFake();
+
+    researchCommand($this, ['--new' => true])->assertSuccessful();
+
+    $genres = [];
+    foreach (Http::recorded() as [$request]) {
+        /** @var Request $request */
+        if (str_starts_with($request->url(), RESEARCH_RAKUTEN_SEARCH_URL)) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $keyword = $query['keyword'] ?? null;
+            if (is_string($keyword)) {
+                $genres[$keyword] = $query['genreId'] ?? null;
+            }
+        }
+    }
+    $prefix = 'https://hb.afl.rakuten.co.jp/hgc/g00test0.example0.g00test0.example1/?pc='
+        .rawurlencode('https://search.rakuten.co.jp/search/mall/');
+    expect($genres)->toBe(['ジン' => '510915', 'バター' => null])
+        ->and($liquor->refresh()->rakuten_search_url)->toBe($prefix.urlencode('ジン').rawurlencode('/510915/'))
+        ->and($soft->refresh()->rakuten_search_url)->toBe($prefix.urlencode('バター').rawurlencode('/'));
 });

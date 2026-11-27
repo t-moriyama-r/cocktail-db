@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
+use App\Models\IdempotencyKey;
 use App\Models\SkipWord;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -85,3 +87,68 @@ it('TC-316-22: ログインしていなければ、スキップ語の API はど
     '更新' => ['PUT', '/api/admin/skip-words/{id}'],
     '削除' => ['DELETE', '/api/admin/skip-words/{id}'],
 ]);
+
+// スキップ語の新規の冪等キー(#762。決まりは docs/decisions/admin-idempotency.md)。仕組み(ミドルウェア idempotent)そのものは
+// IdempotencyApiTest(#657)で確かめているので、ここではスキップ語の新規につないだことを確かめる。旧に冪等キーは無い(旧を動かして確かめてはいない)。
+// OpenAPI のヘッダは、言い換えと一緒に ParaphraseAdminApiTest の TC-762-09 で確かめる。
+
+const SKIP_WORD_IDEMPOTENCY_KEY = '5f1a2c3d-8e9b-4a7c-b6d5-0e2f4a6c8b1d';
+
+it('TC-762-05: Idempotency-Key を付けなければ、同じ本文の 2 回目は今までどおり重なりの 422 で断り、記録を残さない', function () {
+    $this->postJson('/api/admin/skip-words', ['name' => 'Ice'])->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $this->postJson('/api/admin/skip-words', ['name' => 'Ice'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('name');
+
+    expect(SkipWord::query()->count())->toBe(1)
+        ->and(IdempotencyKey::query()->count())->toBe(0);
+});
+
+it('TC-762-06: 同じ Idempotency-Key で再送すると、スキップ語を 1 件だけ作り、1 回目と同じ応答を返す', function () {
+    $headers = [Idempotent::HEADER => SKIP_WORD_IDEMPOTENCY_KEY];
+
+    $first = $this->postJson('/api/admin/skip-words', ['name' => 'Ice'], $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+    $second = $this->postJson('/api/admin/skip-words', ['name' => 'Ice'], $headers)
+        ->assertCreated()
+        ->assertHeader(Idempotent::REPLAYED_HEADER, 'true');
+
+    $word = SkipWord::query()->sole();
+    expect($second->json())->toBe($first->json())
+        ->and($second->json())->toBe(['data' => ['id' => $word->id, 'name' => 'Ice']])
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});
+
+it('TC-762-07: 同じ Idempotency-Key で名前の違う送信は 422 で、作らず、1 回目の応答も返さない', function () {
+    $headers = [Idempotent::HEADER => SKIP_WORD_IDEMPOTENCY_KEY];
+    $this->postJson('/api/admin/skip-words', ['name' => 'Ice'], $headers)->assertCreated();
+
+    $this->postJson('/api/admin/skip-words', ['name' => 'Crushed Ice'], $headers)
+        ->assertUnprocessable()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER)
+        ->assertExactJson([
+            'message' => '冪等キー(Idempotency-Key)は、別の内容の送信に使われています。',
+            'errors' => ['idempotency_key' => ['冪等キー(Idempotency-Key)は、別の内容の送信に使われています。']],
+        ]);
+
+    expect(SkipWord::query()->pluck('name')->all())->toBe(['Ice']);
+});
+
+it('TC-762-08: 検証に落ちた新規(名前が空)は記録を残さず、直して同じ Idempotency-Key で送ると作る', function () {
+    $headers = [Idempotent::HEADER => SKIP_WORD_IDEMPOTENCY_KEY];
+
+    $this->postJson('/api/admin/skip-words', ['name' => ''], $headers)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('name');
+    expect(IdempotencyKey::query()->count())->toBe(0)
+        ->and(SkipWord::query()->count())->toBe(0);
+
+    $this->postJson('/api/admin/skip-words', ['name' => 'Ice'], $headers)
+        ->assertCreated()
+        ->assertHeaderMissing(Idempotent::REPLAYED_HEADER);
+
+    expect(SkipWord::query()->pluck('name')->all())->toBe(['Ice'])
+        ->and(IdempotencyKey::query()->count())->toBe(1);
+});

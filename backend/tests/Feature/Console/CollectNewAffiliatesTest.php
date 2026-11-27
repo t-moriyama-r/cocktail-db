@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Services\Affiliate\AffiliateCollector;
 use App\Services\CategoryTree;
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
@@ -302,19 +303,45 @@ it('TC-248-07: Amazon が 1 件も見つけない(404)ときも、楽天で見�
         ->and($affiliate->rakuten_fetched_at?->toDateTimeString())->toBe(COLLECT_NOW);
 });
 
-it('TC-248-08: 楽天は「洋酒ではない」根(ソフトドリンク・その他)の下のノードでも、ジャンル「ビール・洋酒」で絞って探す', function () {
+// TC-248-08(「洋酒ではない」根の下でも 510915 で絞る。旧に合わせていた)は、#827 で洋酒でない材料を絞らないと決めたので、
+// TC-827-01 に置き換えた
+it('TC-827-01: 楽天は、洋酒の材料はジャンル「ビール・洋酒」で絞り、洋酒でない材料(ソフトドリンク・その他の部分木のノードと、そこにぶら下がる銘柄)は絞らずに探す', function () {
+    ['middle' => $liquorMiddle] = collectTree('L');
+    ['middle' => $softMiddle] = collectTree('S', CategoryRole::SoftDrink);
+    ['node' => $otherNode] = collectTree('O', CategoryRole::Other);
+    Brand::factory()->for($liquorMiddle, 'category')->create(['name' => 'L銘柄']);
+    Brand::factory()->for($softMiddle, 'category')->create(['name' => 'S銘柄']);
+    Brand::factory()->for($otherNode, 'category')->create(['name' => 'O銘柄']);
+    collectFake();
+
+    collectCommand($this, ['--new' => true, '--limit' => '6'])->assertSuccessful();
+
+    // 並びは銘柄 → ノードの順、それぞれ ID の順(TC-248-04)
+    expect(array_values(array_filter(collectSearches(), fn (array $search) => $search[0] === 'rakuten')))->toBe([
+        ['rakuten', 'L銘柄', '510915'],
+        ['rakuten', 'S銘柄', null],
+        ['rakuten', 'O銘柄', null],
+        ['rakuten', 'Lジン', '510915'],
+        ['rakuten', 'Sジン', null],
+        ['rakuten', 'Oジン', null],
+    ]);
+});
+
+it('TC-827-02: 保存する楽天の検索結果のリンクも、洋酒でない材料ではジャンルを付けず、洋酒の材料には 510915 を付ける', function () {
+    collectTree('L');
     collectTree('S', CategoryRole::SoftDrink);
-    collectTree('O', CategoryRole::Other);
     collectFake();
 
     collectCommand($this, ['--new' => true])->assertSuccessful();
 
-    expect(collectSearches())->toBe([
-        ['amazon', 'Sジン', 'GroceryAndGourmetFood'],
-        ['rakuten', 'Sジン', '510915'],
-        ['amazon', 'Oジン', 'GroceryAndGourmetFood'],
-        ['rakuten', 'Oジン', '510915'],
-    ]);
+    $searchUrl = fn (string $name) => Affiliate::query()
+        ->where('category_id', Category::query()->where('name', $name)->sole()->id)
+        ->sole()
+        ->rakuten_search_url;
+    $prefix = 'https://hb.afl.rakuten.co.jp/hgc/g00test0.example0.g00test0.example1/?pc='
+        .rawurlencode('https://search.rakuten.co.jp/search/mall/');
+    expect($searchUrl('Lジン'))->toBe($prefix.urlencode('Lジン').rawurlencode('/510915/'))
+        ->and($searchUrl('Sジン'))->toBe($prefix.urlencode('Sジン').rawurlencode('/'));
 });
 
 it('TC-248-09: 手で入れた値だけの行があるノード・銘柄は探さず、手で入れた値はそのまま残る', function () {
@@ -689,3 +716,21 @@ it('TC-695-09: ノード・銘柄を消すと、その失敗の記録も消え�
 
     expect(AffiliateCollectFailure::query()->count())->toBe(0);
 });
+
+// 管理画面の設定で保存した件数(#826。docs/decisions/settings.md)。旧には設定の画面が無い(旧に無い)
+it('TC-826-08: --limit を省くと、画面で保存した件数まで探す。画面で保存していなければ .env の件数まで探す', function (?string $saved, int $expected) {
+    config()->set('settings', array_merge(config()->array('settings'), ['affiliates.new_limit' => '4']));
+    if ($saved !== null) {
+        app(Settings::class)->set('affiliates.new_limit', $saved);
+    }
+    $node = collectTree()['node'];
+    Brand::factory()->count(6)->for($node, 'category')->create();
+    collectFake();
+
+    collectCommand($this, ['--new' => true])->assertSuccessful();
+
+    expect(Affiliate::query()->count())->toBe($expected);
+})->with([
+    '画面で 2 件' => ['2', 2],
+    '画面で保存していない' => [null, 4],
+]);

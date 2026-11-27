@@ -28,7 +28,7 @@
 | `frontend/` | React + Vite(TypeScript) | `npm test`(Vitest)、`npm run lint`(oxlint)、`npx tsc -b`(型チェック)、`npm run build`(`gen:api`・`tsc -b`・`vite build`) |
 | `openapi/` | `backend` から出力した `openapi.json`(FE の型の元) | CI で最新かを確かめる(下の「API を変えたら」) |
 | `e2e/` | Playwright の E2E。ビルドした FE を Laravel から配信して画面を確かめる | `npm test`(下の「E2E」) |
-| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行と、旧 DB のダンプの確かめ(`docs/legacy-local.md` から呼ぶ)) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
+| `ops/` | サーバーで動かす運用スクリプト(`ops/backup`: バックアップ・世代管理・復元の検証(決まりと入れる手順は `docs/backup.md`)、`ops/migrate`: 移行と、旧 DB のダンプの確かめ(`docs/legacy-local.md` から呼ぶ)、`ops/cutover`: 切り替えの手順 2〜6・8 を流すスクリプト(`docs/cutover.md`)) | CI の `scripts`・`ops-db` ジョブ(下の「BE のテスト」) |
 | `docs/` | 開発の決まりごとの資料(ラベルの意味は `docs/labels.md`、旧システムを手元で動かす手順は `docs/legacy-local.md`、画面のスタイルの書き方と見た目の基準は `docs/design/style.md`、証跡を頼むコメントの形は `docs/evidence-request.md`) | — |
 
 ### BE のテスト
@@ -40,10 +40,11 @@ cd backend
 php artisan test --exclude-group=db   # 手元に MariaDB が無いとき。DB を使うテストを飛ばす
 php artisan test                      # MariaDB があるとき(DB_* を環境変数で渡す)。CI はこちら
 vendor/bin/pint                       # コード整形(Laravel Pint)
+composer lint                         # CI の backend-lint ジョブと同じ構文・書式・型のチェック(php -l・pint --test・phpstan。新しいファイルは git add してから)
 ```
 
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす。SQLite で代用しない
-- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` が `branch-flow` だけ、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。`staging`・`release` は「マージ前にブランチを最新にする」(`strict`)も求めない。昇格の PR の head は `develop`(`staging`)そのもので常に先へ進み、CI の必須のチェックや `strict` があると、進むたびに CI の待ちでマージが止まるため(中身は `develop` に入る前に PR ごとに CI を通っている。#506)。`develop` は、ルールセットで承認 1 件も求め、オーナー(リポジトリの admin)だけを除外する。オーナー以外が作った PR は、オーナーが承認しないとマージできない。自動マージ(`ai-auto-merge.yml`)は、オーナーの PAT(secret `AUTO_MERGE_TOKEN`)でマージして除外を効かせる(#540)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
+- CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR(`develop`・`staging`・`release` 向け)と `develop` への push で動く。draft の PR では全ジョブを飛ばし、ready にしたときから流す(#410)。`release` 向けの PR は、lint とテストの確認(`backend`・`backend-lint`・`frontend`・`actionlint`)だけで、`e2e`・`scripts`・`ops-db` は飛ばす。ブランチ保護の必須のチェックは、`develop` が `backend`・`backend-lint`・`frontend`・`actionlint`・`e2e`、`staging` が `branch-flow` だけ、`release` が `backend`・`backend-lint`・`frontend`・`actionlint`・`branch-flow`(`e2e` は飛ばすので入れない)。`staging`・`release` は「マージ前にブランチを最新にする」(`strict`)も求めない。昇格の PR の head は `develop`(`staging`)そのもので常に先へ進み、CI の必須のチェックや `strict` があると、進むたびに CI の待ちでマージが止まるため(中身は `develop` に入る前に PR ごとに CI を通っている。#506)。`develop` は、ルールセットで承認 1 件も求め、オーナー(リポジトリの admin)だけを除外する。オーナー以外が作った PR は、オーナーが承認しないとマージできない。自動マージ(`ai-auto-merge.yml`)は、オーナーの PAT(secret `AUTO_MERGE_TOKEN`)でマージして除外を効かせる(#540)。同じワークフローの `backend-lint` ジョブが、リポジトリにある PHP ファイルの構文(`php -l`)と書式(`vendor/bin/pint --test`)を確かめ、`vendor/bin/phpstan analyse` で型を確かめる(設定は `backend/phpstan.neon`)。`frontend` ジョブが、FE の `gen:api`・型チェック・lint・`npm test` を流す。`actionlint` ジョブが、`.github/workflows/` の YAML の誤りと、`run` に書いたシェルの誤り(shellcheck の warning 以上)を確かめる(下の「ワークフローを変えたら」)。`scripts` ジョブが `.github/scripts` と `ops/migrate`・`ops/cutover` の DB を使わないシェルスクリプトの検査とテストを、`ops-db` ジョブが MariaDB を使う `ops/backup`・`ops/migrate` のテストを流す(どちらも必須のチェックではない)
 
 ### FE のテスト
 

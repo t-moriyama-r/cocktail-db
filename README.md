@@ -41,11 +41,18 @@ openapi/    Laravel から出力した OpenAPI(FE の型の元)
 
 ## ローカルでの起動
 
+DB は、本番・CI と同じ MariaDB 10.11 を Docker で立てて使う(`backend/.env.example` の `DB_*` がこの Docker を指す)。
+
 ```bash
+# DB(初回だけ。2 回目からは docker start cocktail-db-mariadb)
+docker run -d --name cocktail-db-mariadb -p 127.0.0.1:3306:3306 \
+  -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=laravel mariadb:10.11
+
 # BE
 cd backend
 composer install
 cp .env.example .env && php artisan key:generate
+php artisan migrate          # 表を作る。起こした直後で DB がまだ受け付けないときは、少し待ってやり直す
 php artisan storage:link     # /storage(画像)用の public/storage を作る
 php artisan serve            # http://127.0.0.1:8000
 
@@ -85,8 +92,12 @@ cd ../frontend && npm run gen:api     # src/api/schema.ts を作り直す(build 
 cd backend
 php artisan test --exclude-group=db   # 手元(MariaDB が無いとき)。DB を使うテストを飛ばす
 php artisan test                      # MariaDB があるとき。DB_* を環境変数で渡す
+composer lint                         # CI の backend-lint ジョブと同じ、構文(php -l)・書式(Pint)・型(PHPStan)のチェック
 ```
 
+- `composer lint` は、CI の `backend-lint` ジョブと同じ 3 つを順に流し、最初に落ちたところで止まる。構文は CI と同じく git に入っている PHP ファイル(Blade を除く)だけを見るので、新しく作ったファイルは `git add` してから流す。書式は `vendor/bin/pint` で直せる。中身は `backend/composer.json` の `scripts` の `lint`
+
+- `.env` の `DB_DATABASE`(手元の起動のデータ)のまま `php artisan test` を流すと、DB を使うテストがその DB を作り直す。テストは `DB_DATABASE=testing` のように別の DB を渡して流す(`CREATE DATABASE testing` を先に作っておく)
 - DB を使うテストは `db` グループに入れ、本番と同じ MariaDB で動かす(SQLite では代用しない)
 - 移行のテストは、旧 DB の接続(`legacy`)で 2 つ目の DB `legacy_test` を使う。同じ MariaDB に `legacy_test` を作り、接続先を `LEGACY_DB_HOST` などで渡す(DB 名は `phpunit.xml` が `legacy_test` に固定する)。表と旧データは `tests/Support/LegacyFixture.php` が `database/legacy/schema.sql`(旧 DB の DDL)から作る
 - CI(`.github/workflows/test.yml`)は MariaDB 10.11 を立て、`db` グループも含めて全部流す。PR と `develop` への push で動く

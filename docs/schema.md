@@ -355,7 +355,7 @@ ID の方針は #18 のとおり。カテゴリとミドルを 1 つの表にす
 | `updated_by` | `foreignId` → `users` | ○ | 最後に変えた人(#69 の「変えた人と日時を記録する」) |
 | `created_at`・`updated_at` | `timestamps()` | ○ | |
 
-#23 の本文は `key`・`value`・`updated_at` だけだが、#69 が変えた人を記録するので `updated_by` を足した。変えた履歴まで残すか(1 件ごとの記録の表を作るか)は #69 で決める。
+#23 の本文は `key`・`value`・`updated_at` だけだが、#69 が変えた人を記録するので `updated_by` を足した。変えた履歴を 1 件ごとに残す表は作らず、最後に変えた人と日時(`updated_by`・`updated_at`)だけを残す(#69 で決めた。`docs/decisions/settings.md` の 5)。
 
 ### `users`
 
@@ -406,7 +406,7 @@ Laravel の雛形のマイグレーション(`0001_01_01_000000_create_users_tab
 | `response_body` | `longText` | ○ | その応答の本文。保存が終わるまで(コミットの前)だけ null |
 | `created_at`・`updated_at` | `timestamps()` | ○ | |
 
-インデックス: (`user_id`, `key`) に unique。古い行はまだ消さない(どれだけ残すかは別の issue で決める。[admin-idempotency.md](decisions/admin-idempotency.md) の「残り」)。
+インデックス: (`user_id`, `key`) に unique。行は作ってから 7 日残し、それより古い行は scheduler の `model:prune` が毎日消す(#763。[admin-idempotency.md](decisions/admin-idempotency.md) の 10)。
 
 ## 説明文の参照の記法
 

@@ -10,7 +10,8 @@
 //
 // 出力先の中:
 //   publish/  … evidence ブランチに置くものだけ(<連番 2 桁>-<kind>[-<幅>]-<before|after|compare>.<png|mp4|gif> と manifest.json)
-//   texts/    … 画面・応答・コマンドの結果に出た文字。evidence-leak-check.sh で、ランナーのパス・ホスト名が出ていないかを見る
+//   texts/    … 画面・応答・コマンドの結果に出た文字。evidence-leak-check.sh で、ランナーのパス・ホスト名が出ていないかを見る。
+//               コマンドの結果は、そのコマンドを流した checkout の絶対パスを <repo> に置き換えてから書く(#781)
 //   work/     … 撮影の途中のもの(設定ファイルなど。ランナーの絶対パスが入るので、publish に入れない)
 //
 // 画面は、静止画を video: false で幅ごとに撮り(帯を重ねない)、動画は video の幅だけ別に録る(帯で修正前・修正後が分かるように)。
@@ -23,6 +24,10 @@
 // 値は capture.js の環境変数で渡す。ログイン中の画面(work/login.html)には URL を伏せ字の欄に入れるだけで、画面に出さない。
 // capture.js の出力(texts/ に書く文字)に URL が出ていたら落とし、エラーの文(ジョブのログ)からは URL を伏せる。
 // 撮っている capture.js(コミットを固定)は login.url の "${env:…}" を置き換えないので、置き換える fill で欄に入れて移る。
+//
+// steps のある画面は、撮る回(修正前・修正後 × 幅ごと・動画)ごとに、その側の DB を入れ直してから撮る(#802)。
+// steps で保存する画面(管理画面の新規など)は、前の回で保存した行が残ると、同じ値での 2 回目が一意の制約の 422 で落ちるため。
+// その側の 1 回目は、項目の先頭で入れたデータのまま撮る(入れ直しても同じなので省く)。steps の無い画面は DB を変えないので入れ直さない。
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -117,9 +122,16 @@ function plan(req, opt = {}) {
       // 修正前は直す前の不具合で 5xx のこともあるので見ない
       steps.push({ type: "probe", side: "after", path: item.path });
       const page = (name, extra) => ({ name, url: item.path, read: ["body"], actions, ...extra });
+      // steps のある画面は、その側で 2 回目からの撮る回の前に、その側の DB を入れ直す(#802)
+      const shot = { before: 0, after: 0 };
+      const reseed = (side) => {
+        if (actions.length > 0 && shot[side] > 0) steps.push({ type: "seed", seed: item.data.seed, side });
+        shot[side] += 1;
+      };
       for (const width of item.widths) {
         const wdir = path.join(dir, String(width));
         for (const side of SIDES) {
+          reseed(side);
           steps.push({
             type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}.txt`), ...login,
             config: { label: side, baseUrl: sideOf(opt, side).url, outDir: wdir, port: nextPort(), video: false,
@@ -137,6 +149,7 @@ function plan(req, opt = {}) {
       for (const width of item.video) {
         const vdir = path.join(dir, String(width), "video");
         for (const side of SIDES) {
+          reseed(side);
           steps.push({
             type: "capture", side, texts: path.join(texts, `${id}-${width}-${side}-video.txt`), ...login,
             config: { label: side, baseUrl: sideOf(opt, side).url, outDir: vdir, port: nextPort(), video: true,
@@ -241,13 +254,47 @@ function issueLogin(opt, side, who) {
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function text2html(src, out, title, workdir) {
+const REPO_MARK = "<repo>";
+const REPO_NOTE = `出力の中の checkout の絶対パスは ${REPO_MARK} に置き換えている`;
+
+// コマンドの出力に出る、そのコマンドを流した checkout の絶対パス(Vitest の RUN の行など)を <repo> に置き換える(#781)。
+// 渡したパスと、シンボリックリンクをたどった実のパスの両方を見る。名前の続く別のディレクトリ(<checkout>-old など)は置き換えない。
+// checkout の外の絶対パス(ホームなど)は残すので、evidence-leak-check.sh が今までどおり落とす。置き換えた数も返す
+function maskRepo(text, dir) {
+  const dirs = [dir];
+  try {
+    dirs.push(fs.realpathSync(dir));
+  } catch {
+    // 実のパスを取れなくても、渡したパスだけで置き換える
+  }
+  let count = 0;
+  let t = String(text);
+  // 長いものから置き換える(片方がもう片方の前の部分のとき、短いほうで先に切らない)
+  for (const d of [...new Set(dirs)].filter((x) => x && x !== "/").sort((a, b) => b.length - a.length)) {
+    // checkout 自身か、その下("/" で続く)のパスだけを置き換える。続く文字が区切り・終端でなければ別のディレクトリ(<checkout>+old・<checkout>日本語 など)
+    const stop = "\\s\"'`:;,()\\[\\]<>";
+    const re = new RegExp(`${d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(/[^${stop}]*)?(?![^${stop}])`, "g");
+    t = t.replace(re, (m, rest) => {
+      // ".." で checkout の外へ出るパスは置き換えない(置き換えると /home/ が消えて evidence-leak-check.sh をすり抜ける)
+      if (rest && rest.includes("..")) {
+        const n = path.posix.normalize(`${d}${rest}`);
+        if (n !== d && !n.startsWith(`${d}/`)) return m;
+      }
+      count++;
+      return `${REPO_MARK}${rest || ""}`;
+    });
+  }
+  return { text: t, count };
+}
+
+function text2html(src, out, title, workdir, masked) {
   const text = fs.readFileSync(src, "utf8");
+  const note = masked ? `<p>${esc(REPO_NOTE)}</p>` : "";
   fs.writeFileSync(out, `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
 body { margin: 0; padding: 24px; background: #f5f5f5; font: 14px/1.6 "Noto Sans CJK JP",sans-serif; color: #222; }
 h1 { font-size: 16px; margin: 0 0 4px; } p { margin: 0 0 12px; color: #757575; }
 pre { margin: 0; padding: 12px 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; font: 13px/1.6 monospace; white-space: pre-wrap; word-break: break-all; }
-</style></head><body><h1>${esc(title)}</h1><p>workdir: ${esc(workdir)}</p><pre>${esc(text)}</pre></body></html>\n`);
+</style></head><body><h1>${esc(title)}</h1><p>workdir: ${esc(workdir)}</p>${note}<pre>${esc(text)}</pre></body></html>\n`);
 }
 
 // コマンドに渡す環境変数。ジョブの環境(GITHUB_* など)をそのまま渡さず、動かすのに要るものだけにする
@@ -266,8 +313,9 @@ function runCommand(run, cwd) {
   return r;
 }
 
-function seed(opt, name) {
-  for (const side of SIDES) {
+// side を渡すと、その側だけを入れ直す(撮る回ごとの入れ直し。#802)。渡さなければ両側に入れる
+function seed(opt, name, only) {
+  for (const side of only ? [only] : SIDES) {
     const backend = path.join(opt[side].dir, "backend");
     // 修正前に無いシーダー(この PR で足したもの)は、修正前だけ E2eSeeder で入れる(manifest に残す)
     const use = side === "before" && !fs.existsSync(path.join(backend, "database", "seeders", `${name}.php`)) ? "E2eSeeder" : name;
@@ -317,11 +365,13 @@ function run(req, opt) {
   fs.mkdirSync(path.join(opt.out, "publish"), { recursive: true });
   fs.mkdirSync(path.join(opt.out, "texts"), { recursive: true });
   const manifest = { version: 1, before: opt.beforeSha || null, after: opt.afterSha || null, items: [] };
+  // command の出力ごとに、checkout のパスを <repo> に置き換えたか(text2html が 1 行書くため)
+  const masked = {};
   for (const item of p.items) {
     opt.seeds = {};
     console.error(`== ${item.id} (${item.cases.join(" ")})`);
     for (const step of item.steps) {
-      if (step.type === "seed") seed(opt, step.seed);
+      if (step.type === "seed") seed(opt, step.seed, step.side);
       else if (step.type === "probe") probe(opt, step);
       else if (step.type === "capture") capture(opt, step);
       else if (step.type === "compose") {
@@ -343,9 +393,11 @@ function run(req, opt) {
       } else if (step.type === "command") {
         fs.mkdirSync(path.dirname(step.out), { recursive: true });
         const r = runCommand(step.run, path.join(opt[step.side].dir, step.workdir));
-        fs.writeFileSync(step.out, `${r.stdout}\n(終了コード ${r.status})\n`);
+        const m = maskRepo(r.stdout, opt[step.side].dir);
+        masked[step.out] = m.count > 0;
+        fs.writeFileSync(step.out, `${m.text}\n(終了コード ${r.status})\n`);
         fs.copyFileSync(step.out, step.texts);
-      } else if (step.type === "text2html") text2html(step.src, step.out, step.title, step.workdir);
+      } else if (step.type === "text2html") text2html(step.src, step.out, step.title, step.workdir, masked[step.src]);
       else if (step.type === "video") {
         sh("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", step.src, "-c:v", "libx264", "-pix_fmt", "yuv420p",
           "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-movflags", "+faststart", "-threads", "1", "-an", step.mp4]);
